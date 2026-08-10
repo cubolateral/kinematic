@@ -1,5 +1,7 @@
 use glow::HasContext;
 
+use crate::{core::Project, editor::Editor};
+
 pub struct App {
     gl: glow::Context,
     _gl_context: sdl3::video::GLContext,
@@ -44,7 +46,9 @@ impl App {
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self, project: Project) {
+        let mut editor = Editor::new(project);
+
         let mut events = self.sdl.event_pump().unwrap();
 
         'running: loop {
@@ -60,9 +64,13 @@ impl App {
                 }
             }
 
+            editor.update();
+
             unsafe {
                 self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
                 self.gl.clear(glow::COLOR_BUFFER_BIT);
+
+                editor.draw();
             }
 
             self.window.gl_swap_window();
