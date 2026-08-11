@@ -3,7 +3,10 @@ use glow::HasContext;
 use crate::{core::Project, editor::Editor};
 
 pub struct App {
-    gl: glow::Context,
+    imgui_renderer: dear_imgui_glow::GlowRenderer,
+    imgui_sdl: dear_imgui_sdl3::Sdl3PlatformBackend,
+    imgui: dear_imgui_rs::Context,
+    gl: std::rc::Rc<glow::Context>,
     _gl_context: sdl3::video::GLContext,
     window: sdl3::video::Window,
     sdl: sdl3::Sdl,
@@ -38,7 +41,25 @@ impl App {
             })
         };
 
+        // Initialize imgui.
+        let mut imgui = dear_imgui_rs::Context::create();
+
+        let imgui_sdl = dear_imgui_sdl3::Sdl3PlatformBackend::init_platform_for_opengl(
+            &mut imgui,
+            &window,
+            &gl_context,
+        )
+        .unwrap();
+
+        // dear_imgui_glow::GlowRenderer::new takes ownership of `gl`, wraps it in an `Rc` internally,
+        // and hands a clone back through `gl_context()` for our own GL calls below.
+        let imgui_renderer = dear_imgui_glow::GlowRenderer::new(gl, &mut imgui).unwrap();
+        let gl = imgui_renderer.gl_context().unwrap().clone();
+
         Self {
+            imgui_renderer,
+            imgui_sdl,
+            imgui,
             sdl,
             window,
             _gl_context: gl_context,
@@ -50,9 +71,14 @@ impl App {
         let mut editor = Editor::new(project);
 
         let mut events = self.sdl.event_pump().unwrap();
+        let mut last_frame = std::time::Instant::now();
 
         'running: loop {
             for event in events.poll_iter() {
+                if let Some(raw) = event.to_ll() {
+                    self.imgui_sdl.process_event(&mut self.imgui, &raw);
+                }
+
                 match event {
                     sdl3::event::Event::Quit { .. }
                     | sdl3::event::Event::KeyDown {
@@ -64,15 +90,29 @@ impl App {
                 }
             }
 
-            editor.update();
+            // Calculate delta time.
+            let now = std::time::Instant::now();
+            let dt = now.duration_since(last_frame).as_secs_f32();
+            last_frame = now;
+
+            editor.update(dt);
 
             unsafe {
                 self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
                 self.gl.clear(glow::COLOR_BUFFER_BIT);
-
-                editor.draw();
             }
 
+            editor.draw();
+
+            self.imgui_sdl.new_frame(&mut self.imgui);
+
+            // Draw imgui.
+            let ui = self.imgui.frame();
+            ui.window("Kinematic").build(|| {
+                ui.text("Hello, ImGui!");
+            });
+
+            self.imgui_renderer.render(self.imgui.render()).unwrap();
             self.window.gl_swap_window();
         }
     }

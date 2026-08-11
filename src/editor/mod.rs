@@ -10,7 +10,7 @@ impl Editor {
         Self { project }
     }
 
-    pub fn update(&mut self) {}
+    pub fn update(&mut self, _dt: f32) {}
 
     pub fn draw(&mut self) {}
 }
