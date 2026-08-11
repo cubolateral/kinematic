@@ -6,6 +6,7 @@ pub struct App {
     imgui_renderer: dear_imgui_glow::GlowRenderer,
     imgui_sdl: dear_imgui_sdl3::Sdl3PlatformBackend,
     imgui: dear_imgui_rs::Context,
+    vg: femtovg::Canvas<femtovg::renderer::OpenGl>,
     gl: std::rc::Rc<glow::Context>,
     _gl_context: sdl3::video::GLContext,
     window: sdl3::video::Window,
@@ -41,6 +42,20 @@ impl App {
             })
         };
 
+        // Initialize femtovg.
+        let vg = femtovg::Canvas::new(
+            unsafe {
+                femtovg::renderer::OpenGl::new_from_function(|s| {
+                    video_subsystem
+                        .gl_get_proc_address(s)
+                        .map(|f| f as *const std::ffi::c_void)
+                        .unwrap_or(std::ptr::null())
+                })
+            }
+            .unwrap(),
+        )
+        .unwrap();
+
         // Initialize imgui.
         let mut imgui = dear_imgui_rs::Context::create();
 
@@ -51,8 +66,6 @@ impl App {
         )
         .unwrap();
 
-        // dear_imgui_glow::GlowRenderer::new takes ownership of `gl`, wraps it in an `Rc` internally,
-        // and hands a clone back through `gl_context()` for our own GL calls below.
         let imgui_renderer = dear_imgui_glow::GlowRenderer::new(gl, &mut imgui).unwrap();
         let gl = imgui_renderer.gl_context().unwrap().clone();
 
@@ -60,6 +73,7 @@ impl App {
             imgui_renderer,
             imgui_sdl,
             imgui,
+            vg,
             sdl,
             window,
             _gl_context: gl_context,
@@ -68,7 +82,7 @@ impl App {
     }
 
     pub fn run(&mut self, project: Project) {
-        let mut editor = Editor::new(project);
+        let mut editor = Editor::new(project, &mut self.vg, &mut self.imgui_renderer);
 
         let mut events = self.sdl.event_pump().unwrap();
         let mut last_frame = std::time::Instant::now();
@@ -102,15 +116,14 @@ impl App {
                 self.gl.clear(glow::COLOR_BUFFER_BIT);
             }
 
-            editor.draw();
-
             self.imgui_sdl.new_frame(&mut self.imgui);
 
-            // Draw imgui.
-            let ui = self.imgui.frame();
-            ui.window("Kinematic").build(|| {
-                ui.text("Hello, ImGui!");
-            });
+            editor.draw(
+                self.window.size(),
+                &self.gl,
+                &mut self.vg,
+                self.imgui.frame(),
+            );
 
             self.imgui_renderer.render(self.imgui.render()).unwrap();
             self.window.gl_swap_window();
