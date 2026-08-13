@@ -1,6 +1,7 @@
 use crate::{
     core::{Project, Scene},
     editor::Canvas,
+    ui::Ui,
 };
 
 pub(crate) struct Editor {
@@ -38,41 +39,24 @@ impl Editor {
         vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
         ui: &mut dear_imgui_rs::Ui,
     ) {
-        let (width, height) = self.preview.get_size();
-        let (width, height) = (width as f32, height as f32);
-
         self.preview.draw(window_size, gl, vg, |vg| {
-            vg.clear_rect(0, 0, width as u32, height as u32, femtovg::Color::black());
+            let (width, height) = self.preview.get_size();
+
+            vg.clear_rect(0, 0, width, height, femtovg::Color::black());
             vg.save();
-            vg.translate(width * 0.5, height * 0.5);
+            vg.translate(width as f32 * 0.5, height as f32 * 0.5);
             self.scene.draw(vg);
             vg.restore();
         });
 
-        ui.window("Preview").build(|| {
-            ui.text(format!(
-                "[INFO] Project name: {} / Project resolution: {}x{}",
-                self.project.name, self.project.resolution.0, self.project.resolution.1,
-            ));
-            ui.separator();
+        Ui::draw(self, ui);
+    }
 
-            let available = ui.content_region_avail();
+    pub fn get_project(&mut self) -> &mut Project {
+        &mut self.project
+    }
 
-            let aspect = (available[0] / width).min(available[1] / height);
-            let (image_width, image_height) = (width * aspect, height * aspect);
-
-            // Centralize preview image.
-            ui.set_cursor_pos_x(ui.cursor_pos_x() + (available[0] - image_width) * 0.5);
-            ui.set_cursor_pos_y(ui.cursor_pos_y() + (available[1] - image_height) * 0.5);
-
-            // Draw preview image.
-            ui.image_config(
-                self.preview.get_imgui_texture_id(),
-                [image_width, image_height],
-            )
-            .uv0([0.0, 1.0])
-            .uv1([1.0, 0.0])
-            .build();
-        });
+    pub fn get_preview(&mut self) -> &mut Canvas {
+        &mut self.preview
     }
 }
