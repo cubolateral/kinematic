@@ -21,8 +21,9 @@ impl Scene {
         }
     }
 
-    pub fn build(&mut self, builder: &mut dyn SceneBuilder) {
+    pub fn build(&mut self, builder: &mut dyn SceneBuilder) -> f32 {
         builder.build(self);
+        10.0 // TODO.
     }
 
     pub fn create(&mut self, bundle: impl hecs::DynamicBundle) {

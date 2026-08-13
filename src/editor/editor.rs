@@ -1,12 +1,13 @@
 use crate::{
     core::{Project, Scene},
-    editor::Canvas,
+    editor::{Canvas, Timeline},
     ui::Ui,
 };
 
 pub(crate) struct Editor {
     project: Project,
     scene: Scene,
+    timeline: Timeline,
     preview: Canvas,
 }
 
@@ -19,18 +20,22 @@ impl Editor {
         println!("Project initialized: {}", project.name);
 
         let mut scene = Scene::new();
-        scene.build(project.scene.as_mut());
+
+        let timeline = Timeline::new(scene.build(project.scene.as_mut()));
 
         let preview = Canvas::new(project.resolution, vg, imgui_renderer);
 
         Self {
             project,
             scene,
+            timeline,
             preview,
         }
     }
 
-    pub fn update(&mut self, _dt: f32) {}
+    pub fn update(&mut self, dt: f32) {
+        self.timeline.update(dt);
+    }
 
     pub fn draw(
         &mut self,
@@ -54,6 +59,10 @@ impl Editor {
 
     pub fn get_project(&mut self) -> &mut Project {
         &mut self.project
+    }
+
+    pub fn get_timeline(&mut self) -> &mut Timeline {
+        &mut self.timeline
     }
 
     pub fn get_preview(&mut self) -> &mut Canvas {
