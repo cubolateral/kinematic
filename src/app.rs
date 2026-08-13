@@ -59,6 +59,11 @@ impl App {
         // Initialize imgui.
         let mut imgui = dear_imgui_rs::Context::create();
 
+        // Enable docking.
+        let mut flags = imgui.io().config_flags();
+        flags.insert(dear_imgui_rs::ConfigFlags::DOCKING_ENABLE);
+        imgui.io_mut().set_config_flags(flags);
+
         let imgui_sdl = dear_imgui_sdl3::Sdl3PlatformBackend::init_platform_for_opengl(
             &mut imgui,
             &window,

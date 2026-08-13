@@ -8,6 +8,8 @@ impl Ui {
 
 impl Ui {
     pub fn draw(editor: &mut Editor, ui: &mut dear_imgui_rs::Ui) {
+        dock_layout(ui);
+
         let project_name = editor.get_project().name;
         let (project_width, project_height) = editor.get_project().resolution;
 
@@ -182,5 +184,30 @@ impl Ui {
                 .build();
             draw_list.add_text(text_position, text_color, text);
         });
+
+        fn dock_layout(ui: &dear_imgui_rs::Ui) {
+            let dock = ui.dockspace_over_main_viewport();
+
+            // Unsafe for now.
+            static mut FIRST_TIME: bool = true;
+            if unsafe { FIRST_TIME } {
+                unsafe { FIRST_TIME = false };
+
+                dear_imgui_rs::DockBuilder::remove_node(ui, dock);
+                dear_imgui_rs::DockBuilder::add_node(ui, dock, dear_imgui_rs::DockNodeFlags::NONE);
+                dear_imgui_rs::DockBuilder::set_node_size(ui, dock, ui.main_viewport().size());
+
+                let (dock_bottom, dock) = dear_imgui_rs::DockBuilder::split_node(
+                    ui,
+                    dock,
+                    dear_imgui_rs::SplitDirection::Down,
+                    0.25,
+                );
+
+                dear_imgui_rs::DockBuilder::dock_window(ui, "Preview", dock);
+                dear_imgui_rs::DockBuilder::dock_window(ui, "Timeline", dock_bottom);
+                dear_imgui_rs::DockBuilder::finish(ui, dock);
+            }
+        }
     }
 }
