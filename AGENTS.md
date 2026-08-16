@@ -50,6 +50,8 @@ loop ownership, and ImGui interaction out of the core domain.
 - Preserve the separation between project definition, animation evaluation,
   scene rendering, and editor controls unless a change intentionally revises the
   architecture.
+- Do not use absolute Rust paths with the `::` prefix. Prefer imported names or
+  crate-relative paths instead.
 
 ## Change Workflow
 
