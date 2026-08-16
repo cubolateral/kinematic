@@ -15,6 +15,7 @@ impl Color {
     pub const TRANSPARENT: Self = Self::new(0.0, 0.0, 0.0, 0.0);
     pub const BLACK: Self = Self::new(0.0, 0.0, 0.0, 1.0);
     pub const WHITE: Self = Self::new(1.0, 1.0, 1.0, 1.0);
+    pub const GREY: Self = Self::new(0.5, 0.5, 0.5, 1.0);
     pub const RED: Self = Self::new(1.0, 0.0, 0.0, 1.0);
     pub const GREEN: Self = Self::new(0.0, 1.0, 0.0, 1.0);
     pub const BLUE: Self = Self::new(0.0, 0.0, 1.0, 1.0);
