@@ -28,11 +28,15 @@ impl Animator {
         self.play(Task::Wait(duration));
     }
 
-    /// Adds a group of tasks that start simultaneously and waits for the longest one to finish.
+    /// Adds the tasks scheduled by `schedule` as a simultaneous group.
     ///
-    /// Note that this is equivalent to `a.play(Task::All(tasks))`.
-    pub fn all(&mut self, tasks: Vec<Task>) {
-        self.play(Task::All(tasks));
+    /// The timeline waits for the longest task in the group to finish.
+    pub fn all(&mut self, schedule: impl FnOnce(&mut Animator)) {
+        let mut group = Animator::new();
+
+        schedule(&mut group);
+
+        self.play(Task::All(group.tasks));
     }
 
     /// Compiles scheduled tasks into scene tracks and returns the total duration.
@@ -95,5 +99,34 @@ impl Animator {
                 max_duration
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_collects_tasks_scheduled_by_a_closure() {
+        let mut animator = Animator::new();
+
+        schedule_group(&mut animator);
+
+        assert_eq!(animator.tasks.len(), 1);
+
+        let Task::All(tasks) = &animator.tasks[0] else {
+            panic!("The scheduled task must be an all group.");
+        };
+
+        assert_eq!(tasks.len(), 2);
+        assert!(matches!(tasks[0], Task::Wait(1.0)));
+        assert!(matches!(tasks[1], Task::Wait(2.0)));
+    }
+
+    fn schedule_group(animator: &mut Animator) {
+        animator.all(|animator| {
+            animator.wait(1.0);
+            animator.wait(2.0);
+        });
     }
 }
