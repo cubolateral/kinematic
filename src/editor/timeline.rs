@@ -1,6 +1,7 @@
 pub(crate) struct Timeline {
     pub is_controlling: bool,
     is_playing: bool,
+    previous_time: f32,
     current_time: f32,
     max_time: f32,
 }
@@ -10,12 +11,15 @@ impl Timeline {
         Self {
             is_controlling: false,
             is_playing: false,
+            previous_time: -1.0, // Start by updating.
             current_time: 0.0,
             max_time,
         }
     }
 
-    pub fn update(&mut self, dt: f32) {
+    /// If the scene needs to be updated, it returns the current timeline time;
+    /// otherwise, it returns None.
+    pub fn update(&mut self, dt: f32) -> Option<f32> {
         if self.is_playing() {
             self.go_to(self.current_time + dt);
 
@@ -23,6 +27,14 @@ impl Timeline {
                 self.go_to(0.0);
             }
         }
+
+        // If needs updating.
+        if self.previous_time != self.current_time {
+            self.previous_time = self.current_time;
+            return Some(self.current_time);
+        }
+
+        None
     }
 
     pub fn play(&mut self) {

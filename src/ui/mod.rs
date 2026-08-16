@@ -1,4 +1,4 @@
-use crate::editor::Editor;
+use crate::{core::components::Inspection, editor::Editor};
 
 pub(crate) struct Ui;
 
@@ -9,6 +9,54 @@ impl Ui {
 impl Ui {
     pub fn draw(editor: &mut Editor, ui: &mut dear_imgui_rs::Ui) {
         dock_layout(ui);
+
+        ui.window("Inspector").build(|| {
+            let world = editor.get_scene().get_world();
+
+            for (entity, inspection) in world.query::<(hecs::Entity, &Inspection)>().iter() {
+                let entity_id = entity.id();
+                let entity_label = format!("Entity {}##entity_{}", entity_id, entity_id);
+
+                if ui.collapsing_header(&entity_label, dear_imgui_rs::TreeNodeFlags::DEFAULT_OPEN) {
+                    let trackables = (inspection.get)(world, entity);
+
+                    for trackable in trackables.into_iter() {
+                        // Trackable header.
+                        ui.separator_with_text(trackable.name);
+
+                        // Properties.
+                        for track in (trackable.get)() {
+                            let value = (track.get)(world, entity);
+                            let value_text = format!("{}", value);
+
+                            // Property name.
+                            ui.text(track.name);
+
+                            ui.same_line();
+
+                            // Value column, right-aligned based on actual text width.
+                            let text_width = ui.current_font().calc_text_size(
+                                ui.current_font_size(),
+                                f32::MAX,
+                                f32::MAX,
+                                &value_text,
+                            )[0];
+
+                            ui.set_cursor_pos_x(
+                                ui.cursor_pos_x() + ui.content_region_avail()[0] - text_width,
+                            );
+                            ui.text_disabled(&value_text);
+                        }
+
+                        ui.spacing();
+                    }
+
+                    ui.spacing();
+                    ui.separator();
+                    ui.spacing();
+                }
+            }
+        });
 
         let project_name = editor.get_project().name;
         let (project_width, project_height) = editor.get_project().resolution;
@@ -25,7 +73,8 @@ impl Ui {
 
             let available = ui.content_region_avail();
             let aspect = (available[0] / preview_width).min(available[1] / preview_height);
-            let (image_width, image_height) = (preview_width * aspect, preview_height * aspect);
+            let image_width = (preview_width * aspect).max(1.0);
+            let image_height = (preview_height * aspect).max(1.0);
 
             // Centralize preview image.
             ui.set_cursor_pos_x(ui.cursor_pos_x() + (available[0] - image_width) * 0.5);
@@ -197,15 +246,23 @@ impl Ui {
                 dear_imgui_rs::DockBuilder::add_node(ui, dock, dear_imgui_rs::DockNodeFlags::NONE);
                 dear_imgui_rs::DockBuilder::set_node_size(ui, dock, ui.main_viewport().size());
 
-                let (dock_bottom, dock) = dear_imgui_rs::DockBuilder::split_node(
+                let (dock_inspector, dock_right) = dear_imgui_rs::DockBuilder::split_node(
                     ui,
                     dock,
+                    dear_imgui_rs::SplitDirection::Left,
+                    0.25,
+                );
+                let (dock_timeline, dock_preview) = dear_imgui_rs::DockBuilder::split_node(
+                    ui,
+                    dock_right,
                     dear_imgui_rs::SplitDirection::Down,
                     0.25,
                 );
 
-                dear_imgui_rs::DockBuilder::dock_window(ui, "Preview", dock);
-                dear_imgui_rs::DockBuilder::dock_window(ui, "Timeline", dock_bottom);
+                dear_imgui_rs::DockBuilder::dock_window(ui, "Inspector", dock_inspector);
+                dear_imgui_rs::DockBuilder::dock_window(ui, "Preview", dock_preview);
+                dear_imgui_rs::DockBuilder::dock_window(ui, "Timeline", dock_timeline);
+
                 dear_imgui_rs::DockBuilder::finish(ui, dock);
             }
         }

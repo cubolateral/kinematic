@@ -1,6 +1,11 @@
+use kinematic_macros::{Object, Trackable};
+
 use crate::core::components::{Node, Transform};
 
+#[derive(Trackable)]
+/// Geometry of a circular object.
 pub struct CircleShape {
+    #[track]
     pub radius: f32,
 }
 
@@ -10,17 +15,21 @@ impl Default for CircleShape {
     }
 }
 
-#[derive(hecs::Bundle)]
-pub struct Circle {
+#[derive(Object, hecs::Bundle)]
+/// ECS bundle for the built-in circular scene object.
+pub struct CircleBundle {
+    #[trackable]
     pub shape: CircleShape,
+    #[trackable]
     pub transform: Transform,
+
     pub node: Node,
 }
 
-impl Default for Circle {
+impl Default for CircleBundle {
     fn default() -> Self {
         Self {
-            shape: CircleShape::default(),
+            shape: Default::default(),
             transform: Default::default(),
             node: Node {
                 on_draw: |world, entity, vg| {

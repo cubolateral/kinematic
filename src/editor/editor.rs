@@ -34,7 +34,9 @@ impl Editor {
     }
 
     pub fn update(&mut self, dt: f32) {
-        self.timeline.update(dt);
+        if let Some(time) = self.timeline.update(dt) {
+            self.scene.update(time);
+        }
     }
 
     pub fn draw(
@@ -59,6 +61,10 @@ impl Editor {
 
     pub fn get_project(&mut self) -> &mut Project {
         &mut self.project
+    }
+
+    pub fn get_scene(&mut self) -> &mut Scene {
+        &mut self.scene
     }
 
     pub fn get_timeline(&mut self) -> &mut Timeline {
