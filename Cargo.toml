@@ -2,6 +2,7 @@
 name = "kinematic"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 kinematic-macros = { path = "packages/kinematic-macros" }
@@ -22,3 +23,4 @@ members = ["packages/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"

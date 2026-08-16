@@ -6,6 +6,8 @@ typed animation tracks, and a timeline-based workflow. It uses
 [femtovg](https://github.com/femtovg/femtovg) for drawing, and
 [Dear ImGui](https://github.com/ocornut/imgui) for the editor UI.
 
+Kinematic is in early development, so its API may change.
+
 ## Features
 
 - Typed scene objects and trackable component fields.
@@ -56,4 +58,6 @@ cargo check --workspace
 cargo test --workspace
 ```
 
-Kinematic is in early development, so its API may change.
+## License
+
+Kinematic is available under the [MIT License](LICENSE).
