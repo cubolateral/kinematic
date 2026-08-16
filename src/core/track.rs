@@ -3,6 +3,8 @@ use crate::core::{
     types::{Color, Vector2},
 };
 
+/// Getter function used by a track to read its current value from the ECS world.
+pub type TrackGetter = fn(&hecs::World, hecs::Entity) -> TrackValue;
 /// Setter function used by a track to write the interpolated value back to the ECS world.
 pub type TrackSetter = fn(&hecs::World, hecs::Entity, TrackValue);
 /// Numeric identifier for a component field track.
@@ -373,7 +375,7 @@ pub struct TrackInfo {
     /// Human-readable field name used by tooling and debugging.
     pub name: &'static str,
     /// Reads the current value of the tracked field.
-    pub get: fn(&hecs::World, hecs::Entity) -> TrackValue,
+    pub get: TrackGetter,
     /// Writes an interpolated value back to the field.
     pub set: TrackSetter,
 }
