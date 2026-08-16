@@ -21,3 +21,19 @@ impl Default for Draw {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::Scene;
+
+    #[test]
+    fn accepts_f32_literals_for_opacity() {
+        let mut scene = Scene::new();
+        let entity = scene.get_world_mut().spawn((Draw::default(),));
+
+        Draw::handle(&mut scene, entity).opacity(0.0);
+
+        assert_eq!(scene.get_world().get::<&Draw>(entity).unwrap().opacity, 0.0);
+    }
+}

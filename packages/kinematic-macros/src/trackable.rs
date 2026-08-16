@@ -1,21 +1,7 @@
 use quote::{format_ident, quote};
-use syn::{Data, DeriveInput, Fields, Type, parse_macro_input};
+use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
-/// Maps a field's Rust type to its `TrackValue` variant name.
-/// Add a new arm here whenever a new `TrackValue` variant is added.
-fn track_value_variant(ty: &Type) -> proc_macro2::Ident {
-    let ty_str = quote!(#ty).to_string();
-    match ty_str.as_str() {
-        "f32" => format_ident!("F32"),
-        // "String" => format_ident!("String"),
-        other => panic!(
-            "Trackable: no TrackValue variant mapped for type `{other}` — \
-             add a `TrackValue` variant and a match arm in `track_value_variant`"
-        ),
-    }
-}
-
-// Generates the per-field handle type for a `Trackable` component.
+/// Generates the typed handle and track metadata for a `Trackable` component.
 pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
@@ -31,11 +17,18 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 
     let tracked_fields: Vec<_> = fields
         .iter()
-        .filter(|f| f.attrs.iter().any(|a| a.path().is_ident("track")))
+        .filter(|field| {
+            field
+                .attrs
+                .iter()
+                .any(|attribute| attribute.path().is_ident("track"))
+        })
         .collect();
-
     let count = tracked_fields.len();
+    let mut type_assertions = Vec::with_capacity(count);
     let mut track_entries = Vec::with_capacity(count);
+    let mut handle_fields = Vec::with_capacity(count);
+    let mut handle_initializers = Vec::with_capacity(count);
     let mut tween_fns = Vec::with_capacity(count);
 
     for (id, field) in tracked_fields.iter().enumerate() {
@@ -43,58 +36,79 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         let field_ty = &field.ty;
         let id = id as u32;
         let field_name = field_ident.to_string();
-        let variant = track_value_variant(field_ty);
+
+        type_assertions.push(quote! {
+            const _: fn() = {
+                fn assert_track_value_type<T: crate::core::TrackValueType>() {}
+                assert_track_value_type::<#field_ty>
+            };
+        });
 
         track_entries.push(quote! {
             crate::core::TrackInfo {
                 id: #id,
                 name: #field_name,
                 get: |world, entity| {
-                    crate::core::TrackValue::#variant(
+                    <#field_ty as crate::core::TrackValueType>::into_track_value(
                         world.get::<&#struct_name>(entity).unwrap().#field_ident.clone()
                     )
                 },
                 set: |world, entity, value| {
-                    if let crate::core::TrackValue::#variant(value) = value {
+                    if let Some(value) = <#field_ty as crate::core::TrackValueType>::from_track_value(value) {
                         world.get::<&mut #struct_name>(entity).unwrap().#field_ident = value;
                     }
                 },
             }
         });
 
-        tween_fns.push(quote! {
-            pub fn #field_ident(self, value: #field_ty) -> crate::core::Tween {
-                let old_value = {
-                    let mut component = self
-                        .scene
+        handle_fields.push(quote! {
+            pub #field_ident: crate::core::TrackHandle<'a, #field_ty>,
+        });
+
+        handle_initializers.push(quote! {
+            #field_ident: crate::core::TrackHandle::new(
+                std::rc::Rc::clone(&scene),
+                entity,
+                std::any::TypeId::of::<#struct_name>(),
+                #id,
+                <#struct_name as crate::core::Trackable>::track(#id).set,
+                |scene, entity| {
+                    scene
+                        .get_world()
+                        .get::<&#struct_name>(entity)
+                        .unwrap()
+                        .#field_ident
+                        .clone()
+                },
+                |scene, entity, value| {
+                    let mut component = scene
                         .get_world_mut()
-                        .get::<&mut #struct_name>(self.entity)
+                        .get::<&mut #struct_name>(entity)
                         .unwrap();
                     let old_value = component.#field_ident.clone();
-                    component.#field_ident = value.clone();
+                    component.#field_ident = value;
                     old_value
-                };
+                },
+            ),
+        });
 
-                crate::core::Tween::new(
-                    self.entity,
-                    std::any::TypeId::of::<#struct_name>(),
-                    #id,
-                    <#struct_name as crate::core::Trackable>::track(#id).set,
-                    crate::core::TrackValue::#variant(old_value),
-                    crate::core::TrackValue::#variant(value),
-                )
+        tween_fns.push(quote! {
+            pub fn #field_ident(
+                self,
+                value: <#field_ty as crate::core::TrackValueType>::Input,
+            ) -> crate::core::Tween {
+                self.#field_ident.set(value.into())
             }
         });
     }
 
     let tracks_ident = format_ident!("__{}_TRACKS", struct_name.to_string().to_uppercase());
     let expanded = quote! {
+        #(#type_assertions)*
+
         /// Typed access wrapper around an entity's tracked component.
         pub struct #handle_name<'a> {
-            /// Scene world borrow needed to read and write the component.
-            scene: &'a mut crate::core::Scene,
-            /// Entity that owns the tracked component.
-            entity: hecs::Entity,
+            #(#handle_fields)*
         }
 
         impl #struct_name {
@@ -103,7 +117,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 scene: &'a mut crate::core::Scene,
                 entity: hecs::Entity,
             ) -> #handle_name<'a> {
-                #handle_name { scene, entity }
+                let scene = std::rc::Rc::new(std::cell::RefCell::new(scene));
+
+                #handle_name {
+                    #(#handle_initializers)*
+                }
             }
         }
 
@@ -126,7 +144,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 scene: &'a mut crate::core::Scene,
                 entity: hecs::Entity,
             ) -> Self::Handle<'a> {
-                #handle_name { scene, entity }
+                #struct_name::handle(scene, entity)
             }
 
             fn track(id: crate::core::TrackId) -> &'static crate::core::TrackInfo {

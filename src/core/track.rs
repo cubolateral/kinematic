@@ -1,4 +1,4 @@
-use crate::core::Easing;
+use crate::core::{Easing, Vector2};
 
 /// Setter function used by a track to write the interpolated value back to the ECS world.
 pub type TrackSetter = fn(&hecs::World, hecs::Entity, TrackValue);
@@ -121,12 +121,15 @@ impl Track {
 #[derive(Debug, Clone, Copy)]
 pub enum TrackValue {
     F32(f32),
+    Vector2(Vector2),
 }
 
 impl TrackValue {
     pub fn lerp(self, to: Self, t: f32) -> Self {
         match (self, to) {
             (Self::F32(a), Self::F32(b)) => Self::F32(a + (b - a) * t),
+            (Self::Vector2(a), Self::Vector2(b)) => Self::Vector2(a + (b - a) * t),
+            _ => panic!("Track values must have the same type."),
         }
     }
 }
@@ -135,7 +138,150 @@ impl std::fmt::Display for TrackValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::F32(value) => write!(f, "{value:.2}"),
+            Self::Vector2(value) => write!(f, "[{:.2}, {:.2}]", value.x, value.y),
         }
+    }
+}
+
+/// Converts a component field value to and from its runtime track representation.
+///
+/// Every field marked with `#[track]` must implement this trait.
+pub trait TrackValueType: Clone {
+    /// Input accepted by the generated track tween method.
+    type Input: Into<Self>;
+
+    /// Converts this typed value into the value stored by an animation track.
+    fn into_track_value(self) -> TrackValue;
+
+    /// Converts an animation track value back into this typed value.
+    fn from_track_value(value: TrackValue) -> Option<Self>;
+}
+
+impl TrackValueType for f32 {
+    type Input = f32;
+
+    fn into_track_value(self) -> TrackValue {
+        TrackValue::F32(self)
+    }
+
+    fn from_track_value(value: TrackValue) -> Option<Self> {
+        match value {
+            TrackValue::F32(value) => Some(value),
+            _ => None,
+        }
+    }
+}
+
+impl TrackValueType for Vector2 {
+    type Input = [f32; 2];
+
+    fn into_track_value(self) -> TrackValue {
+        TrackValue::Vector2(self)
+    }
+
+    fn from_track_value(value: TrackValue) -> Option<Self> {
+        match value {
+            TrackValue::Vector2(value) => Some(value),
+            _ => None,
+        }
+    }
+}
+
+/// Typed interface for updating a single tracked component field.
+pub struct TrackHandle<'a, T: TrackValueType> {
+    scene: std::rc::Rc<std::cell::RefCell<&'a mut crate::core::Scene>>,
+    entity: hecs::Entity,
+    type_id: std::any::TypeId,
+    track_id: TrackId,
+    track_setter: TrackSetter,
+    get: fn(&crate::core::Scene, hecs::Entity) -> T,
+    replace: fn(&mut crate::core::Scene, hecs::Entity, T) -> T,
+}
+
+impl<'a, T: TrackValueType> TrackHandle<'a, T> {
+    /// Creates a typed handle using generated component accessors.
+    pub fn new(
+        scene: std::rc::Rc<std::cell::RefCell<&'a mut crate::core::Scene>>,
+        entity: hecs::Entity,
+        type_id: std::any::TypeId,
+        track_id: TrackId,
+        track_setter: TrackSetter,
+        get: fn(&crate::core::Scene, hecs::Entity) -> T,
+        replace: fn(&mut crate::core::Scene, hecs::Entity, T) -> T,
+    ) -> Self {
+        Self {
+            scene,
+            entity,
+            type_id,
+            track_id,
+            track_setter,
+            get,
+            replace,
+        }
+    }
+
+    /// Sets the field target and returns the corresponding tween.
+    pub fn set(self, value: T) -> crate::core::Tween {
+        let old_value = {
+            let mut scene = self.scene.borrow_mut();
+            (self.replace)(&mut scene, self.entity, value.clone())
+        };
+
+        self.tween(old_value, value)
+    }
+
+    fn update(self, update: impl FnOnce(T) -> T) -> crate::core::Tween {
+        let (old_value, new_value) = {
+            let mut scene = self.scene.borrow_mut();
+            let old_value = (self.get)(&scene, self.entity);
+            let new_value = update(old_value.clone());
+            (self.replace)(&mut scene, self.entity, new_value.clone());
+            (old_value, new_value)
+        };
+
+        self.tween(old_value, new_value)
+    }
+
+    fn tween(self, from: T, to: T) -> crate::core::Tween {
+        crate::core::Tween::new(
+            self.entity,
+            self.type_id,
+            self.track_id,
+            self.track_setter,
+            from.into_track_value(),
+            to.into_track_value(),
+        )
+    }
+}
+
+impl<'a> TrackHandle<'a, Vector2> {
+    /// Sets the horizontal coordinate while preserving the vertical coordinate.
+    pub fn x(self, value: f32) -> crate::core::Tween {
+        self.update(|mut position| {
+            position.x = value;
+            position
+        })
+    }
+
+    /// Sets the vertical coordinate while preserving the horizontal coordinate.
+    pub fn y(self, value: f32) -> crate::core::Tween {
+        self.update(|mut position| {
+            position.y = value;
+            position
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn interpolates_vector_values() {
+        let value = TrackValue::Vector2(Vector2::ZERO)
+            .lerp(TrackValue::Vector2(Vector2::new(10.0, 20.0)), 0.5);
+
+        assert!(matches!(value, TrackValue::Vector2(vector) if vector == Vector2::new(5.0, 10.0)));
     }
 }
 

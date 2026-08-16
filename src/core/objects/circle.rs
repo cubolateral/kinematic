@@ -37,7 +37,7 @@ impl Default for CircleBundle {
                     let transform = world.get::<&Transform>(entity).unwrap();
 
                     let mut path = femtovg::Path::new();
-                    path.circle(transform.x, transform.y, shape.radius);
+                    path.circle(transform.position.x, transform.position.y, shape.radius);
                     vg.fill_path(&path, &femtovg::Paint::color(femtovg::Color::white()));
                 },
                 ..Default::default()

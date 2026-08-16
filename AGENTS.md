@@ -34,8 +34,9 @@ loop ownership, and ImGui interaction out of the core domain.
   typed handle returned by `Scene::create`; fields marked `#[trackable]` expose
   trackable component handles through it.
 - `Trackable` components expose fields marked `#[track]`. Adding a newly
-  trackable value type requires coordinated support in `TrackValue`, its
-  interpolation/display behavior, and the `Trackable` derive macro.
+  trackable value type requires coordinated support in `TrackValue`,
+  `TrackValueType`, and its interpolation/display behavior. The `Trackable`
+  derive macro accepts every type that implements `TrackValueType`.
 - In `Trackable` structs, place fields marked `#[track]` before all untracked
   fields.
 - Tracks assume keyframes are appended in non-decreasing timeline order. Preserve
