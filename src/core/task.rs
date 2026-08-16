@@ -2,8 +2,9 @@ use crate::core::{Easing, TrackInfo, TrackValue};
 
 /// A unit of work in an [`Animator`](crate::core::Animator) timeline.
 ///
-/// Tasks are sequenced by the containing animator. [`Self::All`] starts its
-/// children together, while [`Self::Repeat`] repeats its children sequentially.
+/// Tasks are sequenced by the containing animator. [`Self::Chain`] runs its
+/// children sequentially, [`Self::All`] starts its children together, and
+/// [`Self::Repeat`] repeats its children sequentially.
 pub enum Task {
     /// Interpolates one tracked component field over a duration.
     Tween {
@@ -17,6 +18,8 @@ pub enum Task {
     },
     /// Advances the timeline without changing scene state.
     Wait(f32),
+    /// Runs child tasks sequentially from the same group.
+    Chain(Vec<Task>),
     /// Runs all child tasks from the same timeline position.
     All(Vec<Task>),
     /// Repeats a sequence of child tasks a fixed number of times.

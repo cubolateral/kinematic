@@ -28,6 +28,15 @@ impl Animator {
         self.play(Task::Wait(duration));
     }
 
+    /// Adds the tasks scheduled by `schedule` as a sequential group.
+    pub fn chain(&mut self, schedule: impl FnOnce(&mut Animator)) {
+        let mut group = Animator::new();
+
+        schedule(&mut group);
+
+        self.play(Task::Chain(group.tasks));
+    }
+
     /// Adds the tasks scheduled by `schedule` as a simultaneous group.
     ///
     /// The timeline waits for the longest task in the group to finish.
@@ -50,9 +59,10 @@ impl Animator {
 
     /// Compiles scheduled tasks into scene tracks and returns the total duration.
     ///
-    /// Tasks added with [`Self::play`] run sequentially. Nested [`Task::All`]
-    /// tasks share the same start time and advance the timeline by their longest
-    /// child. [`Task::Repeat`] tasks advance it once for each repetition.
+    /// Tasks added with [`Self::play`] run sequentially. [`Task::Chain`] tasks
+    /// advance after each child. Nested [`Task::All`] tasks share the same start
+    /// time and advance the timeline by their longest child. [`Task::Repeat`]
+    /// tasks advance once for each repetition.
     pub fn get_duration(&self, scene: &mut Scene) -> f32 {
         let mut time = 0.0;
 
@@ -88,6 +98,16 @@ impl Animator {
 
             Task::Wait(duration) => *duration,
 
+            Task::Chain(tasks) => {
+                let mut duration = 0.0;
+
+                for task in tasks {
+                    duration += Self::process_task(scene, task, start_time + duration);
+                }
+
+                duration
+            }
+
             Task::All(tasks) => {
                 let mut max_duration: f32 = 0.0;
 
@@ -118,6 +138,42 @@ impl Animator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chain_collects_tasks_scheduled_by_a_closure() {
+        let mut animator = Animator::new();
+
+        animator.chain(|animator| {
+            animator.wait(1.0);
+            animator.wait(2.0);
+        });
+
+        assert_eq!(animator.tasks.len(), 1);
+
+        let Task::Chain(tasks) = &animator.tasks[0] else {
+            panic!("The scheduled task must be a chain group.");
+        };
+
+        assert_eq!(tasks.len(), 2);
+        assert!(matches!(tasks[0], Task::Wait(1.0)));
+        assert!(matches!(tasks[1], Task::Wait(2.0)));
+    }
+
+    #[test]
+    fn chain_runs_its_tasks_sequentially_inside_all() {
+        let mut animator = Animator::new();
+        let mut scene = Scene::new();
+
+        animator.all(|animator| {
+            animator.chain(|animator| {
+                animator.wait(1.0);
+                animator.wait(2.0);
+            });
+            animator.wait(2.0);
+        });
+
+        assert_eq!(animator.get_duration(&mut scene), 3.0);
+    }
 
     #[test]
     fn all_collects_tasks_scheduled_by_a_closure() {
