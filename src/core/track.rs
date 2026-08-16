@@ -19,15 +19,15 @@ pub(crate) struct Keyframe {
 
 #[derive(Debug)]
 pub(crate) struct Track {
-    pub track_setter: TrackSetter,
+    pub info: &'static TrackInfo,
     pub keyframes: Vec<Keyframe>,
 }
 
 impl Track {
     /// Creates an empty track for a single component field.
-    pub fn new(track_setter: TrackSetter) -> Self {
+    pub fn new(info: &'static TrackInfo) -> Self {
         Self {
-            track_setter,
+            info,
             keyframes: vec![],
         }
     }
@@ -37,22 +37,22 @@ impl Track {
             (Some(left), Some(right)) => {
                 // Prevents division by zero.
                 if left.time == right.time {
-                    (self.track_setter)(world, entity, left.value);
+                    (self.info.set)(world, entity, left.value);
                     return;
                 }
 
                 let t = match left.easing {
                     Some(easing) => easing.evaluate((time - left.time) / (right.time - left.time)),
                     None => {
-                        (self.track_setter)(world, entity, left.value);
+                        (self.info.set)(world, entity, left.value);
                         return;
                     }
                 };
 
-                (self.track_setter)(world, entity, left.value.lerp(right.value, t));
+                (self.info.set)(world, entity, left.value.lerp(right.value, t));
             }
-            (Some(left), None) => (self.track_setter)(world, entity, left.value),
-            (None, Some(right)) => (self.track_setter)(world, entity, right.value),
+            (Some(left), None) => (self.info.set)(world, entity, left.value),
+            (None, Some(right)) => (self.info.set)(world, entity, right.value),
             (None, None) => {}
         }
     }
@@ -228,8 +228,7 @@ pub struct TrackHandle<'a, T: TrackValueType> {
     scene: std::rc::Rc<std::cell::RefCell<&'a mut crate::core::Scene>>,
     entity: hecs::Entity,
     type_id: std::any::TypeId,
-    track_id: TrackId,
-    track_setter: TrackSetter,
+    info: &'static TrackInfo,
     get: fn(&crate::core::Scene, hecs::Entity) -> T,
     replace: fn(&mut crate::core::Scene, hecs::Entity, T) -> T,
 }
@@ -240,8 +239,7 @@ impl<'a, T: TrackValueType> TrackHandle<'a, T> {
         scene: std::rc::Rc<std::cell::RefCell<&'a mut crate::core::Scene>>,
         entity: hecs::Entity,
         type_id: std::any::TypeId,
-        track_id: TrackId,
-        track_setter: TrackSetter,
+        info: &'static TrackInfo,
         get: fn(&crate::core::Scene, hecs::Entity) -> T,
         replace: fn(&mut crate::core::Scene, hecs::Entity, T) -> T,
     ) -> Self {
@@ -249,8 +247,7 @@ impl<'a, T: TrackValueType> TrackHandle<'a, T> {
             scene,
             entity,
             type_id,
-            track_id,
-            track_setter,
+            info,
             get,
             replace,
         }
@@ -288,8 +285,7 @@ impl<'a, T: TrackValueType> TrackHandle<'a, T> {
         crate::core::Tween::new(
             self.entity,
             self.type_id,
-            self.track_id,
-            self.track_setter,
+            self.info,
             from.into_track_value(),
             to.into_track_value(),
         )
@@ -369,6 +365,7 @@ mod tests {
     }
 }
 
+#[derive(Debug)]
 pub struct TrackInfo {
     /// Stable track id inside the component type.
     pub id: TrackId,

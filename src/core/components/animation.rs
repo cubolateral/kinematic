@@ -1,12 +1,11 @@
-use crate::core::{Easing, Track, TrackId, TrackSetter, TrackValue};
+use crate::core::{Easing, Track, TrackInfo, TrackValue};
 
 /// Associates a track with the component field it animates.
 ///
-/// The key lives here because it is only needed while compiling tweens into
-/// tracks; a compiled [`Track`] only needs its setter and keyframes.
+/// The component type completes the field metadata stored by [`Track`] to form
+/// the key used while compiling tweens.
 pub(crate) struct AnimationTrack {
     type_id: std::any::TypeId,
-    track_id: TrackId,
     pub(crate) track: Track,
 }
 
@@ -20,8 +19,7 @@ impl Animation {
         &mut self,
         current_time: f32,
         type_id: std::any::TypeId,
-        track_id: TrackId,
-        track_setter: TrackSetter,
+        track_info: &'static TrackInfo,
         from: TrackValue,
         to: TrackValue,
         duration: f32,
@@ -30,14 +28,13 @@ impl Animation {
         let index = match self
             .tracks
             .iter()
-            .position(|track| track.type_id == type_id && track.track_id == track_id)
+            .position(|track| track.type_id == type_id && track.track.info.id == track_info.id)
         {
             Some(index) => index,
             None => {
                 self.tracks.push(AnimationTrack {
                     type_id,
-                    track_id,
-                    track: Track::new(track_setter),
+                    track: Track::new(track_info),
                 });
                 self.tracks.len() - 1
             }

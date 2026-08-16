@@ -55,6 +55,10 @@ loop ownership, and ImGui interaction out of the core domain.
   architecture.
 - Do not use absolute Rust paths with the `::` prefix. Prefer imported names or
   crate-relative paths instead.
+- In `src/`, reserve `use` declarations for project modules. Refer to ordinary
+  external dependency items with qualified paths. Derive macro imports such as
+  `kinematic_macros` and extension traits required for method resolution such as
+  `glow::HasContext` are exceptions.
 
 ## Change Workflow
 

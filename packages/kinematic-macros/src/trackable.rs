@@ -70,8 +70,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 std::rc::Rc::clone(&scene),
                 entity,
                 std::any::TypeId::of::<#struct_name>(),
-                #id,
-                <#struct_name as crate::core::Trackable>::track(#id).set,
+                <#struct_name as crate::core::Trackable>::track(#id),
                 |scene, entity| {
                     scene
                         .get_world()

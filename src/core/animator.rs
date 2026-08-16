@@ -60,8 +60,7 @@ impl Animator {
             Task::Tween {
                 entity,
                 type_id,
-                track_id,
-                track_setter,
+                track_info,
                 from,
                 to,
                 duration,
@@ -72,14 +71,7 @@ impl Animator {
                     .get::<&mut Animation>(*entity)
                     .unwrap()
                     .animate(
-                        start_time,
-                        *type_id,
-                        *track_id,
-                        *track_setter,
-                        *from,
-                        *to,
-                        *duration,
-                        *easing,
+                        start_time, *type_id, track_info, *from, *to, *duration, *easing,
                     );
 
                 *duration

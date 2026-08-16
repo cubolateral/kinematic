@@ -1,4 +1,4 @@
-use crate::core::{Easing, Task, TrackId, TrackSetter, TrackValue};
+use crate::core::{Easing, Task, TrackInfo, TrackValue};
 
 /// Describes the interpolation of a single tracked field.
 ///
@@ -7,8 +7,7 @@ use crate::core::{Easing, Task, TrackId, TrackSetter, TrackValue};
 pub struct Tween {
     entity: hecs::Entity,
     type_id: std::any::TypeId,
-    track_id: TrackId,
-    track_setter: TrackSetter,
+    track_info: &'static TrackInfo,
     from: TrackValue,
     to: TrackValue,
     duration: f32,
@@ -20,16 +19,14 @@ impl Tween {
     pub fn new(
         entity: hecs::Entity,
         type_id: std::any::TypeId,
-        track_id: TrackId,
-        track_setter: TrackSetter,
+        track_info: &'static TrackInfo,
         from: TrackValue,
         to: TrackValue,
     ) -> Self {
         Self {
             entity,
             type_id,
-            track_id,
-            track_setter,
+            track_info,
             from,
             to,
             duration: 0.0,
@@ -54,8 +51,7 @@ impl Tween {
         Task::Tween {
             entity: self.entity,
             type_id: self.type_id,
-            track_id: self.track_id,
-            track_setter: self.track_setter,
+            track_info: self.track_info,
             from: self.from,
             to: self.to,
             duration: self.duration,

@@ -1,4 +1,4 @@
-use crate::core::{Easing, TrackId, TrackSetter, TrackValue};
+use crate::core::{Easing, TrackInfo, TrackValue};
 
 /// A unit of work in an [`Animator`](crate::core::Animator) timeline.
 ///
@@ -10,8 +10,7 @@ pub enum Task {
     Tween {
         entity: hecs::Entity,
         type_id: std::any::TypeId,
-        track_id: TrackId,
-        track_setter: TrackSetter,
+        track_info: &'static TrackInfo,
         from: TrackValue,
         to: TrackValue,
         duration: f32,
