@@ -39,11 +39,20 @@ impl Animator {
         self.play(Task::All(group.tasks));
     }
 
+    /// Repeats the sequence of tasks scheduled by `schedule`.
+    pub fn repeat(&mut self, repetitions: usize, schedule: impl FnOnce(&mut Animator)) {
+        let mut group = Animator::new();
+
+        schedule(&mut group);
+
+        self.play(Task::Repeat(repetitions, group.tasks));
+    }
+
     /// Compiles scheduled tasks into scene tracks and returns the total duration.
     ///
     /// Tasks added with [`Self::play`] run sequentially. Nested [`Task::All`]
     /// tasks share the same start time and advance the timeline by their longest
-    /// child.
+    /// child. [`Task::Repeat`] tasks advance it once for each repetition.
     pub fn get_duration(&self, scene: &mut Scene) -> f32 {
         let mut time = 0.0;
 
@@ -90,6 +99,18 @@ impl Animator {
 
                 max_duration
             }
+
+            Task::Repeat(repetitions, tasks) => {
+                let mut duration = 0.0;
+
+                for _ in 0..*repetitions {
+                    for task in tasks {
+                        duration += Self::process_task(scene, task, start_time + duration);
+                    }
+                }
+
+                duration
+            }
         }
     }
 }
@@ -120,5 +141,77 @@ mod tests {
             animator.wait(1.0);
             animator.wait(2.0);
         });
+    }
+
+    #[test]
+    fn repeat_collects_tasks_scheduled_by_a_closure() {
+        let mut animator = Animator::new();
+
+        animator.repeat(3, |animator| {
+            animator.wait(1.0);
+            animator.wait(2.0);
+        });
+
+        assert_eq!(animator.tasks.len(), 1);
+
+        let Task::Repeat(repetitions, tasks) = &animator.tasks[0] else {
+            panic!("The scheduled task must be a repeat.");
+        };
+
+        assert_eq!(*repetitions, 3);
+        assert_eq!(tasks.len(), 2);
+        assert!(matches!(tasks[0], Task::Wait(1.0)));
+        assert!(matches!(tasks[1], Task::Wait(2.0)));
+    }
+
+    #[test]
+    fn repeat_runs_its_tasks_sequentially() {
+        let mut animator = Animator::new();
+        let mut scene = Scene::new();
+
+        animator.repeat(3, |animator| {
+            animator.wait(1.0);
+            animator.wait(2.0);
+        });
+        animator.wait(1.0);
+
+        assert_eq!(animator.get_duration(&mut scene), 10.0);
+    }
+
+    #[test]
+    fn repeat_continues_tweens_from_the_previous_repetition() {
+        let mut animator = Animator::new();
+        let mut scene = Scene::new();
+        let circle = scene.create(crate::core::objects::CircleBundle::default());
+
+        animator.repeat(2, |animator| {
+            animator.tween(circle.transform(&mut scene).position.x(100.0).duration(1.0));
+            animator.tween(
+                circle
+                    .transform(&mut scene)
+                    .position
+                    .x(-100.0)
+                    .duration(1.0),
+            );
+        });
+
+        assert_eq!(animator.get_duration(&mut scene), 4.0);
+
+        scene.update(2.0);
+        assert_eq!(position_x(&scene), -100.0);
+
+        scene.update(3.0);
+        assert_eq!(position_x(&scene), 100.0);
+
+        scene.update(4.0);
+        assert_eq!(position_x(&scene), -100.0);
+    }
+
+    fn position_x(scene: &Scene) -> f32 {
+        let mut query = scene
+            .get_world()
+            .query::<&crate::core::components::Transform>();
+
+        query.iter().next().unwrap().position.x
     }
 }

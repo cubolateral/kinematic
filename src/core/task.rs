@@ -2,9 +2,8 @@ use crate::core::{Easing, TrackInfo, TrackValue};
 
 /// A unit of work in an [`Animator`](crate::core::Animator) timeline.
 ///
-/// Tasks are sequenced by the containing animator. [`Self::All`] is the one
-/// exception: its children start together and it lasts as long as its longest
-/// child.
+/// Tasks are sequenced by the containing animator. [`Self::All`] starts its
+/// children together, while [`Self::Repeat`] repeats its children sequentially.
 pub enum Task {
     /// Interpolates one tracked component field over a duration.
     Tween {
@@ -20,4 +19,6 @@ pub enum Task {
     Wait(f32),
     /// Runs all child tasks from the same timeline position.
     All(Vec<Task>),
+    /// Repeats a sequence of child tasks a fixed number of times.
+    Repeat(usize, Vec<Task>),
 }

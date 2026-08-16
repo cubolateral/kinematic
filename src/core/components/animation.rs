@@ -40,6 +40,15 @@ impl Animation {
             }
         };
 
+        // An existing track must continue from its latest compiled value. This
+        // lets repeated tasks start from the preceding repetition's target
+        // instead of returning to the value captured when they were declared.
+        let from = self.tracks[index]
+            .track
+            .keyframes
+            .last()
+            .map_or(from, |keyframe| keyframe.value);
+
         // Each tween contributes a start keyframe that owns the easing for the
         // following segment, followed by a target keyframe with no outgoing easing.
         self.tracks[index]
