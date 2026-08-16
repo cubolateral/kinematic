@@ -41,8 +41,13 @@ impl Default for CircleBundle {
                     let transform = world.get::<&Transform>(entity).unwrap();
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
 
+                    vg.save();
+                    vg.translate(transform.position.x, transform.position.y);
+                    vg.scale(transform.scale.x, transform.scale.y);
+                    vg.rotate(transform.rotation);
+
                     let mut path = femtovg::Path::new();
-                    path.circle(transform.position.x, transform.position.y, shape.radius);
+                    path.circle(0.0, 0.0, shape.radius);
 
                     vg.fill_path(
                         &path,
@@ -61,6 +66,8 @@ impl Default for CircleBundle {
                             .with_line_width(style.stroke_width),
                         );
                     }
+
+                    vg.restore();
                 },
                 ..Default::default()
             },

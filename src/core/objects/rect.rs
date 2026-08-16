@@ -46,10 +46,15 @@ impl Default for RectBundle {
                     let transform = world.get::<&Transform>(entity).unwrap();
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
 
+                    vg.save();
+                    vg.translate(transform.position.x, transform.position.y);
+                    vg.rotate(transform.rotation);
+                    vg.scale(transform.scale.x, transform.scale.y);
+
                     let mut path = femtovg::Path::new();
                     path.rect(
-                        transform.position.x - shape.size.x * 0.5,
-                        transform.position.y - shape.size.y * 0.5,
+                        -shape.size.x * 0.5,
+                        -shape.size.y * 0.5,
                         shape.size.x,
                         shape.size.y,
                     );
@@ -71,6 +76,8 @@ impl Default for RectBundle {
                             .with_line_width(style.stroke_width),
                         );
                     }
+
+                    vg.restore();
                 },
                 ..Default::default()
             },
