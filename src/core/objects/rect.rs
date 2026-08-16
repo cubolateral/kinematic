@@ -1,25 +1,30 @@
 use kinematic_macros::{Object, Trackable};
 
-use crate::core::components::{Draw, Style, Transform};
+use crate::core::{
+    components::{Draw, Style, Transform},
+    types::{Vector2, vec2},
+};
 
 #[derive(Trackable)]
-/// Geometry of a circular object.
-pub struct CircleShape {
+/// Geometry of a rectangular object.
+pub struct RectShape {
     #[track]
-    pub radius: f32,
+    pub size: Vector2,
 }
 
-impl Default for CircleShape {
+impl Default for RectShape {
     fn default() -> Self {
-        Self { radius: 128.0 }
+        Self {
+            size: vec2(256.0, 256.0),
+        }
     }
 }
 
 #[derive(Object, hecs::Bundle)]
-/// ECS bundle for the built-in circular scene object.
-pub struct CircleBundle {
+/// ECS bundle for the built-in rectangular scene object.
+pub struct RectBundle {
     #[trackable]
-    pub shape: CircleShape,
+    pub shape: RectShape,
     #[trackable]
     pub style: Style,
     #[trackable]
@@ -28,7 +33,7 @@ pub struct CircleBundle {
     pub draw: Draw,
 }
 
-impl Default for CircleBundle {
+impl Default for RectBundle {
     fn default() -> Self {
         Self {
             shape: Default::default(),
@@ -36,13 +41,18 @@ impl Default for CircleBundle {
             transform: Default::default(),
             draw: Draw {
                 on_draw: |world, entity, vg| {
-                    let shape = world.get::<&CircleShape>(entity).unwrap();
+                    let shape = world.get::<&RectShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform>(entity).unwrap();
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
 
                     let mut path = femtovg::Path::new();
-                    path.circle(transform.position.x, transform.position.y, shape.radius);
+                    path.rect(
+                        transform.position.x - shape.size.x * 0.5,
+                        transform.position.y - shape.size.y * 0.5,
+                        shape.size.x,
+                        shape.size.y,
+                    );
 
                     vg.fill_path(
                         &path,
