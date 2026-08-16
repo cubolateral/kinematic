@@ -26,8 +26,8 @@ impl Scene {
     ///
     /// This updates scene state only; rendering remains in [`Self::draw`].
     pub fn update(&self, time: f32) {
-        for (entity, animation) in self.world.query::<(hecs::Entity, &Animation)>().iter() {
-            for track in &animation.tracks {
+        for (entity, animation) in self.world.query::<(hecs::Entity, &mut Animation)>().iter() {
+            for track in &mut animation.tracks {
                 track.track.update(&self.world, entity, time);
             }
         }

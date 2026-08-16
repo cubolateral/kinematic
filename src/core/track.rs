@@ -21,6 +21,8 @@ pub(crate) struct Keyframe {
 pub(crate) struct Track {
     pub info: &'static TrackInfo,
     pub keyframes: Vec<Keyframe>,
+    current_tween_range: (f32, f32),
+    current_tween_start: usize,
 }
 
 impl Track {
@@ -29,35 +31,41 @@ impl Track {
         Self {
             info,
             keyframes: vec![],
+            current_tween_range: (0.0, 0.0),
+            current_tween_start: 0,
         }
     }
 
-    pub fn update(&self, world: &hecs::World, entity: hecs::Entity, time: f32) {
+    pub fn update(&mut self, world: &hecs::World, entity: hecs::Entity, time: f32) {
+        let set = self.info.set;
+
         match self.find_keyframes(time) {
             (Some(left), Some(right)) => {
                 // Prevents division by zero.
                 if left.time == right.time {
-                    (self.info.set)(world, entity, left.value);
+                    set(world, entity, left.value);
                     return;
                 }
 
                 let t = match left.easing {
                     Some(easing) => easing.evaluate((time - left.time) / (right.time - left.time)),
                     None => {
-                        (self.info.set)(world, entity, left.value);
+                        set(world, entity, left.value);
                         return;
                     }
                 };
 
-                (self.info.set)(world, entity, left.value.lerp(right.value, t));
+                set(world, entity, left.value.lerp(right.value, t));
             }
-            (Some(left), None) => (self.info.set)(world, entity, left.value),
-            (None, Some(right)) => (self.info.set)(world, entity, right.value),
+            (Some(left), None) => set(world, entity, left.value),
+            (None, Some(right)) => set(world, entity, right.value),
             (None, None) => {}
         }
     }
 
     pub fn set_keyframe(&mut self, time: f32, value: TrackValue, easing: Option<Easing>) {
+        self.clear_current_tween_range();
+
         let length = self.keyframes.len();
 
         if let Some(last) = self.keyframes.last_mut() {
@@ -95,10 +103,29 @@ impl Track {
         });
     }
 
-    fn find_keyframes(&self, time: f32) -> (Option<&Keyframe>, Option<&Keyframe>) {
+    fn find_keyframes(&mut self, time: f32) -> (Option<&Keyframe>, Option<&Keyframe>) {
         if self.keyframes.is_empty() {
             return (None, None);
         }
+
+        let (start, end) = self.current_tween_range;
+
+        if start < end && start <= time && time <= end {
+            if start == 0.0 && end == self.keyframes[0].time {
+                return (None, self.keyframes.first());
+            }
+
+            if start == self.keyframes.last().unwrap().time && end == f32::INFINITY {
+                return (self.keyframes.last(), None);
+            }
+
+            let left = &self.keyframes[self.current_tween_start];
+            let right = &self.keyframes[self.current_tween_start + 1];
+
+            return (Some(left), Some(right));
+        }
+
+        self.clear_current_tween_range();
 
         let mut left = 0usize;
         let mut right = self.keyframes.len();
@@ -116,10 +143,34 @@ impl Track {
             }
         }
 
+        let left_index = left.checked_sub(1);
+        let right_index = (left < self.keyframes.len()).then_some(left);
+
+        match (left_index, right_index) {
+            (None, Some(right)) if time >= 0.0 && self.keyframes[right].time > 0.0 => {
+                self.current_tween_range = (0.0, self.keyframes[right].time);
+            }
+            (Some(left), None) if self.keyframes[left].time < f32::INFINITY => {
+                self.current_tween_range = (self.keyframes[left].time, f32::INFINITY);
+            }
+            (Some(left), Some(right))
+                if self.keyframes[left].easing.is_some()
+                    && self.keyframes[left].time < self.keyframes[right].time =>
+            {
+                self.current_tween_range = (self.keyframes[left].time, self.keyframes[right].time);
+                self.current_tween_start = left;
+            }
+            _ => {}
+        }
+
         (
-            left.checked_sub(1).map(|i| &self.keyframes[i]),
-            self.keyframes.get(left),
+            left_index.map(|index| &self.keyframes[index]),
+            right_index.map(|index| &self.keyframes[index]),
         )
+    }
+
+    fn clear_current_tween_range(&mut self) {
+        self.current_tween_range = (0.0, 0.0);
     }
 }
 
@@ -348,6 +399,72 @@ impl<'a> TrackHandle<'a, Color> {
 mod tests {
     use super::*;
 
+    static TEST_TRACK_INFO: TrackInfo = TrackInfo {
+        id: 0,
+        name: "value",
+        get: |_, _| TrackValue::F32(0.0),
+        set: |_, _, _| {},
+    };
+
+    #[test]
+    fn caches_the_current_tween_range() {
+        let mut track = tween_track();
+
+        let _ = track.find_keyframes(5.0);
+        assert_eq!(track.current_tween_range, (0.0, 10.0));
+
+        let _ = track.find_keyframes(8.0);
+        assert_eq!(track.current_tween_range, (0.0, 10.0));
+
+        let _ = track.find_keyframes(15.0);
+        assert_eq!(track.current_tween_range, (10.0, 20.0));
+
+        let _ = track.find_keyframes(5.0);
+        assert_eq!(track.current_tween_range, (0.0, 10.0));
+    }
+
+    #[test]
+    fn caches_the_range_before_the_first_keyframe() {
+        let mut track = offset_tween_track();
+
+        let (left, right) = track.find_keyframes(1.0);
+        assert!(left.is_none());
+        assert_eq!(right.unwrap().time, 3.0);
+        assert_eq!(track.current_tween_range, (0.0, 3.0));
+
+        let (left, right) = track.find_keyframes(2.0);
+        assert!(left.is_none());
+        assert_eq!(right.unwrap().time, 3.0);
+        assert_eq!(track.current_tween_range, (0.0, 3.0));
+    }
+
+    #[test]
+    fn caches_the_range_after_the_last_keyframe() {
+        let mut track = tween_track();
+
+        let (left, right) = track.find_keyframes(25.0);
+        assert_eq!(left.unwrap().time, 20.0);
+        assert!(right.is_none());
+        assert_eq!(track.current_tween_range, (20.0, f32::INFINITY));
+
+        let (left, right) = track.find_keyframes(30.0);
+        assert_eq!(left.unwrap().time, 20.0);
+        assert!(right.is_none());
+        assert_eq!(track.current_tween_range, (20.0, f32::INFINITY));
+    }
+
+    #[test]
+    fn invalidates_the_cached_tween_range_when_adding_a_keyframe() {
+        let mut track = tween_track();
+
+        let _ = track.find_keyframes(5.0);
+        assert_eq!(track.current_tween_range, (0.0, 10.0));
+
+        track.set_keyframe(30.0, TrackValue::F32(30.0), None);
+
+        assert_eq!(track.current_tween_range, (0.0, 0.0));
+    }
+
     #[test]
     fn interpolates_vector_values() {
         let value = TrackValue::Vector2(Vector2::ZERO)
@@ -362,6 +479,21 @@ mod tests {
             .lerp(TrackValue::Color(Color::new(1.0, 0.5, 0.25, 1.0)), 0.5);
 
         assert_eq!(value, TrackValue::Color(Color::new(0.5, 0.25, 0.125, 0.5)));
+    }
+
+    fn tween_track() -> Track {
+        let mut track = Track::new(&TEST_TRACK_INFO);
+        track.set_keyframe(0.0, TrackValue::F32(0.0), Some(Easing::Linear));
+        track.set_keyframe(10.0, TrackValue::F32(10.0), Some(Easing::Linear));
+        track.set_keyframe(20.0, TrackValue::F32(20.0), None);
+        track
+    }
+
+    fn offset_tween_track() -> Track {
+        let mut track = Track::new(&TEST_TRACK_INFO);
+        track.set_keyframe(3.0, TrackValue::F32(3.0), Some(Easing::Linear));
+        track.set_keyframe(10.0, TrackValue::F32(10.0), None);
+        track
     }
 }
 
