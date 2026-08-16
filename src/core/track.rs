@@ -198,11 +198,43 @@ impl TrackValue {
                     aa + (ba - aa) * t,
                 ))
             }
-            (Self::String(_), Self::String(value)) => {
+            (Self::String(a), Self::String(b)) => {
                 let t = t.clamp(0.0, 1.0);
-                let character_count = (value.chars().count() as f32 * t) as usize;
 
-                Self::String(value.chars().take(character_count).collect())
+                if t <= 0.0 {
+                    return Self::String(a.clone());
+                }
+
+                if t >= 1.0 {
+                    return Self::String(b.clone());
+                }
+
+                let from: Vec<char> = a.chars().collect();
+                let to: Vec<char> = b.chars().collect();
+
+                let len = from.len().max(to.len());
+
+                if len == 0 {
+                    return Self::String(String::new());
+                }
+
+                let mut result = String::new();
+
+                for i in 0..len {
+                    let local_t = (t * len as f32 - i as f32).clamp(0.0, 1.0);
+
+                    let character = if local_t < 0.5 {
+                        from.get(i)
+                    } else {
+                        to.get(i)
+                    };
+
+                    if let Some(character) = character {
+                        result.push(*character);
+                    }
+                }
+
+                Self::String(result)
             }
             _ => panic!("Track values must have the same type."),
         }
@@ -509,8 +541,11 @@ mod tests {
         let from = TrackValue::String("Source!".to_owned());
         let to = TrackValue::String("Aé🦀!".to_owned());
 
-        assert_eq!(from.lerp(&to, 0.0), TrackValue::String(String::new()));
-        assert_eq!(from.lerp(&to, 0.5), TrackValue::String("Aé".to_owned()));
+        assert_eq!(from.lerp(&to, 0.0), from);
+        assert_eq!(
+            from.lerp(&to, 0.5),
+            TrackValue::String("Aé🦀!ce!".to_owned())
+        );
         assert_eq!(from.lerp(&to, 1.0), to);
     }
 

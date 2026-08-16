@@ -38,7 +38,7 @@ loop ownership, and ImGui interaction out of the core domain.
   `TrackValueType`, and its interpolation/display behavior. The `Trackable`
   derive macro accepts every type that implements `TrackValueType`.
 - In `Trackable` structs, place fields marked `#[track]` before all untracked
-  fields.
+  fields, with one blank line separating the tracked and untracked field groups.
 - Tracks assume keyframes are appended in non-decreasing timeline order. Preserve
   that invariant when changing task compilation or keyframe insertion.
 - `Draw` callbacks render entity state only. Rendering code should read the ECS
