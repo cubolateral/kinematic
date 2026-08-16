@@ -49,10 +49,12 @@ mod tests {
         let entity = scene.get_world_mut().spawn((Draw::default(),));
 
         Draw::handle(&mut scene, entity).color([0.0, 0.25, 0.5, 0.75]);
+        let alpha = Draw::handle(&mut scene, entity).color.get().a;
         assert_eq!(
             scene.get_world().get::<&Draw>(entity).unwrap().color.rgba(),
             [0.0, 0.25, 0.5, 0.75]
         );
+        assert_eq!(alpha, 0.75);
 
         Draw::handle(&mut scene, entity).color.r(1.0);
         Draw::handle(&mut scene, entity).color.g(0.5);

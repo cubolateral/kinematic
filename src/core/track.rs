@@ -254,6 +254,12 @@ impl<'a, T: TrackValueType> TrackHandle<'a, T> {
         }
     }
 
+    /// Returns the current component field value without creating a tween.
+    pub fn get(&self) -> T {
+        let scene = self.scene.borrow();
+        (self.get)(&scene, self.entity)
+    }
+
     /// Sets the field target and returns the corresponding tween.
     pub fn set(self, value: T) -> crate::core::Tween {
         let old_value = {
