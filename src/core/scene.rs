@@ -1,6 +1,6 @@
 use crate::core::{
     Animator,
-    components::{Animation, Node},
+    components::{Animation, Draw},
     objects::Object,
 };
 
@@ -33,10 +33,13 @@ impl Scene {
         }
     }
 
-    /// Draws each node using the scene state produced by [`Self::update`].
+    /// Draws each entity using the scene state produced by [`Self::update`].
     pub fn draw(&self, vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>) {
-        for (entity, node) in self.world.query::<(hecs::Entity, &Node)>().iter() {
-            (node.on_draw)(&self.world, entity, vg);
+        for (entity, draw) in self.world.query::<(hecs::Entity, &Draw)>().iter() {
+            vg.save_with(|vg| {
+                vg.set_global_alpha(draw.opacity);
+                (draw.on_draw)(&self.world, entity, vg);
+            });
         }
     }
 

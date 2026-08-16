@@ -36,9 +36,11 @@ loop ownership, and ImGui interaction out of the core domain.
 - `Trackable` components expose fields marked `#[track]`. Adding a newly
   trackable value type requires coordinated support in `TrackValue`, its
   interpolation/display behavior, and the `Trackable` derive macro.
+- In `Trackable` structs, place fields marked `#[track]` before all untracked
+  fields.
 - Tracks assume keyframes are appended in non-decreasing timeline order. Preserve
   that invariant when changing task compilation or keyframe insertion.
-- `Node` callbacks render entity state only. Rendering code should read the ECS
+- `Draw` callbacks render entity state only. Rendering code should read the ECS
   world and leave its state unchanged.
 
 ## API Boundaries

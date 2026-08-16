@@ -1,6 +1,6 @@
 use kinematic_macros::{Object, Trackable};
 
-use crate::core::components::{Node, Transform};
+use crate::core::components::{Draw, Transform};
 
 #[derive(Trackable)]
 /// Geometry of a circular object.
@@ -22,8 +22,8 @@ pub struct CircleBundle {
     pub shape: CircleShape,
     #[trackable]
     pub transform: Transform,
-
-    pub node: Node,
+    #[trackable]
+    pub draw: Draw,
 }
 
 impl Default for CircleBundle {
@@ -31,7 +31,7 @@ impl Default for CircleBundle {
         Self {
             shape: Default::default(),
             transform: Default::default(),
-            node: Node {
+            draw: Draw {
                 on_draw: |world, entity, vg| {
                     let shape = world.get::<&CircleShape>(entity).unwrap();
                     let transform = world.get::<&Transform>(entity).unwrap();
