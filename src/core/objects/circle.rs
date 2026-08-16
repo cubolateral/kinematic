@@ -33,12 +33,17 @@ impl Default for CircleBundle {
             transform: Default::default(),
             draw: Draw {
                 on_draw: |world, entity, vg| {
+                    let draw = world.get::<&Draw>(entity).unwrap();
                     let shape = world.get::<&CircleShape>(entity).unwrap();
                     let transform = world.get::<&Transform>(entity).unwrap();
+                    let [r, g, b, a] = draw.color.rgba();
 
                     let mut path = femtovg::Path::new();
                     path.circle(transform.position.x, transform.position.y, shape.radius);
-                    vg.fill_path(&path, &femtovg::Paint::color(femtovg::Color::white()));
+                    vg.fill_path(
+                        &path,
+                        &femtovg::Paint::color(femtovg::Color::rgbaf(r, g, b, a)),
+                    );
                 },
                 ..Default::default()
             },

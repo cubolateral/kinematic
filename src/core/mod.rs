@@ -1,9 +1,9 @@
 pub mod components;
 pub mod objects;
+pub mod types;
 
 mod animator;
 mod easing;
-mod math;
 mod project;
 mod scene;
 mod task;
@@ -12,7 +12,6 @@ mod tween;
 
 pub use animator::*;
 pub use easing::*;
-pub use math::*;
 pub use project::*;
 pub use scene::*;
 pub use task::*;

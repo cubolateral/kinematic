@@ -1,4 +1,7 @@
-use crate::core::{Easing, Vector2};
+use crate::core::{
+    Easing,
+    types::{Color, Vector2},
+};
 
 /// Setter function used by a track to write the interpolated value back to the ECS world.
 pub type TrackSetter = fn(&hecs::World, hecs::Entity, TrackValue);
@@ -118,10 +121,11 @@ impl Track {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TrackValue {
     F32(f32),
     Vector2(Vector2),
+    Color(Color),
 }
 
 impl TrackValue {
@@ -129,6 +133,17 @@ impl TrackValue {
         match (self, to) {
             (Self::F32(a), Self::F32(b)) => Self::F32(a + (b - a) * t),
             (Self::Vector2(a), Self::Vector2(b)) => Self::Vector2(a + (b - a) * t),
+            (Self::Color(a), Self::Color(b)) => {
+                let [ar, ag, ab, aa] = a.rgba();
+                let [br, bg, bb, ba] = b.rgba();
+
+                Self::Color(Color::new(
+                    ar + (br - ar) * t,
+                    ag + (bg - ag) * t,
+                    ab + (bb - ab) * t,
+                    aa + (ba - aa) * t,
+                ))
+            }
             _ => panic!("Track values must have the same type."),
         }
     }
@@ -139,6 +154,10 @@ impl std::fmt::Display for TrackValue {
         match self {
             Self::F32(value) => write!(f, "{value:.2}"),
             Self::Vector2(value) => write!(f, "[{:.2}, {:.2}]", value.x, value.y),
+            Self::Color(value) => {
+                let [r, g, b, a] = value.rgba();
+                write!(f, "[{r:.2}, {g:.2}, {b:.2}, {a:.2}]")
+            }
         }
     }
 }
@@ -182,6 +201,21 @@ impl TrackValueType for Vector2 {
     fn from_track_value(value: TrackValue) -> Option<Self> {
         match value {
             TrackValue::Vector2(value) => Some(value),
+            _ => None,
+        }
+    }
+}
+
+impl TrackValueType for Color {
+    type Input = [f32; 4];
+
+    fn into_track_value(self) -> TrackValue {
+        TrackValue::Color(self)
+    }
+
+    fn from_track_value(value: TrackValue) -> Option<Self> {
+        match value {
+            TrackValue::Color(value) => Some(value),
             _ => None,
         }
     }
@@ -272,6 +306,40 @@ impl<'a> TrackHandle<'a, Vector2> {
     }
 }
 
+impl<'a> TrackHandle<'a, Color> {
+    /// Sets the red channel while preserving the remaining color channels.
+    pub fn r(self, value: f32) -> crate::core::Tween {
+        self.update(|mut color| {
+            color.r = value;
+            color
+        })
+    }
+
+    /// Sets the green channel while preserving the remaining color channels.
+    pub fn g(self, value: f32) -> crate::core::Tween {
+        self.update(|mut color| {
+            color.g = value;
+            color
+        })
+    }
+
+    /// Sets the blue channel while preserving the remaining color channels.
+    pub fn b(self, value: f32) -> crate::core::Tween {
+        self.update(|mut color| {
+            color.b = value;
+            color
+        })
+    }
+
+    /// Sets the alpha channel while preserving the remaining color channels.
+    pub fn a(self, value: f32) -> crate::core::Tween {
+        self.update(|mut color| {
+            color.a = value;
+            color
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,6 +350,14 @@ mod tests {
             .lerp(TrackValue::Vector2(Vector2::new(10.0, 20.0)), 0.5);
 
         assert!(matches!(value, TrackValue::Vector2(vector) if vector == Vector2::new(5.0, 10.0)));
+    }
+
+    #[test]
+    fn interpolates_color_values() {
+        let value = TrackValue::Color(Color::new(0.0, 0.0, 0.0, 0.0))
+            .lerp(TrackValue::Color(Color::new(1.0, 0.5, 0.25, 1.0)), 0.5);
+
+        assert_eq!(value, TrackValue::Color(Color::new(0.5, 0.25, 0.125, 0.5)));
     }
 }
 

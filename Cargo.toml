@@ -14,6 +14,7 @@ dear-imgui-sdl3 = "0.15.1"
 dear-imgui-glow = "0.15.1"
 hecs = { version = "0.11.1", features = ["macros"] }
 glam = "0.33.3"
+palette = "0.7.6"
 
 [workspace]
 members = ["packages/*"]
