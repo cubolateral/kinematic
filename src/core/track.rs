@@ -194,7 +194,7 @@ impl TrackValueType for f32 {
 }
 
 impl TrackValueType for Vector2 {
-    type Input = [f32; 2];
+    type Input = Vector2;
 
     fn into_track_value(self) -> TrackValue {
         TrackValue::Vector2(self)
@@ -209,7 +209,7 @@ impl TrackValueType for Vector2 {
 }
 
 impl TrackValueType for Color {
-    type Input = [f32; 4];
+    type Input = Color;
 
     fn into_track_value(self) -> TrackValue {
         TrackValue::Color(self)
