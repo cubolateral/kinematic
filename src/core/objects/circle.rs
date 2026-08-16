@@ -43,8 +43,8 @@ impl Default for CircleBundle {
 
                     vg.save();
                     vg.translate(transform.position.x, transform.position.y);
-                    vg.scale(transform.scale.x, transform.scale.y);
                     vg.rotate(transform.rotation);
+                    vg.scale(transform.scale.x, transform.scale.y);
 
                     let mut path = femtovg::Path::new();
                     path.circle(0.0, 0.0, shape.radius);
