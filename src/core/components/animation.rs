@@ -47,7 +47,7 @@ impl Animation {
             .track
             .keyframes
             .last()
-            .map_or(from, |keyframe| keyframe.value);
+            .map_or(from, |keyframe| keyframe.value.clone());
 
         // Each tween contributes a start keyframe that owns the easing for the
         // following segment, followed by a target keyframe with no outgoing easing.

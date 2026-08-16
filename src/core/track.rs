@@ -43,22 +43,22 @@ impl Track {
             (Some(left), Some(right)) => {
                 // Prevents division by zero.
                 if left.time == right.time {
-                    set(world, entity, left.value);
+                    set(world, entity, left.value.clone());
                     return;
                 }
 
                 let t = match left.easing {
                     Some(easing) => easing.evaluate((time - left.time) / (right.time - left.time)),
                     None => {
-                        set(world, entity, left.value);
+                        set(world, entity, left.value.clone());
                         return;
                     }
                 };
 
-                set(world, entity, left.value.lerp(right.value, t));
+                set(world, entity, left.value.lerp(&right.value, t));
             }
-            (Some(left), None) => set(world, entity, left.value),
-            (None, Some(right)) => set(world, entity, right.value),
+            (Some(left), None) => set(world, entity, left.value.clone()),
+            (None, Some(right)) => set(world, entity, right.value.clone()),
             (None, None) => {}
         }
     }
@@ -174,15 +174,16 @@ impl Track {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TrackValue {
     F32(f32),
     Vector2(Vector2),
     Color(Color),
+    String(String),
 }
 
 impl TrackValue {
-    pub fn lerp(self, to: Self, t: f32) -> Self {
+    pub fn lerp(&self, to: &Self, t: f32) -> Self {
         match (self, to) {
             (Self::F32(a), Self::F32(b)) => Self::F32(a + (b - a) * t),
             (Self::Vector2(a), Self::Vector2(b)) => Self::Vector2(a + (b - a) * t),
@@ -196,6 +197,12 @@ impl TrackValue {
                     ab + (bb - ab) * t,
                     aa + (ba - aa) * t,
                 ))
+            }
+            (Self::String(_), Self::String(value)) => {
+                let t = t.clamp(0.0, 1.0);
+                let character_count = (value.chars().count() as f32 * t) as usize;
+
+                Self::String(value.chars().take(character_count).collect())
             }
             _ => panic!("Track values must have the same type."),
         }
@@ -211,6 +218,7 @@ impl std::fmt::Display for TrackValue {
                 let [r, g, b, a] = value.rgba();
                 write!(f, "[{r:.2}, {g:.2}, {b:.2}, {a:.2}]")
             }
+            Self::String(value) => f.write_str(value),
         }
     }
 }
@@ -269,6 +277,21 @@ impl TrackValueType for Color {
     fn from_track_value(value: TrackValue) -> Option<Self> {
         match value {
             TrackValue::Color(value) => Some(value),
+            _ => None,
+        }
+    }
+}
+
+impl TrackValueType for String {
+    type Input = String;
+
+    fn into_track_value(self) -> TrackValue {
+        TrackValue::String(self)
+    }
+
+    fn from_track_value(value: TrackValue) -> Option<Self> {
+        match value {
+            TrackValue::String(value) => Some(value),
             _ => None,
         }
     }
@@ -468,7 +491,7 @@ mod tests {
     #[test]
     fn interpolates_vector_values() {
         let value = TrackValue::Vector2(Vector2::ZERO)
-            .lerp(TrackValue::Vector2(Vector2::new(10.0, 20.0)), 0.5);
+            .lerp(&TrackValue::Vector2(Vector2::new(10.0, 20.0)), 0.5);
 
         assert!(matches!(value, TrackValue::Vector2(vector) if vector == Vector2::new(5.0, 10.0)));
     }
@@ -476,9 +499,27 @@ mod tests {
     #[test]
     fn interpolates_color_values() {
         let value = TrackValue::Color(Color::new(0.0, 0.0, 0.0, 0.0))
-            .lerp(TrackValue::Color(Color::new(1.0, 0.5, 0.25, 1.0)), 0.5);
+            .lerp(&TrackValue::Color(Color::new(1.0, 0.5, 0.25, 1.0)), 0.5);
 
         assert_eq!(value, TrackValue::Color(Color::new(0.5, 0.25, 0.125, 0.5)));
+    }
+
+    #[test]
+    fn interpolates_string_values_by_revealing_unicode_characters() {
+        let from = TrackValue::String("Source!".to_owned());
+        let to = TrackValue::String("Aé🦀!".to_owned());
+
+        assert_eq!(from.lerp(&to, 0.0), TrackValue::String(String::new()));
+        assert_eq!(from.lerp(&to, 0.5), TrackValue::String("Aé".to_owned()));
+        assert_eq!(from.lerp(&to, 1.0), to);
+    }
+
+    #[test]
+    fn converts_string_track_values() {
+        let value = "Kinematic!".to_owned();
+        let track_value = value.clone().into_track_value();
+
+        assert_eq!(String::from_track_value(track_value), Some(value));
     }
 
     fn tween_track() -> Track {

@@ -90,7 +90,13 @@ impl Animator {
                     .get::<&mut Animation>(*entity)
                     .unwrap()
                     .animate(
-                        start_time, *type_id, track_info, *from, *to, *duration, *easing,
+                        start_time,
+                        *type_id,
+                        track_info,
+                        from.clone(),
+                        to.clone(),
+                        *duration,
+                        *easing,
                     );
 
                 *duration
