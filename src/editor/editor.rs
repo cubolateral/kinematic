@@ -1,7 +1,6 @@
 use crate::{
     core::{Project, Scene},
     editor::{Canvas, Timeline},
-    ui::Ui,
 };
 
 pub(crate) struct Editor {
@@ -44,7 +43,6 @@ impl Editor {
         window_size: (u32, u32),
         gl: &glow::Context,
         vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
-        ui: &mut dear_imgui_rs::Ui,
     ) {
         self.preview.draw(window_size, gl, vg, |vg| {
             let (width, height) = self.preview.get_size();
@@ -55,8 +53,6 @@ impl Editor {
             self.scene.draw(vg);
             vg.restore();
         });
-
-        Ui::draw(self, ui);
     }
 
     pub fn get_project(&mut self) -> &mut Project {

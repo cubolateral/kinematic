@@ -71,6 +71,9 @@ loop ownership, and ImGui interaction out of the core domain.
    concrete architectural need.
 5. Start string literals and comments with an uppercase letter, and end them
    with a period or exclamation mark.
+6. Keep implementations simple: do not add unnecessary structs, functions, or
+   layers of indirection. Introduce an abstraction only when it is genuinely
+   needed by the behavior or architecture.
 
 ## Maintaining This File
 

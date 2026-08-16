@@ -23,7 +23,7 @@ impl TrackView {
             layout,
             time,
             text: ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
-            active: ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBgActive),
+            active: ui.get_color_u32(dear_imgui_rs::StyleColor::SliderGrabActive),
             inactive: ui.get_color_u32(dear_imgui_rs::StyleColor::Separator),
             hovered: ui.is_window_hovered(),
         }

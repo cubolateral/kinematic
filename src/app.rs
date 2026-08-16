@@ -1,8 +1,9 @@
 use glow::HasContext;
 
-use crate::{core::Project, editor::Editor};
+use crate::{core::Project, editor::Editor, ui::Ui};
 
 pub struct App {
+    ui: Ui,
     imgui_renderer: dear_imgui_glow::GlowRenderer,
     imgui_sdl: dear_imgui_sdl3::Sdl3PlatformBackend,
     imgui: dear_imgui_rs::Context,
@@ -59,10 +60,7 @@ impl App {
         // Initialize imgui.
         let mut imgui = dear_imgui_rs::Context::create();
 
-        // Enable docking.
-        let mut flags = imgui.io().config_flags();
-        flags.insert(dear_imgui_rs::ConfigFlags::DOCKING_ENABLE);
-        imgui.io_mut().set_config_flags(flags);
+        let ui = Ui::new(&mut imgui);
 
         let imgui_sdl = dear_imgui_sdl3::Sdl3PlatformBackend::init_platform_for_opengl(
             &mut imgui,
@@ -75,6 +73,7 @@ impl App {
         let gl = imgui_renderer.gl_context().unwrap().clone();
 
         Self {
+            ui,
             imgui_renderer,
             imgui_sdl,
             imgui,
@@ -121,14 +120,11 @@ impl App {
                 self.gl.clear(glow::COLOR_BUFFER_BIT);
             }
 
+            editor.draw(self.window.size(), &self.gl, &mut self.vg);
+
             self.imgui_sdl.new_frame(&mut self.imgui);
 
-            editor.draw(
-                self.window.size(),
-                &self.gl,
-                &mut self.vg,
-                self.imgui.frame(),
-            );
+            self.ui.draw(&mut editor, self.imgui.frame());
 
             self.imgui_renderer.render(self.imgui.render()).unwrap();
             self.window.gl_swap_window();

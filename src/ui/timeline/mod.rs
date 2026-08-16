@@ -248,6 +248,7 @@ fn draw_overlay(
             ui.get_color_u32(dear_imgui_rs::StyleColor::PopupBg),
         )
         .filled(true)
+        .rounding(3.0)
         .build();
     draw_list
         .add_rect(
@@ -255,6 +256,7 @@ fn draw_overlay(
             max,
             ui.get_color_u32(dear_imgui_rs::StyleColor::Border),
         )
+        .rounding(3.0)
         .build();
     draw_list.add_text(position, text_color, text);
 }
