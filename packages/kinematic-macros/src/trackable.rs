@@ -18,11 +18,20 @@ fn type_fragment(identifier: &syn::Ident) -> String {
         .collect()
 }
 
-/// Generates the typed handle and track metadata for a `Trackable` component.
+/// Generates object-handler fields and track metadata for a `Trackable` component.
 pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let handle_name = format_ident!("{}Handle", struct_name);
+    let handler_fields_name = format_ident!("__{}HandlerFields", struct_name);
+    let builder_component_trait = format_ident!("__Kinematic{}BuilderComponent", struct_name);
+    let scene_world_type = format_ident!("__Kinematic{}SceneWorld", struct_name);
+    let track_handle_type = format_ident!("__Kinematic{}TrackHandle", struct_name);
+    let track_id_type = format_ident!("__Kinematic{}TrackId", struct_name);
+    let track_info_type = format_ident!("__Kinematic{}TrackInfo", struct_name);
+    let trackable_info_type = format_ident!("__Kinematic{}TrackableInfo", struct_name);
+    let trackable_trait = format_ident!("__Kinematic{}Trackable", struct_name);
+    let track_value_type_trait = format_ident!("__Kinematic{}TrackValueType", struct_name);
+    let tween_type = format_ident!("__Kinematic{}Tween", struct_name);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -67,10 +76,10 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 
             impl<T> #setter_trait for T
             where
-                T: crate::core::objects::ObjectBuilderComponent<#struct_name>,
+                T: #builder_component_trait<#struct_name>,
             {
                 fn #field_ident(mut self, value: #field_ty) -> Self {
-                    <T as crate::core::objects::ObjectBuilderComponent<#struct_name>>::component_mut(
+                    <T as #builder_component_trait<#struct_name>>::component_mut(
                         &mut self,
                     ).#field_ident = value;
                     self
@@ -88,22 +97,22 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 
         type_assertions.push(quote! {
             const _: fn() = {
-                fn assert_track_value_type<T: crate::core::TrackValueType>() {}
+                fn assert_track_value_type<T: #track_value_type_trait>() {}
                 assert_track_value_type::<#field_ty>
             };
         });
 
         track_entries.push(quote! {
-            crate::core::TrackInfo {
+            #track_info_type {
                 id: #id,
                 name: #field_name,
                 get: |world, entity| {
-                    <#field_ty as crate::core::TrackValueType>::into_track_value(
+                    <#field_ty as #track_value_type_trait>::into_track_value(
                         world.get::<&#struct_name>(entity).unwrap().#field_ident.clone()
                     )
                 },
                 set: |world, entity, value| {
-                    if let Some(value) = <#field_ty as crate::core::TrackValueType>::from_track_value(value) {
+                    if let Some(value) = <#field_ty as #track_value_type_trait>::from_track_value(value) {
                         world.get::<&mut #struct_name>(entity).unwrap().#field_ident = value;
                     }
                 },
@@ -111,15 +120,15 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         });
 
         handle_fields.push(quote! {
-            #field_visibility #field_ident: crate::core::TrackHandle<#field_ty>,
+            #field_visibility #field_ident: #track_handle_type<#field_ty>,
         });
 
         handle_initializers.push(quote! {
-            #field_ident: crate::core::TrackHandle::new(
+            #field_ident: #track_handle_type::new(
                 std::rc::Rc::clone(&world),
                 entity,
                 std::any::TypeId::of::<#struct_name>(),
-                <#struct_name as crate::core::Trackable>::track(#id),
+                <#struct_name as #trackable_trait>::track(#id),
                 |world, entity| {
                     world
                         .get::<&#struct_name>(entity)
@@ -140,9 +149,9 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 
         tween_fns.push(quote! {
             #field_visibility fn #field_ident(
-                self,
-                value: <#field_ty as crate::core::TrackValueType>::Input,
-            ) -> crate::core::Tween {
+                &self,
+                value: <#field_ty as #track_value_type_trait>::Input,
+            ) -> #tween_type {
                 self.#field_ident.set(value.into())
             }
         });
@@ -150,56 +159,70 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 
     let tracks_ident = format_ident!("__{}_TRACKS", struct_name.to_string().to_uppercase());
     let expanded = quote! {
+        use crate::core::{
+            SceneWorld as #scene_world_type,
+            TrackHandle as #track_handle_type,
+            TrackId as #track_id_type,
+            TrackInfo as #track_info_type,
+            Trackable as #trackable_trait,
+            TrackableInfo as #trackable_info_type,
+            TrackValueType as #track_value_type_trait,
+            Tween as #tween_type,
+            objects::ObjectBuilderComponent as #builder_component_trait,
+        };
+
         #(#type_assertions)*
         #(#builder_setters)*
 
-        /// Typed access wrapper around an entity's tracked component.
-        pub struct #handle_name {
+        /// Internal tracked-field layer used by generated object handlers.
+        #[doc(hidden)]
+        pub struct #handler_fields_name<Next> {
             #(#handle_fields)*
+            next: Next,
         }
 
-        impl #struct_name {
-            /// Builds the generated handle for this trackable component.
-            pub fn handle(
-                world: crate::core::SceneWorld,
-                entity: hecs::Entity,
-            ) -> #handle_name {
-                #handle_name {
-                    #(#handle_initializers)*
-                }
+        impl<Next> std::ops::Deref for #handler_fields_name<Next> {
+            type Target = Next;
+
+            fn deref(&self) -> &Self::Target {
+                &self.next
             }
         }
 
-        impl #handle_name {
+        impl<Next> #handler_fields_name<Next> {
             #(#tween_fns)*
         }
 
         #[allow(non_upper_case_globals)]
-        const #tracks_ident: [crate::core::TrackInfo; #count] = [
+        const #tracks_ident: [#track_info_type; #count] = [
             #(#track_entries),*
         ];
 
-        impl crate::core::Trackable for #struct_name {
-            type Handle = #handle_name;
+        impl #trackable_trait for #struct_name {
+            type HandlerFields<Next> = #handler_fields_name<Next>;
 
-            fn handle(
-                world: crate::core::SceneWorld,
+            fn handler_fields<Next>(
+                world: #scene_world_type,
                 entity: hecs::Entity,
-            ) -> Self::Handle {
-                #struct_name::handle(world, entity)
+                next: Next,
+            ) -> Self::HandlerFields<Next> {
+                #handler_fields_name {
+                    #(#handle_initializers)*
+                    next,
+                }
             }
 
-            fn track(id: crate::core::TrackId) -> &'static crate::core::TrackInfo {
+            fn track(id: #track_id_type) -> &'static #track_info_type {
                 &#tracks_ident[id as usize]
             }
 
-            fn info() -> &'static crate::core::TrackableInfo {
+            fn info() -> &'static #trackable_info_type {
                 &Self::INFO
             }
         }
 
         impl #struct_name {
-            pub const INFO: crate::core::TrackableInfo = crate::core::TrackableInfo {
+            pub const INFO: #trackable_info_type = #trackable_info_type {
                 name: stringify!(#struct_name),
                 get: || &#tracks_ident,
             };

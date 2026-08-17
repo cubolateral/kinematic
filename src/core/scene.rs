@@ -69,6 +69,7 @@ impl Scene {
     ///         .position(Vector2::ZERO)
     ///         .build(),
     /// );
+    /// let _ = text.position.x(100.0);
     /// ```
     pub fn create<T: Object + hecs::DynamicBundle>(&mut self, object: T) -> T::Handler {
         let entity = self.world.borrow_mut().spawn(
@@ -118,13 +119,13 @@ mod tests {
     }
 
     #[test]
-    fn create_returns_the_generated_object_handler() {
+    fn object_handler_exposes_trackable_fields_directly() {
         let mut scene = Scene::new();
         let text: TextHandler = scene.create(TextBuilder::new().build());
         let circle: CircleHandler = scene.create(CircleBuilder::new().build());
 
-        let _ = text.draw().opacity(0.25);
-        let _ = circle.transform().position.x(10.0);
+        let _ = text.opacity(0.25);
+        let _ = circle.position.x(10.0);
         let world = scene.get_world();
         let mut query = world.query::<&Draw>();
 

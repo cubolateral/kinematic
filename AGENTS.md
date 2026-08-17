@@ -32,8 +32,9 @@ loop ownership, and ImGui interaction out of the core domain.
   animation and inspector metadata required by the runtime and editor.
 - Objects are ECS bundles implementing `Object`. The `Object` derive creates a
   `<Object>Builder` and the typed `<Object>Handler` returned by `Scene::create`;
-  fields marked `#[trackable]` expose their values directly on the builder and
-  component handles through the handler.
+  fields marked `#[trackable]` expose their values directly on both types. The
+  public API must not require component-level handlers or component-name access
+  such as `object.transform().position`; use the flat `object.position` form.
 - `Trackable` components expose fields marked `#[track]`. Adding a newly
   trackable value type requires coordinated support in `TrackValue`,
   `TrackValueType`, and its interpolation/display behavior. The `Trackable`

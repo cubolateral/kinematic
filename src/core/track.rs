@@ -366,7 +366,7 @@ impl<T: TrackValueType> TrackHandle<T> {
     }
 
     /// Sets the field target and returns the corresponding tween.
-    pub fn set(self, value: T) -> Tween {
+    pub fn set(&self, value: T) -> Tween {
         let old_value = {
             let mut world = self.world.borrow_mut();
             (self.replace)(&mut world, self.entity, value.clone())
@@ -375,7 +375,7 @@ impl<T: TrackValueType> TrackHandle<T> {
         self.tween(old_value, value)
     }
 
-    fn update(self, update: impl FnOnce(T) -> T) -> Tween {
+    fn update(&self, update: impl FnOnce(T) -> T) -> Tween {
         let (old_value, new_value) = {
             let world = self.world.borrow();
             let old_value = (self.get)(&world, self.entity);
@@ -389,7 +389,7 @@ impl<T: TrackValueType> TrackHandle<T> {
         self.tween(old_value, new_value)
     }
 
-    fn tween(self, from: T, to: T) -> Tween {
+    fn tween(&self, from: T, to: T) -> Tween {
         Tween::new(
             self.entity,
             self.type_id,
@@ -402,7 +402,7 @@ impl<T: TrackValueType> TrackHandle<T> {
 
 impl TrackHandle<Vector2> {
     /// Sets the horizontal coordinate while preserving the vertical coordinate.
-    pub fn x(self, value: f32) -> Tween {
+    pub fn x(&self, value: f32) -> Tween {
         self.update(|mut position| {
             position.x = value;
             position
@@ -410,7 +410,7 @@ impl TrackHandle<Vector2> {
     }
 
     /// Sets the vertical coordinate while preserving the horizontal coordinate.
-    pub fn y(self, value: f32) -> Tween {
+    pub fn y(&self, value: f32) -> Tween {
         self.update(|mut position| {
             position.y = value;
             position
@@ -420,7 +420,7 @@ impl TrackHandle<Vector2> {
 
 impl TrackHandle<Color> {
     /// Sets the red channel while preserving the remaining color channels.
-    pub fn r(self, value: f32) -> Tween {
+    pub fn r(&self, value: f32) -> Tween {
         self.update(|mut color| {
             color.r = value;
             color
@@ -428,7 +428,7 @@ impl TrackHandle<Color> {
     }
 
     /// Sets the green channel while preserving the remaining color channels.
-    pub fn g(self, value: f32) -> Tween {
+    pub fn g(&self, value: f32) -> Tween {
         self.update(|mut color| {
             color.g = value;
             color
@@ -436,7 +436,7 @@ impl TrackHandle<Color> {
     }
 
     /// Sets the blue channel while preserving the remaining color channels.
-    pub fn b(self, value: f32) -> Tween {
+    pub fn b(&self, value: f32) -> Tween {
         self.update(|mut color| {
             color.b = value;
             color
@@ -444,7 +444,7 @@ impl TrackHandle<Color> {
     }
 
     /// Sets the alpha channel while preserving the remaining color channels.
-    pub fn a(self, value: f32) -> Tween {
+    pub fn a(&self, value: f32) -> Tween {
         self.update(|mut color| {
             color.a = value;
             color
@@ -598,11 +598,15 @@ pub struct TrackableInfo {
 
 /// Trait implemented by types that expose animatable fields.
 pub trait Trackable {
-    /// Per-type handle returned by the generated `handle(...)` helper.
-    type Handle;
+    /// Internal field layer added to generated object handlers.
+    type HandlerFields<Next>;
 
-    /// Builds a handle around an entity stored in the scene world.
-    fn handle(world: SceneWorld, entity: hecs::Entity) -> Self::Handle;
+    /// Builds this component's tracked fields around the next handler layer.
+    fn handler_fields<Next>(
+        world: SceneWorld,
+        entity: hecs::Entity,
+        next: Next,
+    ) -> Self::HandlerFields<Next>;
 
     /// Returns metadata for a tracked field id.
     fn track(id: TrackId) -> &'static TrackInfo;
