@@ -40,16 +40,22 @@ impl Default for Rect {
             style: Default::default(),
             transform: Default::default(),
             draw: Draw {
+                get_rect: |world, entity, _| {
+                    let shape = world.get::<&RectShape>(entity).unwrap();
+                    let style = world.get::<&Style>(entity).unwrap();
+                    let padding = style.stroke_width.max(0.0) * 0.5 + 1.0;
+
+                    [
+                        -shape.size.x * 0.5 - padding,
+                        -shape.size.y * 0.5 - padding,
+                        shape.size.x + padding * 2.0,
+                        shape.size.y + padding * 2.0,
+                    ]
+                },
                 on_draw: |world, entity, vg| {
                     let shape = world.get::<&RectShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
-                    let transform = world.get::<&Transform>(entity).unwrap();
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
-
-                    vg.save();
-                    vg.translate(transform.position.x, transform.position.y);
-                    vg.rotate(transform.rotation);
-                    vg.scale(transform.scale.x, transform.scale.y);
 
                     let mut path = femtovg::Path::new();
                     path.rect(
@@ -76,8 +82,6 @@ impl Default for Rect {
                             .with_line_width(style.stroke_width),
                         );
                     }
-
-                    vg.restore();
                 },
                 ..Default::default()
             },

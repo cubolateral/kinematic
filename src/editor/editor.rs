@@ -44,13 +44,13 @@ impl Editor {
         gl: &glow::Context,
         vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
     ) {
-        self.preview.draw(window_size, gl, vg, |vg| {
+        self.preview.draw(window_size, gl, vg, |vg, target| {
             let (width, height) = self.preview.get_size();
 
             vg.clear_rect(0, 0, width, height, femtovg::Color::black());
             vg.save();
             vg.translate(width as f32 * 0.5, height as f32 * 0.5);
-            self.scene.draw(vg);
+            self.scene.draw_to(vg, target);
             vg.restore();
         });
     }

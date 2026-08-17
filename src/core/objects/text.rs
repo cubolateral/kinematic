@@ -105,17 +105,36 @@ impl Default for Text {
             style: Default::default(),
             transform: Default::default(),
             draw: Draw {
+                get_rect: |world, entity, vg| {
+                    let shape = world.get::<&TextShape>(entity).unwrap();
+                    let style = world.get::<&Style>(entity).unwrap();
+                    let font = shape.font.id(vg);
+                    let paint = femtovg::Paint::color(femtovg::Color::white())
+                        .with_font(&[font])
+                        .with_font_size(shape.size)
+                        .with_text_align(femtovg::Align::Center)
+                        .with_text_baseline(femtovg::Baseline::Middle);
+                    let metrics = vg
+                        .measure_text(0.0, 0.0, &shape.text, &paint)
+                        .expect("Text bounds must be measured.");
+                    let font_metrics = vg
+                        .measure_font(&paint)
+                        .expect("Font bounds must be measured.");
+                    let height = font_metrics.ascender() - font_metrics.descender();
+                    let padding = style.stroke_width.max(0.0) * 0.5 + 1.0;
+
+                    [
+                        metrics.x - padding,
+                        -height * 0.5 - padding,
+                        metrics.width() + padding * 2.0,
+                        height + padding * 2.0,
+                    ]
+                },
                 on_draw: |world, entity, vg| {
                     let shape = world.get::<&TextShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
-                    let transform = world.get::<&Transform>(entity).unwrap();
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
                     let font = shape.font.id(vg);
-
-                    vg.save();
-                    vg.translate(transform.position.x, transform.position.y);
-                    vg.rotate(transform.rotation);
-                    vg.scale(transform.scale.x, transform.scale.y);
 
                     let fill_paint = femtovg::Paint::color(femtovg::Color::rgbaf(
                         fill_r, fill_g, fill_b, fill_a,
@@ -142,8 +161,6 @@ impl Default for Text {
                         vg.stroke_text(0.0, 0.0, &shape.text, &stroke_paint)
                             .expect("Text stroke must render.");
                     }
-
-                    vg.restore();
                 },
                 ..Default::default()
             },

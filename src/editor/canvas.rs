@@ -40,10 +40,11 @@ impl Canvas {
         window_size: (u32, u32),
         gl: &glow::Context,
         vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
-        f: impl FnOnce(&mut femtovg::Canvas<femtovg::renderer::OpenGl>),
+        f: impl FnOnce(&mut femtovg::Canvas<femtovg::renderer::OpenGl>, femtovg::RenderTarget),
     ) {
-        vg.set_render_target(femtovg::RenderTarget::Image(self.vg_image_id));
-        f(vg);
+        let target = femtovg::RenderTarget::Image(self.vg_image_id);
+        vg.set_render_target(target);
+        f(vg, target);
         vg.flush();
         vg.set_render_target(femtovg::RenderTarget::Screen);
 

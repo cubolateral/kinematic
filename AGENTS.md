@@ -43,8 +43,11 @@ loop ownership, and ImGui interaction out of the core domain.
   fields, with one blank line separating the tracked and untracked field groups.
 - Tracks assume keyframes are appended in non-decreasing timeline order. Preserve
   that invariant when changing task compilation or keyframe insertion.
-- `Draw` callbacks render entity state only. Rendering code should read the ECS
-  world and leave its state unchanged.
+- `Draw::get_rect` defines an entity's local drawing bounds. `Scene` renders each
+  `Draw` into a per-entity offscreen surface, then composites that surface using
+  the entity's `Transform` and opacity. `Draw::on_draw` must use local coordinates
+  and must not apply the entity transform itself. Drawing callbacks should read
+  the ECS world and leave its state unchanged.
 - The timeline track area supports viewport zoom by vertical mouse dragging and
   horizontal pan by horizontal dragging with the left mouse button. The initial
   drag direction selects the operation, while the right mouse button controls

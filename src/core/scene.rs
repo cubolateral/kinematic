@@ -1,6 +1,6 @@
 use crate::core::{
     Animator,
-    components::{Animation, Draw},
+    components::{Animation, Draw, Transform},
     objects::Object,
 };
 
@@ -15,6 +15,13 @@ pub trait SceneBuilder {
 /// Runtime ECS scene containing render nodes and compiled animation tracks.
 pub struct Scene {
     world: SceneWorld,
+    render_surfaces: std::cell::RefCell<std::collections::HashMap<hecs::Entity, RenderSurface>>,
+}
+
+struct RenderSurface {
+    image: femtovg::ImageId,
+    width: usize,
+    height: usize,
 }
 
 impl Scene {
@@ -22,6 +29,7 @@ impl Scene {
     pub fn new() -> Self {
         Self {
             world: std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new())),
+            render_surfaces: std::cell::RefCell::new(std::collections::HashMap::new()),
         }
     }
 
@@ -39,13 +47,97 @@ impl Scene {
 
     /// Draws each entity using the scene state produced by [`Self::update`].
     pub fn draw(&self, vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>) {
+        self.draw_to(vg, femtovg::RenderTarget::Screen);
+    }
+
+    /// Draws each entity into the supplied render target.
+    pub fn draw_to(
+        &self,
+        vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+        target: femtovg::RenderTarget,
+    ) {
         let world = self.world.borrow();
-        for (entity, draw) in world.query::<(hecs::Entity, &Draw)>().iter() {
+        let mut surfaces = self.render_surfaces.borrow_mut();
+        let mut live = std::collections::HashSet::new();
+        let flags = femtovg::ImageFlags::PREMULTIPLIED | femtovg::ImageFlags::FLIP_Y;
+
+        for (entity, draw, transform) in world.query::<(hecs::Entity, &Draw, &Transform)>().iter() {
+            let [x, y, width, height] = (draw.get_rect)(&world, entity, vg);
+            if ![x, y, width, height].iter().all(|value| value.is_finite())
+                || width <= 0.0
+                || height <= 0.0
+            {
+                continue;
+            }
+
+            live.insert(entity);
+            let image_width = width.ceil() as usize;
+            let image_height = height.ceil() as usize;
+            let surface = surfaces.entry(entity).or_insert_with(|| RenderSurface {
+                image: vg
+                    .create_image_empty(
+                        image_width,
+                        image_height,
+                        femtovg::PixelFormat::Rgba8,
+                        flags,
+                    )
+                    .expect("Entity render surface must be created."),
+                width: image_width,
+                height: image_height,
+            });
+
+            if surface.width != image_width || surface.height != image_height {
+                vg.realloc_image(
+                    surface.image,
+                    image_width,
+                    image_height,
+                    femtovg::PixelFormat::Rgba8,
+                    flags,
+                )
+                .expect("Entity render surface must be resized.");
+                surface.width = image_width;
+                surface.height = image_height;
+            }
+
+            vg.set_render_target(femtovg::RenderTarget::Image(surface.image));
+            vg.clear_rect(
+                0,
+                0,
+                image_width as u32,
+                image_height as u32,
+                femtovg::Color::rgba(0, 0, 0, 0),
+            );
             vg.save_with(|vg| {
-                vg.set_global_alpha(draw.opacity);
+                vg.reset_transform();
+                vg.set_global_alpha(1.0);
+                vg.translate(-x, -y);
                 (draw.on_draw)(&world, entity, vg);
             });
+
+            vg.set_render_target(target);
+            vg.save_with(|vg| {
+                vg.set_global_alpha(draw.opacity);
+                vg.translate(transform.position.x, transform.position.y);
+                vg.rotate(transform.rotation);
+                vg.scale(transform.scale.x, transform.scale.y);
+
+                let mut path = femtovg::Path::new();
+                path.rect(x, y, width, height);
+                vg.fill_path(
+                    &path,
+                    &femtovg::Paint::image(surface.image, x, y, width, height, 0.0, 1.0),
+                );
+            });
         }
+
+        surfaces.retain(|entity, surface| {
+            if live.contains(entity) {
+                true
+            } else {
+                vg.delete_image(surface.image);
+                false
+            }
+        });
     }
 
     /// Populates the scene and compiles the builder's animation timeline.
@@ -115,6 +207,10 @@ mod tests {
         assert!(std::ptr::fn_addr_eq(
             object.draw.on_draw,
             default.draw.on_draw,
+        ));
+        assert!(std::ptr::fn_addr_eq(
+            object.draw.get_rect,
+            default.draw.get_rect,
         ));
     }
 
