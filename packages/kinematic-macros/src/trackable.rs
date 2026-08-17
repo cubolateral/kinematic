@@ -1,6 +1,23 @@
 use quote::{format_ident, quote};
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
+fn type_fragment(identifier: &syn::Ident) -> String {
+    identifier
+        .to_string()
+        .trim_start_matches("r#")
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut characters = part.chars();
+
+            match characters.next() {
+                Some(first) => first.to_uppercase().chain(characters).collect(),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
 /// Generates the typed handle and track metadata for a `Trackable` component.
 pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -30,10 +47,42 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let mut handle_fields = Vec::with_capacity(count);
     let mut handle_initializers = Vec::with_capacity(count);
     let mut tween_fns = Vec::with_capacity(count);
+    let mut builder_setters = Vec::with_capacity(fields.len());
+
+    for field in fields {
+        let field_ident = field.ident.as_ref().unwrap();
+        let field_ty = &field.ty;
+        let field_visibility = &field.vis;
+        let setter_trait = format_ident!(
+            "__Kinematic{}{}BuilderSetter",
+            struct_name,
+            type_fragment(field_ident)
+        );
+
+        builder_setters.push(quote! {
+            #[doc(hidden)]
+            #field_visibility trait #setter_trait: Sized {
+                fn #field_ident(self, value: #field_ty) -> Self;
+            }
+
+            impl<T> #setter_trait for T
+            where
+                T: crate::core::objects::ObjectBuilderComponent<#struct_name>,
+            {
+                fn #field_ident(mut self, value: #field_ty) -> Self {
+                    <T as crate::core::objects::ObjectBuilderComponent<#struct_name>>::component_mut(
+                        &mut self,
+                    ).#field_ident = value;
+                    self
+                }
+            }
+        });
+    }
 
     for (id, field) in tracked_fields.iter().enumerate() {
         let field_ident = field.ident.as_ref().unwrap();
         let field_ty = &field.ty;
+        let field_visibility = &field.vis;
         let id = id as u32;
         let field_name = field_ident.to_string();
 
@@ -62,7 +111,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         });
 
         handle_fields.push(quote! {
-            pub #field_ident: crate::core::TrackHandle<'a, #field_ty>,
+            #field_visibility #field_ident: crate::core::TrackHandle<'a, #field_ty>,
         });
 
         handle_initializers.push(quote! {
@@ -92,7 +141,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         });
 
         tween_fns.push(quote! {
-            pub fn #field_ident(
+            #field_visibility fn #field_ident(
                 self,
                 value: <#field_ty as crate::core::TrackValueType>::Input,
             ) -> crate::core::Tween {
@@ -104,6 +153,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let tracks_ident = format_ident!("__{}_TRACKS", struct_name.to_string().to_uppercase());
     let expanded = quote! {
         #(#type_assertions)*
+        #(#builder_setters)*
 
         /// Typed access wrapper around an entity's tracked component.
         pub struct #handle_name<'a> {

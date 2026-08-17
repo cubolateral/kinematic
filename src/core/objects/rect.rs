@@ -21,8 +21,8 @@ impl Default for RectShape {
 }
 
 #[derive(Object, hecs::Bundle)]
-/// ECS bundle for the built-in rectangular scene object.
-pub struct RectBundle {
+/// Built-in rectangular scene object.
+pub struct Rect {
     #[trackable]
     pub shape: RectShape,
     #[trackable]
@@ -33,7 +33,7 @@ pub struct RectBundle {
     pub draw: Draw,
 }
 
-impl Default for RectBundle {
+impl Default for Rect {
     fn default() -> Self {
         Self {
             shape: Default::default(),

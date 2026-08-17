@@ -85,9 +85,9 @@ impl Default for TextShape {
     }
 }
 
-/// ECS bundle for the built-in text scene object.
+/// Built-in text scene object.
 #[derive(Object, hecs::Bundle)]
-pub struct TextBundle {
+pub struct Text {
     #[trackable]
     pub shape: TextShape,
     #[trackable]
@@ -98,7 +98,7 @@ pub struct TextBundle {
     pub draw: Draw,
 }
 
-impl Default for TextBundle {
+impl Default for Text {
     fn default() -> Self {
         Self {
             shape: Default::default(),

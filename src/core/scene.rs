@@ -52,12 +52,24 @@ impl Scene {
         animator.get_duration(self)
     }
 
-    /// Spawns a bundle into the ECS world and returns its typed handle.
-    pub fn create<T: Object + hecs::DynamicBundle>(&mut self, bundle: T) -> T::Handle {
-        T::handle(
+    /// Spawns an object into the ECS world and returns its typed handler.
+    ///
+    /// ```
+    /// use kinematic::prelude::*;
+    ///
+    /// let mut scene = Scene::new();
+    /// let text: TextHandler = scene.create(
+    ///     TextBuilder::new()
+    ///         .opacity(1.0)
+    ///         .position(Vector2::ZERO)
+    ///         .build(),
+    /// );
+    /// ```
+    pub fn create<T: Object + hecs::DynamicBundle>(&mut self, object: T) -> T::Handler {
+        T::handler(
             self.world.spawn(
                 hecs::EntityBuilder::new()
-                    .add_bundle(bundle)
+                    .add_bundle(object)
                     .add(Animation::default())
                     .add(T::inspection())
                     .build(),
@@ -73,5 +85,41 @@ impl Scene {
     /// Mutable access to the underlying ECS world.
     pub fn get_world_mut(&mut self) -> &mut hecs::World {
         &mut self.world
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::core::{components::*, objects::*, types::*};
+
+    use super::*;
+
+    #[test]
+    fn object_builder_sets_component_values_and_preserves_object_defaults() {
+        let default = Text::default();
+        let object = TextBuilder::new()
+            .opacity(0.5)
+            .position(vec2(10.0, 20.0))
+            .text("Kinematic!".to_owned())
+            .build();
+
+        assert_eq!(object.draw.opacity, 0.5);
+        assert_eq!(object.transform.position, vec2(10.0, 20.0));
+        assert_eq!(object.shape.text, "Kinematic!");
+        assert!(std::ptr::fn_addr_eq(
+            object.draw.on_draw,
+            default.draw.on_draw,
+        ));
+    }
+
+    #[test]
+    fn create_returns_the_generated_object_handler() {
+        let mut scene = Scene::new();
+        let text: TextHandler = scene.create(TextBuilder::new().build());
+
+        let _ = text.draw(&mut scene).opacity(0.25);
+        let mut query = scene.get_world().query::<&Draw>();
+
+        assert_eq!(query.iter().next().unwrap().opacity, 0.25);
     }
 }

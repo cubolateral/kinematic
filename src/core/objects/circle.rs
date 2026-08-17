@@ -16,8 +16,8 @@ impl Default for CircleShape {
 }
 
 #[derive(Object, hecs::Bundle)]
-/// ECS bundle for the built-in circular scene object.
-pub struct CircleBundle {
+/// Built-in circular scene object.
+pub struct Circle {
     #[trackable]
     pub shape: CircleShape,
     #[trackable]
@@ -28,7 +28,7 @@ pub struct CircleBundle {
     pub draw: Draw,
 }
 
-impl Default for CircleBundle {
+impl Default for Circle {
     fn default() -> Self {
         Self {
             shape: Default::default(),

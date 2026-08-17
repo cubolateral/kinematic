@@ -30,9 +30,10 @@ loop ownership, and ImGui interaction out of the core domain.
   state.
 - Spawn user-facing scene objects through `Scene::create`. It attaches the
   animation and inspector metadata required by the runtime and editor.
-- Objects are ECS bundles implementing `Object`. The `Object` derive creates the
-  typed handle returned by `Scene::create`; fields marked `#[trackable]` expose
-  trackable component handles through it.
+- Objects are ECS bundles implementing `Object`. The `Object` derive creates a
+  `<Object>Builder` and the typed `<Object>Handler` returned by `Scene::create`;
+  fields marked `#[trackable]` expose their values directly on the builder and
+  component handles through the handler.
 - `Trackable` components expose fields marked `#[track]`. Adding a newly
   trackable value type requires coordinated support in `TrackValue`,
   `TrackValueType`, and its interpolation/display behavior. The `Trackable`

@@ -244,7 +244,7 @@ mod tests {
     fn repeat_continues_tweens_from_the_previous_repetition() {
         let mut animator = Animator::new();
         let mut scene = Scene::new();
-        let circle = scene.create(crate::core::objects::CircleBundle::default());
+        let circle = scene.create(crate::core::objects::CircleBuilder::new().build());
 
         animator.repeat(2, |animator| {
             animator.tween(circle.transform(&mut scene).position.x(100.0).duration(1.0));

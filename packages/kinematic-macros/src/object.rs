@@ -1,17 +1,12 @@
 use quote::{format_ident, quote};
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
-// Converts `ObjectBundle` into `Object` so the generated handle reads naturally.
-fn bundle_handle_name(struct_name: &syn::Ident) -> proc_macro2::Ident {
-    let name = struct_name.to_string();
-    let handle_name = name.strip_suffix("Bundle").unwrap_or(&name).to_string();
-    format_ident!("{}", handle_name)
-}
-
 pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let bundle_name = &input.ident;
-    let handle_name = bundle_handle_name(bundle_name);
+    let object_name = &input.ident;
+    let visibility = &input.vis;
+    let builder_name = format_ident!("{}Builder", object_name);
+    let handler_name = format_ident!("{}Handler", object_name);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -22,6 +17,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     };
 
     let mut field_accessors = Vec::with_capacity(fields.len());
+    let mut component_accessors = Vec::with_capacity(fields.len());
     let mut trackable_infos = Vec::with_capacity(fields.len());
 
     for field in fields {
@@ -36,8 +32,9 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             continue;
         }
 
+        let field_visibility = &field.vis;
         field_accessors.push(quote! {
-            pub fn #field_ident<'a>(
+            #field_visibility fn #field_ident<'a>(
                 &self,
                 s: &'a mut crate::core::Scene,
             ) -> <#field_ty as crate::core::Trackable>::Handle<'a> {
@@ -49,15 +46,50 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         trackable_infos.push(quote! {
             <#field_ty>::INFO
         });
+
+        component_accessors.push(quote! {
+            impl crate::core::objects::ObjectBuilderComponent<#field_ty> for #builder_name {
+                fn component_mut(&mut self) -> &mut #field_ty {
+                    &mut self.object.#field_ident
+                }
+            }
+        });
     }
 
     let count = trackable_infos.len();
-    let infos_ident = format_ident!("__{}_TRACKABLES", bundle_name.to_string().to_uppercase());
-    let infos_fn_ident = format_ident!("__{}_trackables", bundle_name.to_string().to_lowercase());
+    let infos_ident = format_ident!("__{}_TRACKABLES", object_name.to_string().to_uppercase());
+    let infos_fn_ident = format_ident!("__{}_trackables", object_name.to_string().to_lowercase());
 
     let expanded = quote! {
-        /// Typed entity handle generated from the bundle name.
-        pub struct #handle_name {
+        /// Builder generated for this scene object.
+        #visibility struct #builder_name {
+            object: #object_name,
+        }
+
+        impl #builder_name {
+            /// Creates a builder initialized with the object's defaults.
+            pub fn new() -> Self {
+                Self {
+                    object: <#object_name as Default>::default(),
+                }
+            }
+
+            /// Finishes configuring the scene object.
+            pub fn build(self) -> #object_name {
+                self.object
+            }
+        }
+
+        impl Default for #builder_name {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
+        #(#component_accessors)*
+
+        /// Typed handler for an entity spawned into a scene.
+        #visibility struct #handler_name {
             entity: hecs::Entity,
         }
 
@@ -70,22 +102,22 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             &#infos_ident
         }
 
-        impl #bundle_name {
-            /// Builds a handle wrapper from a spawned entity id.
-            pub fn handle(entity: hecs::Entity) -> #handle_name {
-                #handle_name { entity }
+        impl #object_name {
+            /// Builds a typed handler from a spawned entity id.
+            pub fn handler(entity: hecs::Entity) -> #handler_name {
+                #handler_name { entity }
             }
         }
 
-        impl #handle_name {
+        impl #handler_name {
             #(#field_accessors)*
         }
 
-        impl crate::core::objects::Object for #bundle_name {
-            type Handle = #handle_name;
+        impl crate::core::objects::Object for #object_name {
+            type Handler = #handler_name;
 
-            fn handle(entity: hecs::Entity) -> Self::Handle {
-                #handle_name { entity }
+            fn handler(entity: hecs::Entity) -> Self::Handler {
+                #handler_name { entity }
             }
 
             fn inspection() -> crate::core::components::Inspection {

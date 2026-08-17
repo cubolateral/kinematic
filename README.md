@@ -30,16 +30,24 @@ use kinematic::prelude::*;
 
 #[scene]
 fn example(s: &mut Scene, a: &mut Animator) {
-    let circle = s.create(CircleBundle::default());
+    let circle = s.create(
+        CircleBuilder::new()
+            .position(vec2(-256.0, 0.0))
+            .radius(128.0)
+            .fill(Color::RED)
+            .build(),
+    );
 
     a.tween(
         circle
             .transform(s)
             .position
-            .x(100.0)
+            .x(256.0)
             .duration(1.0)
             .easing(Easing::InOutQuad),
     );
+
+    a.wait(1.0);
 }
 
 fn main() {
