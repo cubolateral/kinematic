@@ -25,6 +25,7 @@ pub(crate) struct Ui {
     is_first_time: bool,
     font: dear_imgui_rs::FontId,
     colors: ThemeColors,
+    scale: f32,
     timeline: timeline::State,
 }
 
@@ -46,6 +47,7 @@ impl Ui {
             is_first_time: true,
             font: Self::load_font(context),
             colors: ThemeColors::default(),
+            scale: 1.0,
             timeline: timeline::State::default(),
         }
     }
@@ -66,11 +68,18 @@ impl Ui {
         timeline::draw(editor, ui, &mut self.timeline);
     }
 
+    pub fn apply_scale(&self, context: &mut dear_imgui_rs::Context) {
+        context
+            .style_mut()
+            .set_font_scale_main(self.scale.clamp(0.75, 1.25));
+    }
+
     fn configuration(&mut self, ui: &dear_imgui_rs::Ui) {
         ui.window("Configuration").build(|| {
             ui.color_edit4("Background", &mut self.colors.background);
             ui.color_edit4("Accent", &mut self.colors.accent);
             ui.slider_f32("Contrast", &mut self.colors.contrast, 0.25, 1.0);
+            ui.slider_f32("UI Scale", &mut self.scale, 0.75, 1.25);
         });
     }
 

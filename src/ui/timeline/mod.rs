@@ -14,7 +14,7 @@ const TRACK_LABEL_WIDTH: f32 = 128.0;
 const TRACK_SPACING: f32 = 4.0;
 const TRACK_TIMELINE_PADDING: f32 = 8.0;
 const GRID_TARGET_SPACING: f32 = 100.0;
-const DRAG_DIRECTION_THRESHOLD: f32 = 8.0;
+const DRAG_DIRECTION_THRESHOLD: f32 = 4.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Interaction {
@@ -134,7 +134,7 @@ impl TimeRange {
 struct Layout {
     content_left: f32,
     top: f32,
-    window_top: f32,
+    viewport_top: f32,
     bottom: f32,
     divider_x: f32,
     timeline_left: f32,
@@ -150,11 +150,13 @@ impl Layout {
         let timeline_left = divider_x + TRACK_TIMELINE_PADDING;
         let [_, window_top] = ui.window_pos();
 
+        let [_, window_height] = ui.window_size();
+
         Self {
             content_left,
             top,
-            window_top,
-            bottom: top + ui.content_region_avail_height(),
+            viewport_top: top + ui.scroll_y(),
+            bottom: window_top + window_height,
             divider_x,
             timeline_left,
             timeline_width: (available - label_width - TRACK_TIMELINE_PADDING).max(1.0),
@@ -186,14 +188,11 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
         controls(editor.get_timeline(), ui, layout);
 
-        ui.set_cursor_screen_pos([layout.timeline_left, layout.top]);
-        ui.invisible_button(
-            "timeline_area",
-            [layout.timeline_width, (layout.bottom - layout.top).max(1.0)],
-        );
-
-        let mouse_x = ui.io().mouse_pos()[0];
-        let timeline_hovered = ui.is_item_hovered() && layout.contains_timeline_x(mouse_x);
+        let mouse = ui.io().mouse_pos();
+        let timeline_hovered = ui.is_window_hovered_with_flags(
+            dear_imgui_rs::WindowHoveredFlags::ALLOW_WHEN_BLOCKED_BY_ACTIVE_ITEM,
+        ) && layout.contains_timeline_x(mouse[0])
+            && (layout.viewport_top..=layout.bottom).contains(&mouse[1]);
         let draw_list = ui.get_window_draw_list();
         let playhead_x = time.x(layout, time.current);
 

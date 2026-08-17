@@ -38,7 +38,7 @@ impl TrackView {
     ) {
         let id = entity.id();
         let clip = ui.push_clip_rect(
-            [self.layout.content_left, self.layout.window_top],
+            [self.layout.content_left, self.layout.viewport_top],
             [
                 self.layout.divider_x - TRACK_TIMELINE_PADDING,
                 self.layout.bottom,

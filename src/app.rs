@@ -122,6 +122,7 @@ impl App {
 
             editor.draw(self.window.size(), &self.gl, &mut self.vg);
 
+            self.ui.apply_scale(&mut self.imgui);
             self.imgui_sdl.new_frame(&mut self.imgui);
 
             self.ui.draw(&mut editor, self.imgui.frame());
