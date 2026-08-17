@@ -1,5 +1,5 @@
 use crate::core::{
-    Easing,
+    Easing, SceneWorld, Tween,
     types::{Color, Vector2},
 };
 
@@ -330,27 +330,27 @@ impl TrackValueType for String {
 }
 
 /// Typed interface for updating a single tracked component field.
-pub struct TrackHandle<'a, T: TrackValueType> {
-    scene: std::rc::Rc<std::cell::RefCell<&'a mut crate::core::Scene>>,
+pub struct TrackHandle<T: TrackValueType> {
+    world: SceneWorld,
     entity: hecs::Entity,
     type_id: std::any::TypeId,
     info: &'static TrackInfo,
-    get: fn(&crate::core::Scene, hecs::Entity) -> T,
-    replace: fn(&mut crate::core::Scene, hecs::Entity, T) -> T,
+    get: fn(&hecs::World, hecs::Entity) -> T,
+    replace: fn(&mut hecs::World, hecs::Entity, T) -> T,
 }
 
-impl<'a, T: TrackValueType> TrackHandle<'a, T> {
+impl<T: TrackValueType> TrackHandle<T> {
     /// Creates a typed handle using generated component accessors.
     pub fn new(
-        scene: std::rc::Rc<std::cell::RefCell<&'a mut crate::core::Scene>>,
+        world: SceneWorld,
         entity: hecs::Entity,
         type_id: std::any::TypeId,
         info: &'static TrackInfo,
-        get: fn(&crate::core::Scene, hecs::Entity) -> T,
-        replace: fn(&mut crate::core::Scene, hecs::Entity, T) -> T,
+        get: fn(&hecs::World, hecs::Entity) -> T,
+        replace: fn(&mut hecs::World, hecs::Entity, T) -> T,
     ) -> Self {
         Self {
-            scene,
+            world,
             entity,
             type_id,
             info,
@@ -361,34 +361,36 @@ impl<'a, T: TrackValueType> TrackHandle<'a, T> {
 
     /// Returns the current component field value without creating a tween.
     pub fn get(&self) -> T {
-        let scene = self.scene.borrow();
-        (self.get)(&scene, self.entity)
+        let world = self.world.borrow();
+        (self.get)(&world, self.entity)
     }
 
     /// Sets the field target and returns the corresponding tween.
-    pub fn set(self, value: T) -> crate::core::Tween {
+    pub fn set(self, value: T) -> Tween {
         let old_value = {
-            let mut scene = self.scene.borrow_mut();
-            (self.replace)(&mut scene, self.entity, value.clone())
+            let mut world = self.world.borrow_mut();
+            (self.replace)(&mut world, self.entity, value.clone())
         };
 
         self.tween(old_value, value)
     }
 
-    fn update(self, update: impl FnOnce(T) -> T) -> crate::core::Tween {
+    fn update(self, update: impl FnOnce(T) -> T) -> Tween {
         let (old_value, new_value) = {
-            let mut scene = self.scene.borrow_mut();
-            let old_value = (self.get)(&scene, self.entity);
+            let world = self.world.borrow();
+            let old_value = (self.get)(&world, self.entity);
             let new_value = update(old_value.clone());
-            (self.replace)(&mut scene, self.entity, new_value.clone());
+            drop(world);
+            let mut world = self.world.borrow_mut();
+            (self.replace)(&mut world, self.entity, new_value.clone());
             (old_value, new_value)
         };
 
         self.tween(old_value, new_value)
     }
 
-    fn tween(self, from: T, to: T) -> crate::core::Tween {
-        crate::core::Tween::new(
+    fn tween(self, from: T, to: T) -> Tween {
+        Tween::new(
             self.entity,
             self.type_id,
             self.info,
@@ -398,9 +400,9 @@ impl<'a, T: TrackValueType> TrackHandle<'a, T> {
     }
 }
 
-impl<'a> TrackHandle<'a, Vector2> {
+impl TrackHandle<Vector2> {
     /// Sets the horizontal coordinate while preserving the vertical coordinate.
-    pub fn x(self, value: f32) -> crate::core::Tween {
+    pub fn x(self, value: f32) -> Tween {
         self.update(|mut position| {
             position.x = value;
             position
@@ -408,7 +410,7 @@ impl<'a> TrackHandle<'a, Vector2> {
     }
 
     /// Sets the vertical coordinate while preserving the horizontal coordinate.
-    pub fn y(self, value: f32) -> crate::core::Tween {
+    pub fn y(self, value: f32) -> Tween {
         self.update(|mut position| {
             position.y = value;
             position
@@ -416,9 +418,9 @@ impl<'a> TrackHandle<'a, Vector2> {
     }
 }
 
-impl<'a> TrackHandle<'a, Color> {
+impl TrackHandle<Color> {
     /// Sets the red channel while preserving the remaining color channels.
-    pub fn r(self, value: f32) -> crate::core::Tween {
+    pub fn r(self, value: f32) -> Tween {
         self.update(|mut color| {
             color.r = value;
             color
@@ -426,7 +428,7 @@ impl<'a> TrackHandle<'a, Color> {
     }
 
     /// Sets the green channel while preserving the remaining color channels.
-    pub fn g(self, value: f32) -> crate::core::Tween {
+    pub fn g(self, value: f32) -> Tween {
         self.update(|mut color| {
             color.g = value;
             color
@@ -434,7 +436,7 @@ impl<'a> TrackHandle<'a, Color> {
     }
 
     /// Sets the blue channel while preserving the remaining color channels.
-    pub fn b(self, value: f32) -> crate::core::Tween {
+    pub fn b(self, value: f32) -> Tween {
         self.update(|mut color| {
             color.b = value;
             color
@@ -442,7 +444,7 @@ impl<'a> TrackHandle<'a, Color> {
     }
 
     /// Sets the alpha channel while preserving the remaining color channels.
-    pub fn a(self, value: f32) -> crate::core::Tween {
+    pub fn a(self, value: f32) -> Tween {
         self.update(|mut color| {
             color.a = value;
             color
@@ -597,12 +599,10 @@ pub struct TrackableInfo {
 /// Trait implemented by types that expose animatable fields.
 pub trait Trackable {
     /// Per-type handle returned by the generated `handle(...)` helper.
-    type Handle<'a>
-    where
-        Self: 'a;
+    type Handle;
 
     /// Builds a handle around an entity stored in the scene world.
-    fn handle<'a>(scene: &'a mut crate::core::Scene, entity: hecs::Entity) -> Self::Handle<'a>;
+    fn handle(world: SceneWorld, entity: hecs::Entity) -> Self::Handle;
 
     /// Returns metadata for a tracked field id.
     fn track(id: TrackId) -> &'static TrackInfo;

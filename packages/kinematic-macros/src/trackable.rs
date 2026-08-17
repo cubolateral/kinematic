@@ -111,26 +111,24 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         });
 
         handle_fields.push(quote! {
-            #field_visibility #field_ident: crate::core::TrackHandle<'a, #field_ty>,
+            #field_visibility #field_ident: crate::core::TrackHandle<#field_ty>,
         });
 
         handle_initializers.push(quote! {
             #field_ident: crate::core::TrackHandle::new(
-                std::rc::Rc::clone(&scene),
+                std::rc::Rc::clone(&world),
                 entity,
                 std::any::TypeId::of::<#struct_name>(),
                 <#struct_name as crate::core::Trackable>::track(#id),
-                |scene, entity| {
-                    scene
-                        .get_world()
+                |world, entity| {
+                    world
                         .get::<&#struct_name>(entity)
                         .unwrap()
                         .#field_ident
                         .clone()
                 },
-                |scene, entity, value| {
-                    let mut component = scene
-                        .get_world_mut()
+                |world, entity, value| {
+                    let mut component = world
                         .get::<&mut #struct_name>(entity)
                         .unwrap();
                     let old_value = component.#field_ident.clone();
@@ -156,25 +154,23 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         #(#builder_setters)*
 
         /// Typed access wrapper around an entity's tracked component.
-        pub struct #handle_name<'a> {
+        pub struct #handle_name {
             #(#handle_fields)*
         }
 
         impl #struct_name {
             /// Builds the generated handle for this trackable component.
-            pub fn handle<'a>(
-                scene: &'a mut crate::core::Scene,
+            pub fn handle(
+                world: crate::core::SceneWorld,
                 entity: hecs::Entity,
-            ) -> #handle_name<'a> {
-                let scene = std::rc::Rc::new(std::cell::RefCell::new(scene));
-
+            ) -> #handle_name {
                 #handle_name {
                     #(#handle_initializers)*
                 }
             }
         }
 
-        impl<'a> #handle_name<'a> {
+        impl #handle_name {
             #(#tween_fns)*
         }
 
@@ -184,16 +180,13 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         ];
 
         impl crate::core::Trackable for #struct_name {
-            type Handle<'a>
-                = #handle_name<'a>
-            where
-                Self: 'a;
+            type Handle = #handle_name;
 
-            fn handle<'a>(
-                scene: &'a mut crate::core::Scene,
+            fn handle(
+                world: crate::core::SceneWorld,
                 entity: hecs::Entity,
-            ) -> Self::Handle<'a> {
-                #struct_name::handle(scene, entity)
+            ) -> Self::Handle {
+                #struct_name::handle(world, entity)
             }
 
             fn track(id: crate::core::TrackId) -> &'static crate::core::TrackInfo {

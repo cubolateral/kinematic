@@ -143,6 +143,8 @@ impl Animator {
 
 #[cfg(test)]
 mod tests {
+    use crate::core::{components::Transform, objects::CircleBuilder};
+
     use super::*;
 
     #[test]
@@ -244,17 +246,11 @@ mod tests {
     fn repeat_continues_tweens_from_the_previous_repetition() {
         let mut animator = Animator::new();
         let mut scene = Scene::new();
-        let circle = scene.create(crate::core::objects::CircleBuilder::new().build());
+        let circle = scene.create(CircleBuilder::new().build());
 
         animator.repeat(2, |animator| {
-            animator.tween(circle.transform(&mut scene).position.x(100.0).duration(1.0));
-            animator.tween(
-                circle
-                    .transform(&mut scene)
-                    .position
-                    .x(-100.0)
-                    .duration(1.0),
-            );
+            animator.tween(circle.transform().position.x(100.0).duration(1.0));
+            animator.tween(circle.transform().position.x(-100.0).duration(1.0));
         });
 
         assert_eq!(animator.get_duration(&mut scene), 4.0);
@@ -270,9 +266,8 @@ mod tests {
     }
 
     fn position_x(scene: &Scene) -> f32 {
-        let mut query = scene
-            .get_world()
-            .query::<&crate::core::components::Transform>();
+        let world = scene.get_world();
+        let mut query = world.query::<&Transform>();
 
         query.iter().next().unwrap().position.x
     }

@@ -14,11 +14,11 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
                 continue;
             }
 
-            for trackable in (inspection.get)(world, entity) {
+            for trackable in (inspection.get)(&world, entity) {
                 ui.separator_with_text(trackable.name);
 
                 for track in (trackable.get)() {
-                    property(ui, track.name, &(track.get)(world, entity).to_string());
+                    property(ui, track.name, &(track.get)(&world, entity).to_string());
                 }
 
                 ui.spacing();

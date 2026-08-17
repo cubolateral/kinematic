@@ -54,8 +54,11 @@ loop ownership, and ImGui interaction out of the core domain.
 - Preserve the separation between project definition, animation evaluation,
   scene rendering, and editor controls unless a change intentionally revises the
   architecture.
-- Do not use absolute Rust paths with the `::` prefix. Prefer imported names or
-  crate-relative paths instead.
+- Do not use absolute Rust paths with the `::` prefix. For items defined by
+  this crate, always add a `use crate::...` import and refer to the imported
+  name (`Tween`, `SceneWorld`, and so on) instead of spelling paths such as
+  `crate::core::Tween` throughout the implementation. This rule also applies
+  to generated code whenever the macro can emit the corresponding import.
 - In `src/`, reserve `use` declarations for project modules. Refer to ordinary
   external dependency items with qualified paths. Derive macro imports such as
   `kinematic_macros` and extension traits required for method resolution such as

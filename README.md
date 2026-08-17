@@ -40,7 +40,7 @@ fn example(s: &mut Scene, a: &mut Animator) {
 
     a.tween(
         circle
-            .transform(s)
+            .transform()
             .position
             .x(256.0)
             .duration(1.0)

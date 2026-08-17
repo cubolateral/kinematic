@@ -1,4 +1,4 @@
-use crate::core::components::Inspection;
+use crate::core::{SceneWorld, components::Inspection};
 
 /// Marker trait for object types that can be spawned into the scene.
 ///
@@ -8,7 +8,7 @@ pub trait Object {
     type Handler;
 
     /// Builds the handler from the spawned entity.
-    fn handler(entity: hecs::Entity) -> Self::Handler;
+    fn handler(world: SceneWorld, entity: hecs::Entity) -> Self::Handler;
 
     /// Returns the inspection metadata component attached to spawned entities.
     fn inspection() -> Inspection;

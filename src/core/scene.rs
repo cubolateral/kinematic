@@ -4,6 +4,9 @@ use crate::core::{
     objects::Object,
 };
 
+/// Shared ECS world used by scenes and their handlers.
+pub type SceneWorld = std::rc::Rc<std::cell::RefCell<hecs::World>>;
+
 /// Builds scene entities and schedules their animation timeline.
 pub trait SceneBuilder {
     fn build(&mut self, s: &mut Scene, a: &mut Animator);
@@ -11,14 +14,14 @@ pub trait SceneBuilder {
 
 /// Runtime ECS scene containing render nodes and compiled animation tracks.
 pub struct Scene {
-    world: hecs::World,
+    world: SceneWorld,
 }
 
 impl Scene {
     /// Creates an empty scene.
     pub fn new() -> Self {
         Self {
-            world: hecs::World::new(),
+            world: std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new())),
         }
     }
 
@@ -26,19 +29,21 @@ impl Scene {
     ///
     /// This updates scene state only; rendering remains in [`Self::draw`].
     pub fn update(&self, time: f32) {
-        for (entity, animation) in self.world.query::<(hecs::Entity, &mut Animation)>().iter() {
+        let world = self.world.borrow_mut();
+        for (entity, animation) in world.query::<(hecs::Entity, &mut Animation)>().iter() {
             for track in &mut animation.tracks {
-                track.track.update(&self.world, entity, time);
+                track.track.update(&world, entity, time);
             }
         }
     }
 
     /// Draws each entity using the scene state produced by [`Self::update`].
     pub fn draw(&self, vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>) {
-        for (entity, draw) in self.world.query::<(hecs::Entity, &Draw)>().iter() {
+        let world = self.world.borrow();
+        for (entity, draw) in world.query::<(hecs::Entity, &Draw)>().iter() {
             vg.save_with(|vg| {
                 vg.set_global_alpha(draw.opacity);
-                (draw.on_draw)(&self.world, entity, vg);
+                (draw.on_draw)(&world, entity, vg);
             });
         }
     }
@@ -66,25 +71,25 @@ impl Scene {
     /// );
     /// ```
     pub fn create<T: Object + hecs::DynamicBundle>(&mut self, object: T) -> T::Handler {
-        T::handler(
-            self.world.spawn(
-                hecs::EntityBuilder::new()
-                    .add_bundle(object)
-                    .add(Animation::default())
-                    .add(T::inspection())
-                    .build(),
-            ),
-        )
+        let entity = self.world.borrow_mut().spawn(
+            hecs::EntityBuilder::new()
+                .add_bundle(object)
+                .add(Animation::default())
+                .add(T::inspection())
+                .build(),
+        );
+
+        T::handler(std::rc::Rc::clone(&self.world), entity)
     }
 
     /// Read-only access to the underlying ECS world.
-    pub fn get_world(&self) -> &hecs::World {
-        &self.world
+    pub fn get_world(&self) -> std::cell::Ref<'_, hecs::World> {
+        self.world.borrow()
     }
 
     /// Mutable access to the underlying ECS world.
-    pub fn get_world_mut(&mut self) -> &mut hecs::World {
-        &mut self.world
+    pub fn get_world_mut(&self) -> std::cell::RefMut<'_, hecs::World> {
+        self.world.borrow_mut()
     }
 }
 
@@ -116,9 +121,12 @@ mod tests {
     fn create_returns_the_generated_object_handler() {
         let mut scene = Scene::new();
         let text: TextHandler = scene.create(TextBuilder::new().build());
+        let circle: CircleHandler = scene.create(CircleBuilder::new().build());
 
-        let _ = text.draw(&mut scene).opacity(0.25);
-        let mut query = scene.get_world().query::<&Draw>();
+        let _ = text.draw().opacity(0.25);
+        let _ = circle.transform().position.x(10.0);
+        let world = scene.get_world();
+        let mut query = world.query::<&Draw>();
 
         assert_eq!(query.iter().next().unwrap().opacity, 0.25);
     }
