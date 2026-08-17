@@ -13,17 +13,113 @@ const TRACK_HEIGHT: f32 = 16.0;
 const TRACK_LABEL_WIDTH: f32 = 128.0;
 const TRACK_SPACING: f32 = 4.0;
 const TRACK_TIMELINE_PADDING: f32 = 8.0;
+const GRID_TARGET_SPACING: f32 = 100.0;
+const DRAG_DIRECTION_THRESHOLD: f32 = 8.0;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Interaction {
+    #[default]
+    None,
+    Scrubber,
+    Tracks,
+    Zoom,
+    Pan,
+}
+
+#[derive(Default)]
+pub(super) struct State {
+    duration: f32,
+    view_start: f32,
+    view_end: f32,
+    interaction: Interaction,
+}
+
+impl State {
+    fn sync_duration(&mut self, duration: f32) {
+        if self.duration != duration {
+            self.duration = duration;
+            self.view_start = 0.0;
+            self.view_end = duration;
+        }
+    }
+
+    fn view_range(&self) -> (f32, f32) {
+        (self.view_start, self.view_end)
+    }
+
+    fn press(&mut self, timeline_hovered: bool, right_pressed: bool) {
+        self.interaction = if timeline_hovered {
+            if right_pressed {
+                Interaction::Scrubber
+            } else {
+                Interaction::Tracks
+            }
+        } else {
+            Interaction::None
+        };
+    }
+
+    fn resolve_tracks(&mut self, delta: [f32; 2]) {
+        if self.interaction != Interaction::Tracks {
+            return;
+        }
+
+        let horizontal = delta[0].abs();
+        let vertical = delta[1].abs();
+        if horizontal.max(vertical) >= DRAG_DIRECTION_THRESHOLD {
+            self.interaction = if vertical > horizontal {
+                Interaction::Zoom
+            } else {
+                Interaction::Pan
+            };
+        }
+    }
+
+    fn zoom(&mut self, delta_y: f32, anchor: f32) {
+        if self.duration <= 0.0 || delta_y == 0.0 {
+            return;
+        }
+
+        let old_span = (self.view_end - self.view_start).max(f32::EPSILON);
+        let min_span = (self.duration * 0.01).max(0.05).min(self.duration);
+        let new_span = (old_span * (delta_y * 0.01).exp()).clamp(min_span, self.duration);
+        let anchor = anchor.clamp(0.0, 1.0);
+        let anchor_time = self.view_start + old_span * anchor;
+        let new_start = anchor_time - new_span * anchor;
+
+        self.set_view(new_start, new_start + new_span);
+    }
+
+    fn pan(&mut self, delta_x: f32, width: f32) {
+        if self.duration <= 0.0 || width <= 0.0 {
+            return;
+        }
+
+        let span = self.view_end - self.view_start;
+        self.set_view(
+            self.view_start - delta_x / width * span,
+            self.view_end - delta_x / width * span,
+        );
+    }
+
+    fn set_view(&mut self, start: f32, end: f32) {
+        let span = (end - start).clamp(0.0, self.duration);
+        self.view_start = start.clamp(0.0, self.duration - span);
+        self.view_end = self.view_start + span;
+    }
+}
 
 #[derive(Clone, Copy)]
 struct TimeRange {
     current: f32,
-    duration: f32,
+    start: f32,
+    end: f32,
 }
 
 impl TimeRange {
     fn ratio(self, time: f32) -> f32 {
-        if self.duration > 0.0 {
-            (time / self.duration).clamp(0.0, 1.0)
+        if self.end > self.start {
+            ((time - self.start) / (self.end - self.start)).clamp(0.0, 1.0)
         } else {
             0.0
         }
@@ -31,10 +127,6 @@ impl TimeRange {
 
     fn x(self, layout: Layout, time: f32) -> f32 {
         layout.timeline_left + layout.timeline_width * self.ratio(time)
-    }
-
-    fn time_at(self, layout: Layout, x: f32) -> f32 {
-        ((x - layout.timeline_left) / layout.timeline_width).clamp(0.0, 1.0) * self.duration
     }
 }
 
@@ -57,13 +149,12 @@ impl Layout {
         let divider_x = content_left + label_width;
         let timeline_left = divider_x + TRACK_TIMELINE_PADDING;
         let [_, window_top] = ui.window_pos();
-        let [_, window_height] = ui.window_size();
 
         Self {
             content_left,
             top,
             window_top,
-            bottom: window_top + window_height,
+            bottom: top + ui.content_region_avail_height(),
             divider_x,
             timeline_left,
             timeline_width: (available - label_width - TRACK_TIMELINE_PADDING).max(1.0),
@@ -79,41 +170,39 @@ impl Layout {
     }
 }
 
-pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
+pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
     ui.window("Timeline").build(|| {
-        let (time, was_controlling) = {
+        let time = {
             let timeline = editor.get_timeline();
-            (
-                TimeRange {
-                    current: timeline.get_current_time(),
-                    duration: timeline.get_max_time(),
-                },
-                timeline.is_controlling,
-            )
+            state.sync_duration(timeline.get_duration());
+            let (start, end) = state.view_range();
+            TimeRange {
+                current: timeline.get_time(),
+                start,
+                end,
+            }
         };
         let layout = Layout::new(ui);
 
         controls(editor.get_timeline(), ui, layout);
 
         ui.set_cursor_screen_pos([layout.timeline_left, layout.top]);
-        ui.invisible_button("scrubber_area", [layout.timeline_width, SCRUBBER_HEIGHT]);
+        ui.invisible_button(
+            "timeline_area",
+            [layout.timeline_width, (layout.bottom - layout.top).max(1.0)],
+        );
 
         let mouse_x = ui.io().mouse_pos()[0];
-        let scrubber_active = ui.is_item_active() && layout.contains_timeline_x(mouse_x);
+        let timeline_hovered = ui.is_item_hovered() && layout.contains_timeline_x(mouse_x);
         let draw_list = ui.get_window_draw_list();
         let playhead_x = time.x(layout, time.current);
 
         draw_scrubber(ui, &draw_list, layout, time, playhead_x);
+        draw_time_grid(ui, &draw_list, layout, time);
         tracks::draw(editor, ui, &draw_list, layout, time);
+        draw_mouse_indicator(ui, &draw_list, layout);
         draw_overlay(ui, &draw_list, layout, time, playhead_x);
-        update_interaction(
-            editor.get_timeline(),
-            ui,
-            layout,
-            time,
-            scrubber_active,
-            was_controlling,
-        );
+        update_interaction(editor.get_timeline(), ui, layout, state, timeline_hovered);
     });
 }
 
@@ -182,7 +271,7 @@ fn draw_scrubber(
 ) {
     let text_y = layout.top + 8.0;
     let line_y = text_y + 32.0;
-    let end_text = format!("{:.2}s", time.duration);
+    let end_text = format!("{:.2}s", time.end);
     let end_width = text_size(ui, &end_text)[0];
 
     draw_list.add_text(
@@ -204,6 +293,67 @@ fn draw_scrubber(
         ui.get_color_u32(dear_imgui_rs::StyleColor::SliderGrabActive),
         2.0,
     );
+}
+
+fn grid_step(time: TimeRange, width: f32) -> f32 {
+    let span = time.end - time.start;
+    if span <= 0.0 || width <= 0.0 {
+        return 0.0;
+    }
+
+    let raw_step = span / (width / GRID_TARGET_SPACING);
+    let magnitude = 10.0_f32.powf(raw_step.log10().floor());
+    let normalized = raw_step / magnitude;
+    let multiple = if normalized < 1.5 {
+        1.0
+    } else if normalized < 3.5 {
+        2.0
+    } else if normalized < 7.5 {
+        5.0
+    } else {
+        10.0
+    };
+
+    multiple * magnitude
+}
+
+fn draw_time_grid(
+    ui: &dear_imgui_rs::Ui,
+    draw_list: &dear_imgui_rs::DrawListMut<'_>,
+    layout: Layout,
+    time: TimeRange,
+) {
+    let step = grid_step(time, layout.timeline_width);
+    if step <= 0.0 {
+        return;
+    }
+
+    let first_tick = (time.start / step).ceil() * step;
+    let color = ui.get_color_u32(dear_imgui_rs::StyleColor::Separator);
+    let mut tick = first_tick;
+
+    while tick <= time.end + step * 0.001 {
+        let x = time.x(layout, tick);
+        draw_list.add_line_v(x, layout.top + SCRUBBER_HEIGHT, layout.bottom, color, 1.0);
+        let label = format_grid_time(tick, step);
+        draw_list.add_text(
+            [x + 3.0, layout.top + 8.0],
+            ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled),
+            label,
+        );
+        tick += step;
+    }
+}
+
+fn format_grid_time(time: f32, step: f32) -> String {
+    let mut decimals = 0;
+    let mut value = step.abs();
+    while value < 1.0 && decimals < 6 {
+        value *= 10.0;
+        decimals += 1;
+    }
+
+    format!("{:.*}s", decimals, time)
 }
 
 fn draw_overlay(
@@ -261,34 +411,142 @@ fn draw_overlay(
     draw_list.add_text(position, text_color, text);
 }
 
+fn draw_mouse_indicator(
+    ui: &dear_imgui_rs::Ui,
+    draw_list: &dear_imgui_rs::DrawListMut<'_>,
+    layout: Layout,
+) {
+    let mouse = ui.io().mouse_pos();
+    if !layout.contains_timeline_x(mouse[0]) || mouse[1] < layout.top || mouse[1] > layout.bottom {
+        return;
+    }
+
+    draw_list.add_line_v(
+        mouse[0],
+        layout.top + SCRUBBER_HEIGHT,
+        layout.bottom,
+        ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled),
+        1.0,
+    );
+}
+
 fn update_interaction(
     timeline: &mut Timeline,
     ui: &dear_imgui_rs::Ui,
     layout: Layout,
-    time: TimeRange,
-    scrubber_active: bool,
-    was_controlling: bool,
+    state: &mut State,
+    timeline_hovered: bool,
 ) {
     let mouse = ui.io().mouse_pos();
-    let window_hovered = ui.is_window_hovered_with_flags(
-        dear_imgui_rs::WindowHoveredFlags::ALLOW_WHEN_BLOCKED_BY_ACTIVE_ITEM,
-    );
-    let tracks_hovered = window_hovered
-        && ui.is_mouse_hovering_rect_with_clip(
-            [layout.timeline_left, layout.top],
-            [layout.timeline_right(), layout.bottom],
-            false,
-        );
-    let dragging =
-        ui.is_mouse_down(dear_imgui_rs::MouseButton::Left) && (tracks_hovered || was_controlling);
+    let mouse_delta = ui.io().mouse_delta();
+    let left = dear_imgui_rs::MouseButton::Left;
+    let right = dear_imgui_rs::MouseButton::Right;
+    let left_down = ui.is_mouse_down(left);
+    let right_down = ui.is_mouse_down(right);
+    let left_pressed = ui.is_mouse_clicked(left);
+    let right_pressed = ui.is_mouse_clicked(right);
 
-    timeline.is_controlling = scrubber_active || dragging;
+    if !left_down && !right_down {
+        state.interaction = Interaction::None;
+    } else if left_pressed || right_pressed {
+        state.press(timeline_hovered, right_pressed || right_down);
+    } else {
+        state.resolve_tracks(ui.mouse_drag_delta_with_threshold(left, DRAG_DIRECTION_THRESHOLD));
+    }
+
+    if state.interaction == Interaction::Zoom && left_down {
+        let anchor = ((mouse[0] - layout.timeline_left) / layout.timeline_width).clamp(0.0, 1.0);
+        state.zoom(mouse_delta[1], anchor);
+    }
+
+    if state.interaction == Interaction::Pan && left_down {
+        state.pan(mouse_delta[0], layout.timeline_width);
+    }
+
+    timeline.is_controlling = state.interaction == Interaction::Scrubber && right_down;
     if timeline.is_controlling {
-        timeline.go_to(time.time_at(layout, mouse[0]));
+        let (start, end) = state.view_range();
+        let visible_time = start
+            + ((mouse[0] - layout.timeline_left) / layout.timeline_width).clamp(0.0, 1.0)
+                * (end - start);
+        timeline.go_to(visible_time);
     }
 }
 
 fn text_size(ui: &dear_imgui_rs::Ui, text: &str) -> [f32; 2] {
     ui.current_font()
         .calc_text_size(ui.current_font_size(), f32::MAX, f32::MAX, text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grid_uses_seconds_for_wide_ranges() {
+        let time = TimeRange {
+            current: 0.0,
+            start: 0.0,
+            end: 40.0,
+        };
+
+        assert_eq!(grid_step(time, 800.0), 5.0);
+    }
+
+    #[test]
+    fn grid_uses_small_intervals_when_zoomed_in() {
+        let time = TimeRange {
+            current: 0.0,
+            start: 0.0,
+            end: 0.4,
+        };
+
+        assert!((grid_step(time, 800.0) - 0.05).abs() < 1e-6);
+    }
+
+    #[test]
+    fn scrubber_keeps_the_gesture_until_the_mouse_is_released() {
+        let mut state = State::default();
+
+        state.press(true, true);
+        state.resolve_tracks([20.0, 0.0]);
+
+        assert_eq!(state.interaction, Interaction::Scrubber);
+    }
+
+    #[test]
+    fn track_gesture_waits_for_a_clear_accumulated_direction() {
+        let mut state = State::default();
+
+        state.press(true, false);
+        state.resolve_tracks([3.0, 1.0]);
+        assert_eq!(state.interaction, Interaction::Tracks);
+
+        state.resolve_tracks([3.0, 9.0]);
+        assert_eq!(state.interaction, Interaction::Zoom);
+    }
+
+    #[test]
+    fn zooming_up_reduces_the_visible_time_span() {
+        let mut state = State::default();
+        state.sync_duration(10.0);
+        let initial = state.view_range();
+
+        state.zoom(-20.0, 0.5);
+
+        let zoomed = state.view_range();
+        assert!(zoomed.1 - zoomed.0 < initial.1 - initial.0);
+    }
+
+    #[test]
+    fn panning_stays_inside_the_timeline_duration() {
+        let mut state = State::default();
+        state.sync_duration(10.0);
+
+        state.pan(-1000.0, 100.0);
+        assert_eq!(state.view_range().1, 10.0);
+
+        state.pan(1000.0, 100.0);
+        assert_eq!(state.view_range().0, 0.0);
+    }
 }

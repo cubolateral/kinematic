@@ -45,6 +45,15 @@ loop ownership, and ImGui interaction out of the core domain.
   that invariant when changing task compilation or keyframe insertion.
 - `Draw` callbacks render entity state only. Rendering code should read the ECS
   world and leave its state unchanged.
+- The timeline track area supports viewport zoom by vertical mouse dragging and
+  horizontal pan by horizontal dragging with the left mouse button. The initial
+  drag direction selects the operation, while the right mouse button controls
+  the scrubber across the unified timeline area. The viewport displays adaptive
+  time-grid labels using editor-style `1/2/5 × 10ⁿ` intervals.
+- Keep timeline viewport and pointer-gesture state in `src/ui`. The editor
+  timeline owns playback time and duration. Its `is_controlling` flag is the
+  sole UI-related exception because it temporarily suspends playback while the
+  scrubber controls the current time.
 
 ## API Boundaries
 

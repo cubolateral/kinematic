@@ -52,10 +52,7 @@ impl TrackView {
         let height = animation.tracks.len().checked_sub(1).map_or(0.0, |last| {
             last as f32 * (TRACK_HEIGHT + TRACK_SPACING) + TRACK_HEIGHT
         });
-        ui.invisible_button(
-            format!("Tracks##timeline_entity_{id}"),
-            [ui.content_region_avail_width().max(1.0), height.max(1.0)],
-        );
+        ui.dummy([ui.content_region_avail_width().max(1.0), height.max(1.0)]);
 
         for (row, animation_track) in animation.tracks.iter().enumerate() {
             self.track(ui, draw_list, &animation_track.track, origin, row);
@@ -82,7 +79,7 @@ impl TrackView {
             SEGMENT_THICKNESS * 0.5,
         );
 
-        if self.time.duration > 0.0 {
+        if self.time.end > self.time.start {
             for pair in track.keyframes.windows(2) {
                 let [left, right] = pair else { continue };
                 if left.easing.is_some() && right.time > left.time {

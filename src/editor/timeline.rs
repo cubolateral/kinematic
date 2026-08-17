@@ -75,11 +75,11 @@ impl Timeline {
         self.is_playing && !self.is_controlling
     }
 
-    pub fn get_max_time(&self) -> f32 {
-        self.max_time
+    pub fn get_time(&self) -> f32 {
+        self.current_time
     }
 
-    pub fn get_current_time(&self) -> f32 {
-        self.current_time
+    pub fn get_duration(&self) -> f32 {
+        self.max_time
     }
 }

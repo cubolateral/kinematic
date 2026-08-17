@@ -25,6 +25,7 @@ pub(crate) struct Ui {
     is_first_time: bool,
     font: dear_imgui_rs::FontId,
     colors: ThemeColors,
+    timeline: timeline::State,
 }
 
 impl Ui {
@@ -45,6 +46,7 @@ impl Ui {
             is_first_time: true,
             font: Self::load_font(context),
             colors: ThemeColors::default(),
+            timeline: timeline::State::default(),
         }
     }
 
@@ -61,7 +63,7 @@ impl Ui {
         inspector::draw(editor, ui);
         self.configuration(ui);
         preview::draw(editor, ui);
-        timeline::draw(editor, ui);
+        timeline::draw(editor, ui, &mut self.timeline);
     }
 
     fn configuration(&mut self, ui: &dear_imgui_rs::Ui) {
