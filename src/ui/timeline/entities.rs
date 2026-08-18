@@ -1,5 +1,8 @@
 use super::{Layout, SCRUBBER_HEIGHT, TRACK_SPACING, TimeRange, text_size};
-use crate::{core::components::Node, editor::Editor};
+use crate::{
+    core::components::{Inspection, Node},
+    editor::Editor,
+};
 
 const ENTITY_HEIGHT: f32 = 24.0;
 
@@ -16,12 +19,11 @@ pub(super) fn draw(
 
     let origin = ui.cursor_screen_pos();
     let world = editor.get_scene().get_world();
-    let mut query = world.query::<(hecs::Entity, &Node)>();
-    let mut entities: Vec<_> = query
+    let mut query = world.query::<(&Node, &Inspection)>();
+    let entities: Vec<_> = query
         .iter()
-        .filter(|(_, node)| node.lifetime[0].is_finite())
+        .filter(|(node, _)| node.lifetime[0].is_finite())
         .collect();
-    entities.sort_by_key(|(entity, _)| entity.id());
 
     let height = entities.len() as f32 * (ENTITY_HEIGHT + TRACK_SPACING);
     ui.dummy([layout.timeline_width, height.max(1.0)]);
@@ -32,7 +34,7 @@ pub(super) fn draw(
         true,
     );
 
-    for (row, (entity, node)) in entities.into_iter().enumerate() {
+    for (row, (node, inspection)) in entities.into_iter().enumerate() {
         let start = node.lifetime[0].max(time.start);
         let end = node.lifetime[1].min(time.end);
         if end <= start {
@@ -63,20 +65,18 @@ pub(super) fn draw(
             .rounding(3.0)
             .build();
 
-        let name = format!("Entity {}", entity.id());
+        let name = inspection.object_name;
         let name_size = text_size(ui, &name);
         let name_position = [min[0] + 6.0, top + (ENTITY_HEIGHT - name_size[1]) * 0.5];
         let text_clip = draw_list.push_clip_rect(min, max, true);
+
         draw_list.add_text(
             name_position,
             ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
             &name,
         );
-        drop(text_clip);
 
-        if hovered {
-            ui.tooltip_text(format!("{}", name));
-        }
+        drop(text_clip);
     }
 
     drop(clip);

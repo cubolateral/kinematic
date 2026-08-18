@@ -13,11 +13,9 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
                 continue;
             }
 
-            let id = entity.id();
-
             if !ui.collapsing_header(
-                format!("Entity {id}##entity_{id}"),
-                dear_imgui_rs::TreeNodeFlags::DEFAULT_OPEN,
+                format!("{}##entity_{}", inspection.object_name, entity.id()),
+                dear_imgui_rs::TreeNodeFlags::NONE,
             ) {
                 continue;
             }

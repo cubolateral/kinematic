@@ -166,6 +166,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
             fn inspection() -> #inspection_type {
                 #inspection_type {
+                    object_name: stringify!(#object_name),
                     get: |_world, _entity| #infos_fn_ident(),
                 }
             }
