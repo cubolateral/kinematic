@@ -16,6 +16,11 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         )
     };
 
+    ui.set_next_window_class(
+        &dear_imgui_rs::WindowClass::default()
+            .dock_node_flags_override_set(dear_imgui_rs::DockFlags::AUTO_HIDE_TAB_BAR),
+    );
+
     ui.window("Preview").build(|| {
         ui.text(format!(
             "[INFO] Project name: {name} / Project resolution: {}x{}",

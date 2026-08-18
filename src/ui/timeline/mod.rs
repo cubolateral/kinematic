@@ -172,6 +172,11 @@ impl Layout {
 }
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
+    ui.set_next_window_class(
+        &dear_imgui_rs::WindowClass::default()
+            .dock_node_flags_override_set(dear_imgui_rs::DockFlags::AUTO_HIDE_TAB_BAR),
+    );
+
     ui.window("Timeline").build(|| {
         let time = {
             let timeline = editor.get_timeline();
