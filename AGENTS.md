@@ -30,6 +30,10 @@ loop ownership, and ImGui interaction out of the core domain.
   state.
 - Spawn user-facing scene objects through `Scene::create`. It attaches the
   animation and inspector metadata required by the runtime and editor.
+- `Scene::create` gives every object a non-trackable `Node` whose lifetime starts
+  at the animator's current scheduling time. `Scene::destroy` ends that lifetime
+  without despawning the entity. Scene evaluation, rendering, and editor views
+  must ignore nodes whose `is_activated` value is false.
 - Objects are ECS bundles implementing `Object`. The `Object` derive creates a
   `<Object>Builder` and the typed `<Object>Handler` returned by `Scene::create`;
   fields marked `#[trackable]` expose their values directly on both types. The
@@ -48,11 +52,13 @@ loop ownership, and ImGui interaction out of the core domain.
   the entity's `Transform` and opacity. `Draw::on_draw` must use local coordinates
   and must not apply the entity transform itself. Drawing callbacks should read
   the ECS world and leave its state unchanged.
-- The timeline track area supports viewport zoom by vertical mouse dragging and
-  horizontal pan by horizontal dragging with the left mouse button. The initial
-  drag direction selects the operation, while the right mouse button controls
-  the scrubber across the unified timeline area. The viewport displays adaptive
-  time-grid labels using editor-style `1/2/5 × 10ⁿ` intervals.
+- The timeline displays one lifetime rectangle per scene entity across the full
+  viewport width. Its preserved track-rendering module is not part of the current
+  view and remains available for a later track UI. The viewport supports zoom by
+  vertical mouse dragging and horizontal pan by horizontal dragging with the left
+  mouse button. The initial drag direction selects the operation, while the right
+  mouse button controls the scrubber. It displays adaptive time-grid labels using
+  editor-style `1/2/5 × 10ⁿ` intervals.
 - Keep timeline viewport and pointer-gesture state in `src/ui`. The editor
   timeline owns playback time and duration. Its `is_controlling` flag is the
   sole UI-related exception because it temporarily suspends playback while the

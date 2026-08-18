@@ -3,7 +3,10 @@ use super::{
     SEGMENT_THICKNESS, TRACK_HEIGHT, TRACK_SPACING, TRACK_TIMELINE_PADDING, TimeRange, text_size,
 };
 use crate::{
-    core::{Track, components::Animation},
+    core::{
+        Track,
+        components::{Animation, Node},
+    },
     editor::Editor,
 };
 
@@ -156,12 +159,15 @@ pub(super) fn draw(
     ui.dummy([0.0, TRACK_SPACING]);
 
     let world = editor.get_scene().get_world();
-    let mut query = world.query::<(hecs::Entity, &Animation)>();
-    let mut entities: Vec<_> = query.iter().collect();
-    entities.sort_by_key(|(entity, _)| entity.id());
+    let mut query = world.query::<(hecs::Entity, &Node, &Animation)>();
+    let mut entities: Vec<_> = query
+        .iter()
+        .filter(|(_, node, _)| node.is_activated)
+        .collect();
+    entities.sort_by_key(|(entity, _, _)| entity.id());
 
     let view = TrackView::new(ui, layout, time);
-    for (entity, animation) in entities {
+    for (entity, _, animation) in entities {
         view.entity(ui, draw_list, entity, animation);
     }
 }

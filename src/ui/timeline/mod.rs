@@ -1,3 +1,5 @@
+mod entities;
+#[allow(dead_code)]
 mod tracks;
 
 use crate::editor::{Editor, Timeline};
@@ -7,10 +9,10 @@ const KEYFRAME_HALF_SIZE: f32 = 4.0;
 const KEYFRAME_HITBOX_SIZE: f32 = 16.0;
 const KEYFRAME_HOVER_SCALE: f32 = 2.0;
 const LABEL_PADDING: [f32; 2] = [8.0, 4.0];
-const SCRUBBER_HEIGHT: f32 = 50.0;
+const TRANSPORT_HEIGHT: f32 = 40.0;
+const SCRUBBER_HEIGHT: f32 = 82.0;
 const SEGMENT_THICKNESS: f32 = 4.0;
 const TRACK_HEIGHT: f32 = 16.0;
-const TRACK_LABEL_WIDTH: f32 = 128.0;
 const TRACK_SPACING: f32 = 4.0;
 const TRACK_TIMELINE_PADDING: f32 = 8.0;
 const GRID_TARGET_SPACING: f32 = 100.0;
@@ -145,9 +147,6 @@ impl Layout {
     fn new(ui: &dear_imgui_rs::Ui) -> Self {
         let [content_left, top] = ui.cursor_screen_pos();
         let available = ui.content_region_avail_width().max(1.0);
-        let label_width = TRACK_LABEL_WIDTH.min(available * 0.4);
-        let divider_x = content_left + label_width;
-        let timeline_left = divider_x + TRACK_TIMELINE_PADDING;
         let [_, window_top] = ui.window_pos();
 
         let [_, window_height] = ui.window_size();
@@ -157,9 +156,9 @@ impl Layout {
             top,
             viewport_top: top + ui.scroll_y(),
             bottom: window_top + window_height,
-            divider_x,
-            timeline_left,
-            timeline_width: (available - label_width - TRACK_TIMELINE_PADDING).max(1.0),
+            divider_x: content_left,
+            timeline_left: content_left,
+            timeline_width: available,
         }
     }
 
@@ -198,7 +197,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
         draw_scrubber(ui, &draw_list, layout, time, playhead_x);
         draw_time_grid(ui, &draw_list, layout, time);
-        tracks::draw(editor, ui, &draw_list, layout, time);
+        entities::draw(editor, ui, &draw_list, layout, time);
         draw_mouse_indicator(ui, &draw_list, layout);
         draw_overlay(ui, &draw_list, layout, time, playhead_x);
         update_interaction(editor.get_timeline(), ui, layout, state, timeline_hovered);
@@ -209,8 +208,8 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, layout: Layout) {
     let spacing = unsafe { ui.style().item_spacing() }[0];
     let width = BUTTON_SIZE * 3.0 + spacing * 2.0;
     ui.set_cursor_screen_pos([
-        layout.content_left + ((layout.divider_x - layout.content_left - width) * 0.5).max(0.0),
-        layout.top + (SCRUBBER_HEIGHT - BUTTON_SIZE) * 0.5,
+        layout.timeline_left + ((layout.timeline_width - width) * 0.5).max(0.0),
+        layout.top + (TRANSPORT_HEIGHT - BUTTON_SIZE) * 0.5,
     ]);
 
     if transport_button(
@@ -268,8 +267,8 @@ fn draw_scrubber(
     time: TimeRange,
     playhead_x: f32,
 ) {
-    let text_y = layout.top + 8.0;
-    let line_y = text_y + 32.0;
+    let text_y = layout.top + TRANSPORT_HEIGHT + 8.0;
+    let line_y = layout.top + SCRUBBER_HEIGHT - 2.0;
     let end_text = format!("{:.2}s", time.end);
     let end_width = text_size(ui, &end_text)[0];
 
@@ -336,7 +335,7 @@ fn draw_time_grid(
         draw_list.add_line_v(x, layout.top + SCRUBBER_HEIGHT, layout.bottom, color, 1.0);
         let label = format_grid_time(tick, step);
         draw_list.add_text(
-            [x + 3.0, layout.top + 8.0],
+            [x + 3.0, layout.top + TRANSPORT_HEIGHT + 8.0],
             ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled),
             label,
         );
@@ -364,15 +363,8 @@ fn draw_overlay(
 ) {
     let text_color = ui.get_color_u32(dear_imgui_rs::StyleColor::Text);
     draw_list.add_line_v(
-        layout.divider_x,
-        layout.top,
-        layout.bottom,
-        ui.get_color_u32(dear_imgui_rs::StyleColor::Separator),
-        1.0,
-    );
-    draw_list.add_line_v(
         playhead_x,
-        layout.top + 40.0,
+        layout.top + SCRUBBER_HEIGHT - 10.0,
         layout.bottom,
         text_color,
         2.0,
@@ -380,7 +372,10 @@ fn draw_overlay(
 
     let text = format!("{:.2}s", time.current);
     let size = text_size(ui, &text);
-    let position = [playhead_x - size[0] * 0.5, layout.top + 8.0];
+    let position = [
+        playhead_x - size[0] * 0.5,
+        layout.top + TRANSPORT_HEIGHT + 8.0,
+    ];
     let min = [
         position[0] - LABEL_PADDING[0],
         position[1] - LABEL_PADDING[1],

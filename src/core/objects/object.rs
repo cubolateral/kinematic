@@ -14,6 +14,12 @@ pub trait Object {
     fn inspection() -> Inspection;
 }
 
+/// Common access to the entity represented by a typed object handler.
+pub trait ObjectHandler {
+    /// Returns the ECS entity represented by this handler.
+    fn entity(&self) -> hecs::Entity;
+}
+
 /// Internal bridge used by generated component setters on object builders.
 #[doc(hidden)]
 pub trait ObjectBuilderComponent<T> {

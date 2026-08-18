@@ -1,7 +1,7 @@
 use crate::core::{
     Animator,
-    components::{Animation, Draw, Transform},
-    objects::Object,
+    components::{Animation, Draw, Node, Transform},
+    objects::{Object, ObjectHandler},
 };
 
 /// Shared ECS world used by scenes and their handlers.
@@ -15,6 +15,7 @@ pub trait SceneBuilder {
 /// Runtime ECS scene containing render nodes and compiled animation tracks.
 pub struct Scene {
     world: SceneWorld,
+    animator_time: std::rc::Rc<std::cell::Cell<f32>>,
     render_surfaces: std::cell::RefCell<std::collections::HashMap<hecs::Entity, RenderSurface>>,
 }
 
@@ -29,6 +30,7 @@ impl Scene {
     pub fn new() -> Self {
         Self {
             world: std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new())),
+            animator_time: std::rc::Rc::new(std::cell::Cell::new(0.0)),
             render_surfaces: std::cell::RefCell::new(std::collections::HashMap::new()),
         }
     }
@@ -38,7 +40,19 @@ impl Scene {
     /// This updates scene state only; rendering remains in [`Self::draw`].
     pub fn update(&self, time: f32) {
         let world = self.world.borrow_mut();
-        for (entity, animation) in world.query::<(hecs::Entity, &mut Animation)>().iter() {
+
+        for node in world.query::<&mut Node>().iter() {
+            node.update(time);
+        }
+
+        for (entity, node, animation) in world
+            .query::<(hecs::Entity, &Node, &mut Animation)>()
+            .iter()
+        {
+            if !node.is_activated {
+                continue;
+            }
+
             for track in &mut animation.tracks {
                 track.track.update(&world, entity, time);
             }
@@ -61,7 +75,14 @@ impl Scene {
         let mut live = std::collections::HashSet::new();
         let flags = femtovg::ImageFlags::PREMULTIPLIED | femtovg::ImageFlags::FLIP_Y;
 
-        for (entity, draw, transform) in world.query::<(hecs::Entity, &Draw, &Transform)>().iter() {
+        for (entity, node, draw, transform) in world
+            .query::<(hecs::Entity, &Node, &Draw, &Transform)>()
+            .iter()
+        {
+            if !node.is_activated {
+                continue;
+            }
+
             let [x, y, width, height] = (draw.get_rect)(&world, entity, vg);
             if ![x, y, width, height].iter().all(|value| value.is_finite())
                 || width <= 0.0
@@ -146,12 +167,14 @@ impl Scene {
     ///
     /// Returns the duration of the resulting timeline.
     pub fn build(&mut self, builder: &mut dyn SceneBuilder) -> f32 {
-        let mut animator = Animator::new();
+        let mut animator = Animator::with_scene_time(std::rc::Rc::clone(&self.animator_time));
         builder.build(self, &mut animator);
         animator.get_duration(self)
     }
 
-    /// Spawns an object into the ECS world and returns its typed handler.
+    /// Spawns an object with a lifetime starting at the current animator time.
+    ///
+    /// Returns the object's typed handler.
     ///
     /// ```
     /// use kinematic::prelude::*;
@@ -170,11 +193,22 @@ impl Scene {
             hecs::EntityBuilder::new()
                 .add_bundle(object)
                 .add(Animation::default())
+                .add(Node::new(self.animator_time.get()))
                 .add(T::inspection())
                 .build(),
         );
 
         T::handler(std::rc::Rc::clone(&self.world), entity)
+    }
+
+    /// Ends an object's lifetime at the animator's current timeline position.
+    pub fn destroy(&mut self, handler: impl ObjectHandler) {
+        let world = self.world.borrow();
+        let mut node = world
+            .get::<&mut Node>(handler.entity())
+            .expect("Destroyed object must belong to this scene.");
+
+        node.lifetime[1] = self.animator_time.get();
     }
 
     /// Read-only access to the underlying ECS world.
@@ -193,6 +227,13 @@ mod tests {
     use crate::core::{components::*, objects::*, types::*};
 
     use super::*;
+
+    #[crate::scene]
+    fn delayed_object_scene(scene: &mut Scene, animator: &mut Animator) {
+        animator.wait(32.0);
+        scene.create(CircleBuilder::new().build());
+        animator.wait(1.0);
+    }
 
     #[test]
     fn object_builder_sets_component_values_and_preserves_object_defaults() {
@@ -228,5 +269,104 @@ mod tests {
         let mut query = world.query::<&Draw>();
 
         assert_eq!(query.iter().next().unwrap().opacity, 0.25);
+    }
+
+    #[test]
+    fn object_lifetime_follows_the_animator_time_and_reactivates_when_seeking_back() {
+        struct LifetimeScene;
+
+        impl SceneBuilder for LifetimeScene {
+            fn build(&mut self, scene: &mut Scene, animator: &mut Animator) {
+                let circle = scene.create(CircleBuilder::new().build());
+
+                animator.wait(1.0);
+                scene.create(RectBuilder::new().build());
+                animator.wait(2.0);
+                scene.destroy(circle);
+            }
+        }
+
+        let mut scene = Scene::new();
+        let duration = scene.build(&mut LifetimeScene);
+
+        assert_eq!(duration, 3.0);
+
+        let lifetimes = || {
+            let world = scene.get_world();
+            let mut lifetimes: Vec<_> = world
+                .query::<&Node>()
+                .iter()
+                .map(|node| node.lifetime)
+                .collect();
+            lifetimes.sort_by(|left, right| left[0].total_cmp(&right[0]));
+            lifetimes
+        };
+
+        assert_eq!(lifetimes(), vec![[0.0, 3.0], [1.0, f32::INFINITY]]);
+
+        let active_count = |time| {
+            scene.update(time);
+            scene
+                .get_world()
+                .query::<&Node>()
+                .iter()
+                .filter(|node| node.is_activated)
+                .count()
+        };
+
+        assert_eq!(active_count(0.0), 1);
+        assert_eq!(active_count(1.0), 2);
+        assert_eq!(active_count(3.0), 1);
+        assert_eq!(active_count(0.5), 1);
+    }
+
+    #[test]
+    fn object_created_after_parallel_work_starts_at_the_latest_group_time() {
+        struct ParallelLifetimeScene;
+
+        impl SceneBuilder for ParallelLifetimeScene {
+            fn build(&mut self, scene: &mut Scene, animator: &mut Animator) {
+                animator.all(|animator| {
+                    animator.wait(5.0);
+                    scene.create(CircleBuilder::new().build());
+                    animator.wait(2.0);
+                });
+                animator.wait(1.0);
+            }
+        }
+
+        let mut scene = Scene::new();
+
+        assert_eq!(scene.build(&mut ParallelLifetimeScene), 6.0);
+
+        let world = scene.get_world();
+        let mut query = world.query::<&Node>();
+        let node = query.iter().next().unwrap();
+
+        assert_eq!(node.lifetime, [5.0, f32::INFINITY]);
+        assert!(!node.is_activated);
+    }
+
+    #[test]
+    fn scene_macro_preserves_the_create_time_as_the_node_start() {
+        let mut scene = Scene::new();
+
+        assert_eq!(scene.build(delayed_object_scene().as_mut()), 33.0);
+
+        scene.update(31.0);
+        {
+            let world = scene.get_world();
+            let mut query = world.query::<&Node>();
+            let node = query.iter().next().unwrap();
+
+            assert_eq!(node.lifetime, [32.0, f32::INFINITY]);
+            assert!(!node.is_activated);
+        }
+
+        scene.update(32.0);
+        let world = scene.get_world();
+        let mut query = world.query::<&Node>();
+
+        assert!(query.iter().next().unwrap().is_activated);
     }
 }

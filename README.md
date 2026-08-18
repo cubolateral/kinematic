@@ -47,6 +47,7 @@ fn example(s: &mut Scene, a: &mut Animator) {
     );
 
     a.wait(1.0);
+    s.destroy(circle);
 }
 
 fn main() {

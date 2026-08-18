@@ -1,10 +1,18 @@
-use crate::{core::components::Inspection, editor::Editor};
+use crate::{
+    core::components::{Inspection, Node},
+    editor::Editor,
+};
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     ui.window("Inspector").build(|| {
         let world = editor.get_scene().get_world();
 
-        for (entity, inspection) in world.query::<(hecs::Entity, &Inspection)>().iter() {
+        for (entity, node, inspection) in world.query::<(hecs::Entity, &Node, &Inspection)>().iter()
+        {
+            if !node.is_activated {
+                continue;
+            }
+
             let id = entity.id();
 
             if !ui.collapsing_header(

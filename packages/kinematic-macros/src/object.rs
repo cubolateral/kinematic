@@ -10,6 +10,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let builder_component_trait = format_ident!("__Kinematic{}BuilderComponent", object_name);
     let inspection_type = format_ident!("__Kinematic{}Inspection", object_name);
     let object_trait = format_ident!("__Kinematic{}Object", object_name);
+    let object_handler_trait = format_ident!("__Kinematic{}ObjectHandler", object_name);
     let scene_world_type = format_ident!("__Kinematic{}SceneWorld", object_name);
     let trackable_info_type = format_ident!("__Kinematic{}TrackableInfo", object_name);
     let trackable_trait = format_ident!("__Kinematic{}Trackable", object_name);
@@ -86,6 +87,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             objects::{
                 Object as #object_trait,
                 ObjectBuilderComponent as #builder_component_trait,
+                ObjectHandler as #object_handler_trait,
             },
         };
 
@@ -118,6 +120,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         /// Typed handler for an entity spawned into a scene.
         #visibility struct #handler_name {
+            entity: hecs::Entity,
             fields: #handler_fields_type,
         }
 
@@ -126,6 +129,12 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
             fn deref(&self) -> &Self::Target {
                 &self.fields
+            }
+        }
+
+        impl #object_handler_trait for #handler_name {
+            fn entity(&self) -> hecs::Entity {
+                self.entity
             }
         }
 
@@ -144,7 +153,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 let fields = ();
                 #(#handler_initializers)*
 
-                #handler_name { fields }
+                #handler_name { entity, fields }
             }
         }
 
