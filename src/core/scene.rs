@@ -87,16 +87,18 @@ impl Scene {
             });
 
             if surface.width != image_width || surface.height != image_height {
-                vg.realloc_image(
-                    surface.image,
-                    image_width,
-                    image_height,
-                    femtovg::PixelFormat::Rgba8,
-                    flags,
-                )
-                .expect("Entity render surface must be resized.");
+                let previous_image = surface.image;
+                surface.image = vg
+                    .create_image_empty(
+                        image_width,
+                        image_height,
+                        femtovg::PixelFormat::Rgba8,
+                        flags,
+                    )
+                    .expect("Entity render surface must be resized.");
                 surface.width = image_width;
                 surface.height = image_height;
+                vg.delete_image(previous_image);
             }
 
             vg.set_render_target(femtovg::RenderTarget::Image(surface.image));
