@@ -15,7 +15,7 @@ pub struct Tween {
 }
 
 impl Tween {
-    /// Creates a tween with zero duration and [`Easing::InOutQuad`] easing.
+    /// Creates a tween with zero duration and [`Easing::default()`] easing.
     pub fn new(
         entity: hecs::Entity,
         type_id: std::any::TypeId,
@@ -30,7 +30,7 @@ impl Tween {
             from,
             to,
             duration: 0.0,
-            easing: Easing::InOutQuad,
+            easing: Easing::default(),
         }
     }
 

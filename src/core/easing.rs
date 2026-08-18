@@ -234,6 +234,12 @@ impl Easing {
     }
 }
 
+impl Default for Easing {
+    fn default() -> Self {
+        Self::InOutCubic
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Easing;
