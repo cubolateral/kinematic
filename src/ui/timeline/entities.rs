@@ -17,7 +17,10 @@ pub(super) fn draw(
     let origin = ui.cursor_screen_pos();
     let world = editor.get_scene().get_world();
     let mut query = world.query::<(hecs::Entity, &Node)>();
-    let mut entities: Vec<_> = query.iter().collect();
+    let mut entities: Vec<_> = query
+        .iter()
+        .filter(|(_, node)| node.lifetime[0].is_finite())
+        .collect();
     entities.sort_by_key(|(entity, _)| entity.id());
 
     let height = entities.len() as f32 * (ENTITY_HEIGHT + TRACK_SPACING);

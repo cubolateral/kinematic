@@ -28,15 +28,17 @@ loop ownership, and ImGui interaction out of the core domain.
 - `Animator` converts declarative `Task` values into entity animation data.
   `Scene::update(time)` evaluates that data; drawing must not mutate animation
   state.
-- Spawn user-facing scene objects through `Scene::create`. It attaches the
-  animation and inspector metadata required by the runtime and editor.
-- `Scene::create` gives every object a non-trackable `Node` whose lifetime starts
-  at the animator's current scheduling time. `Scene::destroy` ends that lifetime
-  without despawning the entity. Scene evaluation, rendering, and editor views
-  must ignore nodes whose `is_activated` value is false.
-- Objects are ECS bundles implementing `Object`. The `Object` derive creates a
-  `<Object>Builder` and the typed `<Object>Handler` returned by `Scene::create`;
-  fields marked `#[trackable]` expose their values directly on both types. The
+- Start user-facing object construction through `Scene::create::<Object>()`. The
+  returned builder's `build` method spawns the object with animation, inspector,
+  and inactive `Node` metadata, then returns its typed handler. `Scene::add`
+  begins the object's lifetime at the animator's current scheduling time.
+  `Scene::destroy` ends that lifetime without despawning the entity. Scene
+  evaluation, rendering, and editor views must ignore nodes whose
+  `is_activated` value is false.
+- Objects are ECS bundles implementing `Object`. The `Object` derive creates the
+  `<Object>Builder` returned by `Scene::create` and the typed `<Object>Handler`
+  returned by the builder's `build` method. Fields marked `#[trackable]` expose
+  their values directly on both types. The
   public API must not require component-level handlers or component-name access
   such as `object.transform().position`; use the flat `object.position` form.
 - `Trackable` components expose fields marked `#[track]`. Adding a newly

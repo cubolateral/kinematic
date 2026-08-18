@@ -209,7 +209,7 @@ impl Animator {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{components::Transform, objects::CircleBuilder};
+    use crate::core::{components::Transform, objects::Circle};
 
     use super::*;
 
@@ -334,7 +334,8 @@ mod tests {
     fn repeat_continues_tweens_from_the_previous_repetition() {
         let mut animator = Animator::new();
         let mut scene = Scene::new();
-        let circle = scene.create(CircleBuilder::new().build());
+        let circle = scene.create::<Circle>().build();
+        scene.add(&circle);
 
         animator.repeat(2, |animator| {
             animator.tween(circle.position.x(100.0).duration(1.0));

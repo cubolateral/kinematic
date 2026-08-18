@@ -172,33 +172,35 @@ impl Scene {
         animator.get_duration(self)
     }
 
-    /// Spawns an object with a lifetime starting at the current animator time.
+    /// Starts building an inactive object connected to this scene.
     ///
-    /// Returns the object's typed handler.
+    /// Calling the generated builder's `build` method spawns the inactive object
+    /// and returns its typed handler. Use [`Self::add`] to begin its lifetime.
     ///
     /// ```
     /// use kinematic::prelude::*;
     ///
     /// let mut scene = Scene::new();
-    /// let text: TextHandler = scene.create(
-    ///     TextBuilder::new()
-    ///         .opacity(1.0)
-    ///         .position(Vector2::ZERO)
-    ///         .build(),
-    /// );
+    /// let text: TextHandler = scene
+    ///     .create::<Text>()
+    ///     .opacity(1.0)
+    ///     .position(Vector2::ZERO)
+    ///     .build();
+    /// scene.add(&text);
     /// let _ = text.position.x(100.0);
     /// ```
-    pub fn create<T: Object + hecs::DynamicBundle>(&mut self, object: T) -> T::Handler {
-        let entity = self.world.borrow_mut().spawn(
-            hecs::EntityBuilder::new()
-                .add_bundle(object)
-                .add(Animation::default())
-                .add(Node::new(self.animator_time.get()))
-                .add(T::inspection())
-                .build(),
-        );
+    pub fn create<T: Object>(&mut self) -> T::Builder {
+        T::builder(std::rc::Rc::clone(&self.world))
+    }
 
-        T::handler(std::rc::Rc::clone(&self.world), entity)
+    /// Begins an object's lifetime at the animator's current timeline position.
+    pub fn add(&mut self, handler: &impl ObjectHandler) {
+        let world = self.world.borrow();
+        let mut node = world
+            .get::<&mut Node>(handler.entity())
+            .expect("Added object must belong to this scene.");
+
+        node.activate(self.animator_time.get());
     }
 
     /// Ends an object's lifetime at the animator's current timeline position.
@@ -208,7 +210,7 @@ impl Scene {
             .get::<&mut Node>(handler.entity())
             .expect("Destroyed object must belong to this scene.");
 
-        node.lifetime[1] = self.animator_time.get();
+        node.deactivate(self.animator_time.get());
     }
 
     /// Read-only access to the underlying ECS world.
@@ -230,38 +232,40 @@ mod tests {
 
     #[crate::scene]
     fn delayed_object_scene(scene: &mut Scene, animator: &mut Animator) {
+        let circle = scene.create::<Circle>().build();
+
         animator.wait(32.0);
-        scene.create(CircleBuilder::new().build());
+        scene.add(&circle);
         animator.wait(1.0);
     }
 
     #[test]
     fn object_builder_sets_component_values_and_preserves_object_defaults() {
         let default = Text::default();
-        let object = TextBuilder::new()
+        let mut scene = Scene::new();
+        let handler = scene
+            .create::<Text>()
             .opacity(0.5)
             .position(vec2(10.0, 20.0))
             .text("Kinematic!".to_owned())
             .build();
+        let world = scene.get_world();
+        let draw = world.get::<&Draw>(handler.entity()).unwrap();
+        let transform = world.get::<&Transform>(handler.entity()).unwrap();
+        let shape = world.get::<&TextShape>(handler.entity()).unwrap();
 
-        assert_eq!(object.draw.opacity, 0.5);
-        assert_eq!(object.transform.position, vec2(10.0, 20.0));
-        assert_eq!(object.shape.text, "Kinematic!");
-        assert!(std::ptr::fn_addr_eq(
-            object.draw.on_draw,
-            default.draw.on_draw,
-        ));
-        assert!(std::ptr::fn_addr_eq(
-            object.draw.get_rect,
-            default.draw.get_rect,
-        ));
+        assert_eq!(draw.opacity, 0.5);
+        assert_eq!(transform.position, vec2(10.0, 20.0));
+        assert_eq!(shape.text, "Kinematic!");
+        assert!(std::ptr::fn_addr_eq(draw.on_draw, default.draw.on_draw,));
+        assert!(std::ptr::fn_addr_eq(draw.get_rect, default.draw.get_rect,));
     }
 
     #[test]
     fn object_handler_exposes_trackable_fields_directly() {
         let mut scene = Scene::new();
-        let text: TextHandler = scene.create(TextBuilder::new().build());
-        let circle: CircleHandler = scene.create(CircleBuilder::new().build());
+        let text: TextHandler = scene.create::<Text>().build();
+        let circle: CircleHandler = scene.create::<Circle>().build();
 
         let _ = text.opacity(0.25);
         let _ = circle.position.x(10.0);
@@ -277,10 +281,12 @@ mod tests {
 
         impl SceneBuilder for LifetimeScene {
             fn build(&mut self, scene: &mut Scene, animator: &mut Animator) {
-                let circle = scene.create(CircleBuilder::new().build());
+                let circle = scene.create::<Circle>().build();
+                let rect = scene.create::<Rect>().build();
+                scene.add(&circle);
 
                 animator.wait(1.0);
-                scene.create(RectBuilder::new().build());
+                scene.add(&rect);
                 animator.wait(2.0);
                 scene.destroy(circle);
             }
@@ -326,9 +332,11 @@ mod tests {
 
         impl SceneBuilder for ParallelLifetimeScene {
             fn build(&mut self, scene: &mut Scene, animator: &mut Animator) {
+                let circle = scene.create::<Circle>().build();
+
                 animator.all(|animator| {
                     animator.wait(5.0);
-                    scene.create(CircleBuilder::new().build());
+                    scene.add(&circle);
                     animator.wait(2.0);
                 });
                 animator.wait(1.0);

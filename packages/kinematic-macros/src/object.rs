@@ -93,26 +93,21 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         /// Builder generated for this scene object.
         #visibility struct #builder_name {
+            world: #scene_world_type,
             object: #object_name,
         }
 
         impl #builder_name {
-            /// Creates a builder initialized with the object's defaults.
-            pub fn new() -> Self {
+            fn new(world: #scene_world_type) -> Self {
                 Self {
+                    world,
                     object: <#object_name as Default>::default(),
                 }
             }
 
-            /// Finishes configuring the scene object.
-            pub fn build(self) -> #object_name {
-                self.object
-            }
-        }
-
-        impl Default for #builder_name {
-            fn default() -> Self {
-                Self::new()
+            /// Spawns the configured object as inactive and returns its handler.
+            pub fn build(self) -> #handler_name {
+                <#object_name as #object_trait>::spawn(self.world, self.object)
             }
         }
 
@@ -158,7 +153,12 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         }
 
         impl #object_trait for #object_name {
+            type Builder = #builder_name;
             type Handler = #handler_name;
+
+            fn builder(world: #scene_world_type) -> Self::Builder {
+                #builder_name::new(world)
+            }
 
             fn handler(world: #scene_world_type, entity: hecs::Entity) -> Self::Handler {
                 #object_name::handler(world, entity)

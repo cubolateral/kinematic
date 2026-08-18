@@ -7,11 +7,14 @@ pub struct Node {
 }
 
 impl Node {
-    pub(crate) fn new(start: f32) -> Self {
-        Self {
-            lifetime: [start, f32::INFINITY],
-            is_activated: start <= 0.0,
-        }
+    pub(crate) fn activate(&mut self, start: f32) {
+        self.lifetime = [start, f32::INFINITY];
+        self.is_activated = start <= 0.0;
+    }
+
+    pub(crate) fn deactivate(&mut self, end: f32) {
+        self.lifetime[1] = end;
+        self.is_activated = self.lifetime[0] <= 0.0 && end > 0.0;
     }
 
     pub(crate) fn update(&mut self, time: f32) {
@@ -21,6 +24,9 @@ impl Node {
 
 impl Default for Node {
     fn default() -> Self {
-        Self::new(0.0)
+        Self {
+            lifetime: [f32::INFINITY; 2],
+            is_activated: false,
+        }
     }
 }
