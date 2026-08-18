@@ -62,7 +62,6 @@ impl Timeline {
     }
 
     pub fn go_to_start(&mut self) {
-        self.pause();
         self.go_to(0.0);
     }
 
