@@ -9,8 +9,7 @@ const KEYFRAME_HALF_SIZE: f32 = 4.0;
 const KEYFRAME_HITBOX_SIZE: f32 = 16.0;
 const KEYFRAME_HOVER_SCALE: f32 = 2.0;
 const LABEL_PADDING: [f32; 2] = [8.0, 4.0];
-const TRANSPORT_HEIGHT: f32 = 40.0;
-const SCRUBBER_HEIGHT: f32 = 82.0;
+const SCRUBBER_HEIGHT: f32 = 40.0;
 const SEGMENT_THICKNESS: f32 = 4.0;
 const TRACK_HEIGHT: f32 = 16.0;
 const TRACK_SPACING: f32 = 4.0;
@@ -178,6 +177,10 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
     );
 
     ui.window("Timeline").build(|| {
+        controls(editor.get_timeline(), ui);
+        ui.spacing();
+        ui.separator();
+
         let time = {
             let timeline = editor.get_timeline();
             state.sync_duration(timeline.get_duration());
@@ -188,10 +191,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 end,
             }
         };
+
         let layout = Layout::new(ui);
-
-        controls(editor.get_timeline(), ui, layout);
-
         let mouse = ui.io().mouse_pos();
         let timeline_hovered = ui.is_window_hovered_with_flags(
             dear_imgui_rs::WindowHoveredFlags::ALLOW_WHEN_BLOCKED_BY_ACTIVE_ITEM,
@@ -209,13 +210,13 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
     });
 }
 
-fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, layout: Layout) {
+fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui) {
     let spacing = unsafe { ui.style().item_spacing() }[0];
     let width = BUTTON_SIZE * 3.0 + spacing * 2.0;
-    ui.set_cursor_screen_pos([
-        layout.timeline_left + ((layout.timeline_width - width) * 0.5).max(0.0),
-        layout.top + (TRANSPORT_HEIGHT - BUTTON_SIZE) * 0.5,
-    ]);
+
+    ui.set_cursor_pos_x(
+        ui.cursor_pos_x() + ((ui.content_region_avail_width() - width) * 0.5).max(0.0),
+    );
 
     if transport_button(
         ui,
@@ -225,6 +226,7 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, layout: Layout) {
     ) {
         timeline.go_to_start();
     }
+
     ui.same_line();
 
     let is_playing = timeline.is_playing();
@@ -240,6 +242,7 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, layout: Layout) {
     ) {
         timeline.toggle();
     }
+
     ui.same_line();
 
     if transport_button(
@@ -272,7 +275,7 @@ fn draw_scrubber(
     time: TimeRange,
     playhead_x: f32,
 ) {
-    let text_y = layout.top + TRANSPORT_HEIGHT + 8.0;
+    let text_y = layout.top + 8.0;
     let line_y = layout.top + SCRUBBER_HEIGHT - 2.0;
     let end_text = format!("{:.2}s", time.end);
     let end_width = text_size(ui, &end_text)[0];
@@ -340,7 +343,7 @@ fn draw_time_grid(
         draw_list.add_line_v(x, layout.top + SCRUBBER_HEIGHT, layout.bottom, color, 1.0);
         let label = format_grid_time(tick, step);
         draw_list.add_text(
-            [x + 3.0, layout.top + TRANSPORT_HEIGHT + 8.0],
+            [x + 3.0, layout.top + 8.0],
             ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled),
             label,
         );
@@ -377,10 +380,7 @@ fn draw_overlay(
 
     let text = format!("{:.2}s", time.current);
     let size = text_size(ui, &text);
-    let position = [
-        playhead_x - size[0] * 0.5,
-        layout.top + TRANSPORT_HEIGHT + 8.0,
-    ];
+    let position = [playhead_x - size[0] * 0.5, layout.top + 8.0];
     let min = [
         position[0] - LABEL_PADDING[0],
         position[1] - LABEL_PADDING[1],
