@@ -160,11 +160,10 @@ pub(super) fn draw(
 
     let world = editor.get_scene().get_world();
     let mut query = world.query::<(hecs::Entity, &Node, &Animation)>();
-    let mut entities: Vec<_> = query
+    let entities: Vec<_> = query
         .iter()
         .filter(|(_, node, _)| node.is_activated)
         .collect();
-    entities.sort_by_key(|(entity, _, _)| entity.id());
 
     let view = TrackView::new(ui, layout, time);
     for (entity, _, animation) in entities {
