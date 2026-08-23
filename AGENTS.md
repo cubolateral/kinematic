@@ -24,8 +24,9 @@ loop ownership, and ImGui interaction out of the core domain.
 ## Architectural Contracts
 
 - `SceneBuilder` declares scene contents and schedules animation work through
-  `Animator`; it must not own the application loop or editor UI state.
-- `Animator` converts declarative `Task` values into entity animation data.
+  `Scene`; it must not own the application loop or editor UI state.
+- The internal `Animator` converts declarative `Task` values into entity
+  animation data.
   `Scene::update(time)` evaluates that data; drawing must not mutate animation
   state.
 - Start user-facing object construction through `Scene::create::<Object>()`. The

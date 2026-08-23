@@ -3,8 +3,8 @@ use crate::core::{AnimatorHandle, Easing, Task, TrackInfo, TrackValue};
 /// Describes the interpolation of a single tracked field.
 ///
 /// A tween becomes part of its scene timeline when [`Self::play`] is called.
-/// It can also be converted into a [`Task`] and passed to an
-/// [`Animator`](crate::core::Animator) manually.
+/// It can also be converted into a [`Task`] and passed to [`Scene::play`](crate::core::Scene::play)
+/// manually.
 pub struct Tween {
     entity: hecs::Entity,
     type_id: std::any::TypeId,
@@ -52,11 +52,11 @@ impl Tween {
 
     /// Registers this tween in the animator associated with its object handler.
     pub fn play(self) {
-        let animator = self.animator.clone();
+        let animator = self.animator.active();
         animator.play(self.task());
     }
 
-    /// Converts this description into a task that can be scheduled by an animator.
+    /// Converts this description into a task that can be scheduled by a scene.
     pub fn task(self) -> Task {
         Task::Tween {
             entity: self.entity,

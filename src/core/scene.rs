@@ -1,5 +1,5 @@
 use crate::core::{
-    Animator, AnimatorHandle,
+    Animator, Scheduling, Task, Tween,
     components::{Animation, Draw, Node, Transform},
     objects::{Object, ObjectHandler},
 };
@@ -9,14 +9,14 @@ pub type SceneWorld = std::rc::Rc<std::cell::RefCell<hecs::World>>;
 
 /// Builds scene entities and schedules their animation timeline.
 pub trait SceneBuilder {
-    fn build(&mut self, s: &mut Scene, a: &mut Animator);
+    fn build(&mut self, scene: &mut Scene);
 }
 
 /// Runtime ECS scene containing render nodes and compiled animation tracks.
 pub struct Scene {
     world: SceneWorld,
     animator_time: std::rc::Rc<std::cell::Cell<f32>>,
-    animator: AnimatorHandle,
+    animator: Animator,
 }
 
 impl Scene {
@@ -27,7 +27,7 @@ impl Scene {
         Self {
             world: std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new())),
             animator_time: std::rc::Rc::clone(&animator_time),
-            animator: Animator::with_scene_time(animator_time).handle(),
+            animator: Animator::with_scene_time(animator_time),
         }
     }
 
@@ -87,12 +87,61 @@ impl Scene {
     ///
     /// Returns the duration of the resulting timeline.
     pub fn build(&mut self, builder: &mut dyn SceneBuilder) -> f32 {
-        let mut animator = Animator::with_scene_time(std::rc::Rc::clone(&self.animator_time));
-        self.animator = animator.handle();
+        self.animator = Animator::with_scene_time(std::rc::Rc::clone(&self.animator_time));
 
-        builder.build(self, &mut animator);
+        builder.build(self);
 
-        animator.get_duration(self)
+        let tasks = self.animator.tasks();
+        Animator::get_duration_for_tasks(&tasks, self)
+    }
+
+    /// Adds a task to the current scene timeline.
+    pub fn play(&mut self, task: Task) {
+        self.animator.handle().play(task);
+    }
+
+    /// Plays a tween on the current scene timeline.
+    pub fn tween(&mut self, tween: Tween) {
+        self.play(tween.task());
+    }
+
+    /// Waits for the specified duration on the current scene timeline.
+    pub fn wait(&mut self, duration: f32) {
+        self.play(Task::Wait(duration));
+    }
+
+    /// Adds a sequential group to the current scene timeline.
+    pub fn chain(&mut self, schedule: impl FnOnce(&mut Scene)) {
+        self.schedule_group(Scheduling::Sequential, schedule, Task::Chain);
+    }
+
+    /// Adds a simultaneous group to the current scene timeline.
+    pub fn all(&mut self, schedule: impl FnOnce(&mut Scene)) {
+        self.schedule_group(Scheduling::Parallel, schedule, Task::All);
+    }
+
+    /// Repeats a sequential group on the current scene timeline.
+    pub fn repeat(&mut self, repetitions: usize, schedule: impl FnOnce(&mut Scene)) {
+        self.schedule_group(Scheduling::Sequential, schedule, |tasks| {
+            Task::Repeat(repetitions, tasks)
+        });
+    }
+
+    fn schedule_group(
+        &mut self,
+        scheduling: Scheduling,
+        schedule: impl FnOnce(&mut Scene),
+        build_task: impl FnOnce(Vec<Task>) -> Task,
+    ) {
+        let group = self.animator.group(scheduling);
+        let previous = group.handle().activate();
+        let parent = std::mem::replace(&mut self.animator, group);
+
+        schedule(self);
+
+        let group = std::mem::replace(&mut self.animator, parent);
+        group.handle().restore(previous);
+        self.play(build_task(group.tasks()));
     }
 
     /// Starts building an inactive object connected to this scene.
@@ -113,7 +162,10 @@ impl Scene {
     /// let _ = text.position_x(100.0);
     /// ```
     pub fn create<T: Object>(&mut self) -> T::Builder {
-        T::builder(std::rc::Rc::clone(&self.world), self.animator.active())
+        T::builder(
+            std::rc::Rc::clone(&self.world),
+            self.animator.handle().active(),
+        )
     }
 
     /// Begins an object's lifetime at the animator's current timeline position.
@@ -123,7 +175,7 @@ impl Scene {
             .get::<&mut Node>(handler.entity())
             .expect("Added object must belong to this scene.");
 
-        node.activate(self.animator.time());
+        node.activate(self.animator.handle().time());
     }
 
     /// Ends an object's lifetime at the animator's current timeline position.
@@ -133,7 +185,7 @@ impl Scene {
             .get::<&mut Node>(handler.entity())
             .expect("Destroyed object must belong to this scene.");
 
-        node.deactivate(self.animator.time());
+        node.deactivate(self.animator.handle().time());
     }
 
     /// Read-only access to the underlying ECS world.
@@ -154,12 +206,12 @@ mod tests {
     use super::*;
 
     #[crate::scene]
-    fn delayed_object_scene(scene: &mut Scene, animator: &mut Animator) {
+    fn delayed_object_scene(scene: &mut Scene) {
         let circle = scene.create::<Circle>().build();
 
-        animator.wait(32.0);
+        scene.wait(32.0);
         scene.add(&circle);
-        animator.wait(1.0);
+        scene.wait(1.0);
     }
 
     #[test]
@@ -205,7 +257,7 @@ mod tests {
         struct HandlerTweenScene;
 
         impl SceneBuilder for HandlerTweenScene {
-            fn build(&mut self, scene: &mut Scene, _animator: &mut Animator) {
+            fn build(&mut self, scene: &mut Scene) {
                 let circle = scene.create::<Circle>().build();
                 scene.add(&circle);
                 circle
@@ -231,34 +283,34 @@ mod tests {
         struct NestedGroupsScene;
 
         impl SceneBuilder for NestedGroupsScene {
-            fn build(&mut self, scene: &mut Scene, animator: &mut Animator) {
+            fn build(&mut self, scene: &mut Scene) {
                 let root = scene.create::<Circle>().build();
                 scene.add(&root);
-                animator.wait(1.0);
+                scene.wait(1.0);
 
-                animator.chain(|chain| {
+                scene.chain(|scene| {
                     let chain_object = scene.create::<Circle>().build();
                     scene.add(&chain_object);
-                    chain.wait(2.0);
+                    scene.wait(2.0);
 
-                    chain.all(|all| {
+                    scene.all(|scene| {
                         let parallel_object = scene.create::<Circle>().build();
                         scene.add(&parallel_object);
-                        all.wait(4.0);
+                        scene.wait(4.0);
 
-                        all.chain(|nested_chain| {
+                        scene.chain(|scene| {
                             let nested_object = scene.create::<Circle>().build();
                             scene.add(&nested_object);
-                            nested_chain.wait(1.0);
+                            scene.wait(1.0);
 
                             let nested_end_object = scene.create::<Circle>().build();
                             scene.add(&nested_end_object);
                         });
 
-                        all.repeat(2, |repeat| {
+                        scene.repeat(2, |scene| {
                             let repeated_object = scene.create::<Circle>().build();
                             scene.add(&repeated_object);
-                            repeat.wait(0.5);
+                            scene.wait(0.5);
 
                             let repeated_end_object = scene.create::<Circle>().build();
                             scene.add(&repeated_end_object);
@@ -268,7 +320,7 @@ mod tests {
                         scene.add(&parallel_end_object);
                     });
 
-                    chain.wait(1.0);
+                    scene.wait(1.0);
                     let chain_end_object = scene.create::<Circle>().build();
                     scene.add(&chain_end_object);
                 });
@@ -341,14 +393,14 @@ mod tests {
         struct LifetimeScene;
 
         impl SceneBuilder for LifetimeScene {
-            fn build(&mut self, scene: &mut Scene, animator: &mut Animator) {
+            fn build(&mut self, scene: &mut Scene) {
                 let circle = scene.create::<Circle>().build();
                 let rect = scene.create::<Rect>().build();
                 scene.add(&circle);
 
-                animator.wait(1.0);
+                scene.wait(1.0);
                 scene.add(&rect);
-                animator.wait(2.0);
+                scene.wait(2.0);
                 scene.destroy(circle);
             }
         }
@@ -392,15 +444,15 @@ mod tests {
         struct ParallelLifetimeScene;
 
         impl SceneBuilder for ParallelLifetimeScene {
-            fn build(&mut self, scene: &mut Scene, animator: &mut Animator) {
+            fn build(&mut self, scene: &mut Scene) {
                 let circle = scene.create::<Circle>().build();
 
-                animator.all(|animator| {
-                    animator.wait(5.0);
+                scene.all(|scene| {
+                    scene.wait(5.0);
                     scene.add(&circle);
-                    animator.wait(2.0);
+                    scene.wait(2.0);
                 });
-                animator.wait(1.0);
+                scene.wait(1.0);
             }
         }
 

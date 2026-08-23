@@ -39,10 +39,10 @@ pub fn scene(
         .into();
     }
 
-    if function.sig.inputs.len() != 2 {
+    if function.sig.inputs.len() != 1 {
         return Error::new_spanned(
             &function.sig.inputs,
-            "A `scene` function must take `&mut Scene` and `&mut Animator` parameters.",
+            "A `scene` function must take a `&mut Scene` parameter.",
         )
         .into_compile_error()
         .into();

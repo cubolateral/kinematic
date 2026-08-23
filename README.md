@@ -29,7 +29,7 @@ Kinematic is in early development, so its API may change.
 use kinematic::prelude::*;
 
 #[scene]
-fn example(s: &mut Scene, a: &mut Animator) {
+fn example(s: &mut Scene) {
     let circle = s
         .create::<Circle>()
         .position(vec2(-256.0, 0.0))
@@ -45,7 +45,7 @@ fn example(s: &mut Scene, a: &mut Animator) {
         .easing(Easing::InOutQuad)
         .play();
 
-    a.wait(1.0);
+    s.wait(1.0);
 }
 
 fn main() {

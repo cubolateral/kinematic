@@ -1,8 +1,8 @@
 use crate::core::{Easing, TrackInfo, TrackValue};
 
-/// A unit of work in an [`Animator`](crate::core::Animator) timeline.
+/// A unit of work in a [`Scene`](crate::core::Scene) timeline.
 ///
-/// Tasks are sequenced by the containing animator. [`Self::Chain`] runs its
+/// Tasks are sequenced by the containing scene. [`Self::Chain`] runs its
 /// children sequentially, [`Self::All`] starts its children together, and
 /// [`Self::Repeat`] repeats its children sequentially.
 #[derive(Clone)]
