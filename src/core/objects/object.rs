@@ -1,6 +1,7 @@
 use crate::core::{
     AnimatorHandle, SceneWorld, TrackProperty, TrackValueType, Trackable, Tween,
     components::{Animation, Inspection, Node},
+    types::Vector2,
 };
 
 /// Marker trait for object types that can be spawned into the scene.
@@ -45,6 +46,9 @@ pub trait ObjectHandler {
 
     /// Returns the ECS entity represented by this handler.
     fn entity(&self) -> hecs::Entity;
+
+    /// Returns the object's local bounding-box size.
+    fn get_box(&self) -> Vector2;
 
     /// Reads a typed trackable property from the object.
     fn get<T: TrackValueType>(&self, property: TrackProperty<T>) -> T;

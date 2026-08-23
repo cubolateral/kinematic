@@ -82,6 +82,7 @@ impl Default for Rect {
                         canvas.draw_rect(rect, &paint);
                     }
                 },
+                get_box: |world, entity| world.get::<&RectShape>(entity).unwrap().size,
                 ..Default::default()
             },
         }

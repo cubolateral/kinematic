@@ -20,6 +20,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let track_property_type = format_ident!("__Kinematic{}TrackProperty", object_name);
     let track_value_type_trait = format_ident!("__Kinematic{}TrackValueType", object_name);
     let tween_type = format_ident!("__Kinematic{}Tween", object_name);
+    let draw_type = format_ident!("__Kinematic{}Draw", object_name);
+    let vector_type = format_ident!("__Kinematic{}Vector2", object_name);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -93,6 +95,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             TrackProperty as #track_property_type,
             TrackValueType as #track_value_type_trait,
             Tween as #tween_type,
+            components::Draw as #draw_type,
+            types::Vector2 as #vector_type,
             TrackableInfo as #trackable_info_type,
             components::Inspection as #inspection_type,
             objects::{
@@ -149,6 +153,14 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
             fn entity(&self) -> hecs::Entity {
                 self.entity
+            }
+
+            fn get_box(&self) -> #vector_type {
+                let world = self.world.borrow();
+                let draw = world
+                    .get::<&#draw_type>(self.entity)
+                    .expect("Object handler must contain a Draw component.");
+                (draw.get_box)(&world, self.entity)
             }
 
             fn get<T: #track_value_type_trait>(

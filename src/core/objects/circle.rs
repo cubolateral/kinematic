@@ -1,6 +1,9 @@
 use kinematic_macros::{Object, Trackable};
 
-use crate::core::components::{Draw, Style, Transform};
+use crate::core::{
+    components::{Draw, Style, Transform},
+    types::Vector2,
+};
 
 #[derive(Trackable)]
 /// Geometry of a circular object.
@@ -70,6 +73,10 @@ impl Default for Circle {
                         paint.set_stroke_width(style.stroke_width);
                         canvas.draw_circle((0.0, 0.0), shape.radius, &paint);
                     }
+                },
+                get_box: |world, entity| {
+                    let shape = world.get::<&CircleShape>(entity).unwrap();
+                    Vector2::splat(shape.radius * 2.0)
                 },
                 ..Default::default()
             },

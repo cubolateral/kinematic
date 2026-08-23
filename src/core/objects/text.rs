@@ -1,6 +1,9 @@
 use kinematic_macros::{Object, Trackable};
 
-use crate::core::components::{Draw, Style, Transform};
+use crate::core::{
+    components::{Draw, Style, Transform},
+    types::Vector2,
+};
 
 type FontCache = std::collections::HashMap<std::path::PathBuf, skia_safe::Typeface>;
 
@@ -139,6 +142,14 @@ impl Default for Text {
                         paint.set_stroke_width(style.stroke_width);
                         canvas.draw_str(&shape.text, origin, &font, &paint);
                     }
+                },
+                get_box: |world, entity| {
+                    let shape = world.get::<&TextShape>(entity).unwrap();
+                    let font = shape.font.skia_font(shape.size);
+                    let (width, _) = font.measure_str(&shape.text, None);
+                    let (_, metrics) = font.metrics();
+
+                    Vector2::new(width, metrics.descent - metrics.ascent)
                 },
                 ..Default::default()
             },
