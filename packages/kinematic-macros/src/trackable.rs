@@ -25,6 +25,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let handler_fields_name = format_ident!("__{}HandlerFields", struct_name);
     let builder_component_trait = format_ident!("__Kinematic{}BuilderComponent", struct_name);
     let scene_world_type = format_ident!("__Kinematic{}SceneWorld", struct_name);
+    let animator_handle_type = format_ident!("__Kinematic{}AnimatorHandle", struct_name);
     let track_handle_type = format_ident!("__Kinematic{}TrackHandle", struct_name);
     let track_id_type = format_ident!("__Kinematic{}TrackId", struct_name);
     let track_info_type = format_ident!("__Kinematic{}TrackInfo", struct_name);
@@ -144,6 +145,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     component.#field_ident = value;
                     old_value
                 },
+                animator.clone(),
             ),
         });
 
@@ -161,6 +163,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let expanded = quote! {
         use crate::core::{
             SceneWorld as #scene_world_type,
+            AnimatorHandle as #animator_handle_type,
             TrackHandle as #track_handle_type,
             TrackId as #track_id_type,
             TrackInfo as #track_info_type,
@@ -204,6 +207,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             fn handler_fields<Next>(
                 world: #scene_world_type,
                 entity: hecs::Entity,
+                animator: #animator_handle_type,
                 next: Next,
             ) -> Self::HandlerFields<Next> {
                 #handler_fields_name {

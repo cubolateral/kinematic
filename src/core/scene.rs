@@ -1,5 +1,5 @@
 use crate::core::{
-    Animator,
+    Animator, AnimatorHandle,
     components::{Animation, Draw, Node, Transform},
     objects::{Object, ObjectHandler},
 };
@@ -16,14 +16,18 @@ pub trait SceneBuilder {
 pub struct Scene {
     world: SceneWorld,
     animator_time: std::rc::Rc<std::cell::Cell<f32>>,
+    animator: AnimatorHandle,
 }
 
 impl Scene {
     /// Creates an empty scene.
     pub fn new() -> Self {
+        let animator_time = std::rc::Rc::new(std::cell::Cell::new(0.0));
+
         Self {
             world: std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new())),
-            animator_time: std::rc::Rc::new(std::cell::Cell::new(0.0)),
+            animator_time: std::rc::Rc::clone(&animator_time),
+            animator: Animator::with_scene_time(animator_time).handle(),
         }
     }
 
@@ -84,6 +88,7 @@ impl Scene {
     /// Returns the duration of the resulting timeline.
     pub fn build(&mut self, builder: &mut dyn SceneBuilder) -> f32 {
         let mut animator = Animator::with_scene_time(std::rc::Rc::clone(&self.animator_time));
+        self.animator = animator.handle();
 
         builder.build(self, &mut animator);
 
@@ -108,7 +113,7 @@ impl Scene {
     /// let _ = text.position.x(100.0);
     /// ```
     pub fn create<T: Object>(&mut self) -> T::Builder {
-        T::builder(std::rc::Rc::clone(&self.world))
+        T::builder(std::rc::Rc::clone(&self.world), self.animator.active())
     }
 
     /// Begins an object's lifetime at the animator's current timeline position.
@@ -118,7 +123,7 @@ impl Scene {
             .get::<&mut Node>(handler.entity())
             .expect("Added object must belong to this scene.");
 
-        node.activate(self.animator_time.get());
+        node.activate(self.animator.time());
     }
 
     /// Ends an object's lifetime at the animator's current timeline position.
@@ -128,7 +133,7 @@ impl Scene {
             .get::<&mut Node>(handler.entity())
             .expect("Destroyed object must belong to this scene.");
 
-        node.deactivate(self.animator_time.get());
+        node.deactivate(self.animator.time());
     }
 
     /// Read-only access to the underlying ECS world.
@@ -144,7 +149,7 @@ impl Scene {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{components::*, objects::*, types::*};
+    use crate::core::{Easing, components::*, objects::*, types::*};
 
     use super::*;
 
@@ -190,6 +195,109 @@ mod tests {
         let mut query = world.query::<&Draw>();
 
         assert_eq!(query.iter().next().unwrap().opacity, 0.25);
+    }
+
+    #[test]
+    fn handler_tween_play_registers_in_scene_animator() {
+        struct HandlerTweenScene;
+
+        impl SceneBuilder for HandlerTweenScene {
+            fn build(&mut self, scene: &mut Scene, _animator: &mut Animator) {
+                let circle = scene.create::<Circle>().build();
+                scene.add(&circle);
+                circle
+                    .position
+                    .x(256.0)
+                    .duration(1.0)
+                    .easing(Easing::InOutQuad)
+                    .play();
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut HandlerTweenScene), 1.0);
+
+        scene.update(0.5);
+        let world = scene.get_world();
+        let mut query = world.query::<&Transform>();
+        let circle = query.iter().next().unwrap();
+        assert_eq!(circle.position.x, 128.0);
+    }
+
+    #[test]
+    fn nested_groups_keep_scene_objects_on_their_local_timeline() {
+        struct NestedGroupsScene;
+
+        impl SceneBuilder for NestedGroupsScene {
+            fn build(&mut self, scene: &mut Scene, animator: &mut Animator) {
+                let root = scene.create::<Circle>().build();
+                scene.add(&root);
+                animator.wait(1.0);
+
+                animator.chain(|chain| {
+                    let chain_object = scene.create::<Circle>().build();
+                    scene.add(&chain_object);
+                    chain.wait(2.0);
+
+                    chain.all(|all| {
+                        let parallel_object = scene.create::<Circle>().build();
+                        scene.add(&parallel_object);
+                        all.wait(4.0);
+
+                        all.chain(|nested_chain| {
+                            let nested_object = scene.create::<Circle>().build();
+                            scene.add(&nested_object);
+                            nested_chain.wait(1.0);
+
+                            let nested_end_object = scene.create::<Circle>().build();
+                            scene.add(&nested_end_object);
+                        });
+
+                        all.repeat(2, |repeat| {
+                            let repeated_object = scene.create::<Circle>().build();
+                            scene.add(&repeated_object);
+                            repeat.wait(0.5);
+
+                            let repeated_end_object = scene.create::<Circle>().build();
+                            scene.add(&repeated_end_object);
+                        });
+
+                        let parallel_end_object = scene.create::<Circle>().build();
+                        scene.add(&parallel_end_object);
+                    });
+
+                    chain.wait(1.0);
+                    let chain_end_object = scene.create::<Circle>().build();
+                    scene.add(&chain_end_object);
+                });
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut NestedGroupsScene), 8.0);
+
+        let world = scene.get_world();
+        let mut lifetimes: Vec<_> = world
+            .query::<&Node>()
+            .iter()
+            .map(|node| node.lifetime)
+            .collect();
+        lifetimes.sort_by(|left, right| left[0].total_cmp(&right[0]));
+
+        assert_eq!(
+            lifetimes,
+            vec![
+                [0.0, f32::INFINITY],
+                [1.0, f32::INFINITY],
+                [3.0, f32::INFINITY],
+                [3.0, f32::INFINITY],
+                [3.0, f32::INFINITY],
+                [3.5, f32::INFINITY],
+                [4.0, f32::INFINITY],
+                [7.0, f32::INFINITY],
+                [8.0, f32::INFINITY],
+            ]
+        );
     }
 
     #[test]

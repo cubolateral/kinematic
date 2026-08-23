@@ -12,6 +12,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let object_trait = format_ident!("__Kinematic{}Object", object_name);
     let object_handler_trait = format_ident!("__Kinematic{}ObjectHandler", object_name);
     let scene_world_type = format_ident!("__Kinematic{}SceneWorld", object_name);
+    let animator_handle_type = format_ident!("__Kinematic{}AnimatorHandle", object_name);
     let trackable_info_type = format_ident!("__Kinematic{}TrackableInfo", object_name);
     let trackable_trait = format_ident!("__Kinematic{}Trackable", object_name);
 
@@ -72,6 +73,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 let fields = <#field_ty as #trackable_trait>::handler_fields(
                     std::rc::Rc::clone(&world),
                     entity,
+                    animator.clone(),
                     fields,
                 );
             }
@@ -81,6 +83,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let expanded = quote! {
         use crate::core::{
             SceneWorld as #scene_world_type,
+            AnimatorHandle as #animator_handle_type,
             Trackable as #trackable_trait,
             TrackableInfo as #trackable_info_type,
             components::Inspection as #inspection_type,
@@ -94,20 +97,22 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         /// Builder generated for this scene object.
         #visibility struct #builder_name {
             world: #scene_world_type,
+            animator: #animator_handle_type,
             object: #object_name,
         }
 
         impl #builder_name {
-            fn new(world: #scene_world_type) -> Self {
+            fn new(world: #scene_world_type, animator: #animator_handle_type) -> Self {
                 Self {
                     world,
+                    animator,
                     object: <#object_name as Default>::default(),
                 }
             }
 
             /// Spawns the configured object as inactive and returns its handler.
             pub fn build(self) -> #handler_name {
-                <#object_name as #object_trait>::spawn(self.world, self.object)
+                <#object_name as #object_trait>::spawn(self.world, self.animator, self.object)
             }
         }
 
@@ -116,6 +121,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         /// Typed handler for an entity spawned into a scene.
         #visibility struct #handler_name {
             entity: hecs::Entity,
+            animator: #animator_handle_type,
             fields: #handler_fields_type,
         }
 
@@ -144,11 +150,11 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         impl #object_name {
             /// Builds a typed handler from a spawned entity id.
-            pub fn handler(world: #scene_world_type, entity: hecs::Entity) -> #handler_name {
+            pub fn handler(world: #scene_world_type, entity: hecs::Entity, animator: #animator_handle_type) -> #handler_name {
                 let fields = ();
                 #(#handler_initializers)*
 
-                #handler_name { entity, fields }
+                #handler_name { entity, animator, fields }
             }
         }
 
@@ -156,12 +162,12 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             type Builder = #builder_name;
             type Handler = #handler_name;
 
-            fn builder(world: #scene_world_type) -> Self::Builder {
-                #builder_name::new(world)
+            fn builder(world: #scene_world_type, animator: #animator_handle_type) -> Self::Builder {
+                #builder_name::new(world, animator)
             }
 
-            fn handler(world: #scene_world_type, entity: hecs::Entity) -> Self::Handler {
-                #object_name::handler(world, entity)
+            fn handler(world: #scene_world_type, entity: hecs::Entity, animator: #animator_handle_type) -> Self::Handler {
+                #object_name::handler(world, entity, animator)
             }
 
             fn inspection() -> #inspection_type {

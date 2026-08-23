@@ -39,13 +39,12 @@ fn example(s: &mut Scene, a: &mut Animator) {
 
     s.add(&circle);
 
-    a.tween(
-        circle
-            .position
-            .x(256.0)
-            .duration(1.0)
-            .easing(Easing::InOutQuad),
-    );
+    circle
+        .position
+        .x(256.0)
+        .duration(1.0)
+        .easing(Easing::InOutQuad)
+        .play();
 
     a.wait(1.0);
 }

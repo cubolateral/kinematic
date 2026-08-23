@@ -1,5 +1,5 @@
 use crate::core::{
-    Easing, SceneWorld, Tween,
+    AnimatorHandle, Easing, SceneWorld, Tween,
     types::{Color, Vector2},
 };
 
@@ -337,6 +337,7 @@ pub struct TrackHandle<T: TrackValueType> {
     info: &'static TrackInfo,
     get: fn(&hecs::World, hecs::Entity) -> T,
     replace: fn(&mut hecs::World, hecs::Entity, T) -> T,
+    animator: AnimatorHandle,
 }
 
 impl<T: TrackValueType> TrackHandle<T> {
@@ -348,6 +349,7 @@ impl<T: TrackValueType> TrackHandle<T> {
         info: &'static TrackInfo,
         get: fn(&hecs::World, hecs::Entity) -> T,
         replace: fn(&mut hecs::World, hecs::Entity, T) -> T,
+        animator: AnimatorHandle,
     ) -> Self {
         Self {
             world,
@@ -356,6 +358,7 @@ impl<T: TrackValueType> TrackHandle<T> {
             info,
             get,
             replace,
+            animator,
         }
     }
 
@@ -396,6 +399,7 @@ impl<T: TrackValueType> TrackHandle<T> {
             self.info,
             from.into_track_value(),
             to.into_track_value(),
+            self.animator.clone(),
         )
     }
 }
@@ -605,6 +609,7 @@ pub trait Trackable {
     fn handler_fields<Next>(
         world: SceneWorld,
         entity: hecs::Entity,
+        animator: AnimatorHandle,
         next: Next,
     ) -> Self::HandlerFields<Next>;
 

@@ -1,5 +1,5 @@
 use crate::core::{
-    SceneWorld,
+    AnimatorHandle, SceneWorld,
     components::{Animation, Inspection, Node},
 };
 
@@ -14,17 +14,17 @@ pub trait Object: hecs::DynamicBundle + Sized {
     type Handler;
 
     /// Builds an object builder connected to a scene world.
-    fn builder(world: SceneWorld) -> Self::Builder;
+    fn builder(world: SceneWorld, animator: AnimatorHandle) -> Self::Builder;
 
     /// Builds the handler from the spawned entity.
-    fn handler(world: SceneWorld, entity: hecs::Entity) -> Self::Handler;
+    fn handler(world: SceneWorld, entity: hecs::Entity, animator: AnimatorHandle) -> Self::Handler;
 
     /// Returns the inspection metadata component attached to spawned entities.
     fn inspection() -> Inspection;
 
     /// Spawns an inactive object and returns its typed handler.
     #[doc(hidden)]
-    fn spawn(world: SceneWorld, object: Self) -> Self::Handler {
+    fn spawn(world: SceneWorld, animator: AnimatorHandle, object: Self) -> Self::Handler {
         let entity = world.borrow_mut().spawn(
             hecs::EntityBuilder::new()
                 .add_bundle(object)
@@ -34,7 +34,7 @@ pub trait Object: hecs::DynamicBundle + Sized {
                 .build(),
         );
 
-        Self::handler(world, entity)
+        Self::handler(world, entity, animator)
     }
 }
 

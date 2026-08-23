@@ -5,6 +5,7 @@ use crate::core::{Easing, TrackInfo, TrackValue};
 /// Tasks are sequenced by the containing animator. [`Self::Chain`] runs its
 /// children sequentially, [`Self::All`] starts its children together, and
 /// [`Self::Repeat`] repeats its children sequentially.
+#[derive(Clone)]
 pub enum Task {
     /// Interpolates one tracked component field over a duration.
     Tween {
