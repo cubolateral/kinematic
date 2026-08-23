@@ -78,7 +78,7 @@ pub struct TextShape {
 impl Default for TextShape {
     fn default() -> Self {
         Self {
-            text: "Text".to_owned(),
+            text: "Text!".to_owned(),
             size: 64.0,
             font: Font::new("assets/fonts/JetBrainsMono-Regular.ttf"),
         }
