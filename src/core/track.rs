@@ -48,6 +48,21 @@ impl Track {
                     return;
                 }
 
+                // Boolean tracks hold their starting value until the segment ends.
+                if matches!(
+                    (&left.value, &right.value),
+                    (TrackValue::Bool(_), TrackValue::Bool(_))
+                ) {
+                    let value = if time < right.time {
+                        left.value.clone()
+                    } else {
+                        right.value.clone()
+                    };
+
+                    set(world, entity, value);
+                    return;
+                }
+
                 let t = match left.easing {
                     Some(easing) => easing.evaluate((time - left.time) / (right.time - left.time)),
                     None => {
@@ -177,6 +192,7 @@ impl Track {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TrackValue {
+    Bool(bool),
     F32(f32),
     Vector2(Vector2),
     Color(Color),
@@ -186,6 +202,13 @@ pub enum TrackValue {
 impl TrackValue {
     pub fn lerp(&self, to: &Self, t: f32) -> Self {
         match (self, to) {
+            (Self::Bool(a), Self::Bool(b)) => {
+                if t < 1.0 {
+                    Self::Bool(*a)
+                } else {
+                    Self::Bool(*b)
+                }
+            }
             (Self::F32(a), Self::F32(b)) => Self::F32(a + (b - a) * t),
             (Self::Vector2(a), Self::Vector2(b)) => Self::Vector2(a + (b - a) * t),
             (Self::Color(a), Self::Color(b)) => {
@@ -245,6 +268,7 @@ impl TrackValue {
 impl std::fmt::Display for TrackValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Bool(value) => write!(f, "{value}"),
             Self::F32(value) => write!(f, "{value:.2}"),
             Self::Vector2(value) => write!(f, "[{:.2}, {:.2}]", value.x, value.y),
             Self::Color(value) => {
@@ -268,6 +292,21 @@ pub trait TrackValueType: Clone {
 
     /// Converts an animation track value back into this typed value.
     fn from_track_value(value: TrackValue) -> Option<Self>;
+}
+
+impl TrackValueType for bool {
+    type Input = bool;
+
+    fn into_track_value(self) -> TrackValue {
+        TrackValue::Bool(self)
+    }
+
+    fn from_track_value(value: TrackValue) -> Option<Self> {
+        match value {
+            TrackValue::Bool(value) => Some(value),
+            _ => None,
+        }
+    }
 }
 
 impl TrackValueType for f32 {
@@ -583,6 +622,24 @@ mod tests {
         let track_value = value.clone().into_track_value();
 
         assert_eq!(String::from_track_value(track_value), Some(value));
+    }
+
+    #[test]
+    fn interpolates_bool_values_at_the_segment_end() {
+        let from = TrackValue::Bool(false);
+        let to = TrackValue::Bool(true);
+
+        assert_eq!(from.lerp(&to, 0.0), from);
+        assert_eq!(from.lerp(&to, 0.5), from);
+        assert_eq!(from.lerp(&to, 0.999), from);
+        assert_eq!(from.lerp(&to, 1.0), to);
+    }
+
+    #[test]
+    fn converts_bool_track_values() {
+        let track_value = true.into_track_value();
+
+        assert_eq!(bool::from_track_value(track_value), Some(true));
     }
 
     fn tween_track() -> Track {
