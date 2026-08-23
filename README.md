@@ -40,8 +40,7 @@ fn example(s: &mut Scene, a: &mut Animator) {
     s.add(&circle);
 
     circle
-        .position
-        .x(256.0)
+        .position_x(256.0)
         .duration(1.0)
         .easing(Easing::InOutQuad)
         .play();

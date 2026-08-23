@@ -431,8 +431,8 @@ mod tests {
         scene.add(&circle);
 
         animator.repeat(2, |animator| {
-            animator.tween(circle.position.x(100.0).duration(1.0));
-            animator.tween(circle.position.x(-100.0).duration(1.0));
+            animator.tween(circle.position_x(100.0).duration(1.0));
+            animator.tween(circle.position_x(-100.0).duration(1.0));
         });
 
         assert_eq!(animator.get_duration(&mut scene), 4.0);

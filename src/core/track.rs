@@ -378,7 +378,8 @@ impl<T: TrackValueType> TrackHandle<T> {
         self.tween(old_value, value)
     }
 
-    fn update(&self, update: impl FnOnce(T) -> T) -> Tween {
+    #[doc(hidden)]
+    pub fn update(&self, update: impl FnOnce(T) -> T) -> Tween {
         let (old_value, new_value) = {
             let world = self.world.borrow();
             let old_value = (self.get)(&world, self.entity);
@@ -401,58 +402,6 @@ impl<T: TrackValueType> TrackHandle<T> {
             to.into_track_value(),
             self.animator.clone(),
         )
-    }
-}
-
-impl TrackHandle<Vector2> {
-    /// Sets the horizontal coordinate while preserving the vertical coordinate.
-    pub fn x(&self, value: f32) -> Tween {
-        self.update(|mut position| {
-            position.x = value;
-            position
-        })
-    }
-
-    /// Sets the vertical coordinate while preserving the horizontal coordinate.
-    pub fn y(&self, value: f32) -> Tween {
-        self.update(|mut position| {
-            position.y = value;
-            position
-        })
-    }
-}
-
-impl TrackHandle<Color> {
-    /// Sets the red channel while preserving the remaining color channels.
-    pub fn r(&self, value: f32) -> Tween {
-        self.update(|mut color| {
-            color.r = value;
-            color
-        })
-    }
-
-    /// Sets the green channel while preserving the remaining color channels.
-    pub fn g(&self, value: f32) -> Tween {
-        self.update(|mut color| {
-            color.g = value;
-            color
-        })
-    }
-
-    /// Sets the blue channel while preserving the remaining color channels.
-    pub fn b(&self, value: f32) -> Tween {
-        self.update(|mut color| {
-            color.b = value;
-            color
-        })
-    }
-
-    /// Sets the alpha channel while preserving the remaining color channels.
-    pub fn a(&self, value: f32) -> Tween {
-        self.update(|mut color| {
-            color.a = value;
-            color
-        })
     }
 }
 

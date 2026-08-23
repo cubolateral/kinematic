@@ -18,6 +18,17 @@ fn type_fragment(identifier: &syn::Ident) -> String {
         .collect()
 }
 
+fn type_name(ty: &syn::Type) -> Option<String> {
+    let syn::Type::Path(path) = ty else {
+        return None;
+    };
+
+    path.path
+        .segments
+        .last()
+        .map(|segment| segment.ident.to_string())
+}
+
 /// Generates object-handler fields and track metadata for a `Trackable` component.
 pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -92,7 +103,6 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     for (id, field) in tracked_fields.iter().enumerate() {
         let field_ident = field.ident.as_ref().unwrap();
         let field_ty = &field.ty;
-        let field_visibility = &field.vis;
         let id = id as u32;
         let field_name = field_ident.to_string();
 
@@ -121,7 +131,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         });
 
         handle_fields.push(quote! {
-            #field_visibility #field_ident: #track_handle_type<#field_ty>,
+            #field_ident: #track_handle_type<#field_ty>,
         });
 
         handle_initializers.push(quote! {
@@ -150,13 +160,47 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         });
 
         tween_fns.push(quote! {
-            #field_visibility fn #field_ident(
+            pub fn #field_ident(
                 &self,
                 value: <#field_ty as #track_value_type_trait>::Input,
             ) -> #tween_type {
                 self.#field_ident.set(value.into())
             }
         });
+
+        match type_name(field_ty).as_deref() {
+            Some("Vector2") => {
+                for suffix in ["x", "y"] {
+                    let method_name = format_ident!("{}_{}", field_ident, suffix);
+                    let component_field = format_ident!("{}", suffix);
+
+                    tween_fns.push(quote! {
+                        pub fn #method_name(&self, value: f32) -> #tween_type {
+                            self.#field_ident.update(|mut component| {
+                                component.#component_field = value;
+                                component
+                            })
+                        }
+                    });
+                }
+            }
+            Some("Color") => {
+                for suffix in ["r", "g", "b", "a"] {
+                    let method_name = format_ident!("{}_{}", field_ident, suffix);
+                    let component_field = format_ident!("{}", suffix);
+
+                    tween_fns.push(quote! {
+                        pub fn #method_name(&self, value: f32) -> #tween_type {
+                            self.#field_ident.update(|mut component| {
+                                component.#component_field = value;
+                                component
+                            })
+                        }
+                    });
+                }
+            }
+            _ => {}
+        }
     }
 
     let tracks_ident = format_ident!("__{}_TRACKS", struct_name.to_string().to_uppercase());

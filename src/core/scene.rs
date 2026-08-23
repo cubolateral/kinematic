@@ -110,7 +110,7 @@ impl Scene {
     ///     .position(Vector2::ZERO)
     ///     .build();
     /// scene.add(&text);
-    /// let _ = text.position.x(100.0);
+    /// let _ = text.position_x(100.0);
     /// ```
     pub fn create<T: Object>(&mut self) -> T::Builder {
         T::builder(std::rc::Rc::clone(&self.world), self.animator.active())
@@ -190,7 +190,10 @@ mod tests {
         let circle: CircleHandler = scene.create::<Circle>().build();
 
         let _ = text.opacity(0.25);
-        let _ = circle.position.x(10.0);
+        let _ = circle.position(vec2(10.0, 20.0));
+        let _ = circle.position_x(10.0);
+        let _ = circle.fill(Color::RED);
+        let _ = circle.fill_r(0.75);
         let world = scene.get_world();
         let mut query = world.query::<&Draw>();
 
@@ -206,8 +209,7 @@ mod tests {
                 let circle = scene.create::<Circle>().build();
                 scene.add(&circle);
                 circle
-                    .position
-                    .x(256.0)
+                    .position_x(256.0)
                     .duration(1.0)
                     .easing(Easing::InOutQuad)
                     .play();
