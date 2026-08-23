@@ -6,45 +6,41 @@ use crate::core::{
     types::Vector2,
 };
 
-/// Direction used by the optional positional shift of a fade effect.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Shift {
-    /// Shifts horizontally to the left.
+/// Position or direction used by a fade effect.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FadeFrom {
+    /// Starts or ends to the left.
     Left,
-    /// Shifts horizontally to the right.
+    /// Starts or ends to the right.
     Right,
-    /// Shifts vertically upward.
+    /// Starts or ends above the object.
     Up,
-    /// Shifts vertically downward.
+    /// Starts or ends below the object.
     Down,
+    /// Starts or ends at a custom position.
+    Position(Vector2),
 }
 
-impl Shift {
-    /// Direction aliases matching the conventional animation notation.
-    pub const LEFT: Self = Self::Left;
-    pub const RIGHT: Self = Self::Right;
-    pub const UP: Self = Self::Up;
-    pub const DOWN: Self = Self::Down;
-
+impl FadeFrom {
     fn vector(self, offset: f32) -> Vector2 {
         match self {
             Self::Left => Vector2::new(-offset, 0.0),
             Self::Right => Vector2::new(offset, 0.0),
             Self::Up => Vector2::new(0.0, -offset),
             Self::Down => Vector2::new(0.0, offset),
+            Self::Position(position) => position,
         }
     }
 }
 
-/// Fades an object in from an optional scale and positional offset.
+/// Fades an object in from an optional scale and position.
 pub struct FadeIn {
     duration: f32,
     easing: Easing,
     scale: f32,
     spin: f32,
-    shift: Option<Shift>,
+    from: Option<FadeFrom>,
     offset: f32,
-    from: Option<Vector2>,
 }
 
 impl FadeIn {
@@ -55,9 +51,8 @@ impl FadeIn {
             easing: Easing::default(),
             scale: 1.0,
             spin: 0.0,
-            shift: None,
-            offset: 100.0,
             from: None,
+            offset: 100.0,
         }
     }
 
@@ -85,21 +80,15 @@ impl FadeIn {
         self
     }
 
-    /// Sets the direction from which the object enters.
-    pub fn shift(mut self, shift: Shift) -> Self {
-        self.shift = Some(shift);
-        self
-    }
-
-    /// Sets the distance used by the configured shift direction.
+    /// Sets the distance used by the configured direction.
     pub fn offset(mut self, offset: f32) -> Self {
         self.offset = offset;
         self
     }
 
-    /// Sets the explicit starting position of the object.
-    pub fn from(mut self, position: Vector2) -> Self {
-        self.from = Some(position);
+    /// Sets the position or direction from which the object enters.
+    pub fn from(mut self, from: FadeFrom) -> Self {
+        self.from = Some(from);
         self
     }
 }
@@ -111,7 +100,10 @@ impl Effect for FadeIn {
         let rotation = handler.get(TransformComponent::rotation_property());
         let start_position = self
             .from
-            .or_else(|| self.shift.map(|shift| position + shift.vector(self.offset)))
+            .map(|from| match from {
+                FadeFrom::Position(position) => position,
+                direction => position + direction.vector(self.offset),
+            })
             .unwrap_or(position);
 
         s.all(|_| {
@@ -153,15 +145,14 @@ impl Effect for FadeIn {
     }
 }
 
-/// Fades an object out toward an optional scale and positional offset.
+/// Fades an object out toward an optional scale and position.
 pub struct FadeOut {
     duration: f32,
     easing: Easing,
     scale: f32,
     spin: f32,
-    shift: Option<Shift>,
+    from: Option<FadeFrom>,
     offset: f32,
-    from: Option<Vector2>,
 }
 
 impl FadeOut {
@@ -172,9 +163,8 @@ impl FadeOut {
             easing: Easing::default(),
             scale: 1.0,
             spin: 0.0,
-            shift: None,
-            offset: 100.0,
             from: None,
+            offset: 100.0,
         }
     }
 
@@ -202,21 +192,15 @@ impl FadeOut {
         self
     }
 
-    /// Sets the direction toward which the object exits.
-    pub fn shift(mut self, shift: Shift) -> Self {
-        self.shift = Some(shift);
-        self
-    }
-
-    /// Sets the distance used by the configured shift direction.
+    /// Sets the distance used by the configured direction.
     pub fn offset(mut self, offset: f32) -> Self {
         self.offset = offset;
         self
     }
 
-    /// Sets the explicit starting position of the object.
-    pub fn from(mut self, position: Vector2) -> Self {
-        self.from = Some(position);
+    /// Sets the position or direction toward which the object exits.
+    pub fn from(mut self, from: FadeFrom) -> Self {
+        self.from = Some(from);
         self
     }
 }
@@ -226,10 +210,14 @@ impl Effect for FadeOut {
         let position = handler.get(TransformComponent::position_property());
         let scale = handler.get(TransformComponent::scale_property());
         let rotation = handler.get(TransformComponent::rotation_property());
-        let start_position = self.from.unwrap_or(position);
+        let start_position = position;
         let end_position = self
-            .shift
-            .map_or(position, |shift| position + shift.vector(self.offset));
+            .from
+            .map(|from| match from {
+                FadeFrom::Position(position) => position,
+                direction => position + direction.vector(self.offset),
+            })
+            .unwrap_or(position);
 
         s.all(|_| {
             handler
