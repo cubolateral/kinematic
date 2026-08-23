@@ -17,6 +17,9 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let animator_handle_type = format_ident!("__Kinematic{}AnimatorHandle", object_name);
     let trackable_info_type = format_ident!("__Kinematic{}TrackableInfo", object_name);
     let trackable_trait = format_ident!("__Kinematic{}Trackable", object_name);
+    let track_property_type = format_ident!("__Kinematic{}TrackProperty", object_name);
+    let track_value_type_trait = format_ident!("__Kinematic{}TrackValueType", object_name);
+    let tween_type = format_ident!("__Kinematic{}Tween", object_name);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -87,6 +90,9 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             SceneWorld as #scene_world_type,
             AnimatorHandle as #animator_handle_type,
             Trackable as #trackable_trait,
+            TrackProperty as #track_property_type,
+            TrackValueType as #track_value_type_trait,
+            Tween as #tween_type,
             TrackableInfo as #trackable_info_type,
             components::Inspection as #inspection_type,
             objects::{
@@ -124,6 +130,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         /// Typed handler for an entity spawned into a scene.
         #visibility struct #handler_name {
+            world: #scene_world_type,
             entity: hecs::Entity,
             animator: #animator_handle_type,
             fields: #handler_fields_type,
@@ -138,8 +145,31 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         }
 
         impl #object_handler_trait for #handler_name {
+            type Object = #object_name;
+
             fn entity(&self) -> hecs::Entity {
                 self.entity
+            }
+
+            fn animate<T: #track_value_type_trait>(
+                &self,
+                property: #track_property_type<T>,
+                to: T,
+            ) -> #tween_type<#object_name> {
+                property
+                    .handle(std::rc::Rc::clone(&self.world), self.entity, self.animator.clone())
+                    .animate::<#object_name>(to)
+            }
+
+            fn animate_from<T: #track_value_type_trait>(
+                &self,
+                property: #track_property_type<T>,
+                from: T,
+                to: T,
+            ) -> #tween_type<#object_name> {
+                property
+                    .handle(std::rc::Rc::clone(&self.world), self.entity, self.animator.clone())
+                    .animate_from::<#object_name>(from, to)
             }
         }
 
@@ -162,7 +192,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 let fields = #handler_root_type::<#object_name>::new();
                 #(#handler_initializers)*
 
-                #handler_name { entity, animator, fields }
+                #handler_name { world, entity, animator, fields }
             }
         }
 

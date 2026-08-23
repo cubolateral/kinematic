@@ -47,6 +47,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let trackable_trait = format_ident!("__Kinematic{}Trackable", struct_name);
     let track_value_type_trait = format_ident!("__Kinematic{}TrackValueType", struct_name);
     let tween_type = format_ident!("__Kinematic{}Tween", struct_name);
+    let track_property_type = format_ident!("__Kinematic{}TrackProperty", struct_name);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -73,6 +74,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let mut tween_fns = Vec::with_capacity(count);
     let mut tween_trait_fns = Vec::with_capacity(count);
     let mut tween_impl_fns = Vec::with_capacity(count);
+    let mut property_constants = Vec::with_capacity(count);
     let mut builder_setters = Vec::with_capacity(fields.len());
 
     for field in fields {
@@ -110,6 +112,8 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         let field_ty = &field.ty;
         let id = id as u32;
         let field_name = field_ident.to_string();
+        let property_name = format_ident!("{}_property", field_ident);
+        let from_method_name = format_ident!("{}_from", field_ident);
 
         type_assertions.push(quote! {
             const _: fn() = {
@@ -169,7 +173,15 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 &self,
                 value: <#field_ty as #track_value_type_trait>::Input,
             ) -> #tween_type<<Next as #handler_context_trait>::Object> {
-                self.#field_ident.set_for(value.into())
+                self.#field_ident.animate::< <Next as #handler_context_trait>::Object >(value.into())
+            }
+
+            pub fn #from_method_name(
+                &self,
+                from: <#field_ty as #track_value_type_trait>::Input,
+                to: <#field_ty as #track_value_type_trait>::Input,
+            ) -> #tween_type<<Next as #handler_context_trait>::Object> {
+                self.#field_ident.animate_from::< <Next as #handler_context_trait>::Object >(from.into(), to.into())
             }
         });
         tween_trait_fns.push(quote! {
@@ -191,10 +203,29 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             }
         });
 
+        property_constants.push(quote! {
+            pub fn #property_name() -> #track_property_type<#field_ty> {
+                #track_property_type::new(
+                    std::any::TypeId::of::<#struct_name>(),
+                    <#struct_name as #trackable_trait>::track(#id),
+                    |world, entity| {
+                        world.get::<&#struct_name>(entity).unwrap().#field_ident.clone()
+                    },
+                    |world, entity, value| {
+                        let mut component = world.get::<&mut #struct_name>(entity).unwrap();
+                        let old_value = component.#field_ident.clone();
+                        component.#field_ident = value;
+                        old_value
+                    },
+                )
+            }
+        });
+
         match type_name(field_ty).as_deref() {
             Some("Vector2") => {
                 for suffix in ["x", "y"] {
                     let method_name = format_ident!("{}_{}", field_ident, suffix);
+                    let from_method_name = format_ident!("{}_from", method_name);
                     let component_field = format_ident!("{}", suffix);
 
                     tween_fns.push(quote! {
@@ -202,10 +233,25 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             &self,
                             value: f32,
                         ) -> #tween_type<<Next as #handler_context_trait>::Object> {
-                            self.#field_ident.update_for(|mut component| {
-                                component.#component_field = value;
-                                component
-                            })
+                            let mut component = self.#field_ident.get();
+                            component.#component_field = value;
+                            self.#field_ident.animate::< <Next as #handler_context_trait>::Object >(component)
+                        }
+
+                        pub fn #from_method_name(
+                            &self,
+                            from: f32,
+                            to: f32,
+                        ) -> #tween_type<<Next as #handler_context_trait>::Object> {
+                            let mut from_component = self.#field_ident.get();
+                            from_component.#component_field = from;
+                            let mut to_component = self.#field_ident.get();
+                            to_component.#component_field = to;
+
+                            self.#field_ident.animate_from::< <Next as #handler_context_trait>::Object >(
+                                from_component,
+                                to_component,
+                            )
                         }
                     });
                     tween_trait_fns.push(quote! {
@@ -217,8 +263,8 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                                 std::any::TypeId::of::<#struct_name>(),
                                 <#struct_name as #trackable_trait>::track(#id),
                                 |mut component: #field_ty| {
-                                    component.#component_field = value;
-                                    component
+                                component.#component_field = value;
+                                component
                                 },
                             )
                         }
@@ -228,6 +274,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             Some("Color") => {
                 for suffix in ["r", "g", "b", "a"] {
                     let method_name = format_ident!("{}_{}", field_ident, suffix);
+                    let from_method_name = format_ident!("{}_from", method_name);
                     let component_field = format_ident!("{}", suffix);
 
                     tween_fns.push(quote! {
@@ -235,10 +282,25 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             &self,
                             value: f32,
                         ) -> #tween_type<<Next as #handler_context_trait>::Object> {
-                            self.#field_ident.update_for(|mut component| {
-                                component.#component_field = value;
-                                component
-                            })
+                            let mut component = self.#field_ident.get();
+                            component.#component_field = value;
+                            self.#field_ident.animate::< <Next as #handler_context_trait>::Object >(component)
+                        }
+
+                        pub fn #from_method_name(
+                            &self,
+                            from: f32,
+                            to: f32,
+                        ) -> #tween_type<<Next as #handler_context_trait>::Object> {
+                            let mut from_component = self.#field_ident.get();
+                            from_component.#component_field = from;
+                            let mut to_component = self.#field_ident.get();
+                            to_component.#component_field = to;
+
+                            self.#field_ident.animate_from::< <Next as #handler_context_trait>::Object >(
+                                from_component,
+                                to_component,
+                            )
                         }
                     });
                     tween_trait_fns.push(quote! {
@@ -268,6 +330,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             SceneWorld as #scene_world_type,
             AnimatorHandle as #animator_handle_type,
             TrackHandle as #track_handle_type,
+            TrackProperty as #track_property_type,
             TrackId as #track_id_type,
             TrackInfo as #track_info_type,
             Trackable as #trackable_trait,
@@ -350,6 +413,8 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         }
 
         impl #struct_name {
+            #(#property_constants)*
+
             pub const INFO: #trackable_info_type = #trackable_info_type {
                 name: stringify!(#struct_name),
                 get: || &#tracks_ident,

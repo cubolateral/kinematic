@@ -1,5 +1,5 @@
 use crate::core::{
-    AnimatorHandle, SceneWorld, Trackable,
+    AnimatorHandle, SceneWorld, TrackProperty, TrackValueType, Trackable, Tween,
     components::{Animation, Inspection, Node},
 };
 
@@ -40,8 +40,22 @@ pub trait Object: hecs::DynamicBundle + Sized {
 
 /// Common access to the entity represented by a typed object handler.
 pub trait ObjectHandler {
+    /// Object type represented by this handler.
+    type Object: Object;
+
     /// Returns the ECS entity represented by this handler.
     fn entity(&self) -> hecs::Entity;
+
+    /// Creates a tween from the current property value to a target value.
+    fn animate<T: TrackValueType>(&self, property: TrackProperty<T>, to: T) -> Tween<Self::Object>;
+
+    /// Creates a tween from an explicit starting value to a target value.
+    fn animate_from<T: TrackValueType>(
+        &self,
+        property: TrackProperty<T>,
+        from: T,
+        to: T,
+    ) -> Tween<Self::Object>;
 }
 
 /// Marks an object as containing a specific trackable component.

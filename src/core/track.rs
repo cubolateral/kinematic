@@ -406,6 +406,21 @@ impl<T: TrackValueType> TrackHandle<T> {
         self.tween(old_value, new_value)
     }
 
+    /// Creates a tween from an explicit starting value to a target value.
+    pub fn animate_from<Object>(&self, from: T, to: T) -> Tween<Object> {
+        self.tween(from, to)
+    }
+
+    /// Creates a tween from the field's current value to a target value.
+    pub fn animate<Object>(&self, to: T) -> Tween<Object> {
+        let from = self.get();
+        let mut world = self.world.borrow_mut();
+        (self.replace)(&mut world, self.entity, to.clone());
+        drop(world);
+
+        self.tween(from, to)
+    }
+
     fn tween<Object>(&self, from: T, to: T) -> Tween<Object> {
         Tween::new(
             std::rc::Rc::clone(&self.world),
@@ -415,6 +430,50 @@ impl<T: TrackValueType> TrackHandle<T> {
             from.into_track_value(),
             to.into_track_value(),
             self.animator.clone(),
+        )
+    }
+}
+
+/// Describes a typed trackable property that can be animated on a compatible object.
+#[derive(Clone, Copy)]
+pub struct TrackProperty<T: TrackValueType> {
+    type_id: std::any::TypeId,
+    info: &'static TrackInfo,
+    get: fn(&hecs::World, hecs::Entity) -> T,
+    replace: fn(&mut hecs::World, hecs::Entity, T) -> T,
+}
+
+impl<T: TrackValueType> TrackProperty<T> {
+    /// Creates metadata for a typed trackable property.
+    pub const fn new(
+        type_id: std::any::TypeId,
+        info: &'static TrackInfo,
+        get: fn(&hecs::World, hecs::Entity) -> T,
+        replace: fn(&mut hecs::World, hecs::Entity, T) -> T,
+    ) -> Self {
+        Self {
+            type_id,
+            info,
+            get,
+            replace,
+        }
+    }
+
+    /// Creates a typed field handle for an object entity.
+    pub fn handle(
+        self,
+        world: SceneWorld,
+        entity: hecs::Entity,
+        animator: AnimatorHandle,
+    ) -> TrackHandle<T> {
+        TrackHandle::new(
+            world,
+            entity,
+            self.type_id,
+            self.info,
+            self.get,
+            self.replace,
+            animator,
         )
     }
 }

@@ -253,6 +253,27 @@ mod tests {
     }
 
     #[test]
+    fn object_handlers_animate_properties_and_generate_from_shortcuts() {
+        let mut scene = Scene::new();
+        let circle: CircleHandler = scene.create::<Circle>().build();
+
+        scene.play(
+            circle
+                .animate(Transform::position_property(), vec2(10.0, 20.0))
+                .duration(1.0)
+                .task(),
+        );
+        scene.play(circle.position_from(Vector2::ZERO, vec2(20.0, 30.0)).task());
+        scene.play(circle.opacity_from(0.0, 1.0).duration(1.0).task());
+
+        scene.update(0.5);
+        let world = scene.get_world();
+        let transform = world.get::<&Transform>(circle.entity()).unwrap();
+
+        assert_eq!(transform.position, vec2(5.0, 10.0));
+    }
+
+    #[test]
     fn handler_tween_play_registers_in_scene_animator() {
         struct HandlerTweenScene;
 
