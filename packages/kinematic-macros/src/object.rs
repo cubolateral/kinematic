@@ -151,6 +151,15 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 self.entity
             }
 
+            fn get<T: #track_value_type_trait>(
+                &self,
+                property: #track_property_type<T>,
+            ) -> T {
+                property
+                    .handle(std::rc::Rc::clone(&self.world), self.entity, self.animator.clone())
+                    .get()
+            }
+
             fn animate<T: #track_value_type_trait>(
                 &self,
                 property: #track_property_type<T>,

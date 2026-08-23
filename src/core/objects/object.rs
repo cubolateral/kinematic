@@ -46,6 +46,9 @@ pub trait ObjectHandler {
     /// Returns the ECS entity represented by this handler.
     fn entity(&self) -> hecs::Entity;
 
+    /// Reads a typed trackable property from the object.
+    fn get<T: TrackValueType>(&self, property: TrackProperty<T>) -> T;
+
     /// Creates a tween from the current property value to a target value.
     fn animate<T: TrackValueType>(&self, property: TrackProperty<T>, to: T) -> Tween<Self::Object>;
 

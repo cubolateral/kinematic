@@ -13,7 +13,7 @@ other implementation details that can change independently.
 ## Repository Layout
 
 - `src/app.rs`: SDL, OpenGL, and ImGui runtime setup.
-- `src/core/`: public scene, animation, project, component, and object APIs.
+- `src/core/`: public scene, animation, effects, project, component, and object APIs.
 - `src/editor/` and `src/ui/`: crate-internal editor state, preview, timeline,
   and UI.
 - `src/renderer/`: crate-internal FFmpeg MP4 export pipeline. It reads frames
@@ -22,6 +22,10 @@ other implementation details that can change independently.
 
 Keep reusable animation and scene behavior in `core`. Keep windowing, rendering
 loop ownership, and ImGui interaction out of the core domain.
+
+Reusable animation Effects live in `src/core/effects/`. The `Effect` trait is
+the public contract for builder-style animations, while individual effect
+implementations such as `FadeIn` and `FadeOut` remain in their own modules.
 
 ## Architectural Contracts
 
@@ -77,8 +81,15 @@ loop ownership, and ImGui interaction out of the core domain.
 
 - Treat `src/lib.rs` and `src/prelude.rs` as the public API boundary. Do not make
   editor internals public merely to simplify a local change.
+- Keep wildcard reexports local to the module that owns the items. Parent
+  modules must expose child directories with `pub mod module;` only; do not
+  reexport child-module contents with `pub use module::*`. Public convenience
+  reexports for submodules belong in `src/prelude.rs`.
 - Prefer extending the public scene/object/animation abstractions over coupling
   downstream code to `hecs::World` internals.
+- Public Effects belong under `core/effects` and should compose the existing
+  `ObjectHandler` property animation API instead of requiring per-object Effect
+  implementations.
 - Preserve the separation between project definition, animation evaluation,
   scene rendering, and editor controls unless a change intentionally revises the
   architecture.

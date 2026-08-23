@@ -1,4 +1,5 @@
 pub mod components;
+pub mod effects;
 pub mod objects;
 pub mod types;
 
