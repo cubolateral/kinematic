@@ -4,16 +4,18 @@ pub(crate) struct Timeline {
     previous_time: f32,
     current_time: f32,
     max_time: f32,
+    frame_duration: f32,
 }
 
 impl Timeline {
-    pub fn new(max_time: f32) -> Self {
+    pub fn new(max_time: f32, fps: u32) -> Self {
         Self {
             is_controlling: false,
             is_playing: false,
             previous_time: -1.0, // Start by updating.
             current_time: 0.0,
             max_time,
+            frame_duration: 1.0 / fps.max(1) as f32,
         }
     }
 
@@ -70,6 +72,16 @@ impl Timeline {
         self.go_to(self.max_time);
     }
 
+    pub fn next_frame(&mut self) {
+        self.pause();
+        self.go_to(self.current_time + self.frame_duration);
+    }
+
+    pub fn previous_frame(&mut self) {
+        self.pause();
+        self.go_to(self.current_time - self.frame_duration);
+    }
+
     pub fn is_playing(&self) -> bool {
         self.is_playing && !self.is_controlling
     }
@@ -80,5 +92,36 @@ impl Timeline {
 
     pub fn get_duration(&self) -> f32 {
         self.max_time
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frame_buttons_move_by_one_project_frame_and_pause() {
+        let mut timeline = Timeline::new(1.0, 10);
+        timeline.play();
+
+        timeline.next_frame();
+        assert!((timeline.get_time() - 0.1).abs() < f32::EPSILON);
+        assert!(!timeline.is_playing());
+
+        timeline.previous_frame();
+        assert!(timeline.get_time().abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn frame_buttons_clamp_to_timeline_bounds() {
+        let mut timeline = Timeline::new(0.15, 10);
+
+        timeline.next_frame();
+        timeline.next_frame();
+        assert!((timeline.get_time() - 0.15).abs() < f32::EPSILON);
+
+        timeline.previous_frame();
+        timeline.previous_frame();
+        assert!(timeline.get_time().abs() < f32::EPSILON);
     }
 }

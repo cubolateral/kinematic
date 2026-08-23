@@ -216,7 +216,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
     let is_playing = timeline.is_playing();
     let spacing = unsafe { ui.style().item_spacing() }[0];
-    let width = BUTTON_SIZE * 3.0 + spacing * 2.0;
+    let width = BUTTON_SIZE * 5.0 + spacing * 4.0;
 
     ui.set_cursor_pos_x(
         ui.cursor_pos_x() + ((ui.content_region_avail_width() - width) * 0.5).max(0.0),
@@ -225,10 +225,23 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
     if transport_button(
         ui,
         "<<",
-        "Go to left [ArrowLeft]",
-        dear_imgui_rs::Key::LeftArrow,
+        "Go to start [Shift + LeftArrow]",
+        Some(dear_imgui_rs::Key::LeftArrow),
+        true,
     ) {
         timeline.go_to_start();
+    }
+
+    ui.same_line();
+
+    if transport_button(
+        ui,
+        "<",
+        "Previous frame [LeftArrow]",
+        Some(dear_imgui_rs::Key::LeftArrow),
+        false,
+    ) {
+        timeline.previous_frame();
     }
 
     ui.same_line();
@@ -241,7 +254,8 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
         } else {
             "Play [Space]"
         },
-        dear_imgui_rs::Key::Space,
+        Some(dear_imgui_rs::Key::Space),
+        false,
     ) {
         timeline.toggle();
     }
@@ -250,9 +264,22 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
 
     if transport_button(
         ui,
+        ">",
+        "Next frame [RightArrow]",
+        Some(dear_imgui_rs::Key::RightArrow),
+        false,
+    ) {
+        timeline.next_frame();
+    }
+
+    ui.same_line();
+
+    if transport_button(
+        ui,
         ">>",
-        "Go to right [ArrowRight]",
-        dear_imgui_rs::Key::RightArrow,
+        "Go to end [Shift + RightArrow]",
+        Some(dear_imgui_rs::Key::RightArrow),
+        true,
     ) {
         timeline.go_to_end();
     }
@@ -270,13 +297,17 @@ fn transport_button(
     ui: &dear_imgui_rs::Ui,
     label: &str,
     tooltip: &str,
-    key: dear_imgui_rs::Key,
+    key: Option<dear_imgui_rs::Key>,
+    requires_shift: bool,
 ) -> bool {
     let clicked = ui.button_config(label).size([BUTTON_SIZE; 2]).build();
+
     if ui.is_item_hovered() {
         ui.tooltip_text(tooltip);
     }
-    clicked || ui.is_key_pressed(key)
+
+    clicked
+        || key.is_some_and(|key| ui.is_key_pressed(key) && ui.io().key_shift() == requires_shift)
 }
 
 fn draw_scrubber(

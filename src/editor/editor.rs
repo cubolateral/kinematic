@@ -25,7 +25,7 @@ impl Editor {
 
         let mut scene = Scene::new();
 
-        let timeline = Timeline::new(scene.build(project.scene.as_mut()));
+        let timeline = Timeline::new(scene.build(project.scene.as_mut()), project.fps);
 
         let preview = Canvas::new(project.resolution, imgui_renderer, skia_context, gl);
 
