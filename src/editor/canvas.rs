@@ -138,4 +138,8 @@ impl Canvas {
     pub fn get_imgui_texture_id(&self) -> dear_imgui_rs::TextureId {
         self.imgui_texture_id
     }
+
+    pub fn get_framebuffer(&self) -> glow::NativeFramebuffer {
+        self.framebuffer
+    }
 }

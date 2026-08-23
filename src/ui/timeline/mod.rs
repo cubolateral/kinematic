@@ -172,6 +172,8 @@ impl Layout {
 }
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
+    let is_exporting = editor.is_exporting();
+
     ui.set_next_window_class(
         &dear_imgui_rs::WindowClass::default()
             .dock_node_flags_override_set(dear_imgui_rs::DockFlags::AUTO_HIDE_TAB_BAR),
@@ -179,8 +181,9 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
     ui.window("Timeline").build(|| {
         let fps = editor.get_preview_fps();
+        let _disabled = ui.begin_disabled_with_cond(is_exporting);
 
-        controls(editor.get_timeline(), ui, fps);
+        controls(editor.get_timeline(), ui, fps, !is_exporting);
         ui.spacing();
         ui.separator();
 
@@ -209,11 +212,16 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         entities::draw(editor, ui, &draw_list, layout, time);
         draw_mouse_indicator(ui, &draw_list, layout);
         draw_overlay(ui, &draw_list, layout, time, playhead_x);
-        update_interaction(editor.get_timeline(), ui, layout, state, timeline_hovered);
+        if is_exporting {
+            state.interaction = Interaction::None;
+            editor.get_timeline().is_controlling = false;
+        } else {
+            update_interaction(editor.get_timeline(), ui, layout, state, timeline_hovered);
+        }
     });
 }
 
-fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
+fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32, interactive: bool) {
     let is_playing = timeline.is_playing();
     let spacing = unsafe { ui.style().item_spacing() }[0];
     let width = BUTTON_SIZE * 5.0 + spacing * 4.0;
@@ -228,6 +236,7 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
         "Go to start [Shift + LeftArrow]",
         Some(dear_imgui_rs::Key::LeftArrow),
         true,
+        interactive,
     ) {
         timeline.go_to_start();
     }
@@ -240,6 +249,7 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
         "Previous frame [LeftArrow]",
         Some(dear_imgui_rs::Key::LeftArrow),
         false,
+        interactive,
     ) {
         timeline.previous_frame();
     }
@@ -256,6 +266,7 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
         },
         Some(dear_imgui_rs::Key::Space),
         false,
+        interactive,
     ) {
         timeline.toggle();
     }
@@ -268,6 +279,7 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
         "Next frame [RightArrow]",
         Some(dear_imgui_rs::Key::RightArrow),
         false,
+        interactive,
     ) {
         timeline.next_frame();
     }
@@ -280,16 +292,19 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
         "Go to end [Shift + RightArrow]",
         Some(dear_imgui_rs::Key::RightArrow),
         true,
+        interactive,
     ) {
         timeline.go_to_end();
     }
 
     ui.same_line();
 
-    ui.text(if is_playing {
+    ui.text(if !interactive {
+        "EXPORTING".to_owned()
+    } else if is_playing {
         format!("FPS: {fps:.2}")
     } else {
-        "PAUSED".to_string()
+        "PAUSED".to_owned()
     });
 }
 
@@ -299,6 +314,7 @@ fn transport_button(
     tooltip: &str,
     key: Option<dear_imgui_rs::Key>,
     requires_shift: bool,
+    shortcuts_enabled: bool,
 ) -> bool {
     let clicked = ui.button_config(label).size([BUTTON_SIZE; 2]).build();
 
@@ -307,7 +323,9 @@ fn transport_button(
     }
 
     clicked
-        || key.is_some_and(|key| ui.is_key_pressed(key) && ui.io().key_shift() == requires_shift)
+        || shortcuts_enabled
+            && key
+                .is_some_and(|key| ui.is_key_pressed(key) && ui.io().key_shift() == requires_shift)
 }
 
 fn draw_scrubber(

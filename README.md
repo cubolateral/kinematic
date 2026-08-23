@@ -4,7 +4,8 @@ Kinematic is a Rust animation editor and library built around an ECS scene,
 typed animation tracks, and a timeline-based workflow. It uses
 [SDL3](https://github.com/libsdl-org/SDL) and OpenGL for the application runtime,
 [Skia](https://skia.org/) for drawing, and
-[Dear ImGui](https://github.com/ocornut/imgui) for the editor UI.
+[Dear ImGui](https://github.com/ocornut/imgui) for the editor UI, and
+[FFmpeg](https://ffmpeg.org/) as its video exporter.
 
 Kinematic is in early development, so its API may change.
 
@@ -15,6 +16,8 @@ Kinematic is in early development, so its API may change.
 - Built-in easing functions.
 - Timeline preview with tracks, keyframes, and inspection data.
 - SDL3/OpenGL rendering with an internal Dear ImGui editor.
+- FFmpeg-backed MP4 export from the editor. Exported projects are
+encoded as MP4 files in the `output/` directory.
 
 ## Requirements
 
@@ -22,6 +25,7 @@ Kinematic is in early development, so its API may change.
 - CMake to build the bundled SDL3 source.
 - A native C/C++ toolchain to compile SDL3 and Dear ImGui.
 - A desktop environment with OpenGL 3.3 support.
+- FFmpeg available in `PATH` for MP4 export.
 
 ## Example
 

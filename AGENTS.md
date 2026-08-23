@@ -16,6 +16,8 @@ other implementation details that can change independently.
 - `src/core/`: public scene, animation, project, component, and object APIs.
 - `src/editor/` and `src/ui/`: crate-internal editor state, preview, timeline,
   and UI.
+- `src/renderer/`: crate-internal FFmpeg MP4 export pipeline. It reads frames
+  from the editor's existing OpenGL preview framebuffer.
 - `packages/kinematic-macros/`: procedural derives used by the core API.
 
 Keep reusable animation and scene behavior in `core`. Keep windowing, rendering
@@ -65,6 +67,11 @@ loop ownership, and ImGui interaction out of the core domain.
   timeline owns playback time and duration. Its `is_controlling` flag is the
   sole UI-related exception because it temporarily suspends playback while the
   scrubber controls the current time.
+- The renderer is crate-internal and must reuse the application's existing SDL,
+  OpenGL, Skia, and preview framebuffer resources. It must not create a second
+  window or graphics context. Export advances the scene by exactly `1 / fps`
+  per frame, sends raw RGBA frames to FFmpeg, and writes MP4 files to
+  `output/<project name>.mp4`. FFmpeg must be available in `PATH`.
 
 ## API Boundaries
 

@@ -1,3 +1,4 @@
+mod export;
 mod inspector;
 mod preview;
 mod timeline;
@@ -26,6 +27,7 @@ pub(crate) struct Ui {
     font: dear_imgui_rs::FontId,
     colors: ThemeColors,
     scale: f32,
+    silent_export: bool,
     timeline: timeline::State,
 }
 
@@ -48,6 +50,7 @@ impl Ui {
             font: Self::load_font(context),
             colors: ThemeColors::default(),
             scale: 1.0,
+            silent_export: true,
             timeline: timeline::State::default(),
         }
     }
@@ -64,6 +67,7 @@ impl Ui {
         let _font = ui.push_font(self.font);
         inspector::draw(editor, ui);
         self.configuration(ui);
+        export::draw(editor, ui, &mut self.silent_export);
         preview::draw(editor, ui);
         timeline::draw(editor, ui, &mut self.timeline);
     }
@@ -191,11 +195,17 @@ impl Ui {
         dear_imgui_rs::DockBuilder::add_node(ui, dock, dear_imgui_rs::DockNodeFlags::NONE);
         dear_imgui_rs::DockBuilder::set_node_size(ui, dock, ui.main_viewport().size());
 
-        let (inspector, right) = dear_imgui_rs::DockBuilder::split_node(
+        let (left, right) = dear_imgui_rs::DockBuilder::split_node(
             ui,
             dock,
             dear_imgui_rs::SplitDirection::Left,
             0.2,
+        );
+        let (inspector, renderer) = dear_imgui_rs::DockBuilder::split_node(
+            ui,
+            left,
+            dear_imgui_rs::SplitDirection::Up,
+            0.85,
         );
         let (timeline, preview) = dear_imgui_rs::DockBuilder::split_node(
             ui,
@@ -206,6 +216,7 @@ impl Ui {
 
         dear_imgui_rs::DockBuilder::dock_window(ui, "Inspector", inspector);
         dear_imgui_rs::DockBuilder::dock_window(ui, "Configuration", inspector);
+        dear_imgui_rs::DockBuilder::dock_window(ui, "Export", renderer);
         dear_imgui_rs::DockBuilder::dock_window(ui, "Preview", preview);
         dear_imgui_rs::DockBuilder::dock_window(ui, "Timeline", timeline);
         dear_imgui_rs::DockBuilder::finish(ui, dock);

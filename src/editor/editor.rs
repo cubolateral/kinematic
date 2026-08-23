@@ -1,6 +1,7 @@
 use crate::{
     core::{Project, Scene},
     editor::{Canvas, Timeline},
+    renderer::{FrameResult, Renderer},
     utilities::FrameTimer,
 };
 
@@ -9,6 +10,9 @@ pub(crate) struct Editor {
     scene: Scene,
     timeline: Timeline,
     preview: Canvas,
+    renderer: Renderer,
+    pending_export_time: Option<f32>,
+    is_exporting: bool,
     accumulator: f32,
     window_timer: FrameTimer,
     canvas_timer: FrameTimer,
@@ -28,12 +32,16 @@ impl Editor {
         let timeline = Timeline::new(scene.build(project.scene.as_mut()), project.fps);
 
         let preview = Canvas::new(project.resolution, imgui_renderer, skia_context, gl);
+        let renderer = Renderer::new(project.resolution);
 
         Self {
             project,
             scene,
             timeline,
             preview,
+            renderer,
+            pending_export_time: None,
+            is_exporting: false,
             accumulator: 0.0,
             window_timer: FrameTimer::new(),
             canvas_timer: FrameTimer::new(),
@@ -42,6 +50,18 @@ impl Editor {
 
     pub fn update(&mut self) -> bool {
         self.window_timer.tick();
+
+        if self.is_exporting {
+            if let Some(time) = self.pending_export_time.take() {
+                self.timeline.go_to(time);
+                self.scene.update(time);
+            }
+
+            self.canvas_timer.tick();
+            self.accumulator = 0.0;
+            return true;
+        }
+
         self.accumulator += self.window_timer.get_delta_time();
 
         let delta = 1.0 / self.project.fps.max(1) as f32;
@@ -82,6 +102,55 @@ impl Editor {
             self.scene.draw(canvas);
             canvas.restore_to_count(save_count);
         });
+
+        if self.is_exporting {
+            self.process_export_frame(gl);
+        }
+    }
+
+    pub fn toggle_export(&mut self, silent: bool) {
+        if self.is_exporting {
+            self.renderer.cancel();
+            self.timeline.pause();
+            self.pending_export_time = None;
+            self.is_exporting = false;
+            self.accumulator = 0.0;
+            return;
+        }
+
+        let started = self.renderer.start(
+            self.project.name,
+            self.project.resolution,
+            self.project.fps,
+            self.timeline.get_duration(),
+            silent,
+        );
+        if !started {
+            return;
+        }
+
+        self.timeline.pause();
+        self.timeline.go_to_start();
+        self.scene.update(0.0);
+        self.pending_export_time = None;
+        self.is_exporting = true;
+        self.accumulator = 0.0;
+    }
+
+    pub fn is_exporting(&self) -> bool {
+        self.is_exporting
+    }
+
+    pub fn get_export_progress(&self) -> f32 {
+        self.renderer.progress()
+    }
+
+    pub fn get_export_message(&self) -> Option<&str> {
+        self.renderer.message()
+    }
+
+    pub fn shutdown(&mut self, gl: &glow::Context) {
+        self.renderer.shutdown(gl);
     }
 
     pub fn get_project(&mut self) -> &mut Project {
@@ -102,5 +171,28 @@ impl Editor {
 
     pub fn get_preview_fps(&self) -> f32 {
         self.canvas_timer.get_fps()
+    }
+
+    fn process_export_frame(&mut self, gl: &glow::Context) {
+        let result = self.renderer.process_frame(
+            gl,
+            self.preview.get_framebuffer(),
+            self.project.resolution,
+        );
+
+        match result {
+            Ok(FrameResult::Continue(time)) => self.pending_export_time = Some(time),
+            Ok(FrameResult::Finished) => {
+                self.pending_export_time = None;
+                self.is_exporting = false;
+                self.accumulator = 0.0;
+            }
+            Err(error) => {
+                self.renderer.fail(&error);
+                self.pending_export_time = None;
+                self.is_exporting = false;
+                self.accumulator = 0.0;
+            }
+        }
     }
 }

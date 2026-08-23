@@ -135,5 +135,7 @@ impl App {
             self.imgui_renderer.render(self.imgui.render()).unwrap();
             self.window.gl_swap_window();
         }
+
+        editor.shutdown(&self.gl);
     }
 }
