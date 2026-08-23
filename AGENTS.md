@@ -95,7 +95,12 @@ loop ownership, and ImGui interaction out of the core domain.
    concrete architectural need.
 5. Start string literals and comments with an uppercase letter, and end them
    with a period or exclamation mark.
-6. Keep implementations simple: do not add unnecessary structs, functions, or
+6. Use moderate vertical spacing in Rust code, including closures and
+   callbacks. Keep closely related variables and statements together, and add
+   one blank line between distinct stages of a function or groups of variables
+   with different purposes. Avoid blank lines between every individual
+   statement.
+7. Keep implementations simple: do not add unnecessary structs, functions, or
    layers of indirection. Introduce an abstraction only when it is genuinely
    needed by the behavior or architecture.
 

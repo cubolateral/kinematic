@@ -30,6 +30,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
 
         let available = ui.content_region_avail();
         let scale = (available[0] / source_size[0]).min(available[1] / source_size[1]);
+
         let size = [
             (source_size[0] * scale).max(1.0),
             (source_size[1] * scale).max(1.0),

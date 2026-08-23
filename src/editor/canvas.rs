@@ -92,6 +92,7 @@ impl Canvas {
             None,
         )
         .expect("Preview Skia surface must be created.");
+
         let imgui_texture_id = imgui_renderer.texture_map_mut().register_texture(
             texture,
             size.0,
@@ -115,11 +116,15 @@ impl Canvas {
         f: impl FnOnce(&skia_safe::Canvas),
     ) {
         skia_context.reset(None);
+
         unsafe {
             gl.bind_framebuffer(glow::FRAMEBUFFER, Some(self.framebuffer));
         }
+
         f(self.surface.canvas());
+
         skia_context.flush_and_submit();
+
         unsafe {
             gl.bind_framebuffer(glow::FRAMEBUFFER, None);
             gl.viewport(0, 0, window_size.0 as i32, window_size.1 as i32);

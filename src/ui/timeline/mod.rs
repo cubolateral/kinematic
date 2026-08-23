@@ -84,6 +84,7 @@ impl State {
         let old_span = (self.view_end - self.view_start).max(f32::EPSILON);
         let min_span = (self.duration * 0.01).max(0.05).min(self.duration);
         let new_span = (old_span * (delta_y * 0.01).exp()).clamp(min_span, self.duration);
+
         let anchor = anchor.clamp(0.0, 1.0);
         let anchor_time = self.view_start + old_span * anchor;
         let new_start = anchor_time - new_span * anchor;

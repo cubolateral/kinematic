@@ -123,6 +123,7 @@ impl TrackView {
             let hit_min = [x - hit_half_size, center - hit_half_size];
             let hit_max = [x + hit_half_size, center + hit_half_size];
             let hovered = self.hovered && ui.is_mouse_hovering_rect(hit_min, hit_max);
+
             let half_size = KEYFRAME_HALF_SIZE * if hovered { KEYFRAME_HOVER_SCALE } else { 1.0 };
             let min = [x - half_size, center - half_size];
             let max = [x + half_size, center + half_size];

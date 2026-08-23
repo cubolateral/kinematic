@@ -44,6 +44,7 @@ impl Default for Rect {
                     let shape = world.get::<&RectShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let draw = world.get::<&Draw>(entity).unwrap();
+
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
                     let rect = skia_safe::Rect::from_xywh(
                         -shape.size.x * 0.5,
@@ -51,6 +52,7 @@ impl Default for Rect {
                         shape.size.x,
                         shape.size.y,
                     );
+
                     let mut paint = skia_safe::Paint::new(
                         skia_safe::Color4f::new(
                             fill_r,

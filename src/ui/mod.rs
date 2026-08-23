@@ -97,6 +97,7 @@ impl Ui {
             } else {
                 [1.0, 1.0, 1.0, 1.0]
             };
+
         let mix = |amount: f32| {
             [
                 background[0] + (foreground[0] - background[0]) * amount * contrast,
@@ -105,12 +106,14 @@ impl Ui {
                 background[3],
             ]
         };
+
         let surface = mix(0.08);
         let hover = mix(0.14);
         let active = mix(0.22);
         let border = mix(0.30);
         let disabled = mix(0.50);
         let accent = self.colors.accent;
+
         let colors = [
             (StyleColor::Text, foreground),
             (StyleColor::TextDisabled, disabled),

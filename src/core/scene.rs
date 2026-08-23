@@ -68,10 +68,13 @@ impl Scene {
             }
 
             let save_count = canvas.save();
+
             canvas.translate((transform.position.x, transform.position.y));
             canvas.rotate(transform.rotation.to_degrees(), None);
             canvas.scale((transform.scale.x, transform.scale.y));
+
             (draw.on_draw)(&world, entity, canvas);
+
             canvas.restore_to_count(save_count);
         }
     }
@@ -81,7 +84,9 @@ impl Scene {
     /// Returns the duration of the resulting timeline.
     pub fn build(&mut self, builder: &mut dyn SceneBuilder) -> f32 {
         let mut animator = Animator::with_scene_time(std::rc::Rc::clone(&self.animator_time));
+
         builder.build(self, &mut animator);
+
         animator.get_duration(self)
     }
 

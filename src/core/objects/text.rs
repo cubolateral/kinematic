@@ -43,6 +43,7 @@ impl Font {
     fn skia_font(&self, size: f32) -> skia_safe::Font {
         let path = self.path.clone();
         let mut cache = FONT_CACHE.lock().unwrap();
+
         let typeface = cache.entry(path.clone()).or_insert_with(|| {
             let data = std::fs::read(&path).unwrap_or_else(|error| {
                 panic!("Font at `{}` could not be read: {error}.", path.display())

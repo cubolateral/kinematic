@@ -46,9 +46,12 @@ impl Editor {
         window_size: (u32, u32),
     ) {
         let (width, height) = self.preview.get_size();
+
         self.preview.draw(skia_context, gl, window_size, |canvas| {
             canvas.clear(skia_safe::colors::BLACK);
+
             let save_count = canvas.save();
+
             canvas.translate((width as f32 * 0.5, height as f32 * 0.5));
             self.scene.draw(canvas);
             canvas.restore_to_count(save_count);

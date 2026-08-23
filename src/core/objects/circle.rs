@@ -39,7 +39,9 @@ impl Default for Circle {
                     let shape = world.get::<&CircleShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let draw = world.get::<&Draw>(entity).unwrap();
+
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
+
                     let mut paint = skia_safe::Paint::new(
                         skia_safe::Color4f::new(
                             fill_r,
