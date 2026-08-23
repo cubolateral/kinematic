@@ -2,7 +2,7 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::components::{Draw, Style, Transform};
 
-type FontCache = std::collections::HashMap<(usize, std::path::PathBuf), femtovg::FontId>;
+type FontCache = std::collections::HashMap<std::path::PathBuf, skia_safe::Typeface>;
 
 static FONT_CACHE: std::sync::LazyLock<std::sync::Mutex<FontCache>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(FontCache::new()));
@@ -40,24 +40,20 @@ impl Font {
         &self.path
     }
 
-    fn id(&self, vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>) -> femtovg::FontId {
+    fn skia_font(&self, size: f32) -> skia_safe::Font {
         let path = self.path.clone();
-        let canvas = vg as *const femtovg::Canvas<femtovg::renderer::OpenGl> as usize;
-        let key = (canvas, path.clone());
         let mut cache = FONT_CACHE.lock().unwrap();
-
-        *cache.entry(key).or_insert_with(|| {
+        let typeface = cache.entry(path.clone()).or_insert_with(|| {
             let data = std::fs::read(&path).unwrap_or_else(|error| {
                 panic!("Font at `{}` could not be read: {error}.", path.display())
             });
 
-            vg.add_font_mem(&data).unwrap_or_else(|error| {
-                panic!(
-                    "Font at `{}` could not be parsed: {error:?}.",
-                    path.display()
-                )
-            })
-        })
+            skia_safe::FontMgr::new()
+                .new_from_data(&data, None)
+                .unwrap_or_else(|| panic!("Font at `{}` could not be parsed.", path.display()))
+        });
+
+        skia_safe::Font::new(typeface.clone(), size)
     }
 }
 
@@ -105,61 +101,42 @@ impl Default for Text {
             style: Default::default(),
             transform: Default::default(),
             draw: Draw {
-                get_rect: |world, entity, vg| {
+                on_draw: |world, entity, canvas| {
                     let shape = world.get::<&TextShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
-                    let font = shape.font.id(vg);
-                    let paint = femtovg::Paint::color(femtovg::Color::white())
-                        .with_font(&[font])
-                        .with_font_size(shape.size)
-                        .with_text_align(femtovg::Align::Center)
-                        .with_text_baseline(femtovg::Baseline::Middle);
-                    let metrics = vg
-                        .measure_text(0.0, 0.0, &shape.text, &paint)
-                        .expect("Text bounds must be measured.");
-                    let font_metrics = vg
-                        .measure_font(&paint)
-                        .expect("Font bounds must be measured.");
-                    let height = font_metrics.ascender() - font_metrics.descender();
-                    let padding = style.stroke_width.max(0.0) * 0.5 + 1.0;
-
-                    [
-                        metrics.x - padding,
-                        -height * 0.5 - padding,
-                        metrics.width() + padding * 2.0,
-                        height + padding * 2.0,
-                    ]
-                },
-                on_draw: |world, entity, vg| {
-                    let shape = world.get::<&TextShape>(entity).unwrap();
-                    let style = world.get::<&Style>(entity).unwrap();
+                    let draw = world.get::<&Draw>(entity).unwrap();
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
-                    let font = shape.font.id(vg);
+                    let font = shape.font.skia_font(shape.size);
+                    let mut paint = skia_safe::Paint::new(
+                        skia_safe::Color4f::new(
+                            fill_r,
+                            fill_g,
+                            fill_b,
+                            fill_a * draw.opacity.clamp(0.0, 1.0),
+                        ),
+                        None,
+                    );
+                    paint.set_anti_alias(true);
+                    let (width, _) = font.measure_str(&shape.text, Some(&paint));
+                    let (_, metrics) = font.metrics();
+                    let origin = (-width * 0.5, -(metrics.ascent + metrics.descent) * 0.5);
 
-                    let fill_paint = femtovg::Paint::color(femtovg::Color::rgbaf(
-                        fill_r, fill_g, fill_b, fill_a,
-                    ))
-                    .with_font(&[font])
-                    .with_font_size(shape.size)
-                    .with_text_align(femtovg::Align::Center)
-                    .with_text_baseline(femtovg::Baseline::Middle);
-
-                    vg.fill_text(0.0, 0.0, &shape.text, &fill_paint)
-                        .expect("Text fill must render.");
+                    canvas.draw_str(&shape.text, origin, &font, &paint);
 
                     if style.stroke_width > 0.0 {
                         let [stroke_r, stroke_g, stroke_b, stroke_a] = style.stroke.rgba();
-                        let stroke_paint = femtovg::Paint::color(femtovg::Color::rgbaf(
-                            stroke_r, stroke_g, stroke_b, stroke_a,
-                        ))
-                        .with_line_width(style.stroke_width)
-                        .with_font(&[font])
-                        .with_font_size(shape.size)
-                        .with_text_align(femtovg::Align::Center)
-                        .with_text_baseline(femtovg::Baseline::Middle);
-
-                        vg.stroke_text(0.0, 0.0, &shape.text, &stroke_paint)
-                            .expect("Text stroke must render.");
+                        paint.set_color4f(
+                            skia_safe::Color4f::new(
+                                stroke_r,
+                                stroke_g,
+                                stroke_b,
+                                stroke_a * draw.opacity.clamp(0.0, 1.0),
+                            ),
+                            None,
+                        );
+                        paint.set_style(skia_safe::PaintStyle::Stroke);
+                        paint.set_stroke_width(style.stroke_width);
+                        canvas.draw_str(&shape.text, origin, &font, &paint);
                     }
                 },
                 ..Default::default()

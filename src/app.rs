@@ -7,8 +7,8 @@ pub struct App {
     imgui_renderer: dear_imgui_glow::GlowRenderer,
     imgui_sdl: dear_imgui_sdl3::Sdl3PlatformBackend,
     imgui: dear_imgui_rs::Context,
-    vg: femtovg::Canvas<femtovg::renderer::OpenGl>,
     gl: std::rc::Rc<glow::Context>,
+    skia_context: skia_safe::gpu::DirectContext,
     _gl_context: sdl3::video::GLContext,
     window: sdl3::video::Window,
     sdl: sdl3::Sdl,
@@ -43,20 +43,6 @@ impl App {
             })
         };
 
-        // Initialize femtovg.
-        let vg = femtovg::Canvas::new(
-            unsafe {
-                femtovg::renderer::OpenGl::new_from_function(|s| {
-                    video_subsystem
-                        .gl_get_proc_address(s)
-                        .map(|f| f as *const std::ffi::c_void)
-                        .unwrap_or(std::ptr::null())
-                })
-            }
-            .unwrap(),
-        )
-        .unwrap();
-
         // Initialize imgui.
         let mut imgui = dear_imgui_rs::Context::create();
 
@@ -72,21 +58,41 @@ impl App {
         let imgui_renderer = dear_imgui_glow::GlowRenderer::new(gl, &mut imgui).unwrap();
         let gl = imgui_renderer.gl_context().unwrap().clone();
 
+        // Initialize Skia against the current OpenGL context.
+        let interface = skia_safe::gpu::gl::Interface::new_load_with(|name| {
+            if name == "eglGetCurrentDisplay" {
+                return std::ptr::null();
+            }
+
+            video_subsystem
+                .gl_get_proc_address(name)
+                .map(|f| f as *const std::ffi::c_void)
+                .unwrap_or(std::ptr::null())
+        })
+        .expect("Skia OpenGL interface must be created.");
+        let skia_context = skia_safe::gpu::direct_contexts::make_gl(interface, None)
+            .expect("Skia OpenGL context must be created.");
+
         Self {
             ui,
             imgui_renderer,
             imgui_sdl,
             imgui,
-            vg,
             sdl,
             window,
             _gl_context: gl_context,
             gl,
+            skia_context,
         }
     }
 
     pub fn run(&mut self, project: Project) {
-        let mut editor = Editor::new(project, &mut self.vg, &mut self.imgui_renderer);
+        let mut editor = Editor::new(
+            project,
+            &mut self.imgui_renderer,
+            &mut self.skia_context,
+            &self.gl,
+        );
 
         let mut events = self.sdl.event_pump().unwrap();
         let mut last_frame = std::time::Instant::now();
@@ -120,7 +126,7 @@ impl App {
                 self.gl.clear(glow::COLOR_BUFFER_BIT);
             }
 
-            editor.draw(self.window.size(), &self.gl, &mut self.vg);
+            editor.draw(&mut self.skia_context, &self.gl, self.window.size());
 
             self.ui.apply_scale(&mut self.imgui);
             self.imgui_sdl.new_frame(&mut self.imgui);

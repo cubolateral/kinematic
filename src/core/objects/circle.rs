@@ -35,37 +35,38 @@ impl Default for Circle {
             style: Default::default(),
             transform: Default::default(),
             draw: Draw {
-                get_rect: |world, entity, _| {
+                on_draw: |world, entity, canvas| {
                     let shape = world.get::<&CircleShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
-                    let extent = shape.radius + style.stroke_width.max(0.0) * 0.5 + 1.0;
-
-                    [-extent, -extent, extent * 2.0, extent * 2.0]
-                },
-                on_draw: |world, entity, vg| {
-                    let shape = world.get::<&CircleShape>(entity).unwrap();
-                    let style = world.get::<&Style>(entity).unwrap();
+                    let draw = world.get::<&Draw>(entity).unwrap();
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
-
-                    let mut path = femtovg::Path::new();
-                    path.circle(0.0, 0.0, shape.radius);
-
-                    vg.fill_path(
-                        &path,
-                        &femtovg::Paint::color(femtovg::Color::rgbaf(
-                            fill_r, fill_g, fill_b, fill_a,
-                        )),
+                    let mut paint = skia_safe::Paint::new(
+                        skia_safe::Color4f::new(
+                            fill_r,
+                            fill_g,
+                            fill_b,
+                            fill_a * draw.opacity.clamp(0.0, 1.0),
+                        ),
+                        None,
                     );
+                    paint.set_anti_alias(true);
+
+                    canvas.draw_circle((0.0, 0.0), shape.radius, &paint);
 
                     if style.stroke_width > 0.0 {
                         let [stroke_r, stroke_g, stroke_b, stroke_a] = style.stroke.rgba();
-                        vg.stroke_path(
-                            &path,
-                            &femtovg::Paint::color(femtovg::Color::rgbaf(
-                                stroke_r, stroke_g, stroke_b, stroke_a,
-                            ))
-                            .with_line_width(style.stroke_width),
+                        paint.set_color4f(
+                            skia_safe::Color4f::new(
+                                stroke_r,
+                                stroke_g,
+                                stroke_b,
+                                stroke_a * draw.opacity.clamp(0.0, 1.0),
+                            ),
+                            None,
                         );
+                        paint.set_style(skia_safe::PaintStyle::Stroke);
+                        paint.set_stroke_width(style.stroke_width);
+                        canvas.draw_circle((0.0, 0.0), shape.radius, &paint);
                     }
                 },
                 ..Default::default()

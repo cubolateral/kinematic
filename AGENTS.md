@@ -3,7 +3,7 @@
 ## Purpose
 
 Kinematic is a Rust animation-editor library. It uses an ECS scene model, a
-timeline-driven animation system, an SDL3/OpenGL renderer (`femtovg`), and an
+timeline-driven animation system, an SDL3/OpenGL runtime, Skia rendering, and an
 internal Dear ImGui editor.
 
 This file records stable architectural contracts and contribution workflow. The
@@ -12,7 +12,7 @@ other implementation details that can change independently.
 
 ## Repository Layout
 
-- `src/app.rs`: SDL, OpenGL, `femtovg`, and ImGui runtime setup.
+- `src/app.rs`: SDL, OpenGL, and ImGui runtime setup.
 - `src/core/`: public scene, animation, project, component, and object APIs.
 - `src/editor/` and `src/ui/`: crate-internal editor state, preview, timeline,
   and UI.
@@ -49,11 +49,10 @@ loop ownership, and ImGui interaction out of the core domain.
   fields, with one blank line separating the tracked and untracked field groups.
 - Tracks assume keyframes are appended in non-decreasing timeline order. Preserve
   that invariant when changing task compilation or keyframe insertion.
-- `Draw::get_rect` defines an entity's local drawing bounds. `Scene` renders each
-  `Draw` into a per-entity offscreen surface, then composites that surface using
-  the entity's `Transform` and opacity. `Draw::on_draw` must use local coordinates
-  and must not apply the entity transform itself. Drawing callbacks should read
-  the ECS world and leave its state unchanged.
+- `Scene` draws every active entity directly into the shared Skia canvas using
+  the entity's `Transform`. `Draw::on_draw` must use local coordinates, apply the
+  entity's opacity to its paints, and must not apply the entity transform itself.
+  Drawing callbacks should read the ECS world and leave its state unchanged.
 - The timeline displays one lifetime rectangle per scene entity across the full
   viewport width. Its preserved track-rendering module is not part of the current
   view and remains available for a later track UI. The viewport supports zoom by

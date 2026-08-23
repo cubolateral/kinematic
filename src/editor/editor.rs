@@ -13,8 +13,9 @@ pub(crate) struct Editor {
 impl Editor {
     pub fn new(
         mut project: Project,
-        vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
         imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
+        skia_context: &mut skia_safe::gpu::DirectContext,
+        gl: &glow::Context,
     ) -> Self {
         println!("Project initialized: {}", project.name);
 
@@ -22,7 +23,7 @@ impl Editor {
 
         let timeline = Timeline::new(scene.build(project.scene.as_mut()));
 
-        let preview = Canvas::new(project.resolution, vg, imgui_renderer);
+        let preview = Canvas::new(project.resolution, imgui_renderer, skia_context, gl);
 
         Self {
             project,
@@ -40,18 +41,17 @@ impl Editor {
 
     pub fn draw(
         &mut self,
-        window_size: (u32, u32),
+        skia_context: &mut skia_safe::gpu::DirectContext,
         gl: &glow::Context,
-        vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+        window_size: (u32, u32),
     ) {
-        self.preview.draw(window_size, gl, vg, |vg, target| {
-            let (width, height) = self.preview.get_size();
-
-            vg.clear_rect(0, 0, width, height, femtovg::Color::black());
-            vg.save();
-            vg.translate(width as f32 * 0.5, height as f32 * 0.5);
-            self.scene.draw_to(vg, target);
-            vg.restore();
+        let (width, height) = self.preview.get_size();
+        self.preview.draw(skia_context, gl, window_size, |canvas| {
+            canvas.clear(skia_safe::colors::BLACK);
+            let save_count = canvas.save();
+            canvas.translate((width as f32 * 0.5, height as f32 * 0.5));
+            self.scene.draw(canvas);
+            canvas.restore_to_count(save_count);
         });
     }
 

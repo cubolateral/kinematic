@@ -16,13 +16,6 @@ pub trait SceneBuilder {
 pub struct Scene {
     world: SceneWorld,
     animator_time: std::rc::Rc<std::cell::Cell<f32>>,
-    render_surfaces: std::cell::RefCell<std::collections::HashMap<hecs::Entity, RenderSurface>>,
-}
-
-struct RenderSurface {
-    image: femtovg::ImageId,
-    width: usize,
-    height: usize,
 }
 
 impl Scene {
@@ -31,7 +24,6 @@ impl Scene {
         Self {
             world: std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new())),
             animator_time: std::rc::Rc::new(std::cell::Cell::new(0.0)),
-            render_surfaces: std::cell::RefCell::new(std::collections::HashMap::new()),
         }
     }
 
@@ -60,20 +52,8 @@ impl Scene {
     }
 
     /// Draws each entity using the scene state produced by [`Self::update`].
-    pub fn draw(&self, vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>) {
-        self.draw_to(vg, femtovg::RenderTarget::Screen);
-    }
-
-    /// Draws each entity into the supplied render target.
-    pub fn draw_to(
-        &self,
-        vg: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
-        target: femtovg::RenderTarget,
-    ) {
+    pub fn draw(&self, canvas: &skia_safe::Canvas) {
         let world = self.world.borrow();
-        let mut surfaces = self.render_surfaces.borrow_mut();
-        let mut live = std::collections::HashSet::new();
-        let flags = femtovg::ImageFlags::PREMULTIPLIED | femtovg::ImageFlags::FLIP_Y;
 
         for (entity, node, draw, transform) in world
             .query::<(hecs::Entity, &Node, &Draw, &Transform)>()
@@ -83,84 +63,17 @@ impl Scene {
                 continue;
             }
 
-            let [x, y, width, height] = (draw.get_rect)(&world, entity, vg);
-            if ![x, y, width, height].iter().all(|value| value.is_finite())
-                || width <= 0.0
-                || height <= 0.0
-            {
+            if draw.opacity <= 0.0 {
                 continue;
             }
 
-            live.insert(entity);
-            let image_width = width.ceil() as usize;
-            let image_height = height.ceil() as usize;
-            let surface = surfaces.entry(entity).or_insert_with(|| RenderSurface {
-                image: vg
-                    .create_image_empty(
-                        image_width,
-                        image_height,
-                        femtovg::PixelFormat::Rgba8,
-                        flags,
-                    )
-                    .expect("Entity render surface must be created."),
-                width: image_width,
-                height: image_height,
-            });
-
-            if surface.width != image_width || surface.height != image_height {
-                let previous_image = surface.image;
-                surface.image = vg
-                    .create_image_empty(
-                        image_width,
-                        image_height,
-                        femtovg::PixelFormat::Rgba8,
-                        flags,
-                    )
-                    .expect("Entity render surface must be resized.");
-                surface.width = image_width;
-                surface.height = image_height;
-                vg.delete_image(previous_image);
-            }
-
-            vg.set_render_target(femtovg::RenderTarget::Image(surface.image));
-            vg.clear_rect(
-                0,
-                0,
-                image_width as u32,
-                image_height as u32,
-                femtovg::Color::rgba(0, 0, 0, 0),
-            );
-            vg.save_with(|vg| {
-                vg.reset_transform();
-                vg.set_global_alpha(1.0);
-                vg.translate(-x, -y);
-                (draw.on_draw)(&world, entity, vg);
-            });
-
-            vg.set_render_target(target);
-            vg.save_with(|vg| {
-                vg.set_global_alpha(draw.opacity);
-                vg.translate(transform.position.x, transform.position.y);
-                vg.rotate(transform.rotation);
-                vg.scale(transform.scale.x, transform.scale.y);
-
-                let mut path = femtovg::Path::new();
-                path.rect(x, y, width, height);
-                vg.fill_path(
-                    &path,
-                    &femtovg::Paint::image(surface.image, x, y, width, height, 0.0, 1.0),
-                );
-            });
+            let save_count = canvas.save();
+            canvas.translate((transform.position.x, transform.position.y));
+            canvas.rotate(transform.rotation.to_degrees(), None);
+            canvas.scale((transform.scale.x, transform.scale.y));
+            (draw.on_draw)(&world, entity, canvas);
+            canvas.restore_to_count(save_count);
         }
-
-        surfaces.retain(|entity, surface| {
-            if live.contains(entity) {
-                true
-            } else {
-                vg.delete_image(surface.image);
-                false
-            }
-        });
     }
 
     /// Populates the scene and compiles the builder's animation timeline.
@@ -258,7 +171,6 @@ mod tests {
         assert_eq!(transform.position, vec2(10.0, 20.0));
         assert_eq!(shape.text, "Kinematic!");
         assert!(std::ptr::fn_addr_eq(draw.on_draw, default.draw.on_draw,));
-        assert!(std::ptr::fn_addr_eq(draw.get_rect, default.draw.get_rect,));
     }
 
     #[test]
@@ -273,6 +185,40 @@ mod tests {
         let mut query = world.query::<&Draw>();
 
         assert_eq!(query.iter().next().unwrap().opacity, 0.25);
+    }
+
+    #[test]
+    fn draw_renders_objects_directly_into_the_supplied_skia_canvas() {
+        let mut scene = Scene::new();
+        let rect = scene
+            .create::<Rect>()
+            .size(vec2(8.0, 8.0))
+            .fill(Color::RED)
+            .opacity(0.5)
+            .position(vec2(4.0, 0.0))
+            .build();
+        scene.add(&rect);
+
+        let image_info = skia_safe::ImageInfo::new(
+            (32, 32),
+            skia_safe::ColorType::RGBA8888,
+            skia_safe::AlphaType::Premul,
+            None,
+        );
+        let mut surface = skia_safe::surfaces::raster(&image_info, None, None).unwrap();
+        let canvas = surface.canvas();
+        canvas.clear(skia_safe::colors::TRANSPARENT);
+        canvas.translate((16.0, 16.0));
+
+        scene.draw(canvas);
+
+        let pixels = surface.peek_pixels().unwrap();
+        let inside = pixels.get_color((20, 16));
+        let outside = pixels.get_color((12, 16));
+
+        assert_eq!(inside.r(), 255);
+        assert!((127..=128).contains(&inside.a()));
+        assert_eq!(outside.a(), 0);
     }
 
     #[test]

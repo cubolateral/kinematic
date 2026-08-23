@@ -3,7 +3,7 @@
 Kinematic is a Rust animation editor and library built around an ECS scene,
 typed animation tracks, and a timeline-based workflow. It uses
 [SDL3](https://github.com/libsdl-org/SDL) and OpenGL for the application runtime,
-[femtovg](https://github.com/femtovg/femtovg) for drawing, and
+[Skia](https://skia.org/) for drawing, and
 [Dear ImGui](https://github.com/ocornut/imgui) for the editor UI.
 
 Kinematic is in early development, so its API may change.
