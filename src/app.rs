@@ -95,7 +95,6 @@ impl App {
         );
 
         let mut events = self.sdl.event_pump().unwrap();
-        let mut last_frame = std::time::Instant::now();
 
         'running: loop {
             for event in events.poll_iter() {
@@ -114,19 +113,19 @@ impl App {
                 }
             }
 
-            // Calculate delta time.
-            let now = std::time::Instant::now();
-            let dt = now.duration_since(last_frame).as_secs_f32();
-            last_frame = now;
-
-            editor.update(dt);
+            let update_canvas = editor.update();
 
             unsafe {
                 self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
                 self.gl.clear(glow::COLOR_BUFFER_BIT);
             }
 
-            editor.draw(&mut self.skia_context, &self.gl, self.window.size());
+            editor.draw(
+                &mut self.skia_context,
+                &self.gl,
+                self.window.size(),
+                update_canvas,
+            );
 
             self.ui.apply_scale(&mut self.imgui);
             self.imgui_sdl.new_frame(&mut self.imgui);

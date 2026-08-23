@@ -6,6 +6,8 @@ pub struct Project {
     pub name: &'static str,
     /// Logical canvas size used by the scene preview.
     pub resolution: (u32, u32),
+    /// Maximum animation and preview frame rate.
+    pub fps: u32,
     /// Declarative scene definition used to populate the runtime scene.
     pub scene: Box<dyn SceneBuilder>,
 }

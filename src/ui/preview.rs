@@ -3,9 +3,9 @@ use crate::editor::Editor;
 const VIEWPORT_OUTLINE_THICKNESS: f32 = 1.0;
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
-    let (name, resolution) = {
+    let (name, resolution, fps) = {
         let project = editor.get_project();
-        (project.name, project.resolution)
+        (project.name, project.resolution, project.fps)
     };
     let (source_size, texture) = {
         let preview = editor.get_preview();
@@ -23,7 +23,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
 
     ui.window("Preview").build(|| {
         ui.text(format!(
-            "[INFO] Project name: {name} / Project resolution: {}x{}",
+            "[PROJECT INFO] Name: {name} / Resolution: {}x{} / FPS: {fps}",
             resolution.0, resolution.1,
         ));
         ui.separator();

@@ -1,6 +1,7 @@
 use crate::{
     core::{Project, Scene},
     editor::{Canvas, Timeline},
+    utilities::FrameTimer,
 };
 
 pub(crate) struct Editor {
@@ -8,6 +9,9 @@ pub(crate) struct Editor {
     scene: Scene,
     timeline: Timeline,
     preview: Canvas,
+    accumulator: f32,
+    window_timer: FrameTimer,
+    canvas_timer: FrameTimer,
 }
 
 impl Editor {
@@ -30,13 +34,30 @@ impl Editor {
             scene,
             timeline,
             preview,
+            accumulator: 0.0,
+            window_timer: FrameTimer::new(),
+            canvas_timer: FrameTimer::new(),
         }
     }
 
-    pub fn update(&mut self, dt: f32) {
-        if let Some(time) = self.timeline.update(dt) {
-            self.scene.update(time);
+    pub fn update(&mut self) -> bool {
+        self.window_timer.tick();
+        self.accumulator += self.window_timer.get_delta_time();
+
+        let delta = 1.0 / self.project.fps.max(1) as f32;
+        let mut update_canvas = false;
+
+        while self.accumulator >= delta {
+            if let Some(time) = self.timeline.update(delta) {
+                self.scene.update(time);
+            }
+
+            self.canvas_timer.tick();
+            self.accumulator -= delta;
+            update_canvas = true;
         }
+
+        update_canvas
     }
 
     pub fn draw(
@@ -44,7 +65,12 @@ impl Editor {
         skia_context: &mut skia_safe::gpu::DirectContext,
         gl: &glow::Context,
         window_size: (u32, u32),
+        update_canvas: bool,
     ) {
+        if !update_canvas {
+            return;
+        }
+
         let (width, height) = self.preview.get_size();
 
         self.preview.draw(skia_context, gl, window_size, |canvas| {
@@ -72,5 +98,9 @@ impl Editor {
 
     pub fn get_preview(&mut self) -> &mut Canvas {
         &mut self.preview
+    }
+
+    pub fn get_preview_fps(&self) -> f32 {
+        self.canvas_timer.get_fps()
     }
 }

@@ -178,7 +178,9 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
     );
 
     ui.window("Timeline").build(|| {
-        controls(editor.get_timeline(), ui);
+        let fps = editor.get_preview_fps();
+
+        controls(editor.get_timeline(), ui, fps);
         ui.spacing();
         ui.separator();
 
@@ -211,7 +213,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
     });
 }
 
-fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui) {
+fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32) {
+    let is_playing = timeline.is_playing();
     let spacing = unsafe { ui.style().item_spacing() }[0];
     let width = BUTTON_SIZE * 3.0 + spacing * 2.0;
 
@@ -230,7 +233,6 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui) {
 
     ui.same_line();
 
-    let is_playing = timeline.is_playing();
     if transport_button(
         ui,
         if is_playing { "||" } else { "|>" },
@@ -254,6 +256,14 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui) {
     ) {
         timeline.go_to_end();
     }
+
+    ui.same_line();
+
+    ui.text(if is_playing {
+        format!("FPS: {fps:.2}")
+    } else {
+        "PAUSED".to_string()
+    });
 }
 
 fn transport_button(

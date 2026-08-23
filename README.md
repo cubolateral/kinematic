@@ -54,6 +54,7 @@ fn main() {
     App::new().run(Project {
         name: "Example",
         resolution: (1280, 720),
+        fps: 60,
         scene: example(),
     });
 }
