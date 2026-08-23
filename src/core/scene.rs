@@ -101,7 +101,7 @@ impl Scene {
     }
 
     /// Plays a tween on the current scene timeline.
-    pub fn tween(&mut self, tween: Tween) {
+    pub fn tween<Object>(&mut self, tween: Tween<Object>) {
         self.play(tween.task());
     }
 
@@ -258,12 +258,13 @@ mod tests {
 
         impl SceneBuilder for HandlerTweenScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = scene.create::<Circle>().build();
+                let circle = scene.create::<Circle>().fill(Color::RED).build();
                 scene.add(&circle);
                 circle
                     .position_x(256.0)
+                    .fill(Color::BLUE)
                     .duration(1.0)
-                    .easing(Easing::InOutQuad)
+                    .easing(Easing::InQuad)
                     .play();
             }
         }
@@ -273,9 +274,36 @@ mod tests {
 
         scene.update(0.5);
         let world = scene.get_world();
+        let mut query = world.query::<(&Transform, &Style)>();
+        let circle = query.iter().next().unwrap();
+        assert_eq!(circle.0.position.x, 64.0);
+        assert_eq!(circle.1.fill, Color::new(0.75, 0.0, 0.25, 1.0));
+    }
+
+    #[test]
+    fn handler_tween_merges_updates_to_the_same_track() {
+        struct ComponentTweenScene;
+
+        impl SceneBuilder for ComponentTweenScene {
+            fn build(&mut self, scene: &mut Scene) {
+                let circle = scene.create::<Circle>().build();
+                scene.add(&circle);
+                circle
+                    .position_x(128.0)
+                    .position_y(64.0)
+                    .duration(1.0)
+                    .play();
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut ComponentTweenScene), 1.0);
+
+        scene.update(1.0);
+        let world = scene.get_world();
         let mut query = world.query::<&Transform>();
         let circle = query.iter().next().unwrap();
-        assert_eq!(circle.position.x, 128.0);
+        assert_eq!(circle.position, vec2(128.0, 64.0));
     }
 
     #[test]

@@ -11,6 +11,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let inspection_type = format_ident!("__Kinematic{}Inspection", object_name);
     let object_trait = format_ident!("__Kinematic{}Object", object_name);
     let object_handler_trait = format_ident!("__Kinematic{}ObjectHandler", object_name);
+    let handler_root_type = format_ident!("__Kinematic{}HandlerRoot", object_name);
+    let object_trackable_trait = format_ident!("__Kinematic{}ObjectTrackable", object_name);
     let scene_world_type = format_ident!("__Kinematic{}SceneWorld", object_name);
     let animator_handle_type = format_ident!("__Kinematic{}AnimatorHandle", object_name);
     let trackable_info_type = format_ident!("__Kinematic{}TrackableInfo", object_name);
@@ -57,7 +59,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let count = trackable_infos.len();
     let infos_ident = format_ident!("__{}_TRACKABLES", object_name.to_string().to_uppercase());
     let infos_fn_ident = format_ident!("__{}_trackables", object_name.to_string().to_lowercase());
-    let mut handler_fields_type = quote!(());
+    let mut handler_fields_type = quote!(#handler_root_type<#object_name>);
 
     for field_ty in trackable_types.iter().rev() {
         handler_fields_type = quote! {
@@ -88,9 +90,11 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             TrackableInfo as #trackable_info_type,
             components::Inspection as #inspection_type,
             objects::{
+                HandlerRoot as #handler_root_type,
                 Object as #object_trait,
                 ObjectBuilderComponent as #builder_component_trait,
                 ObjectHandler as #object_handler_trait,
+                ObjectTrackable as #object_trackable_trait,
             },
         };
 
@@ -139,6 +143,10 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
         }
 
+        #(
+            impl #object_trackable_trait<#trackable_types> for #object_name {}
+        )*
+
         #[allow(non_upper_case_globals)]
         const #infos_ident: [#trackable_info_type; #count] = [
             #(#trackable_infos),*
@@ -151,7 +159,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         impl #object_name {
             /// Builds a typed handler from a spawned entity id.
             pub fn handler(world: #scene_world_type, entity: hecs::Entity, animator: #animator_handle_type) -> #handler_name {
-                let fields = ();
+                let fields = #handler_root_type::<#object_name>::new();
                 #(#handler_initializers)*
 
                 #handler_name { entity, animator, fields }

@@ -1,5 +1,5 @@
 use crate::core::{
-    AnimatorHandle, SceneWorld,
+    AnimatorHandle, SceneWorld, Trackable,
     components::{Animation, Inspection, Node},
 };
 
@@ -42,6 +42,30 @@ pub trait Object: hecs::DynamicBundle + Sized {
 pub trait ObjectHandler {
     /// Returns the ECS entity represented by this handler.
     fn entity(&self) -> hecs::Entity;
+}
+
+/// Marks an object as containing a specific trackable component.
+#[doc(hidden)]
+pub trait ObjectTrackable<T: Trackable>: Object {}
+
+/// Carries the object type through the generated handler-field layers.
+#[doc(hidden)]
+pub trait HandlerContext {
+    type Object: Object;
+}
+
+/// Innermost marker used by generated object handlers.
+#[doc(hidden)]
+pub struct HandlerRoot<T: Object>(std::marker::PhantomData<T>);
+
+impl<T: Object> HandlerRoot<T> {
+    pub fn new() -> Self {
+        Self(std::marker::PhantomData)
+    }
+}
+
+impl<T: Object> HandlerContext for HandlerRoot<T> {
+    type Object = T;
 }
 
 /// Internal bridge used by generated component setters on object builders.

@@ -1,5 +1,6 @@
 use crate::core::{
     AnimatorHandle, Easing, SceneWorld, Tween,
+    objects::HandlerContext,
     types::{Color, Vector2},
 };
 
@@ -370,6 +371,12 @@ impl<T: TrackValueType> TrackHandle<T> {
 
     /// Sets the field target and returns the corresponding tween.
     pub fn set(&self, value: T) -> Tween {
+        self.set_for(value)
+    }
+
+    /// Sets the field target for a generated object-specific tween.
+    #[doc(hidden)]
+    pub fn set_for<Object>(&self, value: T) -> Tween<Object> {
         let old_value = {
             let mut world = self.world.borrow_mut();
             (self.replace)(&mut world, self.entity, value.clone())
@@ -380,6 +387,12 @@ impl<T: TrackValueType> TrackHandle<T> {
 
     #[doc(hidden)]
     pub fn update(&self, update: impl FnOnce(T) -> T) -> Tween {
+        self.update_for(update)
+    }
+
+    /// Updates the field target for a generated object-specific tween.
+    #[doc(hidden)]
+    pub fn update_for<Object>(&self, update: impl FnOnce(T) -> T) -> Tween<Object> {
         let (old_value, new_value) = {
             let world = self.world.borrow();
             let old_value = (self.get)(&world, self.entity);
@@ -393,8 +406,9 @@ impl<T: TrackValueType> TrackHandle<T> {
         self.tween(old_value, new_value)
     }
 
-    fn tween(&self, from: T, to: T) -> Tween {
+    fn tween<Object>(&self, from: T, to: T) -> Tween<Object> {
         Tween::new(
+            std::rc::Rc::clone(&self.world),
             self.entity,
             self.type_id,
             self.info,
@@ -552,10 +566,10 @@ pub struct TrackableInfo {
 /// Trait implemented by types that expose animatable fields.
 pub trait Trackable {
     /// Internal field layer added to generated object handlers.
-    type HandlerFields<Next>;
+    type HandlerFields<Next: HandlerContext>;
 
     /// Builds this component's tracked fields around the next handler layer.
-    fn handler_fields<Next>(
+    fn handler_fields<Next: HandlerContext>(
         world: SceneWorld,
         entity: hecs::Entity,
         animator: AnimatorHandle,

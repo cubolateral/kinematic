@@ -34,7 +34,10 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
     let handler_fields_name = format_ident!("__{}HandlerFields", struct_name);
+    let tween_fields_trait = format_ident!("__Kinematic{}TweenFields", struct_name);
     let builder_component_trait = format_ident!("__Kinematic{}BuilderComponent", struct_name);
+    let handler_context_trait = format_ident!("__Kinematic{}HandlerContext", struct_name);
+    let object_trackable_trait = format_ident!("__Kinematic{}ObjectTrackable", struct_name);
     let scene_world_type = format_ident!("__Kinematic{}SceneWorld", struct_name);
     let animator_handle_type = format_ident!("__Kinematic{}AnimatorHandle", struct_name);
     let track_handle_type = format_ident!("__Kinematic{}TrackHandle", struct_name);
@@ -68,6 +71,8 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let mut handle_fields = Vec::with_capacity(count);
     let mut handle_initializers = Vec::with_capacity(count);
     let mut tween_fns = Vec::with_capacity(count);
+    let mut tween_trait_fns = Vec::with_capacity(count);
+    let mut tween_impl_fns = Vec::with_capacity(count);
     let mut builder_setters = Vec::with_capacity(fields.len());
 
     for field in fields {
@@ -163,8 +168,26 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             pub fn #field_ident(
                 &self,
                 value: <#field_ty as #track_value_type_trait>::Input,
-            ) -> #tween_type {
-                self.#field_ident.set(value.into())
+            ) -> #tween_type<<Next as #handler_context_trait>::Object> {
+                self.#field_ident.set_for(value.into())
+            }
+        });
+        tween_trait_fns.push(quote! {
+            fn #field_ident(
+                self,
+                value: <#field_ty as #track_value_type_trait>::Input,
+            ) -> Self;
+        });
+        tween_impl_fns.push(quote! {
+            fn #field_ident(
+                self,
+                value: <#field_ty as #track_value_type_trait>::Input,
+            ) -> Self {
+                self.set_track::<#field_ty>(
+                    std::any::TypeId::of::<#struct_name>(),
+                    <#struct_name as #trackable_trait>::track(#id),
+                    value.into(),
+                )
             }
         });
 
@@ -175,11 +198,29 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     let component_field = format_ident!("{}", suffix);
 
                     tween_fns.push(quote! {
-                        pub fn #method_name(&self, value: f32) -> #tween_type {
-                            self.#field_ident.update(|mut component| {
+                        pub fn #method_name(
+                            &self,
+                            value: f32,
+                        ) -> #tween_type<<Next as #handler_context_trait>::Object> {
+                            self.#field_ident.update_for(|mut component| {
                                 component.#component_field = value;
                                 component
                             })
+                        }
+                    });
+                    tween_trait_fns.push(quote! {
+                        fn #method_name(self, value: f32) -> Self;
+                    });
+                    tween_impl_fns.push(quote! {
+                        fn #method_name(self, value: f32) -> Self {
+                            self.update_track(
+                                std::any::TypeId::of::<#struct_name>(),
+                                <#struct_name as #trackable_trait>::track(#id),
+                                |mut component: #field_ty| {
+                                    component.#component_field = value;
+                                    component
+                                },
+                            )
                         }
                     });
                 }
@@ -190,11 +231,29 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     let component_field = format_ident!("{}", suffix);
 
                     tween_fns.push(quote! {
-                        pub fn #method_name(&self, value: f32) -> #tween_type {
-                            self.#field_ident.update(|mut component| {
+                        pub fn #method_name(
+                            &self,
+                            value: f32,
+                        ) -> #tween_type<<Next as #handler_context_trait>::Object> {
+                            self.#field_ident.update_for(|mut component| {
                                 component.#component_field = value;
                                 component
                             })
+                        }
+                    });
+                    tween_trait_fns.push(quote! {
+                        fn #method_name(self, value: f32) -> Self;
+                    });
+                    tween_impl_fns.push(quote! {
+                        fn #method_name(self, value: f32) -> Self {
+                            self.update_track(
+                                std::any::TypeId::of::<#struct_name>(),
+                                <#struct_name as #trackable_trait>::track(#id),
+                                |mut component: #field_ty| {
+                                    component.#component_field = value;
+                                    component
+                                },
+                            )
                         }
                     });
                 }
@@ -215,7 +274,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             TrackableInfo as #trackable_info_type,
             TrackValueType as #track_value_type_trait,
             Tween as #tween_type,
-            objects::ObjectBuilderComponent as #builder_component_trait,
+            objects::{
+                HandlerContext as #handler_context_trait,
+                ObjectBuilderComponent as #builder_component_trait,
+                ObjectTrackable as #object_trackable_trait,
+            },
         };
 
         #(#type_assertions)*
@@ -236,8 +299,25 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             }
         }
 
-        impl<Next> #handler_fields_name<Next> {
+        impl<Next: #handler_context_trait> #handler_fields_name<Next> {
             #(#tween_fns)*
+        }
+
+        impl<Next: #handler_context_trait> #handler_context_trait for #handler_fields_name<Next> {
+            type Object = <Next as #handler_context_trait>::Object;
+        }
+
+        /// Chained tracked fields available to tweens for this component.
+        #[doc(hidden)]
+        pub trait #tween_fields_trait: Sized {
+            #(#tween_trait_fns)*
+        }
+
+        impl<ObjectType> #tween_fields_trait for #tween_type<ObjectType>
+        where
+            ObjectType: #object_trackable_trait<#struct_name>,
+        {
+            #(#tween_impl_fns)*
         }
 
         #[allow(non_upper_case_globals)]
@@ -246,9 +326,9 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         ];
 
         impl #trackable_trait for #struct_name {
-            type HandlerFields<Next> = #handler_fields_name<Next>;
+            type HandlerFields<Next: #handler_context_trait> = #handler_fields_name<Next>;
 
-            fn handler_fields<Next>(
+            fn handler_fields<Next: #handler_context_trait>(
                 world: #scene_world_type,
                 entity: hecs::Entity,
                 animator: #animator_handle_type,

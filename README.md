@@ -36,8 +36,8 @@ use kinematic::prelude::*;
 fn example(s: &mut Scene) {
     let circle = s
         .create::<Circle>()
-        .position(vec2(-256.0, 0.0))
         .radius(128.0)
+        .position(vec2(-256.0, 0.0))
         .fill(Color::RED)
         .build();
 
@@ -45,6 +45,7 @@ fn example(s: &mut Scene) {
 
     circle
         .position_x(256.0)
+        .fill(Color::BLUE)
         .duration(1.0)
         .easing(Easing::InOutQuad)
         .play();
