@@ -16,7 +16,7 @@ impl Default for ThemeColors {
         Self {
             background: [0.0, 0.0, 0.0, 0.9],
             accent: [0.0, 0.549, 1.0, 1.0],
-            contrast: 0.5,
+            contrast: 1.0,
         }
     }
 }
