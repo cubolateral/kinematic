@@ -286,12 +286,12 @@ impl Ui {
         let style = ctx.style_mut();
 
         // Geometry.
-        style.set_window_rounding(3.0);
-        style.set_child_rounding(3.0);
-        style.set_popup_rounding(3.0);
-        style.set_frame_rounding(3.0);
-        style.set_grab_rounding(3.0);
-        style.set_tab_rounding(3.0);
+        style.set_window_rounding(0.0);
+        style.set_child_rounding(0.0);
+        style.set_popup_rounding(0.0);
+        style.set_frame_rounding(0.0);
+        style.set_grab_rounding(0.0);
+        style.set_tab_rounding(0.0);
 
         style.set_window_border_size(1.0);
         style.set_child_border_size(1.0);
