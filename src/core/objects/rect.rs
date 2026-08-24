@@ -1,7 +1,7 @@
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    components::{Draw, Style, Transform},
+    components::{Draw, Style, Transform, stroke_width_for_scale},
     types::{Vector2, vec2},
 };
 
@@ -43,6 +43,7 @@ impl Default for Rect {
                 on_draw: |world, entity, canvas| {
                     let shape = world.get::<&RectShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
+                    let transform = world.get::<&Transform>(entity).unwrap();
                     let draw = world.get::<&Draw>(entity).unwrap();
 
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
@@ -78,7 +79,10 @@ impl Default for Rect {
                             None,
                         );
                         paint.set_style(skia_safe::PaintStyle::Stroke);
-                        paint.set_stroke_width(style.stroke_width);
+                        paint.set_stroke_width(stroke_width_for_scale(
+                            style.stroke_width,
+                            transform.scale,
+                        ));
                         canvas.draw_rect(rect, &paint);
                     }
                 },

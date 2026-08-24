@@ -1,7 +1,7 @@
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    components::{Draw, Style, Transform},
+    components::{Draw, Style, Transform, stroke_width_for_scale},
     types::Vector2,
 };
 
@@ -41,6 +41,7 @@ impl Default for Circle {
                 on_draw: |world, entity, canvas| {
                     let shape = world.get::<&CircleShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
+                    let transform = world.get::<&Transform>(entity).unwrap();
                     let draw = world.get::<&Draw>(entity).unwrap();
 
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
@@ -70,7 +71,10 @@ impl Default for Circle {
                             None,
                         );
                         paint.set_style(skia_safe::PaintStyle::Stroke);
-                        paint.set_stroke_width(style.stroke_width);
+                        paint.set_stroke_width(stroke_width_for_scale(
+                            style.stroke_width,
+                            transform.scale,
+                        ));
                         canvas.draw_circle((0.0, 0.0), shape.radius, &paint);
                     }
                 },

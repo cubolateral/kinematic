@@ -2,7 +2,7 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
     Easing,
-    components::{Draw, Style, Transform},
+    components::{Draw, Style, Transform, stroke_width_for_scale},
     types::{Color, Vector2},
 };
 
@@ -207,7 +207,13 @@ fn text_lines<'a>(shape: &'a TextShape, font: &skia_safe::Font) -> Vec<TextLine<
         .collect()
 }
 
-fn draw_complete_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &skia_safe::Canvas) {
+fn draw_complete_text(
+    shape: &TextShape,
+    style: &Style,
+    draw: &Draw,
+    scale: Vector2,
+    canvas: &skia_safe::Canvas,
+) {
     let font = shape.font.skia_font(shape.size);
     let mut paint = text_paint(style.fill, draw.opacity);
     let lines = text_lines(shape, &font);
@@ -222,7 +228,7 @@ fn draw_complete_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &sk
 
     paint.set_color4f(text_paint(style.stroke, draw.opacity).color4f(), None);
     paint.set_style(skia_safe::PaintStyle::Stroke);
-    paint.set_stroke_width(style.stroke_width);
+    paint.set_stroke_width(stroke_width_for_scale(style.stroke_width, scale));
 
     for line in lines {
         canvas.draw_str(line.text, line.origin, &font, &paint);
@@ -259,7 +265,13 @@ fn write_units(text: &str, by_word: bool) -> Vec<(usize, usize)> {
     units
 }
 
-fn draw_written_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &skia_safe::Canvas) {
+fn draw_written_text(
+    shape: &TextShape,
+    style: &Style,
+    draw: &Draw,
+    object_scale: Vector2,
+    canvas: &skia_safe::Canvas,
+) {
     let font = shape.font.skia_font(shape.size);
     let layout_paint = text_paint(style.fill, draw.opacity);
     let lines = text_lines(shape, &font);
@@ -331,7 +343,10 @@ fn draw_written_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &ski
             let stroke = color_with_alpha(style.stroke, fill_progress);
             paint = text_paint(stroke, draw.opacity);
             paint.set_style(skia_safe::PaintStyle::Stroke);
-            paint.set_stroke_width(style.stroke_width);
+            paint.set_stroke_width(stroke_width_for_scale(
+                style.stroke_width,
+                object_scale * scale,
+            ));
             canvas.draw_str(unit, (x, line.origin.1), &font, &paint);
         }
 
@@ -342,12 +357,13 @@ fn draw_written_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &ski
 fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
     let shape = world.get::<&TextShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
+    let transform = world.get::<&Transform>(entity).unwrap();
     let draw = world.get::<&Draw>(entity).unwrap();
 
     if shape.write_progress >= 1.0 {
-        draw_complete_text(&shape, &style, &draw, canvas);
+        draw_complete_text(&shape, &style, &draw, transform.scale, canvas);
     } else {
-        draw_written_text(&shape, &style, &draw, canvas);
+        draw_written_text(&shape, &style, &draw, transform.scale, canvas);
     }
 }
 
