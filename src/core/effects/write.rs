@@ -21,6 +21,7 @@ fn play_text_effect<T>(
     scale: f32,
     outline_width: f32,
     progress: (f32, f32),
+    reverse: bool,
 ) where
     T: ObjectHandler,
     T::Object: ObjectTrackable<TextShape>,
@@ -31,6 +32,7 @@ fn play_text_effect<T>(
         .animate_from(TextShape::write_progress_property(), progress.0, progress.1)
         .animate_from(TextShape::write_scale_property(), scale, scale)
         .animate_from(TextShape::write_by_word_property(), by_word, by_word)
+        .animate_from(TextShape::write_reverse_property(), reverse, reverse)
         .animate_from(
             TextShape::write_outline_width_property(),
             outline_width,
@@ -47,6 +49,7 @@ pub struct Write {
     by: WriteBy,
     scale: f32,
     outline_width: f32,
+    reverse: bool,
 }
 
 impl Write {
@@ -57,6 +60,7 @@ impl Write {
             by,
             scale: 0.0,
             outline_width: 1.0,
+            reverse: false,
         }
     }
 
@@ -77,6 +81,12 @@ impl Write {
         self.outline_width = outline_width;
         self
     }
+
+    /// Sequences the writing units from right to left.
+    pub fn reverse(mut self, reverse: bool) -> Self {
+        self.reverse = reverse;
+        self
+    }
 }
 
 impl<T> Effect<T> for Write
@@ -93,6 +103,7 @@ where
             self.scale,
             self.outline_width,
             (0.0, 1.0),
+            self.reverse,
         );
     }
 }
@@ -103,6 +114,7 @@ pub struct Unwrite {
     by: WriteBy,
     scale: f32,
     outline_width: f32,
+    reverse: bool,
 }
 
 impl Unwrite {
@@ -113,6 +125,7 @@ impl Unwrite {
             by,
             scale: 0.0,
             outline_width: 1.0,
+            reverse: false,
         }
     }
 
@@ -133,6 +146,12 @@ impl Unwrite {
         self.outline_width = outline_width;
         self
     }
+
+    /// Reverses the default right-to-left removal sequence.
+    pub fn reverse(mut self, reverse: bool) -> Self {
+        self.reverse = reverse;
+        self
+    }
 }
 
 impl<T> Effect<T> for Unwrite
@@ -149,6 +168,7 @@ where
             self.scale,
             self.outline_width,
             (1.0, 0.0),
+            self.reverse,
         );
     }
 }

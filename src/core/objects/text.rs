@@ -86,6 +86,9 @@ pub struct TextShape {
     /// Whether write units are words instead of characters.
     #[track]
     pub write_by_word: bool,
+    /// Whether write units are sequenced from right to left.
+    #[track]
+    pub write_reverse: bool,
     /// Temporary outline width used while writing text without a stroke.
     #[track]
     pub write_outline_width: f32,
@@ -103,6 +106,7 @@ impl Default for TextShape {
             write_progress: 1.0,
             write_scale: 0.0,
             write_by_word: false,
+            write_reverse: false,
             write_outline_width: 1.0,
             font: Font::new("assets/fonts/JetBrainsMono-Regular.ttf"),
         }
@@ -279,7 +283,12 @@ fn draw_written_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &ski
     let sequence_duration = 1.0 + (unit_count - 1.0) * WRITE_STAGGER;
 
     for (unit_index, (line_index, start, end)) in units.into_iter().enumerate() {
-        let unit_start = unit_index as f32 * WRITE_STAGGER;
+        let sequence_index = if shape.write_reverse {
+            unit_count as usize - 1 - unit_index
+        } else {
+            unit_index
+        };
+        let unit_start = sequence_index as f32 * WRITE_STAGGER;
         let local_progress = (progress * sequence_duration - unit_start).clamp(0.0, 1.0);
 
         let line = &lines[line_index];
