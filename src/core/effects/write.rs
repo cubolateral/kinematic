@@ -1,7 +1,7 @@
 use crate::core::effects::Effect;
 use crate::core::{
     Easing, Scene,
-    objects::{__KinematicTextShapeTweenFields, ObjectHandler, ObjectTrackable, TextShape},
+    objects::{ObjectHandler, ObjectTrackable, TextShape},
 };
 
 /// Unit used to sequence a text effect.
@@ -29,9 +29,13 @@ fn play_text_effect<T>(
 
     handler
         .animate_from(TextShape::write_progress_property(), progress.0, progress.1)
-        .write_scale_from(scale, scale)
-        .write_by_word_from(by_word, by_word)
-        .write_outline_width_from(outline_width, outline_width)
+        .animate_from(TextShape::write_scale_property(), scale, scale)
+        .animate_from(TextShape::write_by_word_property(), by_word, by_word)
+        .animate_from(
+            TextShape::write_outline_width_property(),
+            outline_width,
+            outline_width,
+        )
         .duration(duration)
         .easing(Easing::Linear)
         .play();

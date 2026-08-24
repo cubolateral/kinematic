@@ -52,6 +52,26 @@ impl GrowFrom {
     }
 }
 
+fn play_grow<T>(
+    _s: &mut Scene,
+    handler: &T,
+    duration: f32,
+    easing: Easing,
+    scale: (Vector2, Vector2),
+    position: (Vector2, Vector2),
+    rotation: (f32, f32),
+) where
+    T: ObjectHandler,
+{
+    handler
+        .animate_from(Transform::scale_property(), scale.0, scale.1)
+        .animate_from(Transform::position_property(), position.0, position.1)
+        .animate_from(Transform::rotation_property(), rotation.0, rotation.1)
+        .duration(duration)
+        .easing(easing)
+        .play();
+}
+
 /// Grows an object from zero scale at a configurable anchor.
 pub struct GrowIn {
     duration: f32,
@@ -111,27 +131,15 @@ impl<T: ObjectHandler> Effect<T> for GrowIn {
             .from
             .resolve(position, handler.get_box(), scale, rotation);
 
-        s.all(|_| {
-            handler
-                .animate_from(Transform::scale_property(), Vector2::ZERO, scale)
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-            handler
-                .animate_from(Transform::position_property(), start_position, position)
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-            handler
-                .animate_from(
-                    Transform::rotation_property(),
-                    rotation + self.spin,
-                    rotation,
-                )
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-        });
+        play_grow(
+            s,
+            handler,
+            self.duration,
+            self.easing,
+            (Vector2::ZERO, scale),
+            (start_position, position),
+            (rotation + self.spin, rotation),
+        );
     }
 }
 
@@ -194,26 +202,14 @@ impl<T: ObjectHandler> Effect<T> for GrowOut {
             .from
             .resolve(position, handler.get_box(), scale, rotation);
 
-        s.all(|_| {
-            handler
-                .animate_from(Transform::scale_property(), scale, Vector2::ZERO)
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-            handler
-                .animate_from(Transform::position_property(), position, end_position)
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-            handler
-                .animate_from(
-                    Transform::rotation_property(),
-                    rotation,
-                    rotation + self.spin,
-                )
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-        });
+        play_grow(
+            s,
+            handler,
+            self.duration,
+            self.easing,
+            (scale, Vector2::ZERO),
+            (position, end_position),
+            (rotation, rotation + self.spin),
+        );
     }
 }

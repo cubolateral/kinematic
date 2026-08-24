@@ -33,6 +33,36 @@ impl FadeFrom {
     }
 }
 
+fn play_fade<T>(
+    _s: &mut Scene,
+    handler: &T,
+    duration: f32,
+    easing: Easing,
+    opacity: (f32, f32),
+    scale: (Vector2, Vector2),
+    position: (Vector2, Vector2),
+    rotation: (f32, f32),
+) where
+    T: ObjectHandler,
+{
+    handler
+        .animate_from(Draw::opacity_property(), opacity.0, opacity.1)
+        .animate_from(TransformComponent::scale_property(), scale.0, scale.1)
+        .animate_from(
+            TransformComponent::position_property(),
+            position.0,
+            position.1,
+        )
+        .animate_from(
+            TransformComponent::rotation_property(),
+            rotation.0,
+            rotation.1,
+        )
+        .duration(duration)
+        .easing(easing)
+        .play();
+}
+
 /// Fades an object in from an optional scale and position.
 pub struct FadeIn {
     duration: f32,
@@ -106,42 +136,16 @@ impl<T: ObjectHandler> Effect<T> for FadeIn {
             })
             .unwrap_or(position);
 
-        s.all(|_| {
-            handler
-                .animate_from(Draw::opacity_property(), 0.0, 1.0)
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-
-            handler
-                .animate_from(
-                    TransformComponent::scale_property(),
-                    scale * self.scale,
-                    scale,
-                )
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-
-            handler
-                .animate_from(
-                    TransformComponent::position_property(),
-                    start_position,
-                    position,
-                )
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-            handler
-                .animate_from(
-                    TransformComponent::rotation_property(),
-                    rotation + self.spin,
-                    rotation,
-                )
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-        });
+        play_fade(
+            s,
+            handler,
+            self.duration,
+            self.easing,
+            (0.0, 1.0),
+            (scale * self.scale, scale),
+            (start_position, position),
+            (rotation + self.spin, rotation),
+        );
     }
 }
 
@@ -219,41 +223,15 @@ impl<T: ObjectHandler> Effect<T> for FadeOut {
             })
             .unwrap_or(position);
 
-        s.all(|_| {
-            handler
-                .animate_from(Draw::opacity_property(), 1.0, 0.0)
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-
-            handler
-                .animate_from(
-                    TransformComponent::scale_property(),
-                    scale,
-                    scale * self.scale,
-                )
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-
-            handler
-                .animate_from(
-                    TransformComponent::position_property(),
-                    start_position,
-                    end_position,
-                )
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-            handler
-                .animate_from(
-                    TransformComponent::rotation_property(),
-                    rotation,
-                    rotation + self.spin,
-                )
-                .duration(self.duration)
-                .easing(self.easing)
-                .play();
-        });
+        play_fade(
+            s,
+            handler,
+            self.duration,
+            self.easing,
+            (1.0, 0.0),
+            (scale, scale * self.scale),
+            (start_position, end_position),
+            (rotation, rotation + self.spin),
+        );
     }
 }

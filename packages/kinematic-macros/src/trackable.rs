@@ -213,9 +213,8 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 from: <#field_ty as #track_value_type_trait>::Input,
                 to: <#field_ty as #track_value_type_trait>::Input,
             ) -> Self {
-                self.set_track_from::<#field_ty>(
-                    std::any::TypeId::of::<#struct_name>(),
-                    <#struct_name as #trackable_trait>::track(#id),
+                self.animate_from(
+                    #struct_name::#property_name(),
                     from.into(),
                     to.into(),
                 )

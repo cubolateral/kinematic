@@ -502,6 +502,14 @@ impl<T: TrackValueType> TrackProperty<T> {
         }
     }
 
+    pub(crate) const fn get_type_id(&self) -> std::any::TypeId {
+        self.type_id
+    }
+
+    pub(crate) const fn get_info(&self) -> &'static TrackInfo {
+        self.info
+    }
+
     /// Creates a typed field handle for an object entity.
     pub fn handle(
         self,

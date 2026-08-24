@@ -1,5 +1,5 @@
 use crate::core::{
-    AnimatorHandle, Easing, SceneWorld, Task, TrackInfo, TrackValue, TrackValueType,
+    AnimatorHandle, Easing, SceneWorld, Task, TrackInfo, TrackProperty, TrackValue, TrackValueType,
 };
 
 struct TweenTarget {
@@ -100,15 +100,15 @@ impl<Object> Tween<Object> {
         self
     }
 
-    /// Adds or replaces a target field with an explicit starting value.
-    #[doc(hidden)]
-    pub fn set_track_from<T: TrackValueType>(
+    /// Adds or replaces a typed property with an explicit starting value.
+    pub fn animate_from<T: TrackValueType>(
         mut self,
-        type_id: std::any::TypeId,
-        track_info: &'static TrackInfo,
+        property: TrackProperty<T>,
         from: T,
         to: T,
     ) -> Self {
+        let type_id = property.get_type_id();
+        let track_info = property.get_info();
         let from = from.into_track_value();
         let to = to.into_track_value();
 
