@@ -58,7 +58,7 @@ impl Write {
         Self {
             duration: 1.0,
             by,
-            scale: 0.0,
+            scale: 2.5,
             outline_width: 1.0,
             reverse: false,
         }
