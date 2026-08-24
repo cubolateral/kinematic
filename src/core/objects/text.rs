@@ -151,6 +151,25 @@ fn color_with_alpha(color: Color, alpha: f32) -> Color {
     Color::new(color.r, color.g, color.b, color.a * alpha)
 }
 
+fn inner_outline_path(path: &skia_safe::Path, width: f32) -> Option<skia_safe::Path> {
+    let mut stroke_paint = text_paint(Color::WHITE, 1.0);
+    stroke_paint.set_style(skia_safe::PaintStyle::Stroke);
+    stroke_paint.set_stroke_width(width * 2.0);
+
+    let mut stroke_builder = skia_safe::PathBuilder::new();
+    if !skia_safe::path_utils::fill_path_with_paint(
+        path,
+        &stroke_paint,
+        &mut stroke_builder,
+        None,
+        None,
+    ) {
+        return None;
+    }
+
+    path.op(&stroke_builder.detach(), skia_safe::PathOp::Intersect)
+}
+
 fn text_lines<'a>(shape: &'a TextShape, font: &skia_safe::Font) -> Vec<TextLine<'a>> {
     let lines: Vec<_> = shape
         .text
@@ -288,25 +307,23 @@ fn draw_written_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &ski
         let mut paint = text_paint(fill, draw.opacity);
         canvas.draw_str(unit, (x, line.origin.1), &font, &paint);
 
-        let has_stroke = style.stroke_width > 0.0;
-        let outline_width = if has_stroke {
-            style.stroke_width
-        } else {
-            shape.write_outline_width
-        };
-
-        if outline_width > 0.0 {
-            let outline = color_with_alpha(style.stroke, outline_progress);
-            let outline_path =
+        if shape.write_outline_width > 0.0 {
+            let outline = color_with_alpha(style.fill, outline_progress);
+            let glyph_path =
                 skia_safe::utils::text_utils::get_path(unit, (x, line.origin.1), &font);
-            let outline_save_count = canvas.save();
 
-            canvas.clip_path(&outline_path, None, true);
-            paint.set_color4f(text_paint(outline, draw.opacity).color4f(), None);
+            if let Some(outline_path) = inner_outline_path(&glyph_path, shape.write_outline_width) {
+                paint = text_paint(outline, draw.opacity);
+                canvas.draw_path(&outline_path, &paint);
+            }
+        }
+
+        if style.stroke_width > 0.0 {
+            let stroke = color_with_alpha(style.stroke, fill_progress);
+            paint = text_paint(stroke, draw.opacity);
             paint.set_style(skia_safe::PaintStyle::Stroke);
-            paint.set_stroke_width(outline_width * 2.0);
+            paint.set_stroke_width(style.stroke_width);
             canvas.draw_str(unit, (x, line.origin.1), &font, &paint);
-            canvas.restore_to_count(outline_save_count);
         }
 
         canvas.restore_to_count(save_count);
@@ -386,6 +403,27 @@ mod tests {
         assert!(approximately_equal(
             right[1].origin.1 - right[0].origin.1,
             font.spacing(),
+        ));
+    }
+
+    #[test]
+    fn inner_write_outline_matches_the_glyph_boundary() {
+        let shape = TextShape::default();
+        let font = shape.font.skia_font(shape.size);
+        let glyph = skia_safe::utils::text_utils::get_path("Border!", (0.0, 0.0), &font);
+        let outline = inner_outline_path(&glyph, 4.0).unwrap();
+        let glyph_bounds = glyph.compute_tight_bounds();
+        let outline_bounds = outline.compute_tight_bounds();
+
+        assert!(approximately_equal(glyph_bounds.left, outline_bounds.left,));
+        assert!(approximately_equal(glyph_bounds.top, outline_bounds.top,));
+        assert!(approximately_equal(
+            glyph_bounds.right,
+            outline_bounds.right,
+        ));
+        assert!(approximately_equal(
+            glyph_bounds.bottom,
+            outline_bounds.bottom,
         ));
     }
 }
