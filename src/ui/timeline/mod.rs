@@ -4,6 +4,8 @@ mod tracks;
 use crate::editor::{Editor, Timeline};
 
 const BUTTON_SIZE: f32 = 25.0;
+const FULLSCREEN_SCRUBBER_HEIGHT: f32 = 12.0;
+const FULLSCREEN_SCRUBBER_THICKNESS: f32 = 3.0;
 const KEYFRAME_RADIUS: f32 = 3.0;
 const KEYFRAME_HITBOX_SIZE: f32 = 16.0;
 const KEYFRAME_HOVER_SCALE: f32 = 1.5;
@@ -219,8 +221,11 @@ impl Layout {
     }
 }
 
-pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
+pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) -> bool {
     let is_exporting = editor.is_exporting();
+    let mut toggle_fullscreen = false;
+
+    shortcuts(editor.get_timeline(), ui, !is_exporting);
 
     ui.set_next_window_class(
         &dear_imgui_rs::WindowClass::default()
@@ -231,7 +236,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         let fps = editor.get_preview_fps();
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
 
-        controls(editor.get_timeline(), ui, fps, !is_exporting);
+        toggle_fullscreen = controls(editor.get_timeline(), ui, fps, !is_exporting, false);
         ui.spacing();
         ui.separator();
 
@@ -295,6 +300,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             update_interaction(editor.get_timeline(), ui, layout, state, timeline_hovered);
         }
     });
+
+    toggle_fullscreen
 }
 
 fn draw_panel_divider(
@@ -313,36 +320,83 @@ fn draw_panel_divider(
     );
 }
 
-fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32, interactive: bool) {
+fn controls(
+    timeline: &mut Timeline,
+    ui: &dear_imgui_rs::Ui,
+    fps: f32,
+    interactive: bool,
+    is_fullscreen: bool,
+) -> bool {
     let is_playing = timeline.is_playing();
     let spacing = unsafe { ui.style().item_spacing() }[0];
-    let width = BUTTON_SIZE * 5.0 + spacing * 4.0;
+    let width = transport_width(ui) + spacing + BUTTON_SIZE;
 
     ui.set_cursor_pos_x(
         ui.cursor_pos_x() + ((ui.content_region_avail_width() - width) * 0.5).max(0.0),
     );
 
-    if transport_button(
-        ui,
-        "<<",
-        "Go to start [Shift + LeftArrow]",
-        Some(dear_imgui_rs::Key::LeftArrow),
-        true,
-        interactive,
-    ) {
+    transport_controls(timeline, ui, interactive);
+
+    ui.same_line();
+    let toggle_fullscreen = fullscreen_button(ui, is_fullscreen);
+
+    ui.same_line();
+
+    ui.text(if !interactive {
+        "EXPORTING".to_owned()
+    } else if is_playing {
+        format!("FPS: {fps:.2}")
+    } else {
+        "PAUSED".to_owned()
+    });
+
+    toggle_fullscreen
+}
+
+fn transport_width(ui: &dear_imgui_rs::Ui) -> f32 {
+    let spacing = unsafe { ui.style().item_spacing() }[0];
+
+    BUTTON_SIZE * 5.0 + spacing * 4.0
+}
+
+pub(super) fn shortcuts(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interactive: bool) {
+    if !interactive {
+        return;
+    }
+
+    let shift = ui.io().key_shift();
+
+    if ui.is_key_pressed(dear_imgui_rs::Key::LeftArrow) {
+        if shift {
+            timeline.go_to_start();
+        } else {
+            timeline.previous_frame();
+        }
+    }
+
+    if ui.is_key_pressed(dear_imgui_rs::Key::Space) {
+        timeline.toggle();
+    }
+
+    if ui.is_key_pressed(dear_imgui_rs::Key::RightArrow) {
+        if shift {
+            timeline.go_to_end();
+        } else {
+            timeline.next_frame();
+        }
+    }
+}
+
+fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interactive: bool) {
+    let is_playing = timeline.is_playing();
+
+    if transport_button(ui, "<<", "Go to start [Shift + LeftArrow]") && interactive {
         timeline.go_to_start();
     }
 
     ui.same_line();
 
-    if transport_button(
-        ui,
-        "<",
-        "Previous frame [LeftArrow]",
-        Some(dear_imgui_rs::Key::LeftArrow),
-        false,
-        interactive,
-    ) {
+    if transport_button(ui, "<", "Previous frame [LeftArrow]") && interactive {
         timeline.previous_frame();
     }
 
@@ -356,58 +410,122 @@ fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32, interacti
         } else {
             "Play [Space]"
         },
-        Some(dear_imgui_rs::Key::Space),
-        false,
-        interactive,
-    ) {
+    ) && interactive
+    {
         timeline.toggle();
     }
 
     ui.same_line();
 
-    if transport_button(
-        ui,
-        ">",
-        "Next frame [RightArrow]",
-        Some(dear_imgui_rs::Key::RightArrow),
-        false,
-        interactive,
-    ) {
+    if transport_button(ui, ">", "Next frame [RightArrow]") && interactive {
         timeline.next_frame();
     }
 
     ui.same_line();
 
-    if transport_button(
-        ui,
-        ">>",
-        "Go to end [Shift + RightArrow]",
-        Some(dear_imgui_rs::Key::RightArrow),
-        true,
-        interactive,
-    ) {
+    if transport_button(ui, ">>", "Go to end [Shift + RightArrow]") && interactive {
         timeline.go_to_end();
     }
-
-    ui.same_line();
-
-    ui.text(if !interactive {
-        "EXPORTING".to_owned()
-    } else if is_playing {
-        format!("FPS: {fps:.2}")
-    } else {
-        "PAUSED".to_owned()
-    });
 }
 
-fn transport_button(
+fn fullscreen_button(ui: &dear_imgui_rs::Ui, is_fullscreen: bool) -> bool {
+    transport_button(
+        ui,
+        "[]",
+        if is_fullscreen {
+            "Exit fullscreen [F]."
+        } else {
+            "Enter fullscreen [F]."
+        },
+    )
+}
+
+pub(super) fn fullscreen_controls(
+    timeline: &mut Timeline,
     ui: &dear_imgui_rs::Ui,
-    label: &str,
-    tooltip: &str,
-    key: Option<dear_imgui_rs::Key>,
-    requires_shift: bool,
-    shortcuts_enabled: bool,
+    fps: f32,
+    interactive: bool,
 ) -> bool {
+    let scrubber_min = ui.cursor_screen_pos();
+    let scrubber_width = ui.content_region_avail_width().max(1.0);
+    let buttons_y = scrubber_min[1] + FULLSCREEN_SCRUBBER_HEIGHT + 7.0;
+
+    let toggle_fullscreen = {
+        let _disabled = ui.begin_disabled_with_cond(!interactive);
+
+        ui.invisible_button(
+            "Fullscreen scrubber.",
+            [scrubber_width, FULLSCREEN_SCRUBBER_HEIGHT],
+        );
+
+        timeline.is_controlling = interactive && ui.is_item_active();
+        if timeline.is_controlling {
+            timeline.go_to(time_at_position(
+                ui.io().mouse_pos()[0],
+                scrubber_min[0],
+                scrubber_width,
+                timeline.get_duration(),
+            ));
+        }
+
+        draw_fullscreen_scrubber(timeline, ui, scrubber_min, scrubber_width);
+
+        ui.set_cursor_screen_pos([scrubber_min[0], buttons_y]);
+        controls(timeline, ui, fps, interactive, true)
+    };
+
+    toggle_fullscreen
+}
+
+fn draw_fullscreen_scrubber(
+    timeline: &Timeline,
+    ui: &dear_imgui_rs::Ui,
+    min: [f32; 2],
+    width: f32,
+) {
+    let duration = timeline.get_duration();
+    let ratio = if duration > 0.0 {
+        (timeline.get_time() / duration).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let progress_x = min[0] + width * ratio;
+    let line_y = min[1] + FULLSCREEN_SCRUBBER_HEIGHT * 0.5;
+    let draw_list = ui.get_window_draw_list();
+
+    draw_list.add_line_h(
+        min[0],
+        min[0] + width,
+        line_y,
+        ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg),
+        FULLSCREEN_SCRUBBER_THICKNESS,
+    );
+    draw_list.add_line_h(
+        min[0],
+        progress_x,
+        line_y,
+        ui.get_color_u32(dear_imgui_rs::StyleColor::SliderGrabActive),
+        FULLSCREEN_SCRUBBER_THICKNESS,
+    );
+    draw_list
+        .add_circle(
+            [progress_x, line_y],
+            FULLSCREEN_SCRUBBER_THICKNESS,
+            ui.get_color_u32(dear_imgui_rs::StyleColor::SliderGrabActive),
+        )
+        .filled(true)
+        .build();
+}
+
+fn time_at_position(position: f32, start: f32, width: f32, duration: f32) -> f32 {
+    if width <= 0.0 || duration <= 0.0 {
+        return 0.0;
+    }
+
+    ((position - start) / width).clamp(0.0, 1.0) * duration
+}
+
+fn transport_button(ui: &dear_imgui_rs::Ui, label: &str, tooltip: &str) -> bool {
     let clicked = ui.button_config(label).size([BUTTON_SIZE; 2]).build();
 
     if ui.is_item_hovered() {
@@ -415,9 +533,6 @@ fn transport_button(
     }
 
     clicked
-        || shortcuts_enabled
-            && key
-                .is_some_and(|key| ui.is_key_pressed(key) && ui.io().key_shift() == requires_shift)
 }
 
 fn draw_scrubber(
@@ -807,5 +922,20 @@ mod tests {
 
         state.pan(1000.0, 100.0);
         assert_eq!(state.view_range().0, 0.0);
+    }
+
+    #[test]
+    fn fullscreen_scrubber_maps_and_clamps_pointer_positions() {
+        assert_eq!(time_at_position(100.0, 100.0, 400.0, 10.0), 0.0);
+        assert_eq!(time_at_position(300.0, 100.0, 400.0, 10.0), 5.0);
+        assert_eq!(time_at_position(500.0, 100.0, 400.0, 10.0), 10.0);
+        assert_eq!(time_at_position(0.0, 100.0, 400.0, 10.0), 0.0);
+        assert_eq!(time_at_position(600.0, 100.0, 400.0, 10.0), 10.0);
+    }
+
+    #[test]
+    fn fullscreen_scrubber_handles_empty_ranges() {
+        assert_eq!(time_at_position(300.0, 100.0, 0.0, 10.0), 0.0);
+        assert_eq!(time_at_position(300.0, 100.0, 400.0, 0.0), 0.0);
     }
 }

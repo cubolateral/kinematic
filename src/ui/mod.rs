@@ -47,6 +47,7 @@ pub(crate) struct Ui {
     colors: ThemeColors,
     scale: f32,
     silent_export: bool,
+    is_fullscreen: bool,
     timeline: timeline::State,
 }
 
@@ -70,12 +71,34 @@ impl Ui {
             colors: ThemeColors::default(),
             scale: 1.0,
             silent_export: true,
+            is_fullscreen: false,
             timeline: timeline::State::default(),
         }
     }
 
     pub fn draw(&mut self, editor: &mut Editor, ui: &mut dear_imgui_rs::Ui) {
         let _theme = self.push_theme(ui);
+        let _font = ui.push_font(self.font);
+        let io = ui.io();
+        let plain_keyboard_input = !io.want_text_input()
+            && !io.key_ctrl()
+            && !io.key_shift()
+            && !io.key_alt()
+            && !io.key_super();
+        let shortcut = plain_keyboard_input
+            && (self.is_fullscreen || !editor.is_exporting())
+            && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::F, false);
+
+        if self.is_fullscreen {
+            let button = preview::draw_fullscreen(editor, ui);
+
+            if shortcut || button {
+                self.is_fullscreen = false;
+            }
+
+            return;
+        }
+
         let dock = ui.dockspace_over_main_viewport();
 
         if self.is_first_time {
@@ -83,13 +106,20 @@ impl Ui {
             self.is_first_time = false;
         }
 
-        let _font = ui.push_font(self.font);
         scene_tree::draw(editor, ui);
         export::draw(editor, ui, &mut self.silent_export);
         preview::draw(editor, ui);
         inspector::draw(editor, ui);
         self.configuration(ui);
-        timeline::draw(editor, ui, &mut self.timeline);
+        let button = timeline::draw(editor, ui, &mut self.timeline);
+
+        if shortcut || button {
+            self.is_fullscreen = true;
+        }
+    }
+
+    pub fn is_fullscreen(&self) -> bool {
+        self.is_fullscreen
     }
 
     pub fn apply_scale(&self, context: &mut dear_imgui_rs::Context) {

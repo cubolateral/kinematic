@@ -95,6 +95,7 @@ impl App {
         );
 
         let mut events = self.sdl.event_pump().unwrap();
+        let mut previous_fullscreen = self.ui.is_fullscreen();
 
         'running: loop {
             for event in events.poll_iter() {
@@ -113,7 +114,10 @@ impl App {
                 }
             }
 
-            let update_canvas = editor.update();
+            let is_fullscreen = self.ui.is_fullscreen();
+            let fullscreen_changed = is_fullscreen != previous_fullscreen;
+            previous_fullscreen = is_fullscreen;
+            let update_canvas = editor.update() || fullscreen_changed;
 
             unsafe {
                 self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
@@ -125,6 +129,7 @@ impl App {
                 &self.gl,
                 self.window.size(),
                 update_canvas,
+                !is_fullscreen,
             );
 
             self.ui.apply_scale(&mut self.imgui);

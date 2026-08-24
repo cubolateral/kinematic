@@ -88,13 +88,16 @@ impl Editor {
         gl: &glow::Context,
         window_size: (u32, u32),
         update_canvas: bool,
+        show_selection: bool,
     ) {
         if !update_canvas {
             return;
         }
 
         let (width, height) = self.preview.get_size();
-        let selected = (!self.is_exporting).then(|| self.selection.get()).flatten();
+        let selected = (show_selection && !self.is_exporting)
+            .then(|| self.selection.get())
+            .flatten();
 
         self.preview.draw(skia_context, gl, window_size, |canvas| {
             canvas.clear(skia_safe::colors::BLACK);
