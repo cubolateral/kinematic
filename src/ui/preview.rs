@@ -3,6 +3,7 @@ use crate::{core::types::vec2, editor::Editor};
 const VIEWPORT_OUTLINE_THICKNESS: f32 = 1.0;
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
+    let is_exporting = editor.is_exporting();
     let mut clicked = None;
     let (name, resolution, fps) = {
         let project = editor.get_project();
@@ -23,6 +24,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     );
 
     ui.window("Preview").build(|| {
+        let _disabled = ui.begin_disabled_with_cond(is_exporting);
         ui.text(format!(
             "[PROJECT INFO] Name: {name} / Resolution: {}x{} / FPS: {fps}",
             resolution.0, resolution.1,

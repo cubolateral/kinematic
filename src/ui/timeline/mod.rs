@@ -1,19 +1,22 @@
-mod entities;
-#[allow(dead_code)]
+mod objects;
 mod tracks;
 
 use crate::editor::{Editor, Timeline};
 
 const BUTTON_SIZE: f32 = 25.0;
-const KEYFRAME_HALF_SIZE: f32 = 4.0;
+const KEYFRAME_RADIUS: f32 = 3.0;
 const KEYFRAME_HITBOX_SIZE: f32 = 16.0;
-const KEYFRAME_HOVER_SCALE: f32 = 2.0;
+const KEYFRAME_HOVER_SCALE: f32 = 1.5;
 const LABEL_PADDING: [f32; 2] = [8.0, 4.0];
 const SCRUBBER_HEIGHT: f32 = 40.0;
 const SEGMENT_THICKNESS: f32 = 4.0;
-const TRACK_HEIGHT: f32 = 16.0;
+const TRACK_HEIGHT: f32 = 24.0;
 const TRACK_SPACING: f32 = 4.0;
-const TRACK_TIMELINE_PADDING: f32 = 8.0;
+const PANEL_TEXT_PADDING: f32 = 10.0;
+const TRACK_TEXT_INDENT: f32 = 16.0;
+const OBJECT_PANEL_MAX_WIDTH: f32 = 280.0;
+const OBJECT_PANEL_MIN_WIDTH: f32 = 160.0;
+const OBJECT_PANEL_RATIO: f32 = 0.3;
 const GRID_TARGET_SPACING: f32 = 100.0;
 const DRAG_DIRECTION_THRESHOLD: f32 = 4.0;
 
@@ -33,7 +36,9 @@ pub(super) struct State {
     view_start: f32,
     view_end: f32,
     interaction: Interaction,
-    pressed_entity: Option<hecs::Entity>,
+    pressed_entity: Option<Option<hecs::Entity>>,
+    pressed_toggle: bool,
+    expanded_objects: std::collections::HashSet<hecs::Entity>,
 }
 
 impl State {
@@ -111,23 +116,42 @@ impl State {
         self.view_end = self.view_start + span;
     }
 
-    fn press_entity(&mut self, entity: Option<hecs::Entity>) {
-        self.pressed_entity = entity;
+    fn press_entity(&mut self, entity: Option<hecs::Entity>, toggle: bool) {
+        self.pressed_entity = Some(entity);
+        self.pressed_toggle = toggle;
     }
 
     fn release_entity(
         &mut self,
         entity: Option<hecs::Entity>,
+        toggle: bool,
+        over_view: bool,
         drag_delta: [f32; 2],
-    ) -> Option<hecs::Entity> {
-        let pressed = self.pressed_entity.take();
+    ) -> Option<(Option<hecs::Entity>, bool)> {
+        let pressed = self.pressed_entity.take()?;
+        let pressed_toggle = std::mem::take(&mut self.pressed_toggle);
         let moved = drag_delta[0].abs().max(drag_delta[1].abs()) >= DRAG_DIRECTION_THRESHOLD;
 
-        if self.interaction == Interaction::Tracks && !moved && pressed == entity {
-            entity
+        if over_view
+            && matches!(self.interaction, Interaction::None | Interaction::Tracks)
+            && !moved
+            && pressed == entity
+            && (!pressed_toggle || toggle)
+        {
+            Some((entity, pressed_toggle))
         } else {
             None
         }
+    }
+
+    fn toggle_object(&mut self, entity: hecs::Entity) {
+        if !self.expanded_objects.remove(&entity) {
+            self.expanded_objects.insert(entity);
+        }
+    }
+
+    fn is_object_expanded(&self, entity: hecs::Entity) -> bool {
+        self.expanded_objects.contains(&entity)
     }
 }
 
@@ -164,21 +188,25 @@ struct Layout {
 }
 
 impl Layout {
-    fn new(ui: &dear_imgui_rs::Ui) -> Self {
-        let [content_left, top] = ui.cursor_screen_pos();
+    fn new(ui: &dear_imgui_rs::Ui, top: f32) -> Self {
+        let [content_left, viewport_top] = ui.cursor_screen_pos();
         let available = ui.content_region_avail_width().max(1.0);
         let [_, window_top] = ui.window_pos();
-
         let [_, window_height] = ui.window_size();
+        let panel_width = (available * OBJECT_PANEL_RATIO)
+            .clamp(OBJECT_PANEL_MIN_WIDTH, OBJECT_PANEL_MAX_WIDTH)
+            .min((available - 1.0).max(0.0));
+        let divider_x = content_left + panel_width;
+        let timeline_left = (divider_x + TRACK_SPACING).min(content_left + available);
 
         Self {
             content_left,
             top,
-            viewport_top: top + ui.scroll_y(),
+            viewport_top: viewport_top + ui.scroll_y(),
             bottom: window_top + window_height,
-            divider_x: content_left,
-            timeline_left: content_left,
-            timeline_width: available,
+            divider_x,
+            timeline_left,
+            timeline_width: (content_left + available - timeline_left).max(1.0),
         }
     }
 
@@ -217,21 +245,49 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 end,
             }
         };
-
-        let layout = Layout::new(ui);
-        let mouse = ui.io().mouse_pos();
-        let timeline_hovered = ui.is_window_hovered_with_flags(
+        let [_, top] = ui.cursor_screen_pos();
+        let content_left = ui.cursor_screen_pos()[0];
+        let available_height = ui.content_region_avail_height();
+        let child_height = (available_height - SCRUBBER_HEIGHT).max(1.0);
+        let header_hovered = ui.is_window_hovered_with_flags(
             dear_imgui_rs::WindowHoveredFlags::ALLOW_WHEN_BLOCKED_BY_ACTIVE_ITEM,
-        ) && layout.contains_timeline_x(mouse[0])
-            && (layout.viewport_top..=layout.bottom).contains(&mouse[1]);
+        );
+        let mut view = None;
+        let mut objects_hovered = false;
+
+        ui.set_cursor_screen_pos([content_left, top + SCRUBBER_HEIGHT]);
+        ui.child_window("Timeline Objects")
+            .size([0.0, child_height])
+            .flags(dear_imgui_rs::WindowFlags::ALWAYS_VERTICAL_SCROLLBAR)
+            .build(ui, || {
+                let layout = Layout::new(ui, top);
+                let mouse = ui.io().mouse_pos();
+                objects_hovered = ui.is_window_hovered_with_flags(
+                    dear_imgui_rs::WindowHoveredFlags::ALLOW_WHEN_BLOCKED_BY_ACTIVE_ITEM,
+                );
+                let draw_list = ui.get_window_draw_list();
+                let playhead_x = time.x(layout, time.current);
+
+                draw_time_grid_lines(ui, &draw_list, layout, time);
+                objects::draw(editor, ui, &draw_list, layout, time, state);
+                draw_panel_divider(ui, &draw_list, layout, layout.viewport_top, layout.bottom);
+                draw_mouse_indicator(ui, &draw_list, layout);
+                draw_playhead(ui, &draw_list, layout, playhead_x);
+                view = Some((layout, mouse));
+            });
+
+        let Some((layout, mouse)) = view else { return };
+        let timeline_hovered = (header_hovered || objects_hovered)
+            && layout.contains_timeline_x(mouse[0])
+            && (layout.top..=layout.bottom).contains(&mouse[1]);
         let draw_list = ui.get_window_draw_list();
         let playhead_x = time.x(layout, time.current);
 
         draw_scrubber(ui, &draw_list, layout, time, playhead_x);
-        draw_time_grid(ui, &draw_list, layout, time);
-        entities::draw(editor, ui, &draw_list, layout, time, state);
-        draw_mouse_indicator(ui, &draw_list, layout);
-        draw_overlay(ui, &draw_list, layout, time, playhead_x);
+        draw_panel_divider(ui, &draw_list, layout, layout.top, layout.viewport_top);
+        draw_time_grid_labels(ui, &draw_list, layout, time);
+        draw_time_panel(ui, &draw_list, layout, time, playhead_x);
+
         if is_exporting {
             state.interaction = Interaction::None;
             editor.get_timeline().is_controlling = false;
@@ -239,6 +295,22 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             update_interaction(editor.get_timeline(), ui, layout, state, timeline_hovered);
         }
     });
+}
+
+fn draw_panel_divider(
+    ui: &dear_imgui_rs::Ui,
+    draw_list: &dear_imgui_rs::DrawListMut<'_>,
+    layout: Layout,
+    top: f32,
+    bottom: f32,
+) {
+    draw_list.add_line_v(
+        layout.divider_x,
+        top,
+        bottom,
+        ui.get_color_u32(dear_imgui_rs::StyleColor::Separator),
+        1.0,
+    );
 }
 
 fn controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, fps: f32, interactive: bool) {
@@ -403,7 +475,7 @@ fn grid_step(time: TimeRange, width: f32) -> f32 {
     multiple * magnitude
 }
 
-fn draw_time_grid(
+fn draw_time_grid_lines(
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     layout: Layout,
@@ -420,12 +492,31 @@ fn draw_time_grid(
 
     while tick <= time.end + step * 0.001 {
         let x = time.x(layout, tick);
-        draw_list.add_line_v(x, layout.top + SCRUBBER_HEIGHT, layout.bottom, color, 1.0);
-        let label = format_grid_time(tick, step);
+        draw_list.add_line_v(x, layout.viewport_top, layout.bottom, color, 1.0);
+        tick += step;
+    }
+}
+
+fn draw_time_grid_labels(
+    ui: &dear_imgui_rs::Ui,
+    draw_list: &dear_imgui_rs::DrawListMut<'_>,
+    layout: Layout,
+    time: TimeRange,
+) {
+    let step = grid_step(time, layout.timeline_width);
+    if step <= 0.0 {
+        return;
+    }
+
+    let first_tick = (time.start / step).ceil() * step;
+    let color = ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled);
+    let mut tick = first_tick;
+
+    while tick <= time.end + step * 0.001 {
         draw_list.add_text(
-            [x + 3.0, layout.top + 8.0],
-            ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled),
-            label,
+            [time.x(layout, tick) + 3.0, layout.top + 8.0],
+            color,
+            format_grid_time(tick, step),
         );
         tick += step;
     }
@@ -442,7 +533,22 @@ fn format_grid_time(time: f32, step: f32) -> String {
     format!("{:.*}s", decimals, time)
 }
 
-fn draw_overlay(
+fn draw_playhead(
+    ui: &dear_imgui_rs::Ui,
+    draw_list: &dear_imgui_rs::DrawListMut<'_>,
+    layout: Layout,
+    playhead_x: f32,
+) {
+    draw_list.add_line_v(
+        playhead_x,
+        layout.viewport_top,
+        layout.bottom,
+        ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+        2.0,
+    );
+}
+
+fn draw_time_panel(
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     layout: Layout,
@@ -453,7 +559,7 @@ fn draw_overlay(
     draw_list.add_line_v(
         playhead_x,
         layout.top + SCRUBBER_HEIGHT - 10.0,
-        layout.bottom,
+        layout.viewport_top,
         text_color,
         2.0,
     );
@@ -477,7 +583,6 @@ fn draw_overlay(
             ui.get_color_u32(dear_imgui_rs::StyleColor::PopupBg),
         )
         .filled(true)
-        .rounding(3.0)
         .build();
     draw_list
         .add_rect(
@@ -485,7 +590,6 @@ fn draw_overlay(
             max,
             ui.get_color_u32(dear_imgui_rs::StyleColor::Border),
         )
-        .rounding(3.0)
         .build();
     draw_list.add_text(position, text_color, text);
 }
@@ -496,13 +600,16 @@ fn draw_mouse_indicator(
     layout: Layout,
 ) {
     let mouse = ui.io().mouse_pos();
-    if !layout.contains_timeline_x(mouse[0]) || mouse[1] < layout.top || mouse[1] > layout.bottom {
+    if !layout.contains_timeline_x(mouse[0])
+        || mouse[1] < layout.viewport_top
+        || mouse[1] > layout.bottom
+    {
         return;
     }
 
     draw_list.add_line_v(
         mouse[0],
-        layout.top + SCRUBBER_HEIGHT,
+        layout.viewport_top,
         layout.bottom,
         ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled),
         1.0,
@@ -613,26 +720,69 @@ mod tests {
             ..Default::default()
         };
 
-        state.press_entity(Some(entity));
+        state.press_entity(Some(entity), false);
 
-        assert_eq!(state.release_entity(Some(entity), [1.0, 1.0]), Some(entity));
+        assert_eq!(
+            state.release_entity(Some(entity), false, true, [1.0, 1.0]),
+            Some((Some(entity), false))
+        );
 
-        state.press_entity(Some(entity));
+        state.press_entity(Some(entity), false);
 
-        assert_eq!(state.release_entity(Some(entity), [4.0, 0.0]), None);
+        assert_eq!(
+            state.release_entity(Some(entity), false, true, [4.0, 0.0]),
+            None
+        );
     }
 
     #[test]
-    fn pan_or_zoom_gestures_never_select_an_entity() {
+    fn pan_or_zoom_gestures_never_activate_an_object() {
         let entity = hecs::Entity::DANGLING;
         let mut state = State {
             interaction: Interaction::Pan,
             ..Default::default()
         };
 
-        state.press_entity(Some(entity));
+        state.press_entity(Some(entity), true);
 
-        assert_eq!(state.release_entity(Some(entity), [0.0, 0.0]), None);
+        assert_eq!(
+            state.release_entity(Some(entity), true, true, [0.0, 0.0]),
+            None
+        );
+    }
+
+    #[test]
+    fn objects_are_collapsed_by_default_and_toggle_from_a_double_click() {
+        let entity = hecs::Entity::DANGLING;
+        let mut state = State::default();
+
+        assert!(!state.is_object_expanded(entity));
+        state.press_entity(Some(entity), true);
+
+        assert_eq!(
+            state.release_entity(Some(entity), true, true, [1.0, 1.0]),
+            Some((Some(entity), true))
+        );
+
+        state.toggle_object(entity);
+        assert!(state.is_object_expanded(entity));
+
+        state.toggle_object(entity);
+        assert!(!state.is_object_expanded(entity));
+    }
+
+    #[test]
+    fn empty_timeline_clicks_clear_selection_without_accepting_outside_releases() {
+        let mut state = State::default();
+
+        state.press_entity(None, false);
+        assert_eq!(
+            state.release_entity(None, false, true, [0.0, 0.0]),
+            Some((None, false))
+        );
+
+        state.press_entity(None, false);
+        assert_eq!(state.release_entity(None, false, false, [0.0, 0.0]), None);
     }
 
     #[test]

@@ -181,6 +181,10 @@ impl Editor {
         self.selection.select(entity);
     }
 
+    pub fn clear_selection(&mut self) {
+        self.selection.clear();
+    }
+
     pub fn select_at(&mut self, point: Vector2) {
         match self.scene.pick(point) {
             Some(entity) => self.selection.select(entity),

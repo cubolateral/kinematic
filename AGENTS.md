@@ -68,18 +68,15 @@ implementations such as `FadeIn` and `FadeOut` remain in their own modules.
   local coordinates, apply the entity's opacity to their paints, and must not
   apply the entity transform itself. Drawing callbacks should read the ECS world
   and leave its state unchanged.
-- The timeline displays one lifetime rectangle per scene entity across the full
-  viewport width. Rows follow the root Group's pre-order hierarchy, Groups use
-  a light neutral color while only the selected row uses the editor accent, and
-  nested rows retain a visible hierarchy cue. Its
-  preserved track-rendering module is not part of the current view and remains
-  available for a later track UI. The viewport supports zoom by
-  vertical mouse dragging and horizontal pan by horizontal dragging with the left
-  mouse button. Entity selection is committed only when the left button is
-  released over the pressed rectangle without crossing the drag threshold. The
-  initial drag direction selects the operation, while the right mouse button
-  controls the scrubber. It displays adaptive time-grid labels using editor-style
-  `1/2/5 × 10ⁿ` intervals.
+- Timeline rows follow the root Group's pre-order hierarchy. Object rows are
+  collapsed by default; a double-click toggles track rows directly below the
+  object, with track lines constrained to its lifetime. The viewport supports
+  zoom by vertical mouse dragging and horizontal pan by horizontal dragging
+  with the left mouse button. Selection and object toggles are committed only
+  when the left button is released over the pressed target without crossing the
+  drag threshold. The initial drag direction selects the operation, while the
+  right mouse button controls the scrubber. It displays adaptive time-grid
+  labels using editor-style `1/2/5 × 10ⁿ` intervals.
 - Keep timeline viewport and pointer-gesture state in `src/ui`. The editor
   timeline owns playback time and duration. Its `is_controlling` flag is the
   sole UI-related exception because it temporarily suspends playback while the
@@ -90,10 +87,9 @@ implementations such as `FadeIn` and `FadeOut` remain in their own modules.
   active entity using its rendered transform and local bounds; this editor
   overlay must not enter exported frames. Preview hit-testing follows reverse
   drawing order so the frontmost overlapping object is selected, then falls
-  back to a containing Group, and clears selection outside every bound. The
-  initial dock layout uses a Scene Tree column on the left with Configuration
-  and Export below it, Preview and Timeline in the center, and the Inspector
-  column on the right.
+  back to a containing Group. Scene Tree, Timeline, and Preview clear selection
+  when clicking outside every object. Their interaction remains disabled
+  throughout export.
 - The renderer is crate-internal and must reuse the application's existing SDL,
   OpenGL, Skia, and preview framebuffer resources. It must not create a second
   window or graphics context. Export advances the scene by exactly `1 / fps`

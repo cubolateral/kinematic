@@ -6,6 +6,24 @@ mod timeline;
 
 use crate::editor::Editor;
 
+pub(super) fn selection_color(ui: &dear_imgui_rs::Ui) -> u32 {
+    ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg)
+}
+
+pub(super) fn draw_panel_rect(
+    draw_list: &dear_imgui_rs::DrawListMut<'_>,
+    min: [f32; 2],
+    max: [f32; 2],
+    fill: Option<u32>,
+    border: u32,
+) {
+    if let Some(fill) = fill {
+        draw_list.add_rect(min, max, fill).filled(true).build();
+    }
+
+    draw_list.add_rect(min, max, border).build();
+}
+
 #[derive(Clone, Copy)]
 struct ThemeColors {
     background: [f32; 4],
@@ -16,7 +34,7 @@ struct ThemeColors {
 impl Default for ThemeColors {
     fn default() -> Self {
         Self {
-            background: [0.0, 0.0, 0.0, 0.9],
+            background: [0.0, 0.0, 0.0, 1.0],
             accent: [0.0, 0.549, 1.0, 1.0],
             contrast: 1.0,
         }
@@ -68,10 +86,10 @@ impl Ui {
         let _font = ui.push_font(self.font);
         scene_tree::draw(editor, ui);
         export::draw(editor, ui, &mut self.silent_export);
-        self.configuration(ui);
         preview::draw(editor, ui);
-        timeline::draw(editor, ui, &mut self.timeline);
         inspector::draw(editor, ui);
+        self.configuration(ui);
+        timeline::draw(editor, ui, &mut self.timeline);
     }
 
     pub fn apply_scale(&self, context: &mut dear_imgui_rs::Context) {
@@ -197,36 +215,30 @@ impl Ui {
         dear_imgui_rs::DockBuilder::add_node(ui, dock, dear_imgui_rs::DockNodeFlags::NONE);
         dear_imgui_rs::DockBuilder::set_node_size(ui, dock, ui.main_viewport().size());
 
-        let (left, remainder) = dear_imgui_rs::DockBuilder::split_node(
+        let (timeline, top) = dear_imgui_rs::DockBuilder::split_node(
             ui,
             dock,
-            dear_imgui_rs::SplitDirection::Left,
-            0.2,
-        );
-        let (scene_tree, left_bottom) = dear_imgui_rs::DockBuilder::split_node(
-            ui,
-            left,
-            dear_imgui_rs::SplitDirection::Up,
-            0.75,
-        );
-        let (inspector, center) = dear_imgui_rs::DockBuilder::split_node(
-            ui,
-            remainder,
-            dear_imgui_rs::SplitDirection::Right,
-            0.2,
-        );
-        let (timeline, preview) = dear_imgui_rs::DockBuilder::split_node(
-            ui,
-            center,
             dear_imgui_rs::SplitDirection::Down,
             0.35,
         );
+        let (left, top_remainder) = dear_imgui_rs::DockBuilder::split_node(
+            ui,
+            top,
+            dear_imgui_rs::SplitDirection::Left,
+            0.2,
+        );
+        let (right, preview) = dear_imgui_rs::DockBuilder::split_node(
+            ui,
+            top_remainder,
+            dear_imgui_rs::SplitDirection::Right,
+            0.25,
+        );
 
-        dear_imgui_rs::DockBuilder::dock_window(ui, "Scene Tree", scene_tree);
-        dear_imgui_rs::DockBuilder::dock_window(ui, "Export", left_bottom);
-        dear_imgui_rs::DockBuilder::dock_window(ui, "Configuration", left_bottom);
-        dear_imgui_rs::DockBuilder::dock_window(ui, "Inspector", inspector);
+        dear_imgui_rs::DockBuilder::dock_window(ui, "Scene Tree", left);
+        dear_imgui_rs::DockBuilder::dock_window(ui, "Export", left);
         dear_imgui_rs::DockBuilder::dock_window(ui, "Preview", preview);
+        dear_imgui_rs::DockBuilder::dock_window(ui, "Inspector", right);
+        dear_imgui_rs::DockBuilder::dock_window(ui, "Configuration", right);
         dear_imgui_rs::DockBuilder::dock_window(ui, "Timeline", timeline);
         dear_imgui_rs::DockBuilder::finish(ui, dock);
     }

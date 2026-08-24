@@ -1,19 +1,14 @@
 use super::{
-    KEYFRAME_HALF_SIZE, KEYFRAME_HITBOX_SIZE, KEYFRAME_HOVER_SCALE, Layout, SCRUBBER_HEIGHT,
-    SEGMENT_THICKNESS, TRACK_HEIGHT, TRACK_SPACING, TRACK_TIMELINE_PADDING, TimeRange, text_size,
+    KEYFRAME_HITBOX_SIZE, KEYFRAME_HOVER_SCALE, KEYFRAME_RADIUS, Layout, PANEL_TEXT_PADDING,
+    SEGMENT_THICKNESS, TRACK_HEIGHT, TRACK_SPACING, TimeRange, text_size,
 };
-use crate::{
-    core::{
-        Track,
-        components::{Animation, Node},
-    },
-    editor::Editor,
-};
+use crate::core::{Track, components::Animation};
 
 #[derive(Clone, Copy)]
 struct TrackView {
     layout: Layout,
     time: TimeRange,
+    keyframe: u32,
     text: u32,
     active: u32,
     inactive: u32,
@@ -25,42 +20,33 @@ impl TrackView {
         Self {
             layout,
             time,
+            keyframe: ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
             text: ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
-            active: ui.get_color_u32(dear_imgui_rs::StyleColor::SliderGrabActive),
+            active: ui.get_color_u32(dear_imgui_rs::StyleColor::CheckMark),
             inactive: ui.get_color_u32(dear_imgui_rs::StyleColor::Separator),
             hovered: ui.is_window_hovered(),
         }
     }
 
-    fn entity(
+    fn object(
         self,
         ui: &dear_imgui_rs::Ui,
         draw_list: &dear_imgui_rs::DrawListMut<'_>,
-        entity: hecs::Entity,
         animation: &Animation,
+        lifetime: [f32; 2],
+        top: f32,
+        name_x: f32,
     ) {
-        let id = entity.id();
-        let clip = ui.push_clip_rect(
-            [self.layout.content_left, self.layout.viewport_top],
-            [
-                self.layout.divider_x - TRACK_TIMELINE_PADDING,
-                self.layout.bottom,
-            ],
-            true,
-        );
-        ui.separator_with_text(format!("Entity {id}"));
-        drop(clip);
-
-        let origin = ui.cursor_screen_pos();
-        let height = animation.tracks.len().checked_sub(1).map_or(0.0, |last| {
-            last as f32 * (TRACK_HEIGHT + TRACK_SPACING) + TRACK_HEIGHT
-        });
-        ui.dummy([ui.content_region_avail_width().max(1.0), height.max(1.0)]);
-
         for (row, animation_track) in animation.tracks.iter().enumerate() {
-            self.track(ui, draw_list, &animation_track.track, origin, row);
+            self.track(
+                ui,
+                draw_list,
+                &animation_track.track,
+                lifetime,
+                top + row as f32 * (TRACK_HEIGHT + TRACK_SPACING),
+                name_x,
+            );
         }
-        ui.spacing();
     }
 
     fn track(
@@ -68,15 +54,40 @@ impl TrackView {
         ui: &dear_imgui_rs::Ui,
         draw_list: &dear_imgui_rs::DrawListMut<'_>,
         track: &Track,
-        origin: [f32; 2],
-        row: usize,
+        lifetime: [f32; 2],
+        top: f32,
+        name_x: f32,
     ) {
-        let top = origin[1] + row as f32 * (TRACK_HEIGHT + TRACK_SPACING);
+        let label = track.info.name;
+        let clip = draw_list.push_clip_rect(
+            [name_x, top],
+            [
+                self.layout.divider_x - PANEL_TEXT_PADDING,
+                top + TRACK_HEIGHT,
+            ],
+            true,
+        );
+        draw_list.add_text(
+            [
+                name_x,
+                top + (TRACK_HEIGHT - text_size(ui, &label)[1]) * 0.5,
+            ],
+            self.text,
+            label,
+        );
+        drop(clip);
+
+        let Some([start, end]) = visible_lifetime(lifetime, self.time) else {
+            return;
+        };
+
         let center = top + TRACK_HEIGHT * 0.5;
+        let start_x = self.time.x(self.layout, start);
+        let end_x = self.time.x(self.layout, end);
 
         draw_list.add_line_h(
-            self.layout.timeline_left,
-            self.layout.timeline_right(),
+            start_x,
+            end_x,
             center,
             self.inactive,
             SEGMENT_THICKNESS * 0.5,
@@ -86,9 +97,15 @@ impl TrackView {
             for pair in track.keyframes.windows(2) {
                 let [left, right] = pair else { continue };
                 if left.easing.is_some() && right.time > left.time {
+                    let segment_start = left.time.max(start);
+                    let segment_end = right.time.min(end);
+                    if segment_end <= segment_start {
+                        continue;
+                    }
+
                     draw_list.add_line_h(
-                        self.time.x(self.layout, left.time),
-                        self.time.x(self.layout, right.time),
+                        self.time.x(self.layout, segment_start),
+                        self.time.x(self.layout, segment_end),
                         center,
                         self.active,
                         SEGMENT_THICKNESS,
@@ -97,38 +114,27 @@ impl TrackView {
             }
         }
 
-        let clip = draw_list.push_clip_rect(
-            [origin[0], top],
-            [
-                (self.layout.divider_x - TRACK_SPACING).max(origin[0] + 1.0),
-                top + TRACK_HEIGHT,
-            ],
-            true,
-        );
-        draw_list.add_text(
-            [
-                origin[0],
-                top + (TRACK_HEIGHT - text_size(ui, track.info.name)[1]) * 0.5,
-            ],
-            self.text,
-            track.info.name,
-        );
-        drop(clip);
-
         let mut hovered_keyframe = None;
 
         for keyframe in &track.keyframes {
+            if keyframe.time < start || keyframe.time > end {
+                continue;
+            }
+
             let x = self.time.x(self.layout, keyframe.time);
             let hit_half_size = KEYFRAME_HITBOX_SIZE * 0.5;
             let hit_min = [x - hit_half_size, center - hit_half_size];
             let hit_max = [x + hit_half_size, center + hit_half_size];
             let hovered = self.hovered && ui.is_mouse_hovering_rect(hit_min, hit_max);
 
-            let half_size = KEYFRAME_HALF_SIZE * if hovered { KEYFRAME_HOVER_SCALE } else { 1.0 };
-            let min = [x - half_size, center - half_size];
-            let max = [x + half_size, center + half_size];
-
-            draw_list.add_rect(min, max, [1.0; 4]).filled(true).build();
+            draw_list
+                .add_circle(
+                    [x, center],
+                    KEYFRAME_RADIUS * if hovered { KEYFRAME_HOVER_SCALE } else { 1.0 },
+                    self.keyframe,
+                )
+                .filled(true)
+                .build();
 
             if hovered {
                 hovered_keyframe = Some(keyframe);
@@ -148,26 +154,51 @@ impl TrackView {
     }
 }
 
+pub(super) fn height(world: &hecs::World, entity: hecs::Entity) -> f32 {
+    world.get::<&Animation>(entity).map_or(0.0, |animation| {
+        animation.tracks.len() as f32 * (TRACK_HEIGHT + TRACK_SPACING)
+    })
+}
+
 pub(super) fn draw(
-    editor: &mut Editor,
+    world: &hecs::World,
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     layout: Layout,
     time: TimeRange,
+    entity: hecs::Entity,
+    lifetime: [f32; 2],
+    top: f32,
+    name_x: f32,
 ) {
-    ui.set_cursor_screen_pos([layout.content_left, layout.top + SCRUBBER_HEIGHT]);
-    ui.separator();
-    ui.dummy([0.0, TRACK_SPACING]);
-
-    let world = editor.get_scene().get_world();
-    let mut query = world.query::<(hecs::Entity, &Node, &Animation)>();
-    let entities: Vec<_> = query
-        .iter()
-        .filter(|(_, node, _)| !node.is_root && node.is_activated)
-        .collect();
+    let Ok(animation) = world.get::<&Animation>(entity) else {
+        return;
+    };
 
     let view = TrackView::new(ui, layout, time);
-    for (entity, _, animation) in entities {
-        view.entity(ui, draw_list, entity, animation);
+    view.object(ui, draw_list, &animation, lifetime, top, name_x);
+}
+
+fn visible_lifetime(lifetime: [f32; 2], time: TimeRange) -> Option<[f32; 2]> {
+    let start = lifetime[0].max(time.start);
+    let end = lifetime[1].min(time.end);
+
+    (end > start).then_some([start, end])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn track_lines_are_clipped_to_the_visible_object_lifetime() {
+        let time = TimeRange {
+            current: 0.0,
+            start: 4.0,
+            end: 8.0,
+        };
+
+        assert_eq!(visible_lifetime([2.0, 6.0], time), Some([4.0, 6.0]));
+        assert_eq!(visible_lifetime([0.0, 3.0], time), None);
     }
 }

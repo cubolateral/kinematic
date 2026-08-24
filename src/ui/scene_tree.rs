@@ -9,37 +9,36 @@ use crate::{
 const ROW_HEIGHT: f32 = 24.0;
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
+    let is_exporting = editor.is_exporting();
     let selected = editor.get_selected_entity();
     let root = editor.get_scene().get_root().get_id();
     let world = editor.get_scene().get_world();
     let mut clicked = None;
+    let mut empty_clicked = false;
     let _text_align = ui.push_style_var(dear_imgui_rs::StyleVar::SelectableTextAlign([0.0, 0.5]));
 
     ui.window("Scene Tree").build(|| {
+        let _disabled = ui.begin_disabled_with_cond(is_exporting);
         let root_name = world
             .get::<&Name>(root)
             .expect("Root group must contain a Name component.");
-        let root_label = format!("{}##scene_tree_{}", root_name.get(), root.to_bits());
+        let position = ui.cursor_screen_pos();
+        let root_clicked = selectable_row(ui, format!("##scene_tree_{}", root.to_bits()));
+        let draw_list = ui.get_window_draw_list();
 
-        let root_clicked = if selected == Some(root) {
-            let mut accent = ui.style_color(dear_imgui_rs::StyleColor::CheckMark);
-            accent[3] = 0.24;
-            let _header = ui.push_style_color(dear_imgui_rs::StyleColor::Header, accent);
-            let _header_hovered =
-                ui.push_style_color(dear_imgui_rs::StyleColor::HeaderHovered, accent);
-            let _header_active =
-                ui.push_style_color(dear_imgui_rs::StyleColor::HeaderActive, accent);
-
-            ui.selectable_config(root_label)
-                .selected(true)
-                .size([0.0, ROW_HEIGHT])
-                .build()
-        } else {
-            ui.selectable_config(root_label)
-                .selected(false)
-                .size([0.0, ROW_HEIGHT])
-                .build()
-        };
+        draw_list.add_text(
+            [
+                position[0],
+                position[1] + (ROW_HEIGHT - text_size(ui, root_name.get())[1]) * 0.5,
+            ],
+            ui.get_color_u32(if selected == Some(root) {
+                dear_imgui_rs::StyleColor::CheckMark
+            } else {
+                dear_imgui_rs::StyleColor::Text
+            }),
+            root_name.get(),
+        );
+        drop(draw_list);
 
         if root_clicked {
             clicked = Some(root);
@@ -48,16 +47,30 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         let children = group_children(&world, root);
         if children.is_empty() {
             ui.text_disabled("   No objects.");
-            return;
+        } else {
+            draw_children(
+                &world,
+                ui,
+                &children,
+                &mut vec![],
+                selected,
+                selected == Some(root),
+                &mut clicked,
+            );
         }
 
-        draw_children(&world, ui, &children, &mut vec![], selected, &mut clicked);
+        empty_clicked = !is_exporting
+            && ui.is_window_hovered()
+            && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)
+            && !ui.is_any_item_hovered();
     });
 
     drop(world);
 
     if let Some(entity) = clicked {
         editor.select_entity(entity);
+    } else if empty_clicked {
+        editor.clear_selection();
     }
 }
 
@@ -67,36 +80,43 @@ fn draw_children(
     children: &[hecs::Entity],
     branches: &mut Vec<bool>,
     selected: Option<hecs::Entity>,
+    ancestor_selected: bool,
     clicked: &mut Option<hecs::Entity>,
 ) {
     for (index, entity) in children.iter().copied().enumerate() {
         let is_last = index + 1 == children.len();
+        let is_highlighted = ancestor_selected || selected == Some(entity);
         let entity_children = group_children(world, entity);
         let name = world
             .get::<&Name>(entity)
             .expect("Scene tree object must contain a Name component.");
-        let label = row_label(branches, is_last, name.get(), entity);
-        let was_clicked = {
-            if selected == Some(entity) {
-                let mut accent = ui.style_color(dear_imgui_rs::StyleColor::CheckMark);
-                accent[3] = 0.24;
-                let _header = ui.push_style_color(dear_imgui_rs::StyleColor::Header, accent);
-                let _header_hovered =
-                    ui.push_style_color(dear_imgui_rs::StyleColor::HeaderHovered, accent);
-                let _header_active =
-                    ui.push_style_color(dear_imgui_rs::StyleColor::HeaderActive, accent);
+        let tree = tree_chars(branches, is_last);
+        let position = ui.cursor_screen_pos();
+        let row_id = format!("##scene_tree_{}", entity.to_bits());
+        let was_clicked = selectable_row(ui, row_id);
 
-                ui.selectable_config(label)
-                    .selected(true)
-                    .size([0.0, ROW_HEIGHT])
-                    .build()
+        let text_y = position[1] + (ROW_HEIGHT - text_size(ui, name.get())[1]) * 0.5;
+        let draw_list = ui.get_window_draw_list();
+
+        draw_list.add_text(
+            [position[0], text_y],
+            ui.get_color_u32(if is_highlighted {
+                dear_imgui_rs::StyleColor::CheckMark
             } else {
-                ui.selectable_config(label)
-                    .selected(false)
-                    .size([0.0, ROW_HEIGHT])
-                    .build()
-            }
-        };
+                dear_imgui_rs::StyleColor::TextDisabled
+            }),
+            &tree,
+        );
+        draw_list.add_text(
+            [position[0] + text_size(ui, &tree)[0], text_y],
+            ui.get_color_u32(if is_highlighted {
+                dear_imgui_rs::StyleColor::CheckMark
+            } else {
+                dear_imgui_rs::StyleColor::Text
+            }),
+            name.get(),
+        );
+        drop(draw_list);
 
         if was_clicked {
             *clicked = Some(entity);
@@ -107,9 +127,30 @@ fn draw_children(
         }
 
         branches.push(!is_last);
-        draw_children(world, ui, &entity_children, branches, selected, clicked);
+        draw_children(
+            world,
+            ui,
+            &entity_children,
+            branches,
+            selected,
+            is_highlighted,
+            clicked,
+        );
         branches.pop();
     }
+}
+
+fn selectable_row(ui: &dear_imgui_rs::Ui, id: String) -> bool {
+    let transparent = [0.0; 4];
+    let _header = ui.push_style_color(dear_imgui_rs::StyleColor::Header, transparent);
+    let _header_hovered =
+        ui.push_style_color(dear_imgui_rs::StyleColor::HeaderHovered, transparent);
+    let _header_active = ui.push_style_color(dear_imgui_rs::StyleColor::HeaderActive, transparent);
+
+    ui.selectable_config(id)
+        .selected(false)
+        .size([0.0, ROW_HEIGHT])
+        .build()
 }
 
 fn group_children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity> {
@@ -130,17 +171,20 @@ fn group_children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity
         .unwrap_or_default()
 }
 
-fn row_label(branches: &[bool], is_last: bool, name: &str, entity: hecs::Entity) -> String {
-    let mut label = String::new();
+fn tree_chars(branches: &[bool], is_last: bool) -> String {
+    let mut tree = String::new();
 
     for continues in branches {
-        label.push_str(if *continues { "│  " } else { "   " });
+        tree.push_str(if *continues { "│  " } else { "   " });
     }
 
-    label.push_str(if is_last { "└─ " } else { "├─ " });
-    label.push_str(name);
-    label.push_str(&format!("##scene_tree_{}", entity.to_bits()));
-    label
+    tree.push_str(if is_last { "└─ " } else { "├─ " });
+    tree
+}
+
+fn text_size(ui: &dear_imgui_rs::Ui, text: &str) -> [f32; 2] {
+    ui.current_font()
+        .calc_text_size(ui.current_font_size(), f32::MAX, f32::MAX, text)
 }
 
 #[cfg(test)]
@@ -150,17 +194,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn labels_preserve_tree_connectors_and_entity_identity() {
-        let label = row_label(&[true, false], false, "Group", hecs::Entity::DANGLING);
-
-        assert!(label.starts_with("│     ├─ Group##scene_tree_"));
-    }
-
-    #[test]
-    fn labels_do_not_require_object_type_markers() {
-        let label = row_label(&[], true, "Circle", hecs::Entity::DANGLING);
-
-        assert!(label.starts_with("└─ Circle##scene_tree_"));
+    fn tree_characters_preserve_the_hierarchy() {
+        assert_eq!(tree_chars(&[true, false], false), "│     ├─ ");
+        assert_eq!(tree_chars(&[], true), "└─ ");
     }
 
     #[test]
