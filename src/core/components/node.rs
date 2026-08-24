@@ -4,6 +4,8 @@ pub struct Node {
     pub(crate) lifetime: [f32; 2],
     /// Whether the object is active at the current scene time.
     pub(crate) is_activated: bool,
+    /// Whether this node is the scene's internal root group.
+    pub(crate) is_root: bool,
 }
 
 impl Node {
@@ -13,8 +15,8 @@ impl Node {
     }
 
     pub(crate) fn deactivate(&mut self, end: f32) {
-        self.lifetime[1] = end;
-        self.is_activated = self.lifetime[0] <= 0.0 && end > 0.0;
+        self.lifetime[1] = self.lifetime[1].min(end);
+        self.is_activated = self.lifetime[0] <= 0.0 && self.lifetime[1] > 0.0;
     }
 
     pub(crate) fn update(&mut self, time: f32) {
@@ -27,6 +29,7 @@ impl Default for Node {
         Self {
             lifetime: [f32::INFINITY; 2],
             is_activated: false,
+            is_root: false,
         }
     }
 }

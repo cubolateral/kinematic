@@ -37,11 +37,15 @@ implementations such as `FadeIn` and `FadeOut` remain in their own modules.
   state.
 - Start user-facing object construction through `Scene::create::<Object>()`. The
   returned builder's `build` method spawns the object with animation, inspector,
-  and inactive `Node` metadata, then returns its typed handler. `Scene::add`
-  begins the object's lifetime at the animator's current scheduling time.
-  `Scene::destroy` ends that lifetime without despawning the entity. Scene
-  evaluation, rendering, and editor views must ignore nodes whose
-  `is_activated` value is false.
+  `Name`, and inactive `Node` metadata, then returns its typed handler. Names
+  default to the Rust object type, remain readable and mutable through the typed
+  handler, and the scene root is named `Root`. Every scene owns a root `Group`
+  exposed by `Scene::get_root`. `Group::add` attaches a handler's
+  entity and begins its entire subtree's lifetime at the animator's current
+  scheduling time. `Group::remove` ends that subtree's lifetime without
+  despawning entities or removing their stored tree edges, so seeking to an
+  earlier time restores them. Scene evaluation, rendering, and editor views must
+  ignore nodes whose `is_activated` value is false.
 - Objects are ECS bundles implementing `Object`. The `Object` derive creates the
   `<Object>Builder` returned by `Scene::create` and the typed `<Object>Handler`
   returned by the builder's `build` method. Fields marked `#[trackable]` expose
@@ -56,21 +60,40 @@ implementations such as `FadeIn` and `FadeOut` remain in their own modules.
   fields, with one blank line separating the tracked and untracked field groups.
 - Tracks assume keyframes are appended in non-decreasing timeline order. Preserve
   that invariant when changing task compilation or keyframe insertion.
-- `Scene` draws every active entity directly into the shared Skia canvas using
-  the entity's `Transform`. `Draw::on_draw` must use local coordinates, apply the
-  entity's opacity to its paints, and must not apply the entity transform itself.
-  Drawing callbacks should read the ECS world and leave its state unchanged.
+- `Scene` starts drawing exclusively from its root `Group`. Groups store ordered
+  `Vec<hecs::Entity>` child lists and recursively invoke each active child's
+  `Draw` callback using the child's `Transform`, so a child must belong to at
+  most one group. Group opacity must composite the subtree through a Skia layer
+  at the destination resolution. Non-group `Draw::on_draw` callbacks must use
+  local coordinates, apply the entity's opacity to their paints, and must not
+  apply the entity transform itself. Drawing callbacks should read the ECS world
+  and leave its state unchanged.
 - The timeline displays one lifetime rectangle per scene entity across the full
-  viewport width. Its preserved track-rendering module is not part of the current
-  view and remains available for a later track UI. The viewport supports zoom by
+  viewport width. Rows follow the root Group's pre-order hierarchy, Groups use
+  a light neutral color while only the selected row uses the editor accent, and
+  nested rows retain a visible hierarchy cue. Its
+  preserved track-rendering module is not part of the current view and remains
+  available for a later track UI. The viewport supports zoom by
   vertical mouse dragging and horizontal pan by horizontal dragging with the left
-  mouse button. The initial drag direction selects the operation, while the right
-  mouse button controls the scrubber. It displays adaptive time-grid labels using
-  editor-style `1/2/5 × 10ⁿ` intervals.
+  mouse button. Entity selection is committed only when the left button is
+  released over the pressed rectangle without crossing the drag threshold. The
+  initial drag direction selects the operation, while the right mouse button
+  controls the scrubber. It displays adaptive time-grid labels using editor-style
+  `1/2/5 × 10ⁿ` intervals.
 - Keep timeline viewport and pointer-gesture state in `src/ui`. The editor
   timeline owns playback time and duration. Its `is_controlling` flag is the
   sole UI-related exception because it temporarily suspends playback while the
   scrubber controls the current time.
+- Keep entity selection as shared editor state. The Scene Tree, Timeline, and
+  Preview may update the selected entity, while the Inspector only reads it and
+  displays the selected object's properties. The Preview outlines the selected
+  active entity using its rendered transform and local bounds; this editor
+  overlay must not enter exported frames. Preview hit-testing follows reverse
+  drawing order so the frontmost overlapping object is selected, then falls
+  back to a containing Group, and clears selection outside every bound. The
+  initial dock layout uses a Scene Tree column on the left with Configuration
+  and Export below it, Preview and Timeline in the center, and the Inspector
+  column on the right.
 - The renderer is crate-internal and must reuse the application's existing SDL,
   OpenGL, Skia, and preview framebuffer resources. It must not create a second
   window or graphics context. Export advances the scene by exactly `1 / fps`

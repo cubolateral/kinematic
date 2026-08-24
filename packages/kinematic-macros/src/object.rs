@@ -9,6 +9,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let handler_name = format_ident!("{}Handler", object_name);
     let builder_component_trait = format_ident!("__Kinematic{}BuilderComponent", object_name);
     let inspection_type = format_ident!("__Kinematic{}Inspection", object_name);
+    let name_type = format_ident!("__Kinematic{}Name", object_name);
     let object_trait = format_ident!("__Kinematic{}Object", object_name);
     let object_handler_trait = format_ident!("__Kinematic{}ObjectHandler", object_name);
     let handler_root_type = format_ident!("__Kinematic{}HandlerRoot", object_name);
@@ -99,6 +100,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             types::Vector2 as #vector_type,
             TrackableInfo as #trackable_info_type,
             components::Inspection as #inspection_type,
+            components::Name as #name_type,
             objects::{
                 HandlerRoot as #handler_root_type,
                 Object as #object_trait,
@@ -113,6 +115,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             world: #scene_world_type,
             animator: #animator_handle_type,
             object: #object_name,
+            name: std::string::String,
         }
 
         impl #builder_name {
@@ -121,12 +124,24 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                     world,
                     animator,
                     object: <#object_name as Default>::default(),
+                    name: stringify!(#object_name).to_owned(),
                 }
+            }
+
+            /// Sets the user-facing name attached to this object.
+            pub fn name(mut self, name: impl Into<std::string::String>) -> Self {
+                self.name = name.into();
+                self
             }
 
             /// Spawns the configured object as inactive and returns its handler.
             pub fn build(self) -> #handler_name {
-                <#object_name as #object_trait>::spawn(self.world, self.animator, self.object)
+                <#object_name as #object_trait>::spawn(
+                    self.world,
+                    self.animator,
+                    self.object,
+                    #name_type::new(self.name),
+                )
             }
         }
 
@@ -151,8 +166,25 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         impl #object_handler_trait for #handler_name {
             type Object = #object_name;
 
-            fn entity(&self) -> hecs::Entity {
+            fn get_id(&self) -> hecs::Entity {
                 self.entity
+            }
+
+            fn get_name(&self) -> std::string::String {
+                self.world
+                    .borrow()
+                    .get::<&#name_type>(self.entity)
+                    .expect("Object handler must contain a Name component.")
+                    .get()
+                    .to_owned()
+            }
+
+            fn set_name(&self, name: impl Into<std::string::String>) {
+                self.world
+                    .borrow()
+                    .get::<&mut #name_type>(self.entity)
+                    .expect("Object handler must contain a Name component.")
+                    .set(name);
             }
 
             fn get_box(&self) -> #vector_type {

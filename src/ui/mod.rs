@@ -1,6 +1,7 @@
 mod export;
 mod inspector;
 mod preview;
+mod scene_tree;
 mod timeline;
 
 use crate::editor::Editor;
@@ -65,11 +66,12 @@ impl Ui {
         }
 
         let _font = ui.push_font(self.font);
-        inspector::draw(editor, ui);
-        self.configuration(ui);
+        scene_tree::draw(editor, ui);
         export::draw(editor, ui, &mut self.silent_export);
+        self.configuration(ui);
         preview::draw(editor, ui);
         timeline::draw(editor, ui, &mut self.timeline);
+        inspector::draw(editor, ui);
     }
 
     pub fn apply_scale(&self, context: &mut dear_imgui_rs::Context) {
@@ -195,28 +197,35 @@ impl Ui {
         dear_imgui_rs::DockBuilder::add_node(ui, dock, dear_imgui_rs::DockNodeFlags::NONE);
         dear_imgui_rs::DockBuilder::set_node_size(ui, dock, ui.main_viewport().size());
 
-        let (left, right) = dear_imgui_rs::DockBuilder::split_node(
+        let (left, remainder) = dear_imgui_rs::DockBuilder::split_node(
             ui,
             dock,
             dear_imgui_rs::SplitDirection::Left,
             0.2,
         );
-        let (inspector, renderer) = dear_imgui_rs::DockBuilder::split_node(
+        let (scene_tree, left_bottom) = dear_imgui_rs::DockBuilder::split_node(
             ui,
             left,
             dear_imgui_rs::SplitDirection::Up,
-            0.85,
+            0.75,
+        );
+        let (inspector, center) = dear_imgui_rs::DockBuilder::split_node(
+            ui,
+            remainder,
+            dear_imgui_rs::SplitDirection::Right,
+            0.2,
         );
         let (timeline, preview) = dear_imgui_rs::DockBuilder::split_node(
             ui,
-            right,
+            center,
             dear_imgui_rs::SplitDirection::Down,
             0.35,
         );
 
+        dear_imgui_rs::DockBuilder::dock_window(ui, "Scene Tree", scene_tree);
+        dear_imgui_rs::DockBuilder::dock_window(ui, "Export", left_bottom);
+        dear_imgui_rs::DockBuilder::dock_window(ui, "Configuration", left_bottom);
         dear_imgui_rs::DockBuilder::dock_window(ui, "Inspector", inspector);
-        dear_imgui_rs::DockBuilder::dock_window(ui, "Configuration", inspector);
-        dear_imgui_rs::DockBuilder::dock_window(ui, "Export", renderer);
         dear_imgui_rs::DockBuilder::dock_window(ui, "Preview", preview);
         dear_imgui_rs::DockBuilder::dock_window(ui, "Timeline", timeline);
         dear_imgui_rs::DockBuilder::finish(ui, dock);

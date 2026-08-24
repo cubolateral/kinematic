@@ -1,6 +1,6 @@
 use crate::{
-    core::{Project, Scene},
-    editor::{Canvas, Timeline},
+    core::{Project, Scene, types::Vector2},
+    editor::{Canvas, Selection, Timeline},
     renderer::{FrameResult, Renderer},
     utilities::FrameTimer,
 };
@@ -8,6 +8,7 @@ use crate::{
 pub(crate) struct Editor {
     project: Project,
     scene: Scene,
+    selection: Selection,
     timeline: Timeline,
     preview: Canvas,
     renderer: Renderer,
@@ -37,6 +38,7 @@ impl Editor {
         Self {
             project,
             scene,
+            selection: Selection::default(),
             timeline,
             preview,
             renderer,
@@ -92,6 +94,7 @@ impl Editor {
         }
 
         let (width, height) = self.preview.get_size();
+        let selected = (!self.is_exporting).then(|| self.selection.get()).flatten();
 
         self.preview.draw(skia_context, gl, window_size, |canvas| {
             canvas.clear(skia_safe::colors::BLACK);
@@ -100,6 +103,11 @@ impl Editor {
 
             canvas.translate((width as f32 * 0.5, height as f32 * 0.5));
             self.scene.draw(canvas);
+
+            if let Some(entity) = selected {
+                self.scene.draw_outline(entity, canvas);
+            }
+
             canvas.restore_to_count(save_count);
         });
 
@@ -159,6 +167,25 @@ impl Editor {
 
     pub fn get_scene(&mut self) -> &mut Scene {
         &mut self.scene
+    }
+
+    pub fn get_selected_entity(&self) -> Option<hecs::Entity> {
+        self.selection.get()
+    }
+
+    pub fn select_entity(&mut self, entity: hecs::Entity) {
+        assert!(
+            self.scene.get_world().contains(entity),
+            "Selected object must belong to this scene."
+        );
+        self.selection.select(entity);
+    }
+
+    pub fn select_at(&mut self, point: Vector2) {
+        match self.scene.pick(point) {
+            Some(entity) => self.selection.select(entity),
+            None => self.selection.clear(),
+        }
     }
 
     pub fn get_timeline(&mut self) -> &mut Timeline {

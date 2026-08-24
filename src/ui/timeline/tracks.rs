@@ -163,7 +163,7 @@ pub(super) fn draw(
     let mut query = world.query::<(hecs::Entity, &Node, &Animation)>();
     let entities: Vec<_> = query
         .iter()
-        .filter(|(_, node, _)| node.is_activated)
+        .filter(|(_, node, _)| !node.is_root && node.is_activated)
         .collect();
 
     let view = TrackView::new(ui, layout, time);

@@ -12,12 +12,15 @@ Kinematic is in early development, so its API may change.
 ## Features
 
 - Typed scene objects and trackable component fields.
+- User-facing object names with type-based defaults.
+- Hierarchical scene trees with nested groups, inherited transforms, and
+  composited group opacity.
 - Sequential and parallel animation tasks.
 - Built-in easing functions.
-- Timeline preview with tracks, keyframes, and inspection data.
+- Hierarchical timeline and selection from the Scene Tree, Timeline, or Preview.
 - SDL3/OpenGL rendering with an internal Dear ImGui editor.
 - FFmpeg-backed MP4 export from the editor. Exported projects are
-encoded as MP4 files in the `output/` directory.
+  encoded as MP4 files in the `output/` directory.
 
 ## Requirements
 
@@ -36,12 +39,18 @@ use kinematic::prelude::*;
 fn example(s: &mut Scene) {
     let circle = s
         .create::<Circle>()
+        .name("Main Circle")
         .radius(128.0)
         .position(vec2(-256.0, 0.0))
         .fill(Color::RED)
         .build();
+    let group = s
+        .create::<Group>()
+        .opacity(1.0)
+        .build();
 
-    s.add(&circle);
+    group.add(&circle);
+    s.get_root().add(&group);
 
     circle
         .position_x(256.0)
@@ -51,17 +60,45 @@ fn example(s: &mut Scene) {
         .play();
 
     s.wait(1.0);
+    group.remove(&circle);
 }
 
 fn main() {
     App::new().run(Project {
-        name: "Example",
+        name: "Example!",
         resolution: (1280, 720),
         fps: 60,
         scene: example(),
     });
 }
 ```
+
+## Scene tree
+
+Every scene owns a root [`Group`](src/core/objects/group.rs), available through
+`Scene::get_root()`. Objects are inactive after `build()` and begin their
+timeline lifetime when added to a group:
+
+```rust
+let circle = scene.create::<Circle>().build();
+let child_group = scene.create::<Group>().build();
+
+child_group.add(&circle);
+scene.get_root().add(&child_group);
+```
+
+Groups may contain objects or other groups. Transforms are inherited through
+the tree, and group opacity is composited once over the complete subtree at the
+destination canvas resolution.
+
+`Group::remove()` ends the selected object's lifetime and the lifetimes of all
+its descendants. The stored tree remains intact so seeking to an earlier time
+restores the subtree. A typed handler exposes its underlying ECS entity through
+`ObjectHandler::get_id()` when direct identification is needed. Every object
+also has a user-facing name. It defaults to its Rust object type, can be set by
+the generated builder's `.name(...)` method, and can later be read or changed
+through `ObjectHandler::get_name()` and `ObjectHandler::set_name()`. The scene
+root is named `Root`.
 
 ## Development
 

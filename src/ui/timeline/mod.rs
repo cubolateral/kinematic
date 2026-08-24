@@ -33,6 +33,7 @@ pub(super) struct State {
     view_start: f32,
     view_end: f32,
     interaction: Interaction,
+    pressed_entity: Option<hecs::Entity>,
 }
 
 impl State {
@@ -108,6 +109,25 @@ impl State {
         let span = (end - start).clamp(0.0, self.duration);
         self.view_start = start.clamp(0.0, self.duration - span);
         self.view_end = self.view_start + span;
+    }
+
+    fn press_entity(&mut self, entity: Option<hecs::Entity>) {
+        self.pressed_entity = entity;
+    }
+
+    fn release_entity(
+        &mut self,
+        entity: Option<hecs::Entity>,
+        drag_delta: [f32; 2],
+    ) -> Option<hecs::Entity> {
+        let pressed = self.pressed_entity.take();
+        let moved = drag_delta[0].abs().max(drag_delta[1].abs()) >= DRAG_DIRECTION_THRESHOLD;
+
+        if self.interaction == Interaction::Tracks && !moved && pressed == entity {
+            entity
+        } else {
+            None
+        }
     }
 }
 
@@ -209,7 +229,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
         draw_scrubber(ui, &draw_list, layout, time, playhead_x);
         draw_time_grid(ui, &draw_list, layout, time);
-        entities::draw(editor, ui, &draw_list, layout, time);
+        entities::draw(editor, ui, &draw_list, layout, time, state);
         draw_mouse_indicator(ui, &draw_list, layout);
         draw_overlay(ui, &draw_list, layout, time, playhead_x);
         if is_exporting {
@@ -583,6 +603,36 @@ mod tests {
 
         state.resolve_tracks([3.0, 9.0]);
         assert_eq!(state.interaction, Interaction::Zoom);
+    }
+
+    #[test]
+    fn entity_selection_requires_release_without_a_drag() {
+        let entity = hecs::Entity::DANGLING;
+        let mut state = State {
+            interaction: Interaction::Tracks,
+            ..Default::default()
+        };
+
+        state.press_entity(Some(entity));
+
+        assert_eq!(state.release_entity(Some(entity), [1.0, 1.0]), Some(entity));
+
+        state.press_entity(Some(entity));
+
+        assert_eq!(state.release_entity(Some(entity), [4.0, 0.0]), None);
+    }
+
+    #[test]
+    fn pan_or_zoom_gestures_never_select_an_entity() {
+        let entity = hecs::Entity::DANGLING;
+        let mut state = State {
+            interaction: Interaction::Pan,
+            ..Default::default()
+        };
+
+        state.press_entity(Some(entity));
+
+        assert_eq!(state.release_entity(Some(entity), [0.0, 0.0]), None);
     }
 
     #[test]

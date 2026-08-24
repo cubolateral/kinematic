@@ -1,6 +1,7 @@
 mod animation;
 mod draw;
 mod inspection;
+mod name;
 mod node;
 mod style;
 mod transform;
@@ -8,6 +9,7 @@ mod transform;
 pub(crate) use animation::*;
 pub use draw::*;
 pub(crate) use inspection::*;
+pub use name::*;
 pub use node::*;
 pub use style::*;
 pub use transform::*;

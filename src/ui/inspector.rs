@@ -1,37 +1,47 @@
 use crate::{
-    core::components::{Inspection, Node},
+    core::components::{Inspection, Name, Node},
     editor::Editor,
 };
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
+    let selected = editor.get_selected_entity();
+
     ui.window("Inspector").build(|| {
+        let Some(entity) = selected else {
+            ui.text_wrapped("Select an object from the Scene Tree or Timeline.");
+            return;
+        };
+
         let world = editor.get_scene().get_world();
+        let Ok(inspection) = world.get::<&Inspection>(entity) else {
+            ui.text_disabled("The selected object is unavailable.");
+            return;
+        };
+        let name = world
+            .get::<&Name>(entity)
+            .expect("Inspected object must contain a Name component.");
+        let node = world
+            .get::<&Node>(entity)
+            .expect("Inspected object must contain a Node component.");
 
-        for (entity, node, inspection) in world.query::<(hecs::Entity, &Node, &Inspection)>().iter()
-        {
-            if !node.is_activated {
-                continue;
+        ui.text(name.get());
+        ui.same_line();
+        ui.text_disabled(if node.is_activated {
+            "Active."
+        } else {
+            "Inactive."
+        });
+        ui.text_disabled(format!("Entity ID: {}.", entity.to_bits()));
+        ui.text_disabled(format!("Object type: {}.", inspection.object_name));
+        ui.separator();
+
+        for trackable in (inspection.get)(&world, entity) {
+            ui.separator_with_text(trackable.name);
+
+            for track in (trackable.get)() {
+                property(ui, track.name, &(track.get)(&world, entity).to_string());
             }
 
-            if !ui.collapsing_header(
-                format!("{}##entity_{}", inspection.object_name, entity.id()),
-                dear_imgui_rs::TreeNodeFlags::NONE,
-            ) {
-                continue;
-            }
-
-            for trackable in (inspection.get)(&world, entity) {
-                ui.separator_with_text(trackable.name);
-
-                for track in (trackable.get)() {
-                    property(ui, track.name, &(track.get)(&world, entity).to_string());
-                }
-
-                ui.spacing();
-            }
-
-            ui.spacing();
-            ui.separator();
             ui.spacing();
         }
     });

@@ -1,8 +1,9 @@
-use crate::editor::Editor;
+use crate::{core::types::vec2, editor::Editor};
 
 const VIEWPORT_OUTLINE_THICKNESS: f32 = 1.0;
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
+    let mut clicked = None;
     let (name, resolution, fps) = {
         let project = editor.get_project();
         (project.name, project.resolution, project.fps)
@@ -43,8 +44,19 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
             .uv1([1.0, 0.0])
             .build();
 
-        let mut min = ui.item_rect_min();
-        let mut max = ui.item_rect_max();
+        let image_min = ui.item_rect_min();
+        let image_max = ui.item_rect_max();
+
+        if ui.is_item_hovered() && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left) {
+            let mouse = ui.io().mouse_pos();
+            let x = (mouse[0] - image_min[0]) / size[0] * source_size[0] - source_size[0] * 0.5;
+            let y = (mouse[1] - image_min[1]) / size[1] * source_size[1] - source_size[1] * 0.5;
+
+            clicked = Some(vec2(x, y));
+        }
+
+        let mut min = image_min;
+        let mut max = image_max;
 
         let half = VIEWPORT_OUTLINE_THICKNESS * 0.5;
 
@@ -62,4 +74,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
             .thickness(VIEWPORT_OUTLINE_THICKNESS)
             .build();
     });
+
+    if let Some(point) = clicked {
+        editor.select_at(point);
+    }
 }

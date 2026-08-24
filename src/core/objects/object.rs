@@ -1,6 +1,6 @@
 use crate::core::{
     AnimatorHandle, SceneWorld, TrackProperty, TrackValueType, Trackable, Tween,
-    components::{Animation, Inspection, Node},
+    components::{Animation, Inspection, Name, Node},
     types::Vector2,
 };
 
@@ -25,12 +25,18 @@ pub trait Object: hecs::DynamicBundle + Sized {
 
     /// Spawns an inactive object and returns its typed handler.
     #[doc(hidden)]
-    fn spawn(world: SceneWorld, animator: AnimatorHandle, object: Self) -> Self::Handler {
+    fn spawn(
+        world: SceneWorld,
+        animator: AnimatorHandle,
+        object: Self,
+        name: Name,
+    ) -> Self::Handler {
         let entity = world.borrow_mut().spawn(
             hecs::EntityBuilder::new()
                 .add_bundle(object)
                 .add(Animation::default())
                 .add(Node::default())
+                .add(name)
                 .add(Self::inspection())
                 .build(),
         );
@@ -45,7 +51,13 @@ pub trait ObjectHandler {
     type Object: Object;
 
     /// Returns the ECS entity represented by this handler.
-    fn entity(&self) -> hecs::Entity;
+    fn get_id(&self) -> hecs::Entity;
+
+    /// Returns the object's user-facing name.
+    fn get_name(&self) -> String;
+
+    /// Replaces the object's user-facing name.
+    fn set_name(&self, name: impl Into<String>);
 
     /// Returns the object's local bounding-box size.
     fn get_box(&self) -> Vector2;

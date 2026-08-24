@@ -1,7 +1,10 @@
 use crate::core::{
     Animator, Scheduling, Task, Tween,
-    components::{Animation, Draw, Node, Transform},
-    objects::{Object, ObjectHandler},
+    components::{Animation, Name, Node},
+    objects::{
+        Group, GroupHandler, Object, ObjectHandler, draw_entity, draw_entity_outline, pick_entity,
+    },
+    types::Vector2,
 };
 
 /// Shared ECS world used by scenes and their handlers.
@@ -15,6 +18,7 @@ pub trait SceneBuilder {
 /// Runtime ECS scene containing render nodes and compiled animation tracks.
 pub struct Scene {
     world: SceneWorld,
+    root: hecs::Entity,
     animator_time: std::rc::Rc<std::cell::Cell<f32>>,
     animator: Animator,
 }
@@ -23,11 +27,31 @@ impl Scene {
     /// Creates an empty scene.
     pub fn new() -> Self {
         let animator_time = std::rc::Rc::new(std::cell::Cell::new(0.0));
+        let animator = Animator::with_scene_time(std::rc::Rc::clone(&animator_time));
+        let world = std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new()));
+        let root = Group::spawn(
+            std::rc::Rc::clone(&world),
+            animator.handle(),
+            Group::default(),
+            Name::new("Root"),
+        )
+        .get_id();
+
+        {
+            let world = world.borrow();
+            let mut node = world
+                .get::<&mut Node>(root)
+                .expect("Root group must contain a Node component.");
+
+            node.is_root = true;
+            node.activate(0.0);
+        }
 
         Self {
-            world: std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new())),
+            world,
+            root,
             animator_time: std::rc::Rc::clone(&animator_time),
-            animator: Animator::with_scene_time(animator_time),
+            animator,
         }
     }
 
@@ -55,32 +79,23 @@ impl Scene {
         }
     }
 
-    /// Draws each entity using the scene state produced by [`Self::update`].
+    /// Draws the root group tree using the scene state produced by [`Self::update`].
     pub fn draw(&self, canvas: &skia_safe::Canvas) {
         let world = self.world.borrow();
 
-        for (entity, node, draw, transform) in world
-            .query::<(hecs::Entity, &Node, &Draw, &Transform)>()
-            .iter()
-        {
-            if !node.is_activated {
-                continue;
-            }
+        draw_entity(&world, self.root, canvas);
+    }
 
-            if draw.opacity <= 0.0 {
-                continue;
-            }
+    pub(crate) fn draw_outline(&self, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+        let world = self.world.borrow();
 
-            let save_count = canvas.save();
+        draw_entity_outline(&world, self.root, entity, canvas);
+    }
 
-            canvas.translate((transform.position.x, transform.position.y));
-            canvas.rotate(transform.rotation.to_degrees(), None);
-            canvas.scale((transform.scale.x, transform.scale.y));
+    pub(crate) fn pick(&self, point: Vector2) -> Option<hecs::Entity> {
+        let world = self.world.borrow();
 
-            (draw.on_draw)(&world, entity, canvas);
-
-            canvas.restore_to_count(save_count);
-        }
+        pick_entity(&world, self.root, point)
     }
 
     /// Populates the scene and compiles the builder's animation timeline.
@@ -147,7 +162,7 @@ impl Scene {
     /// Starts building an inactive object connected to this scene.
     ///
     /// Calling the generated builder's `build` method spawns the inactive object
-    /// and returns its typed handler. Use [`Self::add`] to begin its lifetime.
+    /// and returns its typed handler. Add it to a [`Group`] to begin its lifetime.
     ///
     /// ```
     /// use kinematic::prelude::*;
@@ -158,7 +173,7 @@ impl Scene {
     ///     .opacity(1.0)
     ///     .position(Vector2::ZERO)
     ///     .build();
-    /// scene.add(&text);
+    /// scene.get_root().add(&text);
     /// let _ = text.position_x(100.0);
     /// ```
     pub fn create<T: Object>(&mut self) -> T::Builder {
@@ -168,24 +183,13 @@ impl Scene {
         )
     }
 
-    /// Begins an object's lifetime at the animator's current timeline position.
-    pub fn add(&mut self, handler: &impl ObjectHandler) {
-        let world = self.world.borrow();
-        let mut node = world
-            .get::<&mut Node>(handler.entity())
-            .expect("Added object must belong to this scene.");
-
-        node.activate(self.animator.handle().time());
-    }
-
-    /// Ends an object's lifetime at the animator's current timeline position.
-    pub fn destroy(&mut self, handler: impl ObjectHandler) {
-        let world = self.world.borrow();
-        let mut node = world
-            .get::<&mut Node>(handler.entity())
-            .expect("Destroyed object must belong to this scene.");
-
-        node.deactivate(self.animator.handle().time());
+    /// Returns the root group that owns the scene's drawable object tree.
+    pub fn get_root(&self) -> GroupHandler {
+        Group::handler(
+            std::rc::Rc::clone(&self.world),
+            self.root,
+            self.animator.handle().active(),
+        )
     }
 
     /// Read-only access to the underlying ECS world.
@@ -216,7 +220,7 @@ mod tests {
         let circle = scene.create::<Circle>().build();
 
         scene.wait(32.0);
-        scene.add(&circle);
+        scene.get_root().add(&circle);
         scene.wait(1.0);
     }
 
@@ -231,14 +235,38 @@ mod tests {
             .text("Kinematic!".to_owned())
             .build();
         let world = scene.get_world();
-        let draw = world.get::<&Draw>(handler.entity()).unwrap();
-        let transform = world.get::<&Transform>(handler.entity()).unwrap();
-        let shape = world.get::<&TextShape>(handler.entity()).unwrap();
+        let draw = world.get::<&Draw>(handler.get_id()).unwrap();
+        let transform = world.get::<&Transform>(handler.get_id()).unwrap();
+        let shape = world.get::<&TextShape>(handler.get_id()).unwrap();
 
         assert_eq!(draw.opacity, 0.5);
         assert_eq!(transform.position, vec2(10.0, 20.0));
         assert_eq!(shape.text, "Kinematic!");
         assert!(std::ptr::fn_addr_eq(draw.on_draw, default.draw.on_draw,));
+    }
+
+    #[test]
+    fn object_names_default_to_the_type_and_remain_mutable() {
+        let mut scene = Scene::new();
+        let circle = scene.create::<Circle>().build();
+        let label = scene.create::<Text>().name("Caption").build();
+        let root = scene.get_root();
+
+        assert_eq!(circle.get_name(), "Circle");
+        assert_eq!(label.get_name(), "Caption");
+        assert_eq!(root.get_name(), "Root");
+
+        circle.set_name("Primary Circle");
+
+        assert_eq!(circle.get_name(), "Primary Circle");
+        assert_eq!(
+            scene
+                .get_world()
+                .get::<&Name>(circle.get_id())
+                .unwrap()
+                .get(),
+            "Primary Circle"
+        );
     }
 
     #[test]
@@ -253,15 +281,16 @@ mod tests {
         let _ = circle.fill(Color::RED);
         let _ = circle.fill_r(0.75);
         let world = scene.get_world();
-        let mut query = world.query::<&Draw>();
+        let draw = world.get::<&Draw>(text.get_id()).unwrap();
 
-        assert_eq!(query.iter().next().unwrap().opacity, 0.25);
+        assert_eq!(draw.opacity, 0.25);
     }
 
     #[test]
     fn object_handlers_animate_properties_and_generate_from_shortcuts() {
         let mut scene = Scene::new();
         let circle: CircleHandler = scene.create::<Circle>().build();
+        scene.get_root().add(&circle);
 
         scene.play(
             circle
@@ -272,11 +301,13 @@ mod tests {
         scene.play(circle.position_from(Vector2::ZERO, vec2(20.0, 30.0)).task());
         scene.play(circle.opacity_from(0.0, 1.0).duration(1.0).task());
 
+        let tasks = scene.animator.tasks();
+        Animator::get_duration_for_tasks(&tasks, &mut scene);
         scene.update(0.5);
         let world = scene.get_world();
-        let transform = world.get::<&Transform>(circle.entity()).unwrap();
+        let transform = world.get::<&Transform>(circle.get_id()).unwrap();
 
-        assert_eq!(transform.position, vec2(5.0, 10.0));
+        assert_eq!(transform.position, vec2(10.0, 15.0));
     }
 
     #[test]
@@ -286,7 +317,7 @@ mod tests {
         impl SceneBuilder for HandlerTweenScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = scene.create::<Circle>().fill(Color::RED).build();
-                scene.add(&circle);
+                scene.get_root().add(&circle);
                 circle
                     .position_x(256.0)
                     .fill(Color::BLUE)
@@ -314,7 +345,7 @@ mod tests {
         impl SceneBuilder for ComponentTweenScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = scene.create::<Circle>().build();
-                scene.add(&circle);
+                scene.get_root().add(&circle);
                 circle
                     .position_x(128.0)
                     .position_y(64.0)
@@ -328,8 +359,9 @@ mod tests {
 
         scene.update(1.0);
         let world = scene.get_world();
-        let mut query = world.query::<&Transform>();
-        let circle = query.iter().next().unwrap();
+        let mut query = world.query::<(&Node, &Transform)>();
+        let (_, circle) = query.iter().find(|(node, _)| !node.is_root).unwrap();
+
         assert_eq!(circle.position, vec2(128.0, 64.0));
     }
 
@@ -340,7 +372,7 @@ mod tests {
         impl SceneBuilder for TextEffectScene {
             fn build(&mut self, scene: &mut Scene) {
                 let text = scene.create::<Text>().build();
-                scene.add(&text);
+                scene.get_root().add(&text);
 
                 Write::new(WriteBy::Letter)
                     .scale(0.25)
@@ -387,44 +419,44 @@ mod tests {
         impl SceneBuilder for NestedGroupsScene {
             fn build(&mut self, scene: &mut Scene) {
                 let root = scene.create::<Circle>().build();
-                scene.add(&root);
+                scene.get_root().add(&root);
                 scene.wait(1.0);
 
                 scene.chain(|scene| {
                     let chain_object = scene.create::<Circle>().build();
-                    scene.add(&chain_object);
+                    scene.get_root().add(&chain_object);
                     scene.wait(2.0);
 
                     scene.all(|scene| {
                         let parallel_object = scene.create::<Circle>().build();
-                        scene.add(&parallel_object);
+                        scene.get_root().add(&parallel_object);
                         scene.wait(4.0);
 
                         scene.chain(|scene| {
                             let nested_object = scene.create::<Circle>().build();
-                            scene.add(&nested_object);
+                            scene.get_root().add(&nested_object);
                             scene.wait(1.0);
 
                             let nested_end_object = scene.create::<Circle>().build();
-                            scene.add(&nested_end_object);
+                            scene.get_root().add(&nested_end_object);
                         });
 
                         scene.repeat(2, |scene| {
                             let repeated_object = scene.create::<Circle>().build();
-                            scene.add(&repeated_object);
+                            scene.get_root().add(&repeated_object);
                             scene.wait(0.5);
 
                             let repeated_end_object = scene.create::<Circle>().build();
-                            scene.add(&repeated_end_object);
+                            scene.get_root().add(&repeated_end_object);
                         });
 
                         let parallel_end_object = scene.create::<Circle>().build();
-                        scene.add(&parallel_end_object);
+                        scene.get_root().add(&parallel_end_object);
                     });
 
                     scene.wait(1.0);
                     let chain_end_object = scene.create::<Circle>().build();
-                    scene.add(&chain_end_object);
+                    scene.get_root().add(&chain_end_object);
                 });
             }
         }
@@ -436,6 +468,7 @@ mod tests {
         let mut lifetimes: Vec<_> = world
             .query::<&Node>()
             .iter()
+            .filter(|node| !node.is_root)
             .map(|node| node.lifetime)
             .collect();
         lifetimes.sort_by(|left, right| left[0].total_cmp(&right[0]));
@@ -466,7 +499,7 @@ mod tests {
             .opacity(0.5)
             .position(vec2(4.0, 0.0))
             .build();
-        scene.add(&rect);
+        scene.get_root().add(&rect);
 
         let image_info = skia_safe::ImageInfo::new(
             (32, 32),
@@ -498,12 +531,12 @@ mod tests {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = scene.create::<Circle>().build();
                 let rect = scene.create::<Rect>().build();
-                scene.add(&circle);
+                scene.get_root().add(&circle);
 
                 scene.wait(1.0);
-                scene.add(&rect);
+                scene.get_root().add(&rect);
                 scene.wait(2.0);
-                scene.destroy(circle);
+                scene.get_root().remove(&circle);
             }
         }
 
@@ -517,6 +550,7 @@ mod tests {
             let mut lifetimes: Vec<_> = world
                 .query::<&Node>()
                 .iter()
+                .filter(|node| !node.is_root)
                 .map(|node| node.lifetime)
                 .collect();
             lifetimes.sort_by(|left, right| left[0].total_cmp(&right[0]));
@@ -531,7 +565,7 @@ mod tests {
                 .get_world()
                 .query::<&Node>()
                 .iter()
-                .filter(|node| node.is_activated)
+                .filter(|node| !node.is_root && node.is_activated)
                 .count()
         };
 
@@ -551,7 +585,7 @@ mod tests {
 
                 scene.all(|scene| {
                     scene.wait(5.0);
-                    scene.add(&circle);
+                    scene.get_root().add(&circle);
                     scene.wait(2.0);
                 });
                 scene.wait(1.0);
@@ -564,7 +598,7 @@ mod tests {
 
         let world = scene.get_world();
         let mut query = world.query::<&Node>();
-        let node = query.iter().next().unwrap();
+        let node = query.iter().find(|node| !node.is_root).unwrap();
 
         assert_eq!(node.lifetime, [5.0, f32::INFINITY]);
         assert!(!node.is_activated);
@@ -580,7 +614,7 @@ mod tests {
         {
             let world = scene.get_world();
             let mut query = world.query::<&Node>();
-            let node = query.iter().next().unwrap();
+            let node = query.iter().find(|node| !node.is_root).unwrap();
 
             assert_eq!(node.lifetime, [32.0, f32::INFINITY]);
             assert!(!node.is_activated);
@@ -590,6 +624,12 @@ mod tests {
         let world = scene.get_world();
         let mut query = world.query::<&Node>();
 
-        assert!(query.iter().next().unwrap().is_activated);
+        assert!(
+            query
+                .iter()
+                .find(|node| !node.is_root)
+                .unwrap()
+                .is_activated
+        );
     }
 }
