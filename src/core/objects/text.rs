@@ -8,8 +8,8 @@ use crate::core::{
 
 type FontCache = std::collections::HashMap<std::path::PathBuf, skia_safe::Typeface>;
 
-const REVEAL_STAGGER: f32 = 0.25;
-const REVEAL_OUTLINE_PHASE: f32 = 0.25;
+const WRITE_STAGGER: f32 = 0.25;
+const WRITE_OUTLINE_PHASE: f32 = 0.25;
 
 static FONT_CACHE: std::sync::LazyLock<std::sync::Mutex<FontCache>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(FontCache::new()));
@@ -74,6 +74,9 @@ pub struct TextShape {
     /// Font size in logical canvas units.
     #[track]
     pub size: f32,
+    /// Horizontal line alignment from `-1.0` left to `1.0` right.
+    #[track]
+    pub align: f32,
     /// Normalized progress used by text writing effects.
     #[track]
     pub write_progress: f32,
@@ -96,6 +99,7 @@ impl Default for TextShape {
         Self {
             text: "Text!".to_owned(),
             size: 64.0,
+            align: 0.0,
             write_progress: 1.0,
             write_scale: 0.0,
             write_by_word: false,
@@ -116,6 +120,12 @@ pub struct Text {
     pub transform: Transform,
     #[trackable]
     pub draw: Draw,
+}
+
+struct TextLine<'a> {
+    text: &'a str,
+    width: f32,
+    origin: (f32, f32),
 }
 
 fn text_paint(color: Color, opacity: f32) -> skia_safe::Paint {
@@ -141,19 +151,47 @@ fn color_with_alpha(color: Color, alpha: f32) -> Color {
     Color::new(color.r, color.g, color.b, color.a * alpha)
 }
 
-fn text_origin(shape: &TextShape, font: &skia_safe::Font, paint: &skia_safe::Paint) -> (f32, f32) {
-    let (width, _) = font.measure_str(&shape.text, Some(paint));
-    let (_, metrics) = font.metrics();
+fn text_lines<'a>(shape: &'a TextShape, font: &skia_safe::Font) -> Vec<TextLine<'a>> {
+    let lines: Vec<_> = shape
+        .text
+        .split('\n')
+        .map(|line| line.strip_suffix('\r').unwrap_or(line))
+        .map(|line| {
+            let (width, _) = font.measure_str(line, None);
 
-    (-width * 0.5, -(metrics.ascent + metrics.descent) * 0.5)
+            (line, width)
+        })
+        .collect();
+    let max_width = lines.iter().map(|(_, width)| *width).fold(0.0, f32::max);
+    let (_, metrics) = font.metrics();
+    let line_spacing = font.spacing();
+    let block_height =
+        metrics.descent - metrics.ascent + line_spacing * lines.len().saturating_sub(1) as f32;
+    let first_baseline = -block_height * 0.5 - metrics.ascent;
+    let alignment = (shape.align.clamp(-1.0, 1.0) + 1.0) * 0.5;
+
+    lines
+        .into_iter()
+        .enumerate()
+        .map(|(index, (text, width))| TextLine {
+            text,
+            width,
+            origin: (
+                -max_width * 0.5 + (max_width - width) * alignment,
+                first_baseline + index as f32 * line_spacing,
+            ),
+        })
+        .collect()
 }
 
 fn draw_complete_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &skia_safe::Canvas) {
     let font = shape.font.skia_font(shape.size);
     let mut paint = text_paint(style.fill, draw.opacity);
-    let origin = text_origin(shape, &font, &paint);
+    let lines = text_lines(shape, &font);
 
-    canvas.draw_str(&shape.text, origin, &font, &paint);
+    for line in &lines {
+        canvas.draw_str(line.text, line.origin, &font, &paint);
+    }
 
     if style.stroke_width <= 0.0 {
         return;
@@ -162,7 +200,10 @@ fn draw_complete_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &sk
     paint.set_color4f(text_paint(style.stroke, draw.opacity).color4f(), None);
     paint.set_style(skia_safe::PaintStyle::Stroke);
     paint.set_stroke_width(style.stroke_width);
-    canvas.draw_str(&shape.text, origin, &font, &paint);
+
+    for line in lines {
+        canvas.draw_str(line.text, line.origin, &font, &paint);
+    }
 }
 
 fn write_units(text: &str, by_word: bool) -> Vec<(usize, usize)> {
@@ -196,35 +237,47 @@ fn write_units(text: &str, by_word: bool) -> Vec<(usize, usize)> {
 }
 
 fn draw_written_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &skia_safe::Canvas) {
-    let units = write_units(&shape.text, shape.write_by_word);
+    let font = shape.font.skia_font(shape.size);
+    let layout_paint = text_paint(style.fill, draw.opacity);
+    let lines = text_lines(shape, &font);
+    let units: Vec<_> = lines
+        .iter()
+        .enumerate()
+        .flat_map(|(line_index, line)| {
+            write_units(line.text, shape.write_by_word)
+                .into_iter()
+                .map(move |(start, end)| (line_index, start, end))
+        })
+        .collect();
 
     if units.is_empty() {
         return;
     }
 
-    let font = shape.font.skia_font(shape.size);
-    let layout_paint = text_paint(style.fill, draw.opacity);
-    let origin = text_origin(shape, &font, &layout_paint);
+    let (_, metrics) = font.metrics();
     let progress = shape.write_progress.clamp(0.0, 1.0);
     let unit_count = units.len() as f32;
-    let sequence_duration = 1.0 + (unit_count - 1.0) * REVEAL_STAGGER;
+    let sequence_duration = 1.0 + (unit_count - 1.0) * WRITE_STAGGER;
 
-    for (unit_index, (start, end)) in units.into_iter().enumerate() {
-        let unit_start = unit_index as f32 * REVEAL_STAGGER;
+    for (unit_index, (line_index, start, end)) in units.into_iter().enumerate() {
+        let unit_start = unit_index as f32 * WRITE_STAGGER;
         let local_progress = (progress * sequence_duration - unit_start).clamp(0.0, 1.0);
 
-        let unit = &shape.text[start..end];
-        let prefix = &shape.text[..start];
+        let line = &lines[line_index];
+        let unit = &line.text[start..end];
+        let prefix = &line.text[..start];
         let (prefix_width, _) = font.measure_str(prefix, Some(&layout_paint));
         let (unit_width, _) = font.measure_str(unit, Some(&layout_paint));
-        let x = origin.0 + prefix_width;
-        let center = (x + unit_width * 0.5, 0.0);
+        let x = line.origin.0 + prefix_width;
+        let center = (
+            x + unit_width * 0.5,
+            line.origin.1 + (metrics.ascent + metrics.descent) * 0.5,
+        );
         let scale_progress = Easing::OutBack.evaluate(local_progress);
         let scale = shape.write_scale + (1.0 - shape.write_scale) * scale_progress;
-        let outline_progress = (local_progress / REVEAL_OUTLINE_PHASE).clamp(0.0, 1.0);
-        let fill_progress = ((local_progress - REVEAL_OUTLINE_PHASE)
-            / (1.0 - REVEAL_OUTLINE_PHASE))
-            .clamp(0.0, 1.0);
+        let outline_progress = (local_progress / WRITE_OUTLINE_PHASE).clamp(0.0, 1.0);
+        let fill_progress =
+            ((local_progress - WRITE_OUTLINE_PHASE) / (1.0 - WRITE_OUTLINE_PHASE)).clamp(0.0, 1.0);
         let fill = interpolate_color(Color::TRANSPARENT, style.fill, fill_progress);
         let save_count = canvas.save();
 
@@ -233,7 +286,7 @@ fn draw_written_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &ski
         canvas.translate((-center.0, -center.1));
 
         let mut paint = text_paint(fill, draw.opacity);
-        canvas.draw_str(unit, (x, origin.1), &font, &paint);
+        canvas.draw_str(unit, (x, line.origin.1), &font, &paint);
 
         let has_stroke = style.stroke_width > 0.0;
         let outline_width = if has_stroke {
@@ -244,14 +297,15 @@ fn draw_written_text(shape: &TextShape, style: &Style, draw: &Draw, canvas: &ski
 
         if outline_width > 0.0 {
             let outline = color_with_alpha(style.stroke, outline_progress);
-            let outline_path = skia_safe::utils::text_utils::get_path(unit, (x, origin.1), &font);
+            let outline_path =
+                skia_safe::utils::text_utils::get_path(unit, (x, line.origin.1), &font);
             let outline_save_count = canvas.save();
 
             canvas.clip_path(&outline_path, None, true);
             paint.set_color4f(text_paint(outline, draw.opacity).color4f(), None);
             paint.set_style(skia_safe::PaintStyle::Stroke);
             paint.set_stroke_width(outline_width * 2.0);
-            canvas.draw_str(unit, (x, origin.1), &font, &paint);
+            canvas.draw_str(unit, (x, line.origin.1), &font, &paint);
             canvas.restore_to_count(outline_save_count);
         }
 
@@ -282,13 +336,56 @@ impl Default for Text {
                 get_box: |world, entity| {
                     let shape = world.get::<&TextShape>(entity).unwrap();
                     let font = shape.font.skia_font(shape.size);
-                    let (width, _) = font.measure_str(&shape.text, None);
+                    let lines = text_lines(&shape, &font);
                     let (_, metrics) = font.metrics();
+                    let width = lines.iter().map(|line| line.width).fold(0.0, f32::max);
+                    let height = metrics.descent - metrics.ascent
+                        + font.spacing() * lines.len().saturating_sub(1) as f32;
 
-                    Vector2::new(width, metrics.descent - metrics.ascent)
+                    Vector2::new(width, height)
                 },
                 ..Default::default()
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn approximately_equal(left: f32, right: f32) -> bool {
+        (left - right).abs() < 0.001
+    }
+
+    #[test]
+    fn lays_out_multiple_lines_with_interpolated_alignment() {
+        let mut shape = TextShape {
+            text: "Longest!\nShort!".to_owned(),
+            ..Default::default()
+        };
+        let font = shape.font.skia_font(shape.size);
+
+        shape.align = -1.0;
+        let left = text_lines(&shape, &font);
+        assert!(approximately_equal(left[0].origin.0, left[1].origin.0));
+
+        shape.align = 0.0;
+        let center = text_lines(&shape, &font);
+        assert!(approximately_equal(
+            center[0].origin.0 + center[0].width * 0.5,
+            center[1].origin.0 + center[1].width * 0.5,
+        ));
+
+        shape.align = 1.0;
+        let right = text_lines(&shape, &font);
+        assert!(approximately_equal(
+            right[0].origin.0 + right[0].width,
+            right[1].origin.0 + right[1].width,
+        ));
+        assert!(approximately_equal(
+            right[1].origin.1 - right[0].origin.1,
+            font.spacing(),
+        ));
     }
 }
