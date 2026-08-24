@@ -201,7 +201,13 @@ impl Scene {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{Easing, components::*, objects::*, types::*};
+    use crate::core::{
+        Easing,
+        components::*,
+        effects::{Effect, Unwrite, Write, WriteBy},
+        objects::*,
+        types::*,
+    };
 
     use super::*;
 
@@ -325,6 +331,53 @@ mod tests {
         let mut query = world.query::<&Transform>();
         let circle = query.iter().next().unwrap();
         assert_eq!(circle.position, vec2(128.0, 64.0));
+    }
+
+    #[test]
+    fn text_effect_configuration_is_applied_at_its_start() {
+        struct TextEffectScene;
+
+        impl SceneBuilder for TextEffectScene {
+            fn build(&mut self, scene: &mut Scene) {
+                let text = scene.create::<Text>().build();
+                scene.add(&text);
+
+                Write::new(WriteBy::Letter)
+                    .scale(0.25)
+                    .outline_width(2.0)
+                    .play(scene, &text);
+
+                Unwrite::new(WriteBy::Word)
+                    .scale(0.5)
+                    .outline_width(3.0)
+                    .play(scene, &text);
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut TextEffectScene), 2.0);
+
+        scene.update(0.0);
+        {
+            let world = scene.get_world();
+            let mut query = world.query::<&TextShape>();
+            let shape = query.iter().next().unwrap();
+
+            assert_eq!(shape.write_progress, 0.0);
+            assert_eq!(shape.write_scale, 0.25);
+            assert!(!shape.write_by_word);
+            assert_eq!(shape.write_outline_width, 2.0);
+        }
+
+        scene.update(1.0);
+        let world = scene.get_world();
+        let mut query = world.query::<&TextShape>();
+        let shape = query.iter().next().unwrap();
+
+        assert_eq!(shape.write_progress, 1.0);
+        assert_eq!(shape.write_scale, 0.5);
+        assert!(shape.write_by_word);
+        assert_eq!(shape.write_outline_width, 3.0);
     }
 
     #[test]

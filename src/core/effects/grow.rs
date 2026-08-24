@@ -102,8 +102,8 @@ impl Default for GrowIn {
     }
 }
 
-impl Effect for GrowIn {
-    fn play<T: ObjectHandler>(self, s: &mut Scene, handler: &T) {
+impl<T: ObjectHandler> Effect<T> for GrowIn {
+    fn play(self, s: &mut Scene, handler: &T) {
         let position = handler.get(Transform::position_property());
         let scale = handler.get(Transform::scale_property());
         let rotation = handler.get(Transform::rotation_property());
@@ -185,8 +185,8 @@ impl Default for GrowOut {
     }
 }
 
-impl Effect for GrowOut {
-    fn play<T: ObjectHandler>(self, s: &mut Scene, handler: &T) {
+impl<T: ObjectHandler> Effect<T> for GrowOut {
+    fn play(self, s: &mut Scene, handler: &T) {
         let position = handler.get(Transform::position_property());
         let scale = handler.get(Transform::scale_property());
         let rotation = handler.get(Transform::rotation_property());

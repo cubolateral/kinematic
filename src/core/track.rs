@@ -447,6 +447,10 @@ impl<T: TrackValueType> TrackHandle<T> {
 
     /// Creates a tween from an explicit starting value to a target value.
     pub fn animate_from<Object>(&self, from: T, to: T) -> Tween<Object> {
+        let mut world = self.world.borrow_mut();
+        (self.replace)(&mut world, self.entity, to.clone());
+        drop(world);
+
         self.tween(from, to)
     }
 
@@ -604,7 +608,7 @@ mod tests {
     }
 
     #[test]
-    fn interpolates_string_values_by_revealing_unicode_characters() {
+    fn interpolates_string_values_by_replacing_unicode_characters() {
         let from = TrackValue::String("Source!".to_owned());
         let to = TrackValue::String("Aé🦀!".to_owned());
 

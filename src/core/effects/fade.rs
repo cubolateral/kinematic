@@ -93,8 +93,8 @@ impl FadeIn {
     }
 }
 
-impl Effect for FadeIn {
-    fn play<T: ObjectHandler>(self, s: &mut Scene, handler: &T) {
+impl<T: ObjectHandler> Effect<T> for FadeIn {
+    fn play(self, s: &mut Scene, handler: &T) {
         let position = handler.get(TransformComponent::position_property());
         let scale = handler.get(TransformComponent::scale_property());
         let rotation = handler.get(TransformComponent::rotation_property());
@@ -205,8 +205,8 @@ impl FadeOut {
     }
 }
 
-impl Effect for FadeOut {
-    fn play<T: ObjectHandler>(self, s: &mut Scene, handler: &T) {
+impl<T: ObjectHandler> Effect<T> for FadeOut {
+    fn play(self, s: &mut Scene, handler: &T) {
         let position = handler.get(TransformComponent::position_property());
         let scale = handler.get(TransformComponent::scale_property());
         let rotation = handler.get(TransformComponent::rotation_property());

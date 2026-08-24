@@ -189,6 +189,12 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 self,
                 value: <#field_ty as #track_value_type_trait>::Input,
             ) -> Self;
+
+            fn #from_method_name(
+                self,
+                from: <#field_ty as #track_value_type_trait>::Input,
+                to: <#field_ty as #track_value_type_trait>::Input,
+            ) -> Self;
         });
         tween_impl_fns.push(quote! {
             fn #field_ident(
@@ -199,6 +205,19 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     std::any::TypeId::of::<#struct_name>(),
                     <#struct_name as #trackable_trait>::track(#id),
                     value.into(),
+                )
+            }
+
+            fn #from_method_name(
+                self,
+                from: <#field_ty as #track_value_type_trait>::Input,
+                to: <#field_ty as #track_value_type_trait>::Input,
+            ) -> Self {
+                self.set_track_from::<#field_ty>(
+                    std::any::TypeId::of::<#struct_name>(),
+                    <#struct_name as #trackable_trait>::track(#id),
+                    from.into(),
+                    to.into(),
                 )
             }
         });

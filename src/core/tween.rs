@@ -100,6 +100,42 @@ impl<Object> Tween<Object> {
         self
     }
 
+    /// Adds or replaces a target field with an explicit starting value.
+    #[doc(hidden)]
+    pub fn set_track_from<T: TrackValueType>(
+        mut self,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        from: T,
+        to: T,
+    ) -> Self {
+        let from = from.into_track_value();
+        let to = to.into_track_value();
+
+        {
+            let world = self.world.borrow();
+            (track_info.set)(&world, self.entity, to.clone());
+        }
+
+        if let Some(target) = self
+            .targets
+            .iter_mut()
+            .find(|target| target.type_id == type_id && std::ptr::eq(target.track_info, track_info))
+        {
+            target.from = from;
+            target.to = to;
+        } else {
+            self.targets.push(TweenTarget {
+                type_id,
+                track_info,
+                from,
+                to,
+            });
+        }
+
+        self
+    }
+
     /// Sets the duration in timeline seconds for every target field.
     pub fn duration(mut self, duration: f32) -> Self {
         self.duration = duration;
