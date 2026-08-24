@@ -433,9 +433,9 @@ fn fullscreen_button(ui: &dear_imgui_rs::Ui, is_fullscreen: bool) -> bool {
         ui,
         "[]",
         if is_fullscreen {
-            "Exit fullscreen [F]."
+            "Exit fullscreen [F]"
         } else {
-            "Enter fullscreen [F]."
+            "Enter fullscreen [F]"
         },
     )
 }
