@@ -148,6 +148,11 @@ impl<Object> Tween<Object> {
         self
     }
 
+    /// Immediately plays this tween as a shortcut for `.duration(0.0).play()`.
+    pub fn immediate(self) {
+        self.duration(0.0).play();
+    }
+
     /// Registers this tween in the animator associated with its object handler.
     pub fn play(self) {
         let animator = self.animator.active();

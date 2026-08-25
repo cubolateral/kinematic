@@ -283,12 +283,9 @@ mod tests {
                 .duration(1.0)
                 .task(),
         );
-        scene.play(
-            circle
-                .position_from(Vector2::ZERO, vec2(20.0, 30.0))
-                .duration(0.0)
-                .task(),
-        );
+        circle
+            .position_from(Vector2::ZERO, vec2(20.0, 30.0))
+            .immediate();
         scene.play(circle.opacity_from(0.0, 1.0).duration(1.0).task());
 
         let tasks = scene.animator.tasks();
