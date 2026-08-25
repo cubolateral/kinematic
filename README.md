@@ -38,27 +38,19 @@ use kinematic::prelude::*;
 #[scene]
 fn example(s: &mut Scene) {
     let circle = Circle::builder()
-        .name("Main Circle")
         .radius(128.0)
         .position(vec2(-256.0, 0.0))
         .fill(Color::RED)
         .build(s);
-    let group = Group::builder()
-        .opacity(1.0)
-        .build(s);
 
-    group.add(&circle);
-    s.get_root().add(&group);
+    s.get_root().add(&circle);
 
     circle
         .position_x(256.0)
         .fill(Color::BLUE)
-        .duration(1.0)
-        .easing(Easing::InOutQuad)
         .play();
 
     s.wait(1.0);
-    group.remove(&circle);
 }
 
 fn main() {

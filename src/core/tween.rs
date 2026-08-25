@@ -26,7 +26,7 @@ pub struct Tween<Object = ()> {
 }
 
 impl<Object> Tween<Object> {
-    /// Creates a tween with zero duration and [`Easing::default()`] easing.
+    /// Creates a tween with a one-second duration and [`Easing::default()`] easing.
     pub fn new(
         world: SceneWorld,
         entity: hecs::Entity,
@@ -45,7 +45,7 @@ impl<Object> Tween<Object> {
                 from,
                 to,
             }],
-            duration: 0.0,
+            duration: 1.0,
             easing: Easing::default(),
             animator,
             object: std::marker::PhantomData,
