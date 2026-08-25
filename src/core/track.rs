@@ -294,80 +294,30 @@ pub trait TrackValueType: Clone {
     fn from_track_value(value: TrackValue) -> Option<Self>;
 }
 
-impl TrackValueType for bool {
-    type Input = bool;
+macro_rules! impl_track_value_type {
+    ($type:ty, $variant:ident) => {
+        impl TrackValueType for $type {
+            type Input = $type;
 
-    fn into_track_value(self) -> TrackValue {
-        TrackValue::Bool(self)
-    }
+            fn into_track_value(self) -> TrackValue {
+                TrackValue::$variant(self)
+            }
 
-    fn from_track_value(value: TrackValue) -> Option<Self> {
-        match value {
-            TrackValue::Bool(value) => Some(value),
-            _ => None,
+            fn from_track_value(value: TrackValue) -> Option<Self> {
+                match value {
+                    TrackValue::$variant(value) => Some(value),
+                    _ => None,
+                }
+            }
         }
-    }
+    };
 }
 
-impl TrackValueType for f32 {
-    type Input = f32;
-
-    fn into_track_value(self) -> TrackValue {
-        TrackValue::F32(self)
-    }
-
-    fn from_track_value(value: TrackValue) -> Option<Self> {
-        match value {
-            TrackValue::F32(value) => Some(value),
-            _ => None,
-        }
-    }
-}
-
-impl TrackValueType for Vector2 {
-    type Input = Vector2;
-
-    fn into_track_value(self) -> TrackValue {
-        TrackValue::Vector2(self)
-    }
-
-    fn from_track_value(value: TrackValue) -> Option<Self> {
-        match value {
-            TrackValue::Vector2(value) => Some(value),
-            _ => None,
-        }
-    }
-}
-
-impl TrackValueType for Color {
-    type Input = Color;
-
-    fn into_track_value(self) -> TrackValue {
-        TrackValue::Color(self)
-    }
-
-    fn from_track_value(value: TrackValue) -> Option<Self> {
-        match value {
-            TrackValue::Color(value) => Some(value),
-            _ => None,
-        }
-    }
-}
-
-impl TrackValueType for String {
-    type Input = String;
-
-    fn into_track_value(self) -> TrackValue {
-        TrackValue::String(self)
-    }
-
-    fn from_track_value(value: TrackValue) -> Option<Self> {
-        match value {
-            TrackValue::String(value) => Some(value),
-            _ => None,
-        }
-    }
-}
+impl_track_value_type!(bool, Bool);
+impl_track_value_type!(f32, F32);
+impl_track_value_type!(Vector2, Vector2);
+impl_track_value_type!(Color, Color);
+impl_track_value_type!(String, String);
 
 /// Typed interface for updating a single tracked component field.
 pub struct TrackHandle<T: TrackValueType> {

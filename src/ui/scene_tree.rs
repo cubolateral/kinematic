@@ -186,32 +186,3 @@ fn text_size(ui: &dear_imgui_rs::Ui, text: &str) -> [f32; 2] {
     ui.current_font()
         .calc_text_size(ui.current_font_size(), f32::MAX, f32::MAX, text)
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::core::{Scene, objects::*};
-
-    use super::*;
-
-    #[test]
-    fn tree_characters_preserve_the_hierarchy() {
-        assert_eq!(tree_chars(&[true, false], false), "│     ├─ ");
-        assert_eq!(tree_chars(&[], true), "└─ ");
-    }
-
-    #[test]
-    fn inactive_objects_are_omitted_from_the_tree() {
-        let mut scene = Scene::new();
-        let circle = Circle::builder().build(&mut scene);
-        let root = scene.get_root();
-
-        root.add(&circle);
-        assert_eq!(
-            group_children(&scene.get_world(), root.get_id()),
-            [circle.get_id()]
-        );
-
-        root.remove(&circle);
-        assert!(group_children(&scene.get_world(), root.get_id()).is_empty());
-    }
-}

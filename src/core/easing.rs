@@ -1,7 +1,7 @@
 /// Easing curves from <https://easings.net/>.
 ///
 /// [`Self::evaluate`] expects a normalized animation progress from `0.0` to `1.0`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Easing {
     Linear,
     InQuad,
@@ -9,6 +9,7 @@ pub enum Easing {
     InOutQuad,
     InCubic,
     OutCubic,
+    #[default]
     InOutCubic,
     InQuart,
     OutQuart,
@@ -231,12 +232,6 @@ impl Easing {
             let x = x - 2.625 / d1;
             n1 * x * x + 0.984375
         }
-    }
-}
-
-impl Default for Easing {
-    fn default() -> Self {
-        Self::InOutCubic
     }
 }
 

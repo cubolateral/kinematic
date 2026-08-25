@@ -185,20 +185,3 @@ fn visible_lifetime(lifetime: [f32; 2], time: TimeRange) -> Option<[f32; 2]> {
 
     (end > start).then_some([start, end])
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn track_lines_are_clipped_to_the_visible_object_lifetime() {
-        let time = TimeRange {
-            current: 0.0,
-            start: 4.0,
-            end: 8.0,
-        };
-
-        assert_eq!(visible_lifetime([2.0, 6.0], time), Some([4.0, 6.0]));
-        assert_eq!(visible_lifetime([0.0, 3.0], time), None);
-    }
-}

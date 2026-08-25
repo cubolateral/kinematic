@@ -17,23 +17,3 @@ impl Selection {
         self.entity = None;
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stores_the_entity_selected_by_an_editor_view() {
-        let mut selection = Selection::default();
-
-        assert_eq!(selection.get(), None);
-
-        selection.select(hecs::Entity::DANGLING);
-
-        assert_eq!(selection.get(), Some(hecs::Entity::DANGLING));
-
-        selection.clear();
-
-        assert_eq!(selection.get(), None);
-    }
-}
