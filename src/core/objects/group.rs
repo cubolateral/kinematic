@@ -399,8 +399,8 @@ mod tests {
     #[test]
     fn handlers_expose_ids_and_groups_store_direct_children() {
         let mut scene = Scene::new();
-        let circle = scene.create::<Circle>().build();
-        let group = scene.create::<Group>().build();
+        let circle = Circle::builder().build(&mut scene);
+        let group = Group::builder().build(&mut scene);
         let root = scene.get_root();
 
         group.add(&circle);
@@ -417,8 +417,8 @@ mod tests {
     #[test]
     fn adding_and_removing_a_group_updates_the_whole_subtree_lifetime() {
         let mut scene = Scene::new();
-        let circle = scene.create::<Circle>().build();
-        let group = scene.create::<Group>().build();
+        let circle = Circle::builder().build(&mut scene);
+        let group = Group::builder().build(&mut scene);
         let root = scene.get_root();
 
         group.add(&circle);
@@ -452,8 +452,8 @@ mod tests {
     #[test]
     fn removing_a_parent_preserves_an_earlier_child_removal() {
         let mut scene = Scene::new();
-        let circle = scene.create::<Circle>().build();
-        let group = scene.create::<Group>().build();
+        let circle = Circle::builder().build(&mut scene);
+        let group = Group::builder().build(&mut scene);
         let root = scene.get_root();
 
         group.add(&circle);
@@ -475,9 +475,9 @@ mod tests {
     #[should_panic(expected = "An object must not belong to more than one group.")]
     fn objects_reject_multiple_parents() {
         let mut scene = Scene::new();
-        let circle = scene.create::<Circle>().build();
-        let first = scene.create::<Group>().build();
-        let second = scene.create::<Group>().build();
+        let circle = Circle::builder().build(&mut scene);
+        let first = Group::builder().build(&mut scene);
+        let second = Group::builder().build(&mut scene);
 
         first.add(&circle);
         second.add(&circle);
@@ -487,8 +487,8 @@ mod tests {
     #[should_panic(expected = "Adding this object would create a group cycle.")]
     fn groups_reject_cycles() {
         let mut scene = Scene::new();
-        let parent = scene.create::<Group>().build();
-        let child = scene.create::<Group>().build();
+        let parent = Group::builder().build(&mut scene);
+        let child = Group::builder().build(&mut scene);
 
         parent.add(&child);
         child.add(&parent);
@@ -497,17 +497,15 @@ mod tests {
     #[test]
     fn group_opacity_is_applied_once_to_the_composed_children() {
         let mut scene = Scene::new();
-        let first = scene
-            .create::<Rect>()
+        let first = Rect::builder()
             .size(vec2(8.0, 8.0))
             .fill(Color::RED)
-            .build();
-        let second = scene
-            .create::<Rect>()
+            .build(&mut scene);
+        let second = Rect::builder()
             .size(vec2(8.0, 8.0))
             .fill(Color::RED)
-            .build();
-        let group = scene.create::<Group>().opacity(0.5).build();
+            .build(&mut scene);
+        let group = Group::builder().opacity(0.5).build(&mut scene);
 
         group.add(&first);
         group.add(&second);
@@ -539,14 +537,13 @@ mod tests {
     #[test]
     fn group_bounds_include_child_position_scale_and_rotation() {
         let mut scene = Scene::new();
-        let rectangle = scene
-            .create::<Rect>()
+        let rectangle = Rect::builder()
             .size(vec2(10.0, 20.0))
             .position(vec2(30.0, -10.0))
             .scale(vec2(2.0, 1.0))
             .rotation(std::f32::consts::FRAC_PI_2)
-            .build();
-        let group = scene.create::<Group>().build();
+            .build(&mut scene);
+        let group = Group::builder().build(&mut scene);
 
         group.add(&rectangle);
 
@@ -562,8 +559,8 @@ mod tests {
     #[test]
     fn picking_returns_the_frontmost_visible_object() {
         let mut scene = Scene::new();
-        let behind = scene.create::<Rect>().size(vec2(20.0, 20.0)).build();
-        let front = scene.create::<Rect>().size(vec2(20.0, 20.0)).build();
+        let behind = Rect::builder().size(vec2(20.0, 20.0)).build(&mut scene);
+        let front = Rect::builder().size(vec2(20.0, 20.0)).build(&mut scene);
         let root = scene.get_root();
 
         root.add(&behind);
@@ -590,17 +587,15 @@ mod tests {
     #[test]
     fn picking_empty_space_inside_a_group_selects_the_group() {
         let mut scene = Scene::new();
-        let left = scene
-            .create::<Rect>()
+        let left = Rect::builder()
             .size(vec2(10.0, 10.0))
             .position(vec2(-20.0, 0.0))
-            .build();
-        let right = scene
-            .create::<Rect>()
+            .build(&mut scene);
+        let right = Rect::builder()
             .size(vec2(10.0, 10.0))
             .position(vec2(20.0, 0.0))
-            .build();
-        let group = scene.create::<Group>().build();
+            .build(&mut scene);
+        let group = Group::builder().build(&mut scene);
         let root = scene.get_root();
 
         group.add(&left);

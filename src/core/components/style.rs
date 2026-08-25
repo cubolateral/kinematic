@@ -3,7 +3,7 @@ use kinematic_macros::Trackable;
 use crate::core::types::{Color, Vector2};
 
 /// Fill and stroke properties for a style entity.
-#[derive(Trackable, Default, Debug)]
+#[derive(Clone, Trackable, Default, Debug)]
 pub struct Style {
     /// Color used to fill the style.
     #[track]

@@ -35,6 +35,11 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let mut component_accessors = Vec::with_capacity(fields.len());
     let mut trackable_infos = Vec::with_capacity(fields.len());
     let mut trackable_types = Vec::with_capacity(fields.len());
+    let field_idents: Vec<_> = fields
+        .iter()
+        .map(|field| field.ident.as_ref().unwrap())
+        .collect();
+    let field_types: Vec<_> = fields.iter().map(|field| &field.ty).collect();
 
     for field in fields {
         let field_ident = field.ident.as_ref().unwrap();
@@ -112,17 +117,13 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         /// Builder generated for this scene object.
         #visibility struct #builder_name {
-            world: #scene_world_type,
-            animator: #animator_handle_type,
             object: #object_name,
             name: std::string::String,
         }
 
         impl #builder_name {
-            fn new(world: #scene_world_type, animator: #animator_handle_type) -> Self {
+            fn new() -> Self {
                 Self {
-                    world,
-                    animator,
                     object: <#object_name as Default>::default(),
                     name: stringify!(#object_name).to_owned(),
                 }
@@ -134,14 +135,9 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 self
             }
 
-            /// Spawns the configured object as inactive and returns its handler.
-            pub fn build(self) -> #handler_name {
-                <#object_name as #object_trait>::spawn(
-                    self.world,
-                    self.animator,
-                    self.object,
-                    #name_type::new(self.name),
-                )
+            /// Spawns the configured object as inactive in `scene` and returns its handler.
+            pub fn build(self, scene: &mut crate::core::Scene) -> #handler_name {
+                scene.spawn_object::<#object_name>(self.object, self.name)
             }
         }
 
@@ -226,6 +222,28 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
         }
 
+        impl #handler_name {
+            /// Creates an identical object in the supplied scene.
+            pub fn copy(&self, s: &mut crate::core::Scene) -> #handler_name {
+                let (object, name) = {
+                    let world = self.world.borrow();
+                    let object = #object_name {
+                        #(#field_idents: (*world
+                            .get::<&#field_types>(self.entity)
+                            .expect("Object handler must contain its object fields.")).clone(),)*
+                    };
+
+                    (object, self.get_name())
+                };
+
+                #builder_name {
+                    object,
+                    name,
+                }
+                .build(s)
+            }
+        }
+
         #(
             impl #object_trackable_trait<#trackable_types> for #object_name {}
         )*
@@ -253,8 +271,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             type Builder = #builder_name;
             type Handler = #handler_name;
 
-            fn builder(world: #scene_world_type, animator: #animator_handle_type) -> Self::Builder {
-                #builder_name::new(world, animator)
+            fn builder() -> Self::Builder {
+                #builder_name::new()
             }
 
             fn handler(world: #scene_world_type, entity: hecs::Entity, animator: #animator_handle_type) -> Self::Handler {

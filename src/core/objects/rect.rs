@@ -5,7 +5,7 @@ use crate::core::{
     types::{Vector2, vec2},
 };
 
-#[derive(Trackable)]
+#[derive(Clone, Trackable)]
 /// Geometry of a rectangular object.
 pub struct RectShape {
     #[track]

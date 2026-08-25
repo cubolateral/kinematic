@@ -5,7 +5,7 @@ use crate::core::{
     types::Vector2,
 };
 
-#[derive(Trackable)]
+#[derive(Clone, Trackable)]
 /// Geometry of a circular object.
 pub struct CircleShape {
     #[track]

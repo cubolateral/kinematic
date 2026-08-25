@@ -35,8 +35,8 @@ implementations such as `FadeIn` and `FadeOut` remain in their own modules.
   animation data.
   `Scene::update(time)` evaluates that data; drawing must not mutate animation
   state.
-- Start user-facing object construction through `Scene::create::<Object>()`. The
-  returned builder's `build` method spawns the object with animation, inspector,
+- Start user-facing object construction through `Object::builder()`. The
+  returned builder's `build(&mut scene)` method spawns the object with animation, inspector,
   `Name`, and inactive `Node` metadata, then returns its typed handler. Names
   default to the Rust object type, remain readable and mutable through the typed
   handler, and the scene root is named `Root`. Every scene owns a root `Group`
@@ -47,7 +47,7 @@ implementations such as `FadeIn` and `FadeOut` remain in their own modules.
   earlier time restores them. Scene evaluation, rendering, and editor views must
   ignore nodes whose `is_activated` value is false.
 - Objects are ECS bundles implementing `Object`. The `Object` derive creates the
-  `<Object>Builder` returned by `Scene::create` and the typed `<Object>Handler`
+  `<Object>Builder` returned by `Object::builder` and the typed `<Object>Handler`
   returned by the builder's `build` method. Fields marked `#[trackable]` expose
   their values directly on both types. The
   public API must not require component-level handlers or component-name access

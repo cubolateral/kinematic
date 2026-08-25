@@ -6,16 +6,16 @@ use crate::core::{
 
 /// Marker trait for object types that can be spawned into the scene.
 ///
-/// The derive macro generates the builder returned by `Scene::create` and the
+/// The derive macro generates the builder returned by `Object::builder` and the
 /// typed handler returned by that builder.
 pub trait Object: hecs::DynamicBundle + Sized {
-    /// Builder type returned by [`Scene::create`](crate::core::Scene::create).
+    /// Builder type returned by [`Object::builder`](Self::builder).
     type Builder;
     /// Handler type returned after spawning the object into the ECS world.
     type Handler;
 
-    /// Builds an object builder connected to a scene world.
-    fn builder(world: SceneWorld, animator: AnimatorHandle) -> Self::Builder;
+    /// Builds an object builder.
+    fn builder() -> Self::Builder;
 
     /// Builds the handler from the spawned entity.
     fn handler(world: SceneWorld, entity: hecs::Entity, animator: AnimatorHandle) -> Self::Handler;

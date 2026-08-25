@@ -159,27 +159,13 @@ impl Scene {
         self.play(build_task(group.tasks()));
     }
 
-    /// Starts building an inactive object connected to this scene.
-    ///
-    /// Calling the generated builder's `build` method spawns the inactive object
-    /// and returns its typed handler. Add it to a [`Group`] to begin its lifetime.
-    ///
-    /// ```
-    /// use kinematic::prelude::*;
-    ///
-    /// let mut scene = Scene::new();
-    /// let text: TextHandler = scene
-    ///     .create::<Text>()
-    ///     .opacity(1.0)
-    ///     .position(Vector2::ZERO)
-    ///     .build();
-    /// scene.get_root().add(&text);
-    /// let _ = text.position_x(100.0);
-    /// ```
-    pub fn create<T: Object>(&mut self) -> T::Builder {
-        T::builder(
+    #[doc(hidden)]
+    pub fn spawn_object<T: Object>(&mut self, object: T, name: String) -> T::Handler {
+        T::spawn(
             std::rc::Rc::clone(&self.world),
             self.animator.handle().active(),
+            object,
+            Name::new(name),
         )
     }
 
@@ -217,7 +203,7 @@ mod tests {
 
     #[crate::scene]
     fn delayed_object_scene(scene: &mut Scene) {
-        let circle = scene.create::<Circle>().build();
+        let circle = Circle::builder().build(scene);
 
         scene.wait(32.0);
         scene.get_root().add(&circle);
@@ -228,12 +214,11 @@ mod tests {
     fn object_builder_sets_component_values_and_preserves_object_defaults() {
         let default = Text::default();
         let mut scene = Scene::new();
-        let handler = scene
-            .create::<Text>()
+        let handler = Text::builder()
             .opacity(0.5)
             .position(vec2(10.0, 20.0))
             .text("Kinematic!".to_owned())
-            .build();
+            .build(&mut scene);
         let world = scene.get_world();
         let draw = world.get::<&Draw>(handler.get_id()).unwrap();
         let transform = world.get::<&Transform>(handler.get_id()).unwrap();
@@ -248,8 +233,8 @@ mod tests {
     #[test]
     fn object_names_default_to_the_type_and_remain_mutable() {
         let mut scene = Scene::new();
-        let circle = scene.create::<Circle>().build();
-        let label = scene.create::<Text>().name("Caption").build();
+        let circle = Circle::builder().build(&mut scene);
+        let label = Text::builder().name("Caption").build(&mut scene);
         let root = scene.get_root();
 
         assert_eq!(circle.get_name(), "Circle");
@@ -272,8 +257,8 @@ mod tests {
     #[test]
     fn object_handler_exposes_trackable_fields_directly() {
         let mut scene = Scene::new();
-        let text: TextHandler = scene.create::<Text>().build();
-        let circle: CircleHandler = scene.create::<Circle>().build();
+        let text: TextHandler = Text::builder().build(&mut scene);
+        let circle: CircleHandler = Circle::builder().build(&mut scene);
 
         let _ = text.opacity(0.25);
         let _ = circle.position(vec2(10.0, 20.0));
@@ -289,7 +274,7 @@ mod tests {
     #[test]
     fn object_handlers_animate_properties_and_generate_from_shortcuts() {
         let mut scene = Scene::new();
-        let circle: CircleHandler = scene.create::<Circle>().build();
+        let circle: CircleHandler = Circle::builder().build(&mut scene);
         scene.get_root().add(&circle);
 
         scene.play(
@@ -316,7 +301,7 @@ mod tests {
 
         impl SceneBuilder for HandlerTweenScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = scene.create::<Circle>().fill(Color::RED).build();
+                let circle = Circle::builder().fill(Color::RED).build(scene);
                 scene.get_root().add(&circle);
                 circle
                     .position_x(256.0)
@@ -344,7 +329,7 @@ mod tests {
 
         impl SceneBuilder for ComponentTweenScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = scene.create::<Circle>().build();
+                let circle = Circle::builder().build(scene);
                 scene.get_root().add(&circle);
                 circle
                     .position_x(128.0)
@@ -371,7 +356,7 @@ mod tests {
 
         impl SceneBuilder for TextEffectScene {
             fn build(&mut self, scene: &mut Scene) {
-                let text = scene.create::<Text>().build();
+                let text = Text::builder().build(scene);
                 scene.get_root().add(&text);
 
                 Write::new(WriteBy::Letter)
@@ -418,44 +403,44 @@ mod tests {
 
         impl SceneBuilder for NestedGroupsScene {
             fn build(&mut self, scene: &mut Scene) {
-                let root = scene.create::<Circle>().build();
+                let root = Circle::builder().build(scene);
                 scene.get_root().add(&root);
                 scene.wait(1.0);
 
                 scene.chain(|scene| {
-                    let chain_object = scene.create::<Circle>().build();
+                    let chain_object = Circle::builder().build(scene);
                     scene.get_root().add(&chain_object);
                     scene.wait(2.0);
 
                     scene.all(|scene| {
-                        let parallel_object = scene.create::<Circle>().build();
+                        let parallel_object = Circle::builder().build(scene);
                         scene.get_root().add(&parallel_object);
                         scene.wait(4.0);
 
                         scene.chain(|scene| {
-                            let nested_object = scene.create::<Circle>().build();
+                            let nested_object = Circle::builder().build(scene);
                             scene.get_root().add(&nested_object);
                             scene.wait(1.0);
 
-                            let nested_end_object = scene.create::<Circle>().build();
+                            let nested_end_object = Circle::builder().build(scene);
                             scene.get_root().add(&nested_end_object);
                         });
 
                         scene.repeat(2, |scene| {
-                            let repeated_object = scene.create::<Circle>().build();
+                            let repeated_object = Circle::builder().build(scene);
                             scene.get_root().add(&repeated_object);
                             scene.wait(0.5);
 
-                            let repeated_end_object = scene.create::<Circle>().build();
+                            let repeated_end_object = Circle::builder().build(scene);
                             scene.get_root().add(&repeated_end_object);
                         });
 
-                        let parallel_end_object = scene.create::<Circle>().build();
+                        let parallel_end_object = Circle::builder().build(scene);
                         scene.get_root().add(&parallel_end_object);
                     });
 
                     scene.wait(1.0);
-                    let chain_end_object = scene.create::<Circle>().build();
+                    let chain_end_object = Circle::builder().build(scene);
                     scene.get_root().add(&chain_end_object);
                 });
             }
@@ -492,13 +477,12 @@ mod tests {
     #[test]
     fn draw_renders_objects_directly_into_the_supplied_skia_canvas() {
         let mut scene = Scene::new();
-        let rect = scene
-            .create::<Rect>()
+        let rect = Rect::builder()
             .size(vec2(8.0, 8.0))
             .fill(Color::RED)
             .opacity(0.5)
             .position(vec2(4.0, 0.0))
-            .build();
+            .build(&mut scene);
         scene.get_root().add(&rect);
 
         let image_info = skia_safe::ImageInfo::new(
@@ -529,8 +513,8 @@ mod tests {
 
         impl SceneBuilder for LifetimeScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = scene.create::<Circle>().build();
-                let rect = scene.create::<Rect>().build();
+                let circle = Circle::builder().build(scene);
+                let rect = Rect::builder().build(scene);
                 scene.get_root().add(&circle);
 
                 scene.wait(1.0);
@@ -581,7 +565,7 @@ mod tests {
 
         impl SceneBuilder for ParallelLifetimeScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = scene.create::<Circle>().build();
+                let circle = Circle::builder().build(scene);
 
                 scene.all(|scene| {
                     scene.wait(5.0);

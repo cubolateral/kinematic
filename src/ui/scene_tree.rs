@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn inactive_objects_are_omitted_from_the_tree() {
         let mut scene = Scene::new();
-        let circle = scene.create::<Circle>().build();
+        let circle = Circle::builder().build(&mut scene);
         let root = scene.get_root();
 
         root.add(&circle);

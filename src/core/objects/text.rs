@@ -66,7 +66,7 @@ impl Font {
 }
 
 /// Content and typography of a text object.
-#[derive(Trackable)]
+#[derive(Clone, Trackable)]
 pub struct TextShape {
     /// Text displayed by the object.
     #[track]

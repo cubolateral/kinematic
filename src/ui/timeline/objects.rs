@@ -278,9 +278,9 @@ mod tests {
     #[test]
     fn rows_follow_the_scene_tree_preorder() {
         let mut scene = Scene::new();
-        let group = scene.create::<Group>().name("Group").build();
-        let child = scene.create::<Circle>().name("Child").build();
-        let sibling = scene.create::<Rect>().name("Sibling").build();
+        let group = Group::builder().name("Group").build(&mut scene);
+        let child = Circle::builder().name("Child").build(&mut scene);
+        let sibling = Rect::builder().name("Sibling").build(&mut scene);
         let root = scene.get_root();
 
         group.add(&child);

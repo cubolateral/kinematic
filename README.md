@@ -37,17 +37,15 @@ use kinematic::prelude::*;
 
 #[scene]
 fn example(s: &mut Scene) {
-    let circle = s
-        .create::<Circle>()
+    let circle = Circle::builder()
         .name("Main Circle")
         .radius(128.0)
         .position(vec2(-256.0, 0.0))
         .fill(Color::RED)
-        .build();
-    let group = s
-        .create::<Group>()
+        .build(s);
+    let group = Group::builder()
         .opacity(1.0)
-        .build();
+        .build(s);
 
     group.add(&circle);
     s.get_root().add(&group);
@@ -80,8 +78,8 @@ Every scene owns a root [`Group`](src/core/objects/group.rs), available through
 timeline lifetime when added to a group:
 
 ```rust
-let circle = scene.create::<Circle>().build();
-let child_group = scene.create::<Group>().build();
+let circle = Circle::builder().build(&mut scene);
+let child_group = Group::builder().build(&mut scene);
 
 child_group.add(&circle);
 scene.get_root().add(&child_group);
