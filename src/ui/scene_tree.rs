@@ -6,7 +6,10 @@ use crate::{
     editor::Editor,
 };
 
+use super::widgets::{hierarchy_prefix, text_size};
+
 const ROW_HEIGHT: f32 = 24.0;
+pub(super) const WINDOW_NAME: &str = "Scene Tree";
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     let is_exporting = editor.is_exporting();
@@ -17,7 +20,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     let mut empty_clicked = false;
     let _text_align = ui.push_style_var(dear_imgui_rs::StyleVar::SelectableTextAlign([0.0, 0.5]));
 
-    ui.window("Scene Tree").build(|| {
+    ui.window(WINDOW_NAME).build(|| {
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
         let root_name = world
             .get::<&Name>(root)
@@ -90,7 +93,7 @@ fn draw_children(
         let name = world
             .get::<&Name>(entity)
             .expect("Scene tree object must contain a Name component.");
-        let tree = tree_chars(branches, is_last);
+        let tree = hierarchy_prefix(branches, is_last);
         let position = ui.cursor_screen_pos();
         let row_id = format!("##scene_tree_{}", entity.to_bits());
         let was_clicked = selectable_row(ui, row_id);
@@ -169,20 +172,4 @@ fn group_children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity
                 .collect()
         })
         .unwrap_or_default()
-}
-
-fn tree_chars(branches: &[bool], is_last: bool) -> String {
-    let mut tree = String::new();
-
-    for continues in branches {
-        tree.push_str(if *continues { "│  " } else { "   " });
-    }
-
-    tree.push_str(if is_last { "└─ " } else { "├─ " });
-    tree
-}
-
-fn text_size(ui: &dear_imgui_rs::Ui, text: &str) -> [f32; 2] {
-    ui.current_font()
-        .calc_text_size(ui.current_font_size(), f32::MAX, f32::MAX, text)
 }

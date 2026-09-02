@@ -1,12 +1,14 @@
 use super::{
-    Layout, PANEL_TEXT_PADDING, State, TRACK_SPACING, TRACK_TEXT_INDENT, TimeRange, text_size,
+    layout::{Layout, TimeRange},
+    metrics::{PANEL_TEXT_PADDING, TRACK_SPACING, TRACK_TEXT_INDENT},
+    state::State,
     tracks,
 };
 use crate::{
     core::components::{Name, Node},
     core::objects::ObjectHandler,
     editor::Editor,
-    ui::{draw_panel_rect, selection_color},
+    ui::widgets::{draw_panel_rect, hierarchy_prefix, selection_color, text_size},
 };
 
 const OBJECT_HEIGHT: f32 = 24.0;
@@ -47,10 +49,11 @@ pub(super) fn draw(
     );
 
     let height = objects.iter().fold(0.0, |height, object| {
-        let tracks_height = state
-            .is_object_expanded(object.entity)
-            .then(|| tracks::height(&world, object.entity))
-            .unwrap_or_default();
+        let tracks_height = if state.is_object_expanded(object.entity) {
+            tracks::height(&world, object.entity)
+        } else {
+            0.0
+        };
 
         height + OBJECT_HEIGHT + TRACK_SPACING + tracks_height
     });
@@ -73,9 +76,11 @@ pub(super) fn draw(
         let start = object.lifetime[0].max(time.start);
         let end = object.lifetime[1].min(time.end);
         let expanded = state.is_object_expanded(object.entity);
-        let tracks_height = expanded
-            .then(|| tracks::height(&world, object.entity))
-            .unwrap_or_default();
+        let tracks_height = if expanded {
+            tracks::height(&world, object.entity)
+        } else {
+            0.0
+        };
         let bottom = top + OBJECT_HEIGHT + tracks_height;
         let sidebar_min = [layout.content_left, top];
         let sidebar_max = [layout.divider_x, bottom];
@@ -110,7 +115,7 @@ pub(super) fn draw(
             );
         }
 
-        let tree = tree_chars(&object.branches, object.is_last);
+        let tree = hierarchy_prefix(&object.branches, object.is_last);
         let label = format!("{tree}{}", object.name);
         let label_size = text_size(ui, &label);
         let tree_width = text_size(ui, &tree)[0];
@@ -171,10 +176,12 @@ pub(super) fn draw(
                 draw_list,
                 layout,
                 time,
-                object.entity,
-                object.lifetime,
-                top,
-                name_position[0] + TRACK_TEXT_INDENT,
+                tracks::ObjectTracks {
+                    entity: object.entity,
+                    lifetime: object.lifetime,
+                    top,
+                    name_x: name_position[0] + TRACK_TEXT_INDENT,
+                },
             );
             top += tracks_height;
         }
@@ -256,15 +263,4 @@ fn collect_rows(
         collect_rows(world, entity, branches, selected, is_highlighted, rows);
         branches.pop();
     }
-}
-
-fn tree_chars(branches: &[bool], is_last: bool) -> String {
-    let mut tree = String::new();
-
-    for continues in branches {
-        tree.push_str(if *continues { "│  " } else { "   " });
-    }
-
-    tree.push_str(if is_last { "└─ " } else { "├─ " });
-    tree
 }

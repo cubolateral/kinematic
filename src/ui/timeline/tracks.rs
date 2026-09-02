@@ -1,8 +1,14 @@
 use super::{
-    KEYFRAME_HITBOX_SIZE, KEYFRAME_HOVER_SCALE, KEYFRAME_RADIUS, Layout, PANEL_TEXT_PADDING,
-    SEGMENT_THICKNESS, TRACK_HEIGHT, TRACK_SPACING, TimeRange, text_size,
+    layout::{Layout, TimeRange},
+    metrics::{
+        KEYFRAME_HITBOX_SIZE, KEYFRAME_HOVER_SCALE, KEYFRAME_RADIUS, PANEL_TEXT_PADDING,
+        SEGMENT_THICKNESS, TRACK_HEIGHT, TRACK_SPACING,
+    },
 };
-use crate::core::{Track, components::Animation};
+use crate::{
+    core::{Track, components::Animation},
+    ui::widgets::text_size,
+};
 
 #[derive(Clone, Copy)]
 struct TrackView {
@@ -68,10 +74,7 @@ impl TrackView {
             true,
         );
         draw_list.add_text(
-            [
-                name_x,
-                top + (TRACK_HEIGHT - text_size(ui, &label)[1]) * 0.5,
-            ],
+            [name_x, top + (TRACK_HEIGHT - text_size(ui, label)[1]) * 0.5],
             self.text,
             label,
         );
@@ -160,23 +163,34 @@ pub(super) fn height(world: &hecs::World, entity: hecs::Entity) -> f32 {
     })
 }
 
+pub(super) struct ObjectTracks {
+    pub entity: hecs::Entity,
+    pub lifetime: [f32; 2],
+    pub top: f32,
+    pub name_x: f32,
+}
+
 pub(super) fn draw(
     world: &hecs::World,
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     layout: Layout,
     time: TimeRange,
-    entity: hecs::Entity,
-    lifetime: [f32; 2],
-    top: f32,
-    name_x: f32,
+    object: ObjectTracks,
 ) {
-    let Ok(animation) = world.get::<&Animation>(entity) else {
+    let Ok(animation) = world.get::<&Animation>(object.entity) else {
         return;
     };
 
     let view = TrackView::new(ui, layout, time);
-    view.object(ui, draw_list, &animation, lifetime, top, name_x);
+    view.object(
+        ui,
+        draw_list,
+        &animation,
+        object.lifetime,
+        object.top,
+        object.name_x,
+    );
 }
 
 fn visible_lifetime(lifetime: [f32; 2], time: TimeRange) -> Option<[f32; 2]> {

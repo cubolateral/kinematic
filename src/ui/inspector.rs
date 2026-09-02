@@ -3,10 +3,14 @@ use crate::{
     editor::Editor,
 };
 
+use super::widgets::text_size;
+
+pub(super) const WINDOW_NAME: &str = "Inspector";
+
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     let selected = editor.get_selected_entity();
 
-    ui.window("Inspector").build(|| {
+    ui.window(WINDOW_NAME).build(|| {
         let Some(entity) = selected else {
             ui.text_wrapped("Select an object from the Scene Tree or Timeline.");
             return;
@@ -51,9 +55,7 @@ fn property(ui: &dear_imgui_rs::Ui, name: &str, value: &str) {
     ui.text(name);
     ui.same_line();
 
-    let width = ui
-        .current_font()
-        .calc_text_size(ui.current_font_size(), f32::MAX, f32::MAX, value)[0];
+    let width = text_size(ui, value)[0];
     ui.set_cursor_pos_x(ui.cursor_pos_x() + ui.content_region_avail()[0] - width);
     ui.text_disabled(value);
 }
