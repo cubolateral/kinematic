@@ -16,7 +16,7 @@ Kinematic is a Rust animation editor and library. The source code is the authori
 - SceneBuilder declares scene contents and schedules work through Scene; it does not own the application loop or editor state.
 - Animator compiles Task values into animation data. Scene::update(time) evaluates that data. Drawing must not mutate animation state.
 - User-facing objects are created with Object::builder().build(&mut scene). Objects have typed handlers, a default type name, and inactive Node metadata until attached to a group.
-- Every scene has a named root Group available through Scene::get_root(). Group::add attaches a subtree at the animator's current time. Group::remove ends its lifetime without deleting entities or tree edges, so seeking backward can restore it.
+- Every scene has a named root Group available through Scene::get_root(). Group::add attaches a subtree at the animator's current time. ObjectHandler::remove ends its lifetime without deleting entities or tree edges, so seeking backward can restore it.
 - Inactive nodes must be ignored by scene evaluation, rendering, hit testing, and editor views.
 - Objects are ECS bundles implementing Object. The derive macro generates builders and typed handlers. #[trackable] fields are exposed directly on those types; do not introduce component-level handlers for convenience.
 - Trackable fields use #[track] and must appear before untracked fields, separated by one blank line. New trackable value types require support in TrackValue, TrackValueType, interpolation, and display behavior.

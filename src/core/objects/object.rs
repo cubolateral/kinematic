@@ -59,6 +59,9 @@ pub trait ObjectHandler {
     /// Replaces the object's user-facing name.
     fn set_name(&self, name: impl Into<String>);
 
+    /// Ends this object's lifetime at the current scheduling time.
+    fn remove(&self);
+
     /// Returns the object's local bounding-box size.
     fn get_box(&self) -> Vector2;
 
@@ -75,6 +78,44 @@ pub trait ObjectHandler {
         from: T,
         to: T,
     ) -> Tween<Self::Object>;
+}
+
+/// Ends an object subtree's lifetime at the supplied scheduling time.
+#[doc(hidden)]
+pub fn remove_object(world: &SceneWorld, entity: hecs::Entity, time: f32) {
+    let world = world.borrow();
+    let node = world
+        .get::<&Node>(entity)
+        .expect("Removed object must contain a Node component.");
+
+    assert!(!node.is_root, "The scene root must not be removed.");
+    drop(node);
+
+    assert!(
+        world
+            .query::<&Vec<hecs::Entity>>()
+            .iter()
+            .any(|children| children.contains(&entity)),
+        "Removed object must belong to a group."
+    );
+
+    deactivate_subtree(&world, entity, time);
+}
+
+fn deactivate_subtree(world: &hecs::World, entity: hecs::Entity, time: f32) {
+    world
+        .get::<&mut Node>(entity)
+        .expect("Removed object must contain a Node component.")
+        .deactivate(time);
+
+    let children = world
+        .get::<&Vec<hecs::Entity>>(entity)
+        .map(|children| (*children).clone())
+        .unwrap_or_default();
+
+    for child in children {
+        deactivate_subtree(world, child, time);
+    }
 }
 
 /// Marks an object as containing a specific trackable component.

@@ -81,7 +81,7 @@ Groups may contain objects or other groups. Transforms are inherited through
 the tree, and group opacity is composited once over the complete subtree at the
 destination canvas resolution.
 
-`Group::remove()` ends the selected object's lifetime and the lifetimes of all
+`ObjectHandler::remove()` ends the object's lifetime and the lifetimes of all
 its descendants. The stored tree remains intact so seeking to an earlier time
 restores the subtree. A typed handler exposes its underlying ECS entity through
 `ObjectHandler::get_id()` when direct identification is needed. Every object

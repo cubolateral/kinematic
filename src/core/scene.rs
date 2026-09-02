@@ -520,7 +520,7 @@ mod tests {
                 scene.wait(1.0);
                 scene.get_root().add(&rect);
                 scene.wait(2.0);
-                scene.get_root().remove(&circle);
+                circle.remove();
             }
         }
 

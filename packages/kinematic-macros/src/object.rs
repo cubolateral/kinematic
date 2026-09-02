@@ -23,6 +23,10 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let tween_type = format_ident!("__Kinematic{}Tween", object_name);
     let draw_type = format_ident!("__Kinematic{}Draw", object_name);
     let vector_type = format_ident!("__Kinematic{}Vector2", object_name);
+    let remove_object_fn = format_ident!(
+        "__kinematic_{}_remove_object",
+        object_name.to_string().to_lowercase()
+    );
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -112,6 +116,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 ObjectBuilderComponent as #builder_component_trait,
                 ObjectHandler as #object_handler_trait,
                 ObjectTrackable as #object_trackable_trait,
+                remove_object as #remove_object_fn,
             },
         };
 
@@ -181,6 +186,10 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                     .get::<&mut #name_type>(self.entity)
                     .expect("Object handler must contain a Name component.")
                     .set(name);
+            }
+
+            fn remove(&self) {
+                #remove_object_fn(&self.world, self.entity, self.animator.time());
             }
 
             fn get_box(&self) -> #vector_type {

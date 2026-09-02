@@ -78,23 +78,6 @@ impl GroupHandler {
             .push(child);
         activate_subtree(&world, child, self.animator.time());
     }
-
-    /// Ends an object subtree's lifetime at the current scheduling time.
-    pub fn remove(&self, handler: &impl ObjectHandler) {
-        let child = handler.get_id();
-        let world = self.world.borrow();
-        let children = world
-            .get::<&Vec<hecs::Entity>>(self.entity)
-            .expect("Group handler must contain children.");
-
-        assert!(
-            children.contains(&child),
-            "Removed object must be a direct child of this group."
-        );
-        drop(children);
-
-        deactivate_subtree(&world, child, self.animator.time());
-    }
 }
 
 pub(crate) fn draw_entity(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
@@ -374,22 +357,6 @@ fn activate_subtree(world: &hecs::World, entity: hecs::Entity, time: f32) {
     }
 }
 
-fn deactivate_subtree(world: &hecs::World, entity: hecs::Entity, time: f32) {
-    world
-        .get::<&mut Node>(entity)
-        .expect("Removed object must contain a Node component.")
-        .deactivate(time);
-
-    let children = world
-        .get::<&Vec<hecs::Entity>>(entity)
-        .map(|children| (*children).clone())
-        .unwrap_or_default();
-
-    for child in children {
-        deactivate_subtree(world, child, time);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::core::{Scene, components::*, objects::*, types::*};
@@ -424,7 +391,7 @@ mod tests {
         group.add(&circle);
         root.add(&group);
         scene.wait(2.0);
-        root.remove(&group);
+        group.remove();
 
         {
             let world = scene.get_world();
@@ -459,9 +426,9 @@ mod tests {
         group.add(&circle);
         root.add(&group);
         scene.wait(1.0);
-        group.remove(&circle);
+        circle.remove();
         scene.wait(1.0);
-        root.remove(&group);
+        group.remove();
 
         let world = scene.get_world();
         let group_node = world.get::<&Node>(group.get_id()).unwrap();
