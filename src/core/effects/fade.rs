@@ -1,6 +1,6 @@
 use crate::core::effects::Effect;
 use crate::core::{
-    Easing, Scene,
+    Easing,
     components::{Draw, Transform as TransformComponent},
     objects::ObjectHandler,
     types::Vector2,
@@ -34,7 +34,6 @@ impl FadeFrom {
 }
 
 fn play_fade<T>(
-    _s: &mut Scene,
     handler: &T,
     duration: f32,
     easing: Easing,
@@ -124,7 +123,7 @@ impl FadeIn {
 }
 
 impl<T: ObjectHandler> Effect<T> for FadeIn {
-    fn play(self, s: &mut Scene, handler: &T) {
+    fn play(self, handler: &T) {
         let position = handler.get(TransformComponent::position_property());
         let scale = handler.get(TransformComponent::scale_property());
         let rotation = handler.get(TransformComponent::rotation_property());
@@ -137,7 +136,6 @@ impl<T: ObjectHandler> Effect<T> for FadeIn {
             .unwrap_or(position);
 
         play_fade(
-            s,
             handler,
             self.duration,
             self.easing,
@@ -210,7 +208,7 @@ impl FadeOut {
 }
 
 impl<T: ObjectHandler> Effect<T> for FadeOut {
-    fn play(self, s: &mut Scene, handler: &T) {
+    fn play(self, handler: &T) {
         let position = handler.get(TransformComponent::position_property());
         let scale = handler.get(TransformComponent::scale_property());
         let rotation = handler.get(TransformComponent::rotation_property());
@@ -224,7 +222,6 @@ impl<T: ObjectHandler> Effect<T> for FadeOut {
             .unwrap_or(position);
 
         play_fade(
-            s,
             handler,
             self.duration,
             self.easing,
@@ -234,4 +231,14 @@ impl<T: ObjectHandler> Effect<T> for FadeOut {
             (rotation, rotation + self.spin),
         );
     }
+}
+
+/// Plays a default fade-in effect on an object handler.
+pub fn fade_in<T: ObjectHandler>(handler: &T) {
+    FadeIn::new().play(handler);
+}
+
+/// Plays a default fade-out effect on an object handler.
+pub fn fade_out<T: ObjectHandler>(handler: &T) {
+    FadeOut::new().play(handler);
 }

@@ -361,15 +361,13 @@ mod tests {
                 let text = Text::builder().build(scene);
                 scene.get_root().add(&text);
 
-                Write::new(WriteBy::Letter)
-                    .scale(0.25)
-                    .outline_width(2.0)
-                    .play(scene, &text);
+                Write::new().scale(0.25).outline_width(2.0).play(&text);
 
-                Unwrite::new(WriteBy::Word)
+                Unwrite::new()
+                    .by(WriteBy::Word)
                     .scale(0.5)
                     .outline_width(3.0)
-                    .play(scene, &text);
+                    .play(&text);
             }
         }
 

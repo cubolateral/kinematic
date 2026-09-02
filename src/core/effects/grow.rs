@@ -1,5 +1,5 @@
 use crate::core::effects::Effect;
-use crate::core::{Easing, Scene, components::Transform, objects::ObjectHandler, types::Vector2};
+use crate::core::{Easing, components::Transform, objects::ObjectHandler, types::Vector2};
 
 /// Anchor used as the origin of a grow effect.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,7 +53,6 @@ impl GrowFrom {
 }
 
 fn play_grow<T>(
-    _s: &mut Scene,
     handler: &T,
     duration: f32,
     easing: Easing,
@@ -123,7 +122,7 @@ impl Default for GrowIn {
 }
 
 impl<T: ObjectHandler> Effect<T> for GrowIn {
-    fn play(self, s: &mut Scene, handler: &T) {
+    fn play(self, handler: &T) {
         let position = handler.get(Transform::position_property());
         let scale = handler.get(Transform::scale_property());
         let rotation = handler.get(Transform::rotation_property());
@@ -132,7 +131,6 @@ impl<T: ObjectHandler> Effect<T> for GrowIn {
             .resolve(position, handler.get_box(), scale, rotation);
 
         play_grow(
-            s,
             handler,
             self.duration,
             self.easing,
@@ -194,7 +192,7 @@ impl Default for GrowOut {
 }
 
 impl<T: ObjectHandler> Effect<T> for GrowOut {
-    fn play(self, s: &mut Scene, handler: &T) {
+    fn play(self, handler: &T) {
         let position = handler.get(Transform::position_property());
         let scale = handler.get(Transform::scale_property());
         let rotation = handler.get(Transform::rotation_property());
@@ -203,7 +201,6 @@ impl<T: ObjectHandler> Effect<T> for GrowOut {
             .resolve(position, handler.get_box(), scale, rotation);
 
         play_grow(
-            s,
             handler,
             self.duration,
             self.easing,
@@ -212,4 +209,14 @@ impl<T: ObjectHandler> Effect<T> for GrowOut {
             (rotation, rotation + self.spin),
         );
     }
+}
+
+/// Plays a default grow-in effect on an object handler.
+pub fn grow_in<T: ObjectHandler>(handler: &T) {
+    GrowIn::new().play(handler);
+}
+
+/// Plays a default grow-out effect on an object handler.
+pub fn grow_out<T: ObjectHandler>(handler: &T) {
+    GrowOut::new().play(handler);
 }

@@ -1,6 +1,6 @@
 use crate::core::effects::Effect;
 use crate::core::{
-    Easing, Scene,
+    Easing,
     objects::{ObjectHandler, ObjectTrackable, TextShape},
 };
 
@@ -14,7 +14,6 @@ pub enum WriteBy {
 }
 
 fn play_text_effect<T>(
-    _s: &mut Scene,
     handler: &T,
     duration: f32,
     by: WriteBy,
@@ -53,15 +52,21 @@ pub struct Write {
 }
 
 impl Write {
-    /// Creates a write effect with a fixed sequencing unit.
-    pub fn new(by: WriteBy) -> Self {
+    /// Creates a write effect that sequences letters.
+    pub fn new() -> Self {
         Self {
             duration: 1.0,
-            by,
+            by: WriteBy::Letter,
             scale: 2.5,
             outline_width: 1.0,
             reverse: false,
         }
+    }
+
+    /// Sets the unit used to sequence the effect.
+    pub fn by(mut self, by: WriteBy) -> Self {
+        self.by = by;
+        self
     }
 
     /// Sets the effect duration in timeline seconds.
@@ -94,9 +99,8 @@ where
     T: ObjectHandler,
     T::Object: ObjectTrackable<TextShape>,
 {
-    fn play(self, s: &mut Scene, handler: &T) {
+    fn play(self, handler: &T) {
         play_text_effect(
-            s,
             handler,
             self.duration,
             self.by,
@@ -118,15 +122,21 @@ pub struct Unwrite {
 }
 
 impl Unwrite {
-    /// Creates an unwrite effect with a fixed sequencing unit.
-    pub fn new(by: WriteBy) -> Self {
+    /// Creates an unwrite effect that sequences letters.
+    pub fn new() -> Self {
         Self {
             duration: 1.0,
-            by,
+            by: WriteBy::Letter,
             scale: 0.0,
             outline_width: 1.0,
             reverse: false,
         }
+    }
+
+    /// Sets the unit used to sequence the effect.
+    pub fn by(mut self, by: WriteBy) -> Self {
+        self.by = by;
+        self
     }
 
     /// Sets the effect duration in timeline seconds.
@@ -159,9 +169,8 @@ where
     T: ObjectHandler,
     T::Object: ObjectTrackable<TextShape>,
 {
-    fn play(self, s: &mut Scene, handler: &T) {
+    fn play(self, handler: &T) {
         play_text_effect(
-            s,
             handler,
             self.duration,
             self.by,
@@ -171,4 +180,22 @@ where
             self.reverse,
         );
     }
+}
+
+/// Plays a default write effect on a text object handler.
+pub fn write<T>(handler: &T)
+where
+    T: ObjectHandler,
+    T::Object: ObjectTrackable<TextShape>,
+{
+    Write::new().play(handler);
+}
+
+/// Plays a default unwrite effect on a text object handler.
+pub fn unwrite<T>(handler: &T)
+where
+    T: ObjectHandler,
+    T::Object: ObjectTrackable<TextShape>,
+{
+    Unwrite::new().play(handler);
 }
