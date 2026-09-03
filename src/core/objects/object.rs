@@ -1,8 +1,8 @@
 use crate::core::{
     AnimatorHandle, SceneWorld, TrackInfo, TrackProperty, TrackValue, TrackValueType, Trackable,
     Tween,
-    components::{Animation, Inspection, Name, Node},
-    objects::{deactivate_subtree, is_attached},
+    components::{Animation, Draw, Inspection, Name, Node, Transform},
+    objects::{CameraTransform, deactivate_subtree, is_attached},
     types::Vector2,
 };
 
@@ -76,6 +76,18 @@ pub trait ObjectHandler {
 
     /// Returns the object's local bounding-box size.
     fn get_box(&self) -> Vector2;
+
+    /// Returns the object's position in scene coordinates.
+    fn get_global_position(&self) -> Vector2;
+
+    /// Returns the object's accumulated rotation in radians.
+    fn get_global_rotation(&self) -> f32;
+
+    /// Returns the object's accumulated scale without introducing skew.
+    fn get_global_scale(&self) -> Vector2;
+
+    /// Returns the object's opacity combined with its ancestor opacities.
+    fn get_global_opacity(&self) -> f32;
 
     /// Reads a typed trackable property from the object.
     fn get<T: TrackValueType>(&self, property: TrackProperty<T>) -> T;
@@ -181,6 +193,125 @@ pub fn remove_object(world: &SceneWorld, entity: hecs::Entity, time: f32) {
     );
 
     deactivate_subtree(&world, entity, time);
+}
+
+#[derive(Clone, Copy)]
+struct GlobalTransform {
+    position: Vector2,
+    rotation: f32,
+    scale: Vector2,
+}
+
+impl Default for GlobalTransform {
+    fn default() -> Self {
+        Self {
+            position: Vector2::ZERO,
+            rotation: 0.0,
+            scale: Vector2::ONE,
+        }
+    }
+}
+
+impl GlobalTransform {
+    fn append(self, local: Self) -> Self {
+        let position = local.position * self.scale;
+        let (sin, cos) = self.rotation.sin_cos();
+        let position = Vector2::new(
+            position.x * cos - position.y * sin,
+            position.x * sin + position.y * cos,
+        );
+
+        Self {
+            position: self.position + position,
+            rotation: self.rotation + local.rotation,
+            scale: self.scale * local.scale,
+        }
+    }
+}
+
+fn local_transform(world: &hecs::World, entity: hecs::Entity) -> GlobalTransform {
+    if let Ok(transform) = world.get::<&Transform>(entity) {
+        return GlobalTransform {
+            position: transform.position,
+            rotation: transform.rotation,
+            scale: transform.scale,
+        };
+    }
+
+    if let Ok(transform) = world.get::<&CameraTransform>(entity) {
+        let inverse_zoom = if transform.zoom.abs() <= f32::EPSILON {
+            0.0
+        } else {
+            transform.zoom.recip()
+        };
+
+        return GlobalTransform {
+            position: transform.position,
+            rotation: transform.rotation,
+            scale: Vector2::splat(inverse_zoom),
+        };
+    }
+
+    GlobalTransform::default()
+}
+
+fn global_transform(world: &hecs::World, entity: hecs::Entity) -> GlobalTransform {
+    let mut lineage = vec![entity];
+    let mut current = entity;
+
+    while let Some(parent) = world
+        .get::<&Node>(current)
+        .expect("Scene object must contain a Node component.")
+        .parent
+    {
+        lineage.push(parent);
+        current = parent;
+    }
+
+    lineage
+        .into_iter()
+        .rev()
+        .fold(GlobalTransform::default(), |global, current| {
+            global.append(local_transform(world, current))
+        })
+}
+
+/// Returns an object's position in scene coordinates.
+#[doc(hidden)]
+pub fn object_global_position(world: &hecs::World, entity: hecs::Entity) -> Vector2 {
+    global_transform(world, entity).position
+}
+
+/// Returns an object's accumulated rotation in radians.
+#[doc(hidden)]
+pub fn object_global_rotation(world: &hecs::World, entity: hecs::Entity) -> f32 {
+    global_transform(world, entity).rotation
+}
+
+/// Returns an object's accumulated scale without introducing skew.
+#[doc(hidden)]
+pub fn object_global_scale(world: &hecs::World, entity: hecs::Entity) -> Vector2 {
+    global_transform(world, entity).scale
+}
+
+/// Returns an object's opacity combined with its ancestor opacities.
+#[doc(hidden)]
+pub fn object_global_opacity(world: &hecs::World, entity: hecs::Entity) -> f32 {
+    let mut opacity = 1.0;
+    let mut current = Some(entity);
+
+    while let Some(entity) = current {
+        if let Ok(draw) = world.get::<&Draw>(entity) {
+            opacity *= draw.opacity.clamp(0.0, 1.0);
+        }
+
+        current = world
+            .get::<&Node>(entity)
+            .expect("Scene object must contain a Node component.")
+            .parent;
+    }
+
+    opacity
 }
 
 /// Marks an object as containing a specific trackable component.

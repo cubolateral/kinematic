@@ -118,6 +118,10 @@ pub(crate) fn attach_child(
         .children
         .get_or_insert_with(Vec::new)
         .push(child);
+    world
+        .get::<&mut Node>(child)
+        .expect("Added object must contain a Node component.")
+        .parent = Some(parent);
     activate_subtree(&world, child, time);
 }
 
@@ -354,5 +358,57 @@ mod tests {
         let center = surface.peek_pixels().unwrap().get_color((8, 8));
         assert_eq!(center.r(), 255);
         assert!((127..=128).contains(&center.a()));
+    }
+
+    #[test]
+    fn handlers_compose_global_values_without_skew() {
+        let mut scene = Scene::new();
+        let outer = Group::builder()
+            .position(vec2(10.0, 20.0))
+            .scale(vec2(2.0, 3.0))
+            .rotation(std::f32::consts::FRAC_PI_2)
+            .opacity(0.5)
+            .build(&mut scene);
+        let inner = Group::builder()
+            .position(vec2(4.0, 5.0))
+            .scale(vec2(5.0, 7.0))
+            .rotation(0.25)
+            .opacity(0.4)
+            .build(&mut scene);
+        let child = Rect::builder()
+            .position(vec2(1.0, 2.0))
+            .scale(vec2(0.5, 0.25))
+            .rotation(0.125)
+            .opacity(0.5)
+            .build(&mut scene);
+
+        inner.add(&child);
+        outer.add(&inner);
+        scene.get_root().add(&outer);
+
+        let inner_position = vec2(-5.0, 28.0);
+        let scaled_child_position = vec2(10.0, 42.0);
+        let rotation = std::f32::consts::FRAC_PI_2 + 0.25;
+        let (sin, cos) = rotation.sin_cos();
+        let expected_position = inner_position
+            + vec2(
+                scaled_child_position.x * cos - scaled_child_position.y * sin,
+                scaled_child_position.x * sin + scaled_child_position.y * cos,
+            );
+
+        assert!(
+            child
+                .get_global_position()
+                .abs_diff_eq(expected_position, 0.0001)
+        );
+        assert!(
+            (child.get_global_rotation() - (std::f32::consts::FRAC_PI_2 + 0.375)).abs() < 0.0001
+        );
+        assert!(
+            child
+                .get_global_scale()
+                .abs_diff_eq(vec2(5.0, 5.25), 0.0001)
+        );
+        assert!((child.get_global_opacity() - 0.1).abs() < 0.0001);
     }
 }

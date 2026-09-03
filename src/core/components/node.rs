@@ -1,5 +1,7 @@
 #[derive(Debug)]
 pub struct Node {
+    /// Parent container, assigned when the object is attached to the scene tree.
+    pub(crate) parent: Option<hecs::Entity>,
     /// Timeline bounds stored as `[start, end]` and evaluated as `start <= time < end`.
     pub(crate) lifetime: [f32; 2],
     /// Whether the object is active at the current scene time.
@@ -29,6 +31,7 @@ impl Node {
 impl Default for Node {
     fn default() -> Self {
         Self {
+            parent: None,
             lifetime: [f32::INFINITY; 2],
             is_activated: false,
             is_root: false,

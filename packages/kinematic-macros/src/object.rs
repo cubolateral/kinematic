@@ -26,6 +26,22 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         "__kinematic_{}_object_box",
         object_name.to_string().to_lowercase()
     );
+    let object_global_position_fn = format_ident!(
+        "__kinematic_{}_object_global_position",
+        object_name.to_string().to_lowercase()
+    );
+    let object_global_rotation_fn = format_ident!(
+        "__kinematic_{}_object_global_rotation",
+        object_name.to_string().to_lowercase()
+    );
+    let object_global_scale_fn = format_ident!(
+        "__kinematic_{}_object_global_scale",
+        object_name.to_string().to_lowercase()
+    );
+    let object_global_opacity_fn = format_ident!(
+        "__kinematic_{}_object_global_opacity",
+        object_name.to_string().to_lowercase()
+    );
     let remove_object_fn = format_ident!(
         "__kinematic_{}_remove_object",
         object_name.to_string().to_lowercase()
@@ -126,6 +142,10 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 ObjectBuilderComponent as #builder_component_trait,
                 ObjectHandler as #object_handler_trait,
                 ObjectTrackable as #object_trackable_trait,
+                object_global_opacity as #object_global_opacity_fn,
+                object_global_position as #object_global_position_fn,
+                object_global_rotation as #object_global_rotation_fn,
+                object_global_scale as #object_global_scale_fn,
                 remove_object as #remove_object_fn,
                 restore_object as #restore_object_fn,
                 save_object as #save_object_fn,
@@ -208,6 +228,26 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             fn get_box(&self) -> #vector_type {
                 let world = self.world.borrow();
                 #object_box_fn(&world, self.entity)
+            }
+
+            fn get_global_position(&self) -> #vector_type {
+                let world = self.world.borrow();
+                #object_global_position_fn(&world, self.entity)
+            }
+
+            fn get_global_rotation(&self) -> f32 {
+                let world = self.world.borrow();
+                #object_global_rotation_fn(&world, self.entity)
+            }
+
+            fn get_global_scale(&self) -> #vector_type {
+                let world = self.world.borrow();
+                #object_global_scale_fn(&world, self.entity)
+            }
+
+            fn get_global_opacity(&self) -> f32 {
+                let world = self.world.borrow();
+                #object_global_opacity_fn(&world, self.entity)
             }
 
             fn get<T: #track_value_type_trait>(
