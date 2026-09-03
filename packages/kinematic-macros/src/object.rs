@@ -174,8 +174,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
 
             /// Spawns the configured object as inactive in `scene` and returns its handler.
-            pub fn build(self, scene: &mut crate::core::Scene) -> #handler_name {
-                scene.spawn_object::<#object_name>(self.object, self.name)
+            pub fn build(self, s: &mut crate::core::Scene) -> #handler_name {
+                s.spawn_object::<#object_name>(self.object, self.name)
             }
         }
 
