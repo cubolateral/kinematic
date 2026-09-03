@@ -16,12 +16,12 @@ Kinematic is a Rust animation editor and library. The source code is the authori
 - SceneBuilder declares scene contents and schedules work through Scene; it does not own the application loop or editor state.
 - Animator compiles Task values into animation data. Scene::update(time) evaluates that data. Drawing must not mutate animation state.
 - User-facing objects are created with Object::builder().build(&mut scene). Objects have typed handlers, a default type name, and inactive Node metadata until attached to a group.
-- Every scene has a named root Group available through Scene::get_root(). Group::add attaches a subtree at the animator's current time. ObjectHandler::remove ends its lifetime without deleting entities or tree edges, so seeking backward can restore it.
+- Every scene has a named internal root container available through Scene::get_root(). Types deriving Container attach subtrees at the animator's current time through their generated handlers. ObjectHandler::remove ends its lifetime without deleting entities or tree edges, so seeking backward can restore it.
 - Inactive nodes must be ignored by scene evaluation, rendering, hit testing, and editor views.
 - Objects are ECS bundles implementing Object. The derive macro generates builders and typed handlers. #[trackable] fields are exposed directly on those types; do not introduce component-level handlers for convenience.
 - Trackable fields use #[track] and must appear before untracked fields, separated by one blank line. New trackable value types require support in TrackValue, TrackValueType, interpolation, and display behavior.
 - Keyframes are appended in non-decreasing timeline order.
-- Drawing starts at the root group, follows ordered child lists, uses local coordinates in non-group draw callbacks, applies opacity in paints, and leaves ECS state unchanged. Group opacity composites the complete subtree once.
+- Drawing starts at the root container, follows the optional ordered child lists stored by Node, uses local coordinates in draw callbacks, and leaves ECS state unchanged. Container opacity composites the complete subtree once.
 - Timeline state belongs in src/ui; playback time and duration belong to the editor timeline. Selection is shared by Scene Tree, Timeline, and Preview; the Inspector only reads it. Editor overlays must never enter exported frames.
 - Export reuses the existing SDL/OpenGL/Skia/framebuffer resources, advances exactly 1 / fps per frame, streams raw RGBA frames to FFmpeg, and writes output/<project name>.mp4.
 

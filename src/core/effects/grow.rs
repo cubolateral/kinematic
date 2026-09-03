@@ -1,5 +1,10 @@
 use crate::core::effects::Effect;
-use crate::core::{Easing, components::Transform, objects::ObjectHandler, types::Vector2};
+use crate::core::{
+    Easing,
+    components::Transform,
+    objects::{ObjectHandler, ObjectTrackable},
+    types::Vector2,
+};
 
 /// Anchor used as the origin of a grow effect.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -61,6 +66,7 @@ fn play_grow<T>(
     rotation: (f32, f32),
 ) where
     T: ObjectHandler,
+    T::Object: ObjectTrackable<Transform>,
 {
     handler
         .animate_from(Transform::scale_property(), scale.0, scale.1)
@@ -121,7 +127,11 @@ impl Default for GrowIn {
     }
 }
 
-impl<T: ObjectHandler> Effect<T> for GrowIn {
+impl<T> Effect<T> for GrowIn
+where
+    T: ObjectHandler,
+    T::Object: ObjectTrackable<Transform>,
+{
     fn play(self, handler: &T) {
         let position = handler.get(Transform::position_property());
         let scale = handler.get(Transform::scale_property());
@@ -191,7 +201,11 @@ impl Default for GrowOut {
     }
 }
 
-impl<T: ObjectHandler> Effect<T> for GrowOut {
+impl<T> Effect<T> for GrowOut
+where
+    T: ObjectHandler,
+    T::Object: ObjectTrackable<Transform>,
+{
     fn play(self, handler: &T) {
         let position = handler.get(Transform::position_property());
         let scale = handler.get(Transform::scale_property());
@@ -212,11 +226,19 @@ impl<T: ObjectHandler> Effect<T> for GrowOut {
 }
 
 /// Plays a default grow-in effect on an object handler.
-pub fn grow_in<T: ObjectHandler>(handler: &T) {
+pub fn grow_in<T>(handler: &T)
+where
+    T: ObjectHandler,
+    T::Object: ObjectTrackable<Transform>,
+{
     GrowIn::new().play(handler);
 }
 
 /// Plays a default grow-out effect on an object handler.
-pub fn grow_out<T: ObjectHandler>(handler: &T) {
+pub fn grow_out<T>(handler: &T)
+where
+    T: ObjectHandler,
+    T::Object: ObjectTrackable<Transform>,
+{
     GrowOut::new().play(handler);
 }

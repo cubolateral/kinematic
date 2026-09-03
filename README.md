@@ -13,8 +13,8 @@ Kinematic is in early development, so its API may change.
 
 - Typed scene objects and trackable component fields.
 - User-facing object names with type-based defaults.
-- Hierarchical scene trees with nested groups, inherited transforms, and
-  composited group opacity.
+- Hierarchical scene trees with reusable containers and inherited transforms.
+- Animatable cameras with position, zoom, and rotation.
 - Sequential and parallel animation tasks.
 - Built-in easing functions.
 - Hierarchical timeline and selection from the Scene Tree, Timeline, or Preview.
@@ -65,9 +65,9 @@ fn main() {
 
 ## Scene tree
 
-Every scene owns a root [`Group`](src/core/objects/group.rs), available through
+Every scene owns an internal root container, available through
 `Scene::get_root()`. Objects are inactive after `build()` and begin their
-timeline lifetime when added to a group:
+timeline lifetime when added to a container:
 
 ```rust
 let circle = Circle::builder().build(&mut scene);
@@ -77,9 +77,30 @@ child_group.add(&circle);
 scene.get_root().add(&child_group);
 ```
 
-Groups may contain objects or other groups. Transforms are inherited through
-the tree, and group opacity is composited once over the complete subtree at the
-destination canvas resolution.
+The `Container` derive gives an object's generated handler the `add` method.
+`Group` uses it to organize transformable subtrees, but hierarchy traversal is
+not coupled to that concrete type. Container transforms are inherited through
+the tree, and container opacity is composited once over its complete subtree at
+the destination canvas resolution.
+
+## Camera
+
+Add a camera to any container to control the rendered view:
+
+```rust
+let camera = Camera::builder()
+    .position(vec2(200.0, 0.0))
+    .zoom(2.0)
+    .rotation(0.25)
+    .build(&mut scene);
+
+scene.get_root().add(&camera);
+```
+
+Camera properties belong to `CameraTransform`, separately from the `Transform`
+used by drawable objects. A camera can inherit the transform of an ancestor
+container. If multiple cameras are active, the last camera in tree order
+controls the view. Without an active camera, rendering keeps the identity view.
 
 `ObjectHandler::remove()` ends the object's lifetime and the lifetimes of all
 its descendants. The stored tree remains intact so seeking to an earlier time

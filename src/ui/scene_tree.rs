@@ -1,8 +1,5 @@
 use crate::{
-    core::{
-        components::{Name, Node},
-        objects::ObjectHandler,
-    },
+    core::components::{Name, Node},
     editor::Editor,
 };
 
@@ -24,7 +21,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
         let root_name = world
             .get::<&Name>(root)
-            .expect("Root group must contain a Name component.");
+            .expect("Root must contain a Name component.");
         let position = ui.cursor_screen_pos();
         let root_clicked = selectable_row(ui, format!("##scene_tree_{}", root.to_bits()));
         let draw_list = ui.get_window_draw_list();
@@ -47,7 +44,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
             clicked = Some(root);
         }
 
-        let children = group_children(&world, root);
+        let children = active_children(&world, root);
         if children.is_empty() {
             ui.text_disabled("   No objects.");
         } else {
@@ -89,7 +86,7 @@ fn draw_children(
     for (index, entity) in children.iter().copied().enumerate() {
         let is_last = index + 1 == children.len();
         let is_highlighted = ancestor_selected || selected == Some(entity);
-        let entity_children = group_children(world, entity);
+        let entity_children = active_children(world, entity);
         let name = world
             .get::<&Name>(entity)
             .expect("Scene tree object must contain a Name component.");
@@ -156,12 +153,14 @@ fn selectable_row(ui: &dear_imgui_rs::Ui, id: String) -> bool {
         .build()
 }
 
-fn group_children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity> {
+fn active_children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity> {
     world
-        .get::<&Vec<hecs::Entity>>(entity)
-        .map(|children| {
-            children
-                .iter()
+        .get::<&Node>(entity)
+        .map(|node| {
+            node.children
+                .as_ref()
+                .into_iter()
+                .flatten()
                 .copied()
                 .filter(|child| {
                     world

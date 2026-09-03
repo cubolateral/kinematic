@@ -2,7 +2,7 @@ use crate::core::effects::Effect;
 use crate::core::{
     Easing,
     components::{Draw, Transform as TransformComponent},
-    objects::ObjectHandler,
+    objects::{ObjectHandler, ObjectTrackable},
     types::Vector2,
 };
 
@@ -43,6 +43,7 @@ fn play_fade<T>(
     rotation: (f32, f32),
 ) where
     T: ObjectHandler,
+    T::Object: ObjectTrackable<Draw> + ObjectTrackable<TransformComponent>,
 {
     handler
         .animate_from(Draw::opacity_property(), opacity.0, opacity.1)
@@ -122,7 +123,11 @@ impl FadeIn {
     }
 }
 
-impl<T: ObjectHandler> Effect<T> for FadeIn {
+impl<T> Effect<T> for FadeIn
+where
+    T: ObjectHandler,
+    T::Object: ObjectTrackable<Draw> + ObjectTrackable<TransformComponent>,
+{
     fn play(self, handler: &T) {
         let position = handler.get(TransformComponent::position_property());
         let scale = handler.get(TransformComponent::scale_property());
@@ -207,7 +212,11 @@ impl FadeOut {
     }
 }
 
-impl<T: ObjectHandler> Effect<T> for FadeOut {
+impl<T> Effect<T> for FadeOut
+where
+    T: ObjectHandler,
+    T::Object: ObjectTrackable<Draw> + ObjectTrackable<TransformComponent>,
+{
     fn play(self, handler: &T) {
         let position = handler.get(TransformComponent::position_property());
         let scale = handler.get(TransformComponent::scale_property());
@@ -234,11 +243,19 @@ impl<T: ObjectHandler> Effect<T> for FadeOut {
 }
 
 /// Plays a default fade-in effect on an object handler.
-pub fn fade_in<T: ObjectHandler>(handler: &T) {
+pub fn fade_in<T>(handler: &T)
+where
+    T: ObjectHandler,
+    T::Object: ObjectTrackable<Draw> + ObjectTrackable<TransformComponent>,
+{
     FadeIn::new().play(handler);
 }
 
 /// Plays a default fade-out effect on an object handler.
-pub fn fade_out<T: ObjectHandler>(handler: &T) {
+pub fn fade_out<T>(handler: &T)
+where
+    T: ObjectHandler,
+    T::Object: ObjectTrackable<Draw> + ObjectTrackable<TransformComponent>,
+{
     FadeOut::new().play(handler);
 }

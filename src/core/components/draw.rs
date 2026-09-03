@@ -11,8 +11,8 @@ pub struct Draw {
     #[track]
     pub opacity: f32,
 
-    /// Draws this entity in local coordinates on the supplied canvas.
-    pub on_draw: fn(&hecs::World, hecs::Entity, &skia_safe::Canvas),
+    /// Draws this entity in local coordinates with the supplied opacity.
+    pub on_draw: fn(&hecs::World, hecs::Entity, &skia_safe::Canvas, f32),
 
     /// Returns the object's local bounding-box size.
     pub get_box: fn(&hecs::World, hecs::Entity) -> Vector2,
@@ -21,7 +21,7 @@ pub struct Draw {
 impl Default for Draw {
     fn default() -> Self {
         Self {
-            on_draw: |_, _, _| {},
+            on_draw: |_, _, _, _| {},
             get_box: |_, _| Vector2::ZERO,
             opacity: 1.0,
         }

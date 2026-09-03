@@ -40,11 +40,10 @@ impl Default for Rect {
             style: Default::default(),
             transform: Default::default(),
             draw: Draw {
-                on_draw: |world, entity, canvas| {
+                on_draw: |world, entity, canvas, opacity| {
                     let shape = world.get::<&RectShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform>(entity).unwrap();
-                    let draw = world.get::<&Draw>(entity).unwrap();
 
                     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
                     let rect = skia_safe::Rect::from_xywh(
@@ -55,12 +54,7 @@ impl Default for Rect {
                     );
 
                     let mut paint = skia_safe::Paint::new(
-                        skia_safe::Color4f::new(
-                            fill_r,
-                            fill_g,
-                            fill_b,
-                            fill_a * draw.opacity.clamp(0.0, 1.0),
-                        ),
+                        skia_safe::Color4f::new(fill_r, fill_g, fill_b, fill_a * opacity),
                         None,
                     );
                     paint.set_anti_alias(true);
@@ -74,7 +68,7 @@ impl Default for Rect {
                                 stroke_r,
                                 stroke_g,
                                 stroke_b,
-                                stroke_a * draw.opacity.clamp(0.0, 1.0),
+                                stroke_a * opacity,
                             ),
                             None,
                         );

@@ -1,10 +1,10 @@
 use crate::core::{
     Animator, Scheduling, Task, Tween,
-    components::{Animation, Name, Node},
+    components::{Animation, Draw, Inspection, Name, Node},
     objects::{
-        Group, GroupHandler, Object, ObjectHandler, draw_entity, draw_entity_outline, pick_entity,
+        Object, RootHandler, active_camera_matrix, draw_entity, draw_entity_outline, pick_entity,
     },
-    types::Vector2,
+    types::{Vector2, vec2},
 };
 
 /// Shared ECS world used by scenes and their handlers.
@@ -29,19 +29,24 @@ impl Scene {
         let animator_time = std::rc::Rc::new(std::cell::Cell::new(0.0));
         let animator = Animator::with_scene_time(std::rc::Rc::clone(&animator_time));
         let world = std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new()));
-        let root = Group::spawn(
-            std::rc::Rc::clone(&world),
-            animator.handle(),
-            Group::default(),
-            Name::new("Root"),
-        )
-        .get_id();
+        let root = world.borrow_mut().spawn(
+            hecs::EntityBuilder::new()
+                .add(Animation::default())
+                .add(Draw::default())
+                .add(Inspection {
+                    object_name: "Root",
+                    ..Default::default()
+                })
+                .add(Name::new("Root"))
+                .add(Node::default())
+                .build(),
+        );
 
         {
             let world = world.borrow();
             let mut node = world
                 .get::<&mut Node>(root)
-                .expect("Root group must contain a Node component.");
+                .expect("Root must contain a Node component.");
 
             node.is_root = true;
             node.activate(0.0);
@@ -79,21 +84,43 @@ impl Scene {
         }
     }
 
-    /// Draws the root group tree using the scene state produced by [`Self::update`].
+    /// Draws the root tree using the scene state produced by [`Self::update`].
     pub fn draw(&self, canvas: &skia_safe::Canvas) {
         let world = self.world.borrow();
+        let save_count = canvas.save();
+
+        if let Some(view) =
+            active_camera_matrix(&world, self.root).and_then(|camera| camera.invert())
+        {
+            canvas.concat(&view);
+        }
 
         draw_entity(&world, self.root, canvas);
+        canvas.restore_to_count(save_count);
     }
 
     pub(crate) fn draw_outline(&self, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
         let world = self.world.borrow();
+        let save_count = canvas.save();
+
+        if let Some(view) =
+            active_camera_matrix(&world, self.root).and_then(|camera| camera.invert())
+        {
+            canvas.concat(&view);
+        }
 
         draw_entity_outline(&world, self.root, entity, canvas);
+        canvas.restore_to_count(save_count);
     }
 
     pub(crate) fn pick(&self, point: Vector2) -> Option<hecs::Entity> {
         let world = self.world.borrow();
+        let point = active_camera_matrix(&world, self.root)
+            .map(|camera| {
+                let point = camera.map_point((point.x, point.y));
+                vec2(point.x, point.y)
+            })
+            .unwrap_or(point);
 
         pick_entity(&world, self.root, point)
     }
@@ -169,13 +196,13 @@ impl Scene {
         )
     }
 
-    /// Returns the root group that owns the scene's drawable object tree.
-    pub fn get_root(&self) -> GroupHandler {
-        Group::handler(
-            std::rc::Rc::clone(&self.world),
-            self.root,
-            self.animator.handle().active(),
-        )
+    /// Returns the internal root that owns the scene's object tree.
+    pub fn get_root(&self) -> RootHandler {
+        RootHandler {
+            world: std::rc::Rc::clone(&self.world),
+            entity: self.root,
+            animator: self.animator.handle().active(),
+        }
     }
 
     /// Read-only access to the underlying ECS world.

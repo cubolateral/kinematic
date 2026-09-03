@@ -4,8 +4,10 @@ pub struct Node {
     pub(crate) lifetime: [f32; 2],
     /// Whether the object is active at the current scene time.
     pub(crate) is_activated: bool,
-    /// Whether this node is the scene's internal root group.
+    /// Whether this node is the scene's internal root container.
     pub(crate) is_root: bool,
+    /// Ordered child objects, allocated when the first child is added.
+    pub(crate) children: Option<Vec<hecs::Entity>>,
 }
 
 impl Node {
@@ -30,6 +32,7 @@ impl Default for Node {
             lifetime: [f32::INFINITY; 2],
             is_activated: false,
             is_root: false,
+            children: None,
         }
     }
 }

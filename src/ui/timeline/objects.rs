@@ -6,7 +6,6 @@ use super::{
 };
 use crate::{
     core::components::{Name, Node},
-    core::objects::ObjectHandler,
     editor::Editor,
     ui::widgets::{draw_panel_rect, hierarchy_prefix, selection_color, text_size},
 };
@@ -222,15 +221,17 @@ pub(super) fn draw(
 
 fn collect_rows(
     world: &hecs::World,
-    group: hecs::Entity,
+    parent: hecs::Entity,
     branches: &mut Vec<bool>,
     selected: Option<hecs::Entity>,
     ancestor_selected: bool,
     rows: &mut Vec<ObjectRow>,
 ) {
     let children = world
-        .get::<&Vec<hecs::Entity>>(group)
-        .map(|children| (*children).clone())
+        .get::<&Node>(parent)
+        .expect("Timeline parent must contain a Node component.")
+        .children
+        .clone()
         .unwrap_or_default();
 
     for (index, entity) in children.iter().copied().enumerate() {
@@ -242,7 +243,10 @@ fn collect_rows(
         let name = world
             .get::<&Name>(entity)
             .expect("Timeline object must contain a Name component.");
-        let is_group = world.get::<&Vec<hecs::Entity>>(entity).is_ok();
+        let has_children = node
+            .children
+            .as_ref()
+            .is_some_and(|children| !children.is_empty());
 
         if node.lifetime[0].is_finite() {
             rows.push(ObjectRow {
@@ -255,7 +259,7 @@ fn collect_rows(
             });
         }
 
-        if !is_group {
+        if !has_children {
             continue;
         }
 

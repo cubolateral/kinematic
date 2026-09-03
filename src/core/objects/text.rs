@@ -210,12 +210,12 @@ fn text_lines<'a>(shape: &'a TextShape, font: &skia_safe::Font) -> Vec<TextLine<
 fn draw_complete_text(
     shape: &TextShape,
     style: &Style,
-    draw: &Draw,
+    opacity: f32,
     scale: Vector2,
     canvas: &skia_safe::Canvas,
 ) {
     let font = shape.font.skia_font(shape.size);
-    let mut paint = text_paint(style.fill, draw.opacity);
+    let mut paint = text_paint(style.fill, opacity);
     let lines = text_lines(shape, &font);
 
     for line in &lines {
@@ -226,7 +226,7 @@ fn draw_complete_text(
         return;
     }
 
-    paint.set_color4f(text_paint(style.stroke, draw.opacity).color4f(), None);
+    paint.set_color4f(text_paint(style.stroke, opacity).color4f(), None);
     paint.set_style(skia_safe::PaintStyle::Stroke);
     paint.set_stroke_width(stroke_width_for_scale(style.stroke_width, scale));
 
@@ -268,12 +268,12 @@ fn write_units(text: &str, by_word: bool) -> Vec<(usize, usize)> {
 fn draw_written_text(
     shape: &TextShape,
     style: &Style,
-    draw: &Draw,
+    opacity: f32,
     object_scale: Vector2,
     canvas: &skia_safe::Canvas,
 ) {
     let font = shape.font.skia_font(shape.size);
-    let layout_paint = text_paint(style.fill, draw.opacity);
+    let layout_paint = text_paint(style.fill, opacity);
     let lines = text_lines(shape, &font);
     let units: Vec<_> = lines
         .iter()
@@ -325,7 +325,7 @@ fn draw_written_text(
         canvas.scale((scale, scale));
         canvas.translate((-center.0, -center.1));
 
-        let mut paint = text_paint(fill, draw.opacity);
+        let mut paint = text_paint(fill, opacity);
         canvas.draw_str(unit, (x, line.origin.1), &font, &paint);
 
         if shape.write_outline_width > 0.0 {
@@ -334,14 +334,14 @@ fn draw_written_text(
                 skia_safe::utils::text_utils::get_path(unit, (x, line.origin.1), &font);
 
             if let Some(outline_path) = inner_outline_path(&glyph_path, shape.write_outline_width) {
-                paint = text_paint(outline, draw.opacity);
+                paint = text_paint(outline, opacity);
                 canvas.draw_path(&outline_path, &paint);
             }
         }
 
         if style.stroke_width > 0.0 {
             let stroke = color_with_alpha(style.stroke, fill_progress);
-            paint = text_paint(stroke, draw.opacity);
+            paint = text_paint(stroke, opacity);
             paint.set_style(skia_safe::PaintStyle::Stroke);
             paint.set_stroke_width(stroke_width_for_scale(
                 style.stroke_width,
@@ -354,16 +354,15 @@ fn draw_written_text(
     }
 }
 
-fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
     let shape = world.get::<&TextShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform>(entity).unwrap();
-    let draw = world.get::<&Draw>(entity).unwrap();
 
     if shape.write_progress >= 1.0 {
-        draw_complete_text(&shape, &style, &draw, transform.scale, canvas);
+        draw_complete_text(&shape, &style, opacity, transform.scale, canvas);
     } else {
-        draw_written_text(&shape, &style, &draw, transform.scale, canvas);
+        draw_written_text(&shape, &style, opacity, transform.scale, canvas);
     }
 }
 

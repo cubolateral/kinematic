@@ -1,6 +1,7 @@
 use crate::core::{
     AnimatorHandle, SceneWorld, TrackProperty, TrackValueType, Trackable, Tween,
     components::{Animation, Inspection, Name, Node},
+    objects::{deactivate_subtree, is_attached},
     types::Vector2,
 };
 
@@ -92,30 +93,11 @@ pub fn remove_object(world: &SceneWorld, entity: hecs::Entity, time: f32) {
     drop(node);
 
     assert!(
-        world
-            .query::<&Vec<hecs::Entity>>()
-            .iter()
-            .any(|children| children.contains(&entity)),
-        "Removed object must belong to a group."
+        is_attached(&world, entity),
+        "Removed object must belong to a container."
     );
 
     deactivate_subtree(&world, entity, time);
-}
-
-fn deactivate_subtree(world: &hecs::World, entity: hecs::Entity, time: f32) {
-    world
-        .get::<&mut Node>(entity)
-        .expect("Removed object must contain a Node component.")
-        .deactivate(time);
-
-    let children = world
-        .get::<&Vec<hecs::Entity>>(entity)
-        .map(|children| (*children).clone())
-        .unwrap_or_default();
-
-    for child in children {
-        deactivate_subtree(world, child, time);
-    }
 }
 
 /// Marks an object as containing a specific trackable component.
