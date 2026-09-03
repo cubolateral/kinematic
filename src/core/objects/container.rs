@@ -410,5 +410,6 @@ mod tests {
                 .abs_diff_eq(vec2(5.0, 5.25), 0.0001)
         );
         assert!((child.get_global_opacity() - 0.1).abs() < 0.0001);
+        assert_eq!(scene.pick(expected_position), Some(child.get_id()));
     }
 }

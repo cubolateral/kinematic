@@ -1,6 +1,6 @@
 use crate::core::{
     components::{Draw, Node, Transform},
-    objects::{CameraTransform, children},
+    objects::{CameraTransform, GlobalTransform, children, local_transform},
     types::Vector2,
 };
 
@@ -9,14 +9,14 @@ pub(crate) fn active_camera_matrix(
     root: hecs::Entity,
 ) -> Option<skia_safe::Matrix> {
     let mut camera = None;
-    find_active_camera(world, root, &skia_safe::Matrix::new_identity(), &mut camera);
+    find_active_camera(world, root, GlobalTransform::default(), &mut camera);
     camera
 }
 
 fn find_active_camera(
     world: &hecs::World,
     entity: hecs::Entity,
-    parent: &skia_safe::Matrix,
+    parent: GlobalTransform,
     camera: &mut Option<skia_safe::Matrix>,
 ) {
     let node = world
@@ -26,27 +26,28 @@ fn find_active_camera(
         return;
     }
 
-    let local = world
-        .get::<&CameraTransform>(entity)
-        .map(|transform| camera_matrix(&transform))
-        .or_else(|_| {
-            world
-                .get::<&Transform>(entity)
-                .map(|transform| transform_matrix(&transform))
-        })
-        .unwrap_or_else(|_| skia_safe::Matrix::new_identity());
-    let global = skia_safe::Matrix::concat(parent, &local);
+    let global = parent.append(local_transform(world, entity));
+    let matrix = transform_matrix(global);
 
-    if world.get::<&CameraTransform>(entity).is_ok() && global.invert().is_some() {
-        *camera = Some(global.clone());
+    if world.get::<&CameraTransform>(entity).is_ok() && matrix.invert().is_some() {
+        *camera = Some(matrix);
     }
 
     for child in children(world, entity) {
-        find_active_camera(world, child, &global, camera);
+        find_active_camera(world, child, global, camera);
     }
 }
 
 pub(crate) fn draw_entity(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+    draw_entity_with_parent(world, entity, GlobalTransform::default(), canvas);
+}
+
+fn draw_entity_with_parent(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    parent: GlobalTransform,
+    canvas: &skia_safe::Canvas,
+) {
     let node = world
         .get::<&Node>(entity)
         .expect("Drawn object must contain a Node component.");
@@ -63,21 +64,22 @@ pub(crate) fn draw_entity(world: &hecs::World, entity: hecs::Entity, canvas: &sk
     }
 
     let children = node.children.clone().unwrap_or_default();
+    let global = parent.append(local_transform(world, entity));
     let save_count = canvas.save();
-    apply_transform(world, entity, canvas);
+    apply_global_transform(parent, global, canvas);
 
     if children.is_empty() || opacity >= 1.0 {
         (draw.on_draw)(world, entity, canvas, opacity);
 
         for child in children {
-            draw_entity(world, child, canvas);
+            draw_entity_with_parent(world, child, global, canvas);
         }
     } else {
         let layer_count = canvas.save_layer_alpha_f(None, opacity);
         (draw.on_draw)(world, entity, canvas, 1.0);
 
         for child in children {
-            draw_entity(world, child, canvas);
+            draw_entity_with_parent(world, child, global, canvas);
         }
 
         canvas.restore_to_count(layer_count);
@@ -92,6 +94,16 @@ pub(crate) fn draw_entity_outline(
     target: hecs::Entity,
     canvas: &skia_safe::Canvas,
 ) -> bool {
+    draw_entity_outline_with_parent(world, entity, target, GlobalTransform::default(), canvas)
+}
+
+fn draw_entity_outline_with_parent(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    target: hecs::Entity,
+    parent: GlobalTransform,
+    canvas: &skia_safe::Canvas,
+) -> bool {
     let node = world
         .get::<&Node>(entity)
         .expect("Outlined object must contain a Node component.");
@@ -99,8 +111,9 @@ pub(crate) fn draw_entity_outline(
         return false;
     }
 
+    let global = parent.append(local_transform(world, entity));
     let save_count = canvas.save();
-    apply_transform(world, entity, canvas);
+    apply_global_transform(parent, global, canvas);
 
     let found = if entity == target {
         if let Some(bounds) = local_bounds(world, entity) {
@@ -111,7 +124,7 @@ pub(crate) fn draw_entity_outline(
     } else {
         children(world, entity)
             .into_iter()
-            .any(|child| draw_entity_outline(world, child, target, canvas))
+            .any(|child| draw_entity_outline_with_parent(world, child, target, global, canvas))
     };
 
     canvas.restore_to_count(save_count);
@@ -122,6 +135,15 @@ pub(crate) fn pick_entity(
     world: &hecs::World,
     entity: hecs::Entity,
     point: Vector2,
+) -> Option<hecs::Entity> {
+    pick_entity_with_parent(world, entity, point, GlobalTransform::default())
+}
+
+fn pick_entity_with_parent(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    point: Vector2,
+    parent: GlobalTransform,
 ) -> Option<hecs::Entity> {
     let node = world
         .get::<&Node>(entity)
@@ -134,7 +156,8 @@ pub(crate) fn pick_entity(
         return None;
     }
 
-    let point = inverse_transform_point(world, entity, point)?;
+    let global = parent.append(local_transform(world, entity));
+    let local_point = inverse_transform_point(global, point)?;
 
     if let Some(child) = node
         .children
@@ -143,17 +166,17 @@ pub(crate) fn pick_entity(
         .flatten()
         .rev()
         .copied()
-        .find_map(|child| pick_entity(world, child, point))
+        .find_map(|child| pick_entity_with_parent(world, child, point, global))
     {
         return Some(child);
     }
 
     let bounds = local_bounds(world, entity)?;
 
-    (point.x >= bounds.left
-        && point.x <= bounds.right
-        && point.y >= bounds.top
-        && point.y <= bounds.bottom)
+    (local_point.x >= bounds.left
+        && local_point.x <= bounds.right
+        && local_point.y >= bounds.top
+        && local_point.y <= bounds.bottom)
         .then_some(entity)
 }
 
@@ -231,14 +254,7 @@ fn transformed_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_
     ))
 }
 
-fn inverse_transform_point(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    point: Vector2,
-) -> Option<Vector2> {
-    let Ok(transform) = world.get::<&Transform>(entity) else {
-        return Some(point);
-    };
+fn inverse_transform_point(transform: GlobalTransform, point: Vector2) -> Option<Vector2> {
     if transform.scale.x.abs() <= f32::EPSILON || transform.scale.y.abs() <= f32::EPSILON {
         return None;
     }
@@ -254,32 +270,20 @@ fn inverse_transform_point(
     Some(rotated / transform.scale)
 }
 
-fn apply_transform(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
-    let Ok(transform) = world.get::<&Transform>(entity) else {
+fn apply_global_transform(
+    parent: GlobalTransform,
+    global: GlobalTransform,
+    canvas: &skia_safe::Canvas,
+) {
+    let Some(inverse_parent) = transform_matrix(parent).invert() else {
         return;
     };
-
-    canvas.translate((transform.position.x, transform.position.y));
-    canvas.rotate(transform.rotation.to_degrees(), None);
-    canvas.scale((transform.scale.x, transform.scale.y));
+    let relative = skia_safe::Matrix::concat(&inverse_parent, &transform_matrix(global));
+    canvas.concat(&relative);
 }
 
-fn transform_matrix(transform: &Transform) -> skia_safe::Matrix {
+fn transform_matrix(transform: GlobalTransform) -> skia_safe::Matrix {
     affine_matrix(transform.position, transform.scale, transform.rotation)
-}
-
-fn camera_matrix(transform: &CameraTransform) -> skia_safe::Matrix {
-    let inverse_zoom = if transform.zoom.abs() <= f32::EPSILON {
-        0.0
-    } else {
-        transform.zoom.recip()
-    };
-
-    affine_matrix(
-        transform.position,
-        Vector2::splat(inverse_zoom),
-        transform.rotation,
-    )
 }
 
 fn affine_matrix(position: Vector2, scale: Vector2, rotation: f32) -> skia_safe::Matrix {

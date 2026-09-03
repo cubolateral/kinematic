@@ -196,10 +196,10 @@ pub fn remove_object(world: &SceneWorld, entity: hecs::Entity, time: f32) {
 }
 
 #[derive(Clone, Copy)]
-struct GlobalTransform {
-    position: Vector2,
-    rotation: f32,
-    scale: Vector2,
+pub(crate) struct GlobalTransform {
+    pub(crate) position: Vector2,
+    pub(crate) rotation: f32,
+    pub(crate) scale: Vector2,
 }
 
 impl Default for GlobalTransform {
@@ -213,7 +213,7 @@ impl Default for GlobalTransform {
 }
 
 impl GlobalTransform {
-    fn append(self, local: Self) -> Self {
+    pub(crate) fn append(self, local: Self) -> Self {
         let position = local.position * self.scale;
         let (sin, cos) = self.rotation.sin_cos();
         let position = Vector2::new(
@@ -229,7 +229,7 @@ impl GlobalTransform {
     }
 }
 
-fn local_transform(world: &hecs::World, entity: hecs::Entity) -> GlobalTransform {
+pub(crate) fn local_transform(world: &hecs::World, entity: hecs::Entity) -> GlobalTransform {
     if let Ok(transform) = world.get::<&Transform>(entity) {
         return GlobalTransform {
             position: transform.position,
@@ -255,7 +255,7 @@ fn local_transform(world: &hecs::World, entity: hecs::Entity) -> GlobalTransform
     GlobalTransform::default()
 }
 
-fn global_transform(world: &hecs::World, entity: hecs::Entity) -> GlobalTransform {
+pub(crate) fn global_transform(world: &hecs::World, entity: hecs::Entity) -> GlobalTransform {
     let mut lineage = vec![entity];
     let mut current = entity;
 
