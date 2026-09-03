@@ -79,10 +79,49 @@ impl Track {
         }
     }
 
-    pub fn set_keyframe(&mut self, time: f32, value: TrackValue, easing: Option<Easing>) {
-        self.clear_current_tween_range();
+    /// Appends a tween while preserving discontinuities created by instant changes.
+    pub fn add_tween(
+        &mut self,
+        start_time: f32,
+        from: TrackValue,
+        to: TrackValue,
+        duration: f32,
+        easing: Easing,
+    ) {
+        if duration == 0.0 {
+            // Preserve the value before a standalone instant change. If another
+            // tween ends now, its final keyframe already provides that value.
+            if self
+                .keyframes
+                .last()
+                .is_none_or(|keyframe| keyframe.time < start_time)
+            {
+                self.set_keyframe(start_time, from, None);
+            }
 
-        let length = self.keyframes.len();
+            self.set_keyframe(start_time, to, None);
+            return;
+        }
+
+        // The starting keyframe owns the easing for the following segment.
+        self.set_keyframe(start_time, from, Some(easing));
+        self.set_keyframe(start_time + duration, to, None);
+    }
+
+    /// Returns all keyframes at `time` in insertion order.
+    pub fn keyframes_at(&self, time: f32) -> &[Keyframe] {
+        let start = self
+            .keyframes
+            .partition_point(|keyframe| keyframe.time < time);
+        let end = self
+            .keyframes
+            .partition_point(|keyframe| keyframe.time <= time);
+
+        &self.keyframes[start..end]
+    }
+
+    fn set_keyframe(&mut self, time: f32, value: TrackValue, easing: Option<Easing>) {
+        self.clear_current_tween_range();
 
         if let Some(last) = self.keyframes.last_mut() {
             // Keyframes are appended in time order because runtime lookup assumes
@@ -92,21 +131,13 @@ impl Track {
                 "Keyframes must be appended in non-decreasing time order."
             );
 
-            if time == last.time {
-                if length == 1 {
-                    // Special case: this happens when the first tween is created with
-                    // `duration == 0`. In that case, the value must stay at its original
-                    // state before the target time, so we keep the first keyframe as the
-                    // initial value and let the new one represent the instant change.
-                    last.time = 0.0;
-                    last.easing = None;
-                } else {
-                    // Same timestamp as the latest keyframe means this is an update,
-                    // not a new segment. Replace the value/easing in place.
-                    last.value = value;
-                    last.easing = easing;
-                    return;
-                }
+            if time == last.time && easing.is_some() {
+                // A tween starting where the previous one ended owns the outgoing
+                // easing. A zero-duration tween then appends its target at the same
+                // timestamp so the value before the instant change is preserved.
+                last.value = value;
+                last.easing = easing;
+                return;
             }
         }
 
@@ -126,7 +157,7 @@ impl Track {
 
         let (start, end) = self.current_tween_range;
 
-        if start < end && start <= time && time <= end {
+        if start < end && start <= time && time < end {
             if start == 0.0 && end == self.keyframes[0].time {
                 return (None, self.keyframes.first());
             }
@@ -143,21 +174,9 @@ impl Track {
 
         self.clear_current_tween_range();
 
-        let mut left = 0usize;
-        let mut right = self.keyframes.len();
-
-        while left < right {
-            let mid = left + (right - left) / 2;
-            let t = self.keyframes[mid].time;
-
-            if t == time {
-                return (Some(&self.keyframes[mid]), Some(&self.keyframes[mid]));
-            } else if t < time {
-                left = mid + 1;
-            } else {
-                right = mid;
-            }
-        }
+        let left = self
+            .keyframes
+            .partition_point(|keyframe| keyframe.time <= time);
 
         let left_index = left.checked_sub(1);
         let right_index = (left < self.keyframes.len()).then_some(left);
@@ -547,6 +566,38 @@ mod tests {
         track.set_keyframe(30.0, TrackValue::F32(30.0), None);
 
         assert_eq!(track.current_tween_range, (0.0, 0.0));
+    }
+
+    #[test]
+    fn instant_keyframe_preserves_the_tween_ending_at_the_same_time() {
+        let mut track = Track::new(&TEST_TRACK_INFO);
+        track.add_tween(
+            0.0,
+            TrackValue::F32(0.0),
+            TrackValue::F32(1.0),
+            1.0,
+            Easing::Linear,
+        );
+        track.add_tween(
+            1.0,
+            TrackValue::F32(1.0),
+            TrackValue::F32(0.0),
+            0.0,
+            Easing::Linear,
+        );
+
+        let (left, right) = track.find_keyframes(0.5);
+        assert_eq!(left.unwrap().value, TrackValue::F32(0.0));
+        assert_eq!(right.unwrap().value, TrackValue::F32(1.0));
+
+        let coincident = track.keyframes_at(1.0);
+        assert_eq!(coincident.len(), 2);
+        assert_eq!(coincident[0].value, TrackValue::F32(1.0));
+        assert_eq!(coincident[1].value, TrackValue::F32(0.0));
+
+        let (left, right) = track.find_keyframes(1.0);
+        assert_eq!(left.unwrap().value, TrackValue::F32(0.0));
+        assert!(right.is_none());
     }
 
     #[test]

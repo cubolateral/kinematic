@@ -321,7 +321,7 @@ mod tests {
         let world = scene.get_world();
         let transform = world.get::<&Transform>(circle.get_id()).unwrap();
 
-        assert_eq!(transform.position, vec2(10.0, 15.0));
+        assert_eq!(transform.position, vec2(5.0, 10.0));
     }
 
     #[test]
@@ -399,6 +399,41 @@ mod tests {
         let circle = Circle::builder().build(&mut scene);
 
         let _ = circle.restore();
+    }
+
+    #[test]
+    fn immediate_restore_preserves_the_preceding_track_transition() {
+        struct ImmediateRestoreScene;
+
+        impl SceneBuilder for ImmediateRestoreScene {
+            fn build(&mut self, scene: &mut Scene) {
+                let camera = Camera::builder().build(scene);
+                scene.get_root().add(&camera);
+
+                camera.save();
+                camera.rotation(1.0).play();
+                camera.restore().immediate();
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut ImmediateRestoreScene), 1.0);
+
+        scene.update(0.5);
+        {
+            let world = scene.get_world();
+            let mut query = world.query::<&CameraTransform>();
+            let camera = query.iter().next().unwrap();
+
+            assert_eq!(camera.rotation, 0.5);
+        }
+
+        scene.update(1.0);
+        let world = scene.get_world();
+        let mut query = world.query::<&CameraTransform>();
+        let camera = query.iter().next().unwrap();
+
+        assert_eq!(camera.rotation, 0.0);
     }
 
     #[test]

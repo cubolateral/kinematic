@@ -117,7 +117,7 @@ impl TrackView {
             }
         }
 
-        let mut hovered_keyframe = None;
+        let mut hovered_time = None;
 
         for keyframe in &track.keyframes {
             if keyframe.time < start || keyframe.time > end {
@@ -140,17 +140,25 @@ impl TrackView {
                 .build();
 
             if hovered {
-                hovered_keyframe = Some(keyframe);
+                hovered_time = Some(keyframe.time);
             }
         }
 
-        if let Some(keyframe) = hovered_keyframe {
+        if let Some(time) = hovered_time {
             ui.tooltip(|| {
-                ui.text(format!("Time: {:.2}s", keyframe.time));
-                ui.text(format!("Value: {}", keyframe.value));
-                match keyframe.easing {
-                    Some(easing) => ui.text(format!("Easing: {easing:?}")),
-                    None => ui.text("Easing: None"),
+                let keyframes = track.keyframes_at(time);
+
+                for (index, keyframe) in keyframes.iter().enumerate() {
+                    if index > 0 {
+                        ui.separator();
+                    }
+
+                    ui.text(format!("Time: {:.2}s", keyframe.time));
+                    ui.text(format!("Value: {}", keyframe.value));
+                    match keyframe.easing {
+                        Some(easing) => ui.text(format!("Easing: {easing:?}")),
+                        None => ui.text("Easing: None"),
+                    }
                 }
             });
         }

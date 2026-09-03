@@ -40,13 +40,8 @@ impl Animation {
             }
         };
 
-        // Each tween contributes a start keyframe that owns the easing for the
-        // following segment, followed by a target keyframe with no outgoing easing.
         self.tracks[index]
             .track
-            .set_keyframe(current_time, from, Some(easing));
-        self.tracks[index]
-            .track
-            .set_keyframe(current_time + duration, to, None);
+            .add_tween(current_time, from, to, duration, easing);
     }
 }
