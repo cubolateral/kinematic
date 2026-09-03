@@ -30,6 +30,14 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         "__kinematic_{}_remove_object",
         object_name.to_string().to_lowercase()
     );
+    let save_object_fn = format_ident!(
+        "__kinematic_{}_save_object",
+        object_name.to_string().to_lowercase()
+    );
+    let restore_object_fn = format_ident!(
+        "__kinematic_{}_restore_object",
+        object_name.to_string().to_lowercase()
+    );
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -119,6 +127,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 ObjectHandler as #object_handler_trait,
                 ObjectTrackable as #object_trackable_trait,
                 remove_object as #remove_object_fn,
+                restore_object as #restore_object_fn,
+                save_object as #save_object_fn,
                 object_box as #object_box_fn,
             },
         };
@@ -228,6 +238,18 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 property
                     .handle(std::rc::Rc::clone(&self.world), self.entity, self.animator.clone())
                     .animate_from::<#object_name>(from, to)
+            }
+
+            fn save(&self) {
+                #save_object_fn(&self.world, self.entity);
+            }
+
+            fn restore(&self) -> #tween_type<#object_name> {
+                #restore_object_fn(
+                    &self.world,
+                    self.entity,
+                    self.animator.clone(),
+                )
             }
         }
 

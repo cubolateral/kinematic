@@ -1,9 +1,19 @@
 use crate::core::{
-    AnimatorHandle, SceneWorld, TrackProperty, TrackValueType, Trackable, Tween,
+    AnimatorHandle, SceneWorld, TrackInfo, TrackProperty, TrackValue, TrackValueType, Trackable,
+    Tween,
     components::{Animation, Inspection, Name, Node},
     objects::{deactivate_subtree, is_attached},
     types::Vector2,
 };
+
+struct SnapshotValue {
+    type_id: std::any::TypeId,
+    track_info: &'static TrackInfo,
+    value: TrackValue,
+}
+
+#[derive(Default)]
+struct SnapshotStack(Vec<Vec<SnapshotValue>>);
 
 /// Marker trait for object types that can be spawned into the scene.
 ///
@@ -37,6 +47,7 @@ pub trait Object: hecs::DynamicBundle + Sized {
                 .add_bundle(object)
                 .add(Animation::default())
                 .add(Node::default())
+                .add(SnapshotStack::default())
                 .add(name)
                 .add(Self::inspection())
                 .build(),
@@ -79,6 +90,78 @@ pub trait ObjectHandler {
         from: T,
         to: T,
     ) -> Tween<Self::Object>;
+
+    /// Saves all tracked property values on this object's snapshot stack.
+    fn save(&self);
+
+    /// Pops the latest snapshot and creates a tween back to its values.
+    fn restore(&self) -> Tween<Self::Object>;
+}
+
+/// Pushes the current tracked values onto an object's snapshot stack.
+#[doc(hidden)]
+pub fn save_object(world: &SceneWorld, entity: hecs::Entity) {
+    let values = {
+        let world = world.borrow();
+        let inspection = *world
+            .get::<&Inspection>(entity)
+            .expect("Object handler must contain Inspection metadata.");
+
+        let mut values = Vec::new();
+
+        for trackable in (inspection.get)(&world, entity) {
+            let type_id = (trackable.type_id)();
+
+            for track_info in (trackable.get)() {
+                values.push(SnapshotValue {
+                    type_id,
+                    track_info,
+                    value: (track_info.get)(&world, entity),
+                });
+            }
+        }
+
+        values
+    };
+
+    world
+        .borrow()
+        .get::<&mut SnapshotStack>(entity)
+        .expect("Object handler must contain a snapshot stack.")
+        .0
+        .push(values);
+}
+
+/// Pops an object's latest snapshot and builds a tween back to it.
+#[doc(hidden)]
+pub fn restore_object<Object>(
+    world: &SceneWorld,
+    entity: hecs::Entity,
+    animator: AnimatorHandle,
+) -> Tween<Object> {
+    let snapshot = world
+        .borrow()
+        .get::<&mut SnapshotStack>(entity)
+        .expect("Object handler must contain a snapshot stack.")
+        .0
+        .pop()
+        .expect("Cannot restore an object without a saved snapshot.");
+
+    let targets = {
+        let world_ref = world.borrow();
+
+        snapshot
+            .into_iter()
+            .map(|saved| {
+                let from = (saved.track_info.get)(&world_ref, entity);
+                (saved.track_info.set)(&world_ref, entity, saved.value.clone());
+
+                (saved.type_id, saved.track_info, from, saved.value)
+            })
+            .collect()
+    };
+
+    Tween::from_targets(std::rc::Rc::clone(world), entity, targets, animator)
 }
 
 /// Ends an object subtree's lifetime at the supplied scheduling time.

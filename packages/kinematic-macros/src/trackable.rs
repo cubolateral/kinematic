@@ -435,6 +435,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 
             pub const INFO: #trackable_info_type = #trackable_info_type {
                 name: stringify!(#struct_name),
+                type_id: || std::any::TypeId::of::<#struct_name>(),
                 get: || &#tracks_ident,
             };
         }

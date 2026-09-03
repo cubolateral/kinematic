@@ -353,6 +353,55 @@ mod tests {
     }
 
     #[test]
+    fn object_handler_restores_saved_states_in_lifo_order() {
+        struct SnapshotScene;
+
+        impl SceneBuilder for SnapshotScene {
+            fn build(&mut self, scene: &mut Scene) {
+                let circle = Circle::builder().fill(Color::RED).build(scene);
+                scene.get_root().add(&circle);
+
+                circle.save();
+                circle.position_x(100.0).fill(Color::BLUE).play();
+                circle.save();
+                circle.position_x(200.0).fill(Color::GREEN).play();
+                circle.restore().play();
+                circle.restore().play();
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut SnapshotScene), 4.0);
+
+        scene.update(3.0);
+        {
+            let world = scene.get_world();
+            let mut query = world.query::<(&Transform, &Style)>();
+            let (transform, style) = query.iter().next().unwrap();
+
+            assert_eq!(transform.position.x, 100.0);
+            assert_eq!(style.fill, Color::BLUE);
+        }
+
+        scene.update(4.0);
+        let world = scene.get_world();
+        let mut query = world.query::<(&Transform, &Style)>();
+        let (transform, style) = query.iter().next().unwrap();
+
+        assert_eq!(transform.position.x, 0.0);
+        assert_eq!(style.fill, Color::RED);
+    }
+
+    #[test]
+    #[should_panic(expected = "Cannot restore an object without a saved snapshot.")]
+    fn object_handler_rejects_restore_without_a_snapshot() {
+        let mut scene = Scene::new();
+        let circle = Circle::builder().build(&mut scene);
+
+        let _ = circle.restore();
+    }
+
+    #[test]
     fn handler_tween_merges_updates_to_the_same_track() {
         struct ComponentTweenScene;
 

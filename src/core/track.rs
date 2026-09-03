@@ -637,6 +637,8 @@ pub struct TrackInfo {
 pub struct TrackableInfo {
     /// Name of the trackable component, usually the Rust type name.
     pub name: &'static str,
+    /// Returns the runtime type id of the trackable component.
+    pub type_id: fn() -> std::any::TypeId,
     /// Returns the static list of tracked fields for the component.
     pub get: fn() -> &'static [TrackInfo],
 }

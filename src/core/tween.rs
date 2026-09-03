@@ -52,6 +52,32 @@ impl<Object> Tween<Object> {
         }
     }
 
+    /// Creates a tween containing an arbitrary set of simultaneous targets.
+    pub(crate) fn from_targets(
+        world: SceneWorld,
+        entity: hecs::Entity,
+        targets: Vec<(std::any::TypeId, &'static TrackInfo, TrackValue, TrackValue)>,
+        animator: AnimatorHandle,
+    ) -> Self {
+        Self {
+            world,
+            entity,
+            targets: targets
+                .into_iter()
+                .map(|(type_id, track_info, from, to)| TweenTarget {
+                    type_id,
+                    track_info,
+                    from,
+                    to,
+                })
+                .collect(),
+            duration: 1.0,
+            easing: Easing::default(),
+            animator,
+            object: std::marker::PhantomData,
+        }
+    }
+
     /// Adds or replaces a target field in this simultaneous tween.
     #[doc(hidden)]
     pub fn set_track<T: TrackValueType>(
