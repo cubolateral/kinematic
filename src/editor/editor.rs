@@ -21,16 +21,15 @@ pub(crate) struct Editor {
 
 impl Editor {
     pub fn new(
-        mut project: Project,
+        project: Project,
         imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
         skia_context: &mut skia_safe::gpu::DirectContext,
         gl: &glow::Context,
     ) -> Self {
         println!("Project initialized: {}", project.name);
 
-        let mut scene = Scene::new();
-
-        let timeline = Timeline::new(scene.build(project.scene.as_mut()), project.fps);
+        let scene = (project.scene)();
+        let timeline = Timeline::new(scene.get_duration(), project.fps);
 
         let preview = Canvas::new(project.resolution, imgui_renderer, skia_context, gl);
         let renderer = Renderer::new(project.resolution);

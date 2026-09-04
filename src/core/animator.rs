@@ -162,7 +162,7 @@ impl Animator {
         self.handle.state.borrow().tasks.clone()
     }
 
-    fn task_duration(task: &Task) -> f32 {
+    pub(crate) fn task_duration(task: &Task) -> f32 {
         match task {
             Task::Tween { duration, .. } | Task::Wait(duration) => *duration,
             Task::Chain(tasks) => tasks.iter().map(Self::task_duration).sum(),

@@ -21,7 +21,7 @@ pub fn derive_trackable(input: TokenStream) -> TokenStream {
     trackable::derive_trackable(input)
 }
 
-/// Turns a scene-building function into a [`SceneBuilder`](kinematic::core::SceneBuilder) factory.
+/// Turns a scene-building function into a [`Scene`](kinematic::core::Scene) factory.
 #[proc_macro_attribute]
 pub fn scene(attribute: TokenStream, input: TokenStream) -> TokenStream {
     scene::scene(attribute, input)

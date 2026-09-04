@@ -1,4 +1,4 @@
-use crate::core::SceneBuilder;
+use crate::core::Scene;
 
 /// Top-level configuration used to initialize an editor project.
 pub struct Project {
@@ -8,6 +8,6 @@ pub struct Project {
     pub resolution: (u32, u32),
     /// Maximum animation and preview frame rate.
     pub fps: u32,
-    /// Declarative scene definition used to populate the runtime scene.
-    pub scene: Box<dyn SceneBuilder>,
+    /// Factory used to create the runtime scene.
+    pub scene: fn() -> Scene,
 }

@@ -137,6 +137,14 @@ impl Scene {
         Animator::get_duration_for_tasks(&tasks, self)
     }
 
+    pub(crate) fn get_duration(&self) -> f32 {
+        self.animator
+            .tasks()
+            .iter()
+            .map(Animator::task_duration)
+            .sum()
+    }
+
     /// Adds a task to the current scene timeline.
     pub fn play(&mut self, task: Task) {
         self.animator.handle().play(task);
@@ -701,9 +709,9 @@ mod tests {
 
     #[test]
     fn scene_macro_preserves_the_create_time_as_the_node_start() {
-        let mut scene = Scene::new();
+        let scene = delayed_object_scene();
 
-        assert_eq!(scene.build(delayed_object_scene().as_mut()), 33.0);
+        assert_eq!(scene.get_duration(), 33.0);
 
         scene.update(31.0);
         {

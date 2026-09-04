@@ -80,14 +80,16 @@ pub fn scene(
 
     quote! {
         #(#attributes)*
-        #visibility fn #name() -> std::boxed::Box<dyn kinematic::core::SceneBuilder> {
+        #visibility fn #name() -> kinematic::core::Scene {
             struct #builder_name;
 
             impl kinematic::core::SceneBuilder for #builder_name {
                 fn build(&mut self, #inputs) #body
             }
 
-            std::boxed::Box::new(#builder_name)
+            let mut scene = kinematic::core::Scene::new();
+            scene.build(&mut #builder_name);
+            scene
         }
     }
     .into()

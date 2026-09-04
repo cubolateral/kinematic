@@ -58,7 +58,7 @@ fn main() {
         name: "Example!",
         resolution: (1280, 720),
         fps: 60,
-        scene: example(),
+        scene: example,
     });
 }
 ```
