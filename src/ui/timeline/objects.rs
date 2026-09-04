@@ -30,10 +30,9 @@ pub(super) fn draw(
     time: TimeRange,
     state: &mut State,
 ) {
-    ui.dummy([0.0, TRACK_SPACING]);
-
     let origin = ui.cursor_screen_pos();
     let selected = editor.get_selected_entity();
+    let scene_range = editor.get_scene_range();
     let root = editor.get_scene().get_root().get_id();
     let world = editor.get_scene().get_world();
     let mut objects = vec![];
@@ -72,8 +71,12 @@ pub(super) fn draw(
     let mut top = origin[1];
 
     for object in objects {
-        let start = object.lifetime[0].max(time.start);
-        let end = object.lifetime[1].min(time.end);
+        let lifetime = [
+            scene_range[0] + object.lifetime[0],
+            (scene_range[0] + object.lifetime[1]).min(scene_range[1]),
+        ];
+        let start = lifetime[0].max(time.start);
+        let end = lifetime[1].min(time.end);
         let expanded = state.is_object_expanded(object.entity);
         let tracks_height = if expanded {
             tracks::height(&world, object.entity)
@@ -177,7 +180,8 @@ pub(super) fn draw(
                 time,
                 tracks::ObjectTracks {
                     entity: object.entity,
-                    lifetime: object.lifetime,
+                    lifetime,
+                    time_offset: scene_range[0],
                     top,
                     name_x: name_position[0] + TRACK_TEXT_INDENT,
                 },

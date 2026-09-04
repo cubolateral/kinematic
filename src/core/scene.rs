@@ -17,6 +17,7 @@ pub trait SceneBuilder {
 
 /// Runtime ECS scene containing render nodes and compiled animation tracks.
 pub struct Scene {
+    name: &'static str,
     world: SceneWorld,
     root: hecs::Entity,
     animator_time: std::rc::Rc<std::cell::Cell<f32>>,
@@ -26,6 +27,11 @@ pub struct Scene {
 impl Scene {
     /// Creates an empty scene.
     pub fn new() -> Self {
+        Self::new_named("Scene")
+    }
+
+    #[doc(hidden)]
+    pub fn new_named(name: &'static str) -> Self {
         let animator_time = std::rc::Rc::new(std::cell::Cell::new(0.0));
         let animator = Animator::with_scene_time(std::rc::Rc::clone(&animator_time));
         let world = std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new()));
@@ -53,6 +59,7 @@ impl Scene {
         }
 
         Self {
+            name,
             world,
             root,
             animator_time: std::rc::Rc::clone(&animator_time),
@@ -143,6 +150,10 @@ impl Scene {
             .iter()
             .map(Animator::task_duration)
             .sum()
+    }
+
+    pub(crate) fn get_name(&self) -> &'static str {
+        self.name
     }
 
     /// Adds a task to the current scene timeline.
@@ -711,6 +722,7 @@ mod tests {
     fn scene_macro_preserves_the_create_time_as_the_node_start() {
         let scene = delayed_object_scene();
 
+        assert_eq!(scene.get_name(), "delayed_object_scene");
         assert_eq!(scene.get_duration(), 33.0);
 
         scene.update(31.0);

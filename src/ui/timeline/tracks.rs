@@ -40,6 +40,7 @@ impl TrackView {
         draw_list: &dear_imgui_rs::DrawListMut<'_>,
         animation: &Animation,
         lifetime: [f32; 2],
+        time_offset: f32,
         top: f32,
         name_x: f32,
     ) {
@@ -49,6 +50,7 @@ impl TrackView {
                 draw_list,
                 &animation_track.track,
                 lifetime,
+                time_offset,
                 top + row as f32 * (TRACK_HEIGHT + TRACK_SPACING),
                 name_x,
             );
@@ -61,6 +63,7 @@ impl TrackView {
         draw_list: &dear_imgui_rs::DrawListMut<'_>,
         track: &Track,
         lifetime: [f32; 2],
+        time_offset: f32,
         top: f32,
         name_x: f32,
     ) {
@@ -100,8 +103,8 @@ impl TrackView {
             for pair in track.keyframes.windows(2) {
                 let [left, right] = pair else { continue };
                 if left.easing.is_some() && right.time > left.time {
-                    let segment_start = left.time.max(start);
-                    let segment_end = right.time.min(end);
+                    let segment_start = (time_offset + left.time).max(start);
+                    let segment_end = (time_offset + right.time).min(end);
                     if segment_end <= segment_start {
                         continue;
                     }
@@ -120,11 +123,12 @@ impl TrackView {
         let mut hovered_time = None;
 
         for keyframe in &track.keyframes {
-            if keyframe.time < start || keyframe.time > end {
+            let keyframe_time = time_offset + keyframe.time;
+            if keyframe_time < start || keyframe_time > end {
                 continue;
             }
 
-            let x = self.time.x(self.layout, keyframe.time);
+            let x = self.time.x(self.layout, keyframe_time);
             let hit_half_size = KEYFRAME_HITBOX_SIZE * 0.5;
             let hit_min = [x - hit_half_size, center - hit_half_size];
             let hit_max = [x + hit_half_size, center + hit_half_size];
@@ -140,20 +144,20 @@ impl TrackView {
                 .build();
 
             if hovered {
-                hovered_time = Some(keyframe.time);
+                hovered_time = Some((keyframe.time, keyframe_time));
             }
         }
 
-        if let Some(time) = hovered_time {
+        if let Some((local_time, project_time)) = hovered_time {
             ui.tooltip(|| {
-                let keyframes = track.keyframes_at(time);
+                let keyframes = track.keyframes_at(local_time);
 
                 for (index, keyframe) in keyframes.iter().enumerate() {
                     if index > 0 {
                         ui.separator();
                     }
 
-                    ui.text(format!("Time: {:.2}s", keyframe.time));
+                    ui.text(format!("Time: {project_time:.2}s"));
                     ui.text(format!("Value: {}", keyframe.value));
                     match keyframe.easing {
                         Some(easing) => ui.text(format!("Easing: {easing:?}")),
@@ -174,6 +178,7 @@ pub(super) fn height(world: &hecs::World, entity: hecs::Entity) -> f32 {
 pub(super) struct ObjectTracks {
     pub entity: hecs::Entity,
     pub lifetime: [f32; 2],
+    pub time_offset: f32,
     pub top: f32,
     pub name_x: f32,
 }
@@ -196,6 +201,7 @@ pub(super) fn draw(
         draw_list,
         &animation,
         object.lifetime,
+        object.time_offset,
         object.top,
         object.name_x,
     );

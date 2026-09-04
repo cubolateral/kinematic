@@ -16,6 +16,7 @@ Kinematic is in early development, so its API may change.
 - Hierarchical scene trees with reusable containers and inherited transforms.
 - Animatable cameras with position, zoom, and rotation.
 - Sequential and parallel animation tasks.
+- Sequential multi-scene projects.
 - Built-in easing functions.
 - Hierarchical timeline and selection from the Scene Tree, Timeline, or Preview.
 - SDL3/OpenGL rendering with an internal Dear ImGui editor.
@@ -58,10 +59,13 @@ fn main() {
         name: "Example!",
         resolution: (1280, 720),
         fps: 60,
-        scene: example,
+        scenes: vec![example],
     });
 }
 ```
+
+Scene factories in `Project::scenes` run in vector order. Each scene starts as
+soon as the previous scene reaches the end of its timeline.
 
 ## Scene tree
 

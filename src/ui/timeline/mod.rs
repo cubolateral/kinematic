@@ -4,6 +4,7 @@ mod layout;
 mod metrics;
 mod objects;
 mod ruler;
+mod scene;
 mod state;
 mod tracks;
 
@@ -65,6 +66,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 let playhead_x = time.x(layout, time.current);
 
                 ruler::draw_time_grid_lines(ui, &draw_list, layout, time);
+                scene::draw(editor, ui, &draw_list, layout, time);
                 objects::draw(editor, ui, &draw_list, layout, time, state);
                 ruler::draw_panel_divider(
                     ui,

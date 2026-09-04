@@ -5,9 +5,16 @@ use crate::{
     utilities::FrameTimer,
 };
 
+struct EditorScene {
+    scene: Scene,
+    start: f32,
+    end: f32,
+}
+
 pub(crate) struct Editor {
     project: Project,
-    scene: Scene,
+    scenes: Vec<EditorScene>,
+    active_scene: usize,
     selection: Selection,
     timeline: Timeline,
     preview: Canvas,
@@ -27,16 +34,19 @@ impl Editor {
         gl: &glow::Context,
     ) -> Self {
         println!("Project initialized: {}", project.name);
+        project.validate();
 
-        let scene = (project.scene)();
-        let timeline = Timeline::new(scene.get_duration(), project.fps);
+        let scenes = create_scenes(&project.scenes);
+        let duration = scenes.last().map_or(0.0, |scene| scene.end);
+        let timeline = Timeline::new(duration, project.fps);
 
         let preview = Canvas::new(project.resolution, imgui_renderer, skia_context, gl);
         let renderer = Renderer::new(project.resolution);
 
-        Self {
+        let mut editor = Self {
             project,
-            scene,
+            scenes,
+            active_scene: 0,
             selection: Selection::default(),
             timeline,
             preview,
@@ -46,7 +56,9 @@ impl Editor {
             accumulator: 0.0,
             window_timer: FrameTimer::new(),
             canvas_timer: FrameTimer::new(),
-        }
+        };
+        editor.update_active_scene(0.0);
+        editor
     }
 
     pub fn update(&mut self) -> bool {
@@ -55,7 +67,7 @@ impl Editor {
         if self.is_exporting {
             if let Some(time) = self.pending_export_time.take() {
                 self.timeline.go_to(time);
-                self.scene.update(time);
+                self.update_active_scene(time);
             }
 
             self.canvas_timer.tick();
@@ -70,7 +82,7 @@ impl Editor {
 
         while self.accumulator >= delta {
             if let Some(time) = self.timeline.update(delta) {
-                self.scene.update(time);
+                self.update_active_scene(time);
             }
 
             self.canvas_timer.tick();
@@ -97,6 +109,7 @@ impl Editor {
         let selected = (show_selection && !self.is_exporting)
             .then(|| self.selection.get())
             .flatten();
+        let scene = &self.scenes[self.active_scene].scene;
 
         self.preview.draw(skia_context, gl, window_size, |canvas| {
             canvas.clear(skia_safe::colors::BLACK);
@@ -104,10 +117,10 @@ impl Editor {
             let save_count = canvas.save();
 
             canvas.translate((width as f32 * 0.5, height as f32 * 0.5));
-            self.scene.draw(canvas);
+            scene.draw(canvas);
 
             if let Some(entity) = selected {
-                self.scene.draw_outline(entity, canvas);
+                scene.draw_outline(entity, canvas);
             }
 
             canvas.restore_to_count(save_count);
@@ -141,7 +154,7 @@ impl Editor {
 
         self.timeline.pause();
         self.timeline.go_to_start();
-        self.scene.update(0.0);
+        self.update_active_scene(0.0);
         self.pending_export_time = None;
         self.is_exporting = true;
         self.accumulator = 0.0;
@@ -168,7 +181,22 @@ impl Editor {
     }
 
     pub fn get_scene(&mut self) -> &mut Scene {
-        &mut self.scene
+        &mut self.scenes[self.active_scene].scene
+    }
+
+    pub fn get_scene_range(&self) -> [f32; 2] {
+        let scene = &self.scenes[self.active_scene];
+        [scene.start, scene.end]
+    }
+
+    pub fn get_scenes(&self) -> impl Iterator<Item = (&'static str, [f32; 2])> + '_ {
+        self.scenes
+            .iter()
+            .map(|scene| (scene.scene.get_name(), [scene.start, scene.end]))
+    }
+
+    pub fn get_active_scene_index(&self) -> usize {
+        self.active_scene
     }
 
     pub fn get_selected_entity(&self) -> Option<hecs::Entity> {
@@ -177,7 +205,7 @@ impl Editor {
 
     pub fn select_entity(&mut self, entity: hecs::Entity) {
         assert!(
-            self.scene.get_world().contains(entity),
+            self.get_scene().get_world().contains(entity),
             "Selected object must belong to this scene."
         );
         self.selection.select(entity);
@@ -188,7 +216,7 @@ impl Editor {
     }
 
     pub fn select_at(&mut self, point: Vector2) {
-        match self.scene.pick(point) {
+        match self.get_scene().pick(point) {
             Some(entity) => self.selection.select(entity),
             None => self.selection.clear(),
         }
@@ -227,5 +255,87 @@ impl Editor {
                 self.accumulator = 0.0;
             }
         }
+    }
+
+    fn update_active_scene(&mut self, time: f32) {
+        let active_scene = active_scene_at(&self.scenes, time);
+
+        if self.active_scene != active_scene {
+            self.active_scene = active_scene;
+            self.selection.clear();
+        }
+
+        let scene = &self.scenes[self.active_scene];
+        let local_time = (time - scene.start).clamp(0.0, scene.end - scene.start);
+        scene.scene.update(local_time);
+    }
+}
+
+fn active_scene_at(scenes: &[EditorScene], time: f32) -> usize {
+    scenes
+        .iter()
+        .position(|scene| time < scene.end)
+        .unwrap_or(scenes.len() - 1)
+}
+
+fn create_scenes(factories: &[fn() -> Scene]) -> Vec<EditorScene> {
+    let mut start = 0.0;
+
+    factories
+        .iter()
+        .map(|create_scene| {
+            let scene = create_scene();
+            let end = start + scene.get_duration();
+            let editor_scene = EditorScene { scene, start, end };
+            start = end;
+            editor_scene
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[crate::scene]
+    fn opening(scene: &mut Scene) {
+        scene.wait(2.0);
+    }
+
+    #[crate::scene]
+    fn ending(scene: &mut Scene) {
+        scene.wait(3.0);
+    }
+
+    #[test]
+    fn scene_factories_create_ordered_project_ranges() {
+        let factories: [fn() -> Scene; 2] = [opening, ending];
+        let scenes = create_scenes(&factories);
+
+        assert_eq!(scenes[0].scene.get_name(), "opening");
+        assert_eq!([scenes[0].start, scenes[0].end], [0.0, 2.0]);
+        assert_eq!(scenes[1].scene.get_name(), "ending");
+        assert_eq!([scenes[1].start, scenes[1].end], [2.0, 5.0]);
+    }
+
+    #[test]
+    fn scenes_advance_at_the_end_of_each_range() {
+        let scenes = vec![
+            EditorScene {
+                scene: Scene::new(),
+                start: 0.0,
+                end: 2.0,
+            },
+            EditorScene {
+                scene: Scene::new(),
+                start: 2.0,
+                end: 5.0,
+            },
+        ];
+
+        assert_eq!(active_scene_at(&scenes, 0.0), 0);
+        assert_eq!(active_scene_at(&scenes, 1.999), 0);
+        assert_eq!(active_scene_at(&scenes, 2.0), 1);
+        assert_eq!(active_scene_at(&scenes, 5.0), 1);
     }
 }

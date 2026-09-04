@@ -87,7 +87,7 @@ pub fn scene(
                 fn build(&mut self, #inputs) #body
             }
 
-            let mut scene = kinematic::core::Scene::new();
+            let mut scene = kinematic::core::Scene::new_named(stringify!(#name));
             scene.build(&mut #builder_name);
             scene
         }

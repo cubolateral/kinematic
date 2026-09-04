@@ -8,6 +8,15 @@ pub struct Project {
     pub resolution: (u32, u32),
     /// Maximum animation and preview frame rate.
     pub fps: u32,
-    /// Factory used to create the runtime scene.
-    pub scene: fn() -> Scene,
+    /// Ordered factories used to create the runtime scenes.
+    pub scenes: Vec<fn() -> Scene>,
+}
+
+impl Project {
+    pub(crate) fn validate(&self) {
+        assert!(
+            !self.scenes.is_empty(),
+            "Project must contain at least one scene."
+        );
+    }
 }
