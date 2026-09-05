@@ -53,6 +53,7 @@ impl Track {
                     (&left.value, &right.value),
                     (TrackValue::Bool(_), TrackValue::Bool(_))
                         | (TrackValue::U32(_), TrackValue::U32(_))
+                        | (TrackValue::String(_), TrackValue::String(_))
                 ) {
                     let value = if time < right.time {
                         left.value.clone()
@@ -132,11 +133,8 @@ impl Track {
                 "Keyframes must be appended in non-decreasing time order."
             );
 
-            if time == last.time && easing.is_some() {
-                // A tween starting where the previous one ended owns the outgoing
-                // easing. A zero-duration tween then appends its target at the same
-                // timestamp so the value before the instant change is preserved.
-                last.value = value;
+            if time == last.time && easing.is_some() && last.value == value {
+                // Share continuous endpoints; preserve both values for a jump.
                 last.easing = easing;
                 return;
             }
@@ -251,42 +249,11 @@ impl TrackValue {
                 ))
             }
             (Self::String(a), Self::String(b)) => {
-                let t = t.clamp(0.0, 1.0);
-
-                if t <= 0.0 {
-                    return Self::String(a.clone());
+                if t < 1.0 {
+                    Self::String(a.clone())
+                } else {
+                    Self::String(b.clone())
                 }
-
-                if t >= 1.0 {
-                    return Self::String(b.clone());
-                }
-
-                let from: Vec<char> = a.chars().collect();
-                let to: Vec<char> = b.chars().collect();
-
-                let len = from.len().max(to.len());
-
-                if len == 0 {
-                    return Self::String(String::new());
-                }
-
-                let mut result = String::new();
-
-                for i in 0..len {
-                    let local_t = (t * len as f32 - i as f32).clamp(0.0, 1.0);
-
-                    let character = if local_t < 0.5 {
-                        from.get(i)
-                    } else {
-                        to.get(i)
-                    };
-
-                    if let Some(character) = character {
-                        result.push(*character);
-                    }
-                }
-
-                Self::String(result)
             }
             _ => panic!("Track values must have the same type."),
         }
@@ -628,15 +595,12 @@ mod tests {
     }
 
     #[test]
-    fn interpolates_string_values_by_replacing_unicode_characters() {
+    fn string_values_change_at_the_segment_end() {
         let from = TrackValue::String("Source!".to_owned());
         let to = TrackValue::String("Aé🦀!".to_owned());
 
         assert_eq!(from.lerp(&to, 0.0), from);
-        assert_eq!(
-            from.lerp(&to, 0.5),
-            TrackValue::String("Aé🦀!ce!".to_owned())
-        );
+        assert_eq!(from.lerp(&to, 0.5), from);
         assert_eq!(from.lerp(&to, 1.0), to);
     }
 

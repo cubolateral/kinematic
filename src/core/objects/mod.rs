@@ -4,6 +4,7 @@ mod container;
 mod creation;
 mod group;
 mod object;
+pub(crate) mod particle;
 mod rect;
 mod render;
 mod text;

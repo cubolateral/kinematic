@@ -37,3 +37,10 @@ Kinematic is a Rust animation editor and library. The source code is the authori
 ## Validation
 
 For Rust changes, run cargo fmt --check, cargo check --workspace, and cargo test --workspace. Inspect callers before changing a core contract or macro-generated API. Keep macro output and its implementing traits/types synchronized.
+
+## Solo maintenance
+
+- Write for the single developer who will maintain this entire project without Codex. Favor code they can understand, debug, and change locally.
+- Reuse existing conventions and extract small helpers for actual duplication. Avoid parallel mechanisms, handwritten generated metadata, clever state encodings, and speculative abstractions.
+- Keep changes and tests proportional to the behavior. Prefer a focused regression test for a real failure over many tests of implementation details.
+- Simplify the underlying cause instead of accumulating special cases. Judge a solution by its ongoing maintenance cost, not just whether it passes tests.
