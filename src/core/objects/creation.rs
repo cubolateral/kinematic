@@ -365,7 +365,7 @@ fn draw_particles(
             &cached.sources[..active_count],
             Some(&cached.colors[..active_count]),
             skia_safe::BlendMode::Modulate,
-            skia_safe::FilterMode::Linear,
+            skia_safe::FilterMode::Nearest,
             None,
             &paint,
         );
@@ -408,7 +408,7 @@ pub(crate) fn draw_particle_batch(
             &sources,
             Some(colors),
             skia_safe::BlendMode::Modulate,
-            skia_safe::FilterMode::Linear,
+            skia_safe::FilterMode::Nearest,
             None,
             &skia_safe::Paint::default(),
         );

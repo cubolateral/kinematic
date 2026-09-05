@@ -27,7 +27,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
             .size(viewport_size, dear_imgui_rs::Condition::Always)
             .flags(window_flags | dear_imgui_rs::WindowFlags::NO_INPUTS)
             .build(|| {
-                image::draw(ui, preview, viewport_size, false);
+                image::draw(ui, preview, viewport_size);
             });
     }
 

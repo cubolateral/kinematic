@@ -18,6 +18,7 @@ pub(crate) struct Ui {
     appearance: theme::Appearance,
     export: export::State,
     is_fullscreen: bool,
+    preview: preview::State,
     timeline: timeline::State,
 }
 
@@ -33,6 +34,7 @@ impl Ui {
             appearance: theme::Appearance::default(),
             export: export::State::default(),
             is_fullscreen: false,
+            preview: preview::State::default(),
             timeline: timeline::State::default(),
         }
     }
@@ -69,7 +71,7 @@ impl Ui {
 
         scene_tree::draw(editor, ui);
         export::draw(editor, ui, &mut self.export);
-        preview::draw(editor, ui);
+        preview::draw(editor, ui, &mut self.preview);
         inspector::draw(editor, ui);
         settings::draw(&mut self.appearance, ui);
         let fullscreen_button = timeline::draw(editor, ui, &mut self.timeline);
