@@ -106,7 +106,12 @@ impl Scene {
         canvas.restore_to_count(save_count);
     }
 
-    pub(crate) fn draw_outline(&self, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+    pub(crate) fn draw_outline(
+        &self,
+        entity: hecs::Entity,
+        canvas: &skia_safe::Canvas,
+        thickness: f32,
+    ) {
         let world = self.world.borrow();
         let save_count = canvas.save();
 
@@ -116,7 +121,7 @@ impl Scene {
             canvas.concat(&view);
         }
 
-        draw_entity_outline(&world, self.root, entity, canvas);
+        draw_entity_outline(&world, self.root, entity, thickness, canvas);
         canvas.restore_to_count(save_count);
     }
 

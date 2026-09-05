@@ -23,10 +23,18 @@ pub(super) fn preview(editor: &mut Editor) -> PreviewImage {
     }
 }
 
-pub(super) fn draw(ui: &dear_imgui_rs::Ui, preview: PreviewImage, available: [f32; 2]) {
+pub(super) fn draw(
+    ui: &dear_imgui_rs::Ui,
+    preview: PreviewImage,
+    available: [f32; 2],
+    editor: Option<&mut Editor>,
+) {
     let scale =
         (available[0].max(1.0) / preview.size[0]).min(available[1].max(1.0) / preview.size[1]);
     let size = [preview.size[0] * scale, preview.size[1] * scale];
+    if let Some(editor) = editor {
+        editor.set_preview_scale(scale);
+    }
     let origin = ui.cursor_screen_pos();
 
     ui.set_cursor_screen_pos([
@@ -49,6 +57,7 @@ pub(super) fn draw_interactive(
     preview: PreviewImage,
     available: [f32; 2],
     state: &mut State,
+    editor: &mut Editor,
 ) -> Option<Vector2> {
     let available = [available[0].max(1.0), available[1].max(1.0)];
     let viewport_min = ui.cursor_screen_pos();
@@ -87,6 +96,9 @@ pub(super) fn draw_interactive(
 
     let fit_scale = (available[0] / preview.size[0]).min(available[1] / preview.size[1]);
     let scale = fit_scale * state.zoom();
+    // The outline is rendered into the preview texture, so compensate for its display scale.
+    // This keeps its width constant in screen pixels.
+    editor.set_preview_scale(scale);
     let size = [preview.size[0] * scale, preview.size[1] * scale];
     let pan = state.pan();
     let image_min = [

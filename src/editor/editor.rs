@@ -24,6 +24,7 @@ pub(crate) struct Editor {
     accumulator: f32,
     window_timer: FrameTimer,
     canvas_timer: FrameTimer,
+    preview_scale: f32,
 }
 
 impl Editor {
@@ -56,6 +57,7 @@ impl Editor {
             accumulator: 0.0,
             window_timer: FrameTimer::new(),
             canvas_timer: FrameTimer::new(),
+            preview_scale: 1.0,
         };
         editor.update_active_scene(0.0);
         editor
@@ -101,7 +103,7 @@ impl Editor {
         update_canvas: bool,
         show_selection: bool,
     ) {
-        if !update_canvas {
+        if !update_canvas && !(show_selection && self.selection.get().is_some()) {
             return;
         }
 
@@ -120,7 +122,7 @@ impl Editor {
             scene.draw(canvas);
 
             if let Some(entity) = selected {
-                scene.draw_outline(entity, canvas);
+                scene.draw_outline(entity, canvas, 2.0 / self.preview_scale.max(0.001));
             }
 
             canvas.restore_to_count(save_count);
@@ -129,6 +131,10 @@ impl Editor {
         if self.is_exporting {
             self.process_export_frame(gl);
         }
+    }
+
+    pub fn set_preview_scale(&mut self, scale: f32) {
+        self.preview_scale = scale.max(0.001);
     }
 
     pub fn toggle_export(&mut self, silent: bool) {

@@ -46,7 +46,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         ui.text(format!("Zoom: {:.0}%", state.zoom() * 100.0));
         ui.separator();
 
-        clicked = image::draw_interactive(ui, preview, ui.content_region_avail(), state);
+        clicked = image::draw_interactive(ui, preview, ui.content_region_avail(), state, editor);
     });
 
     if let Some(point) = clicked {

@@ -92,9 +92,17 @@ pub(crate) fn draw_entity_outline(
     world: &hecs::World,
     entity: hecs::Entity,
     target: hecs::Entity,
+    thickness: f32,
     canvas: &skia_safe::Canvas,
 ) -> bool {
-    draw_entity_outline_with_parent(world, entity, target, GlobalTransform::default(), canvas)
+    draw_entity_outline_with_parent(
+        world,
+        entity,
+        target,
+        GlobalTransform::default(),
+        thickness,
+        canvas,
+    )
 }
 
 fn draw_entity_outline_with_parent(
@@ -102,6 +110,7 @@ fn draw_entity_outline_with_parent(
     entity: hecs::Entity,
     target: hecs::Entity,
     parent: GlobalTransform,
+    thickness: f32,
     canvas: &skia_safe::Canvas,
 ) -> bool {
     let node = world
@@ -117,14 +126,14 @@ fn draw_entity_outline_with_parent(
 
     let found = if entity == target {
         if let Some(bounds) = local_bounds(world, entity) {
-            draw_outline(bounds, canvas);
+            draw_outline(bounds, thickness, canvas);
         }
 
         true
     } else {
-        children(world, entity)
-            .into_iter()
-            .any(|child| draw_entity_outline_with_parent(world, child, target, global, canvas))
+        children(world, entity).into_iter().any(|child| {
+            draw_entity_outline_with_parent(world, child, target, global, thickness, canvas)
+        })
     };
 
     canvas.restore_to_count(save_count);
@@ -303,16 +312,16 @@ fn affine_matrix(position: Vector2, scale: Vector2, rotation: f32) -> skia_safe:
     )
 }
 
-fn draw_outline(bounds: skia_safe::Rect, canvas: &skia_safe::Canvas) {
+fn draw_outline(bounds: skia_safe::Rect, thickness: f32, canvas: &skia_safe::Canvas) {
     let mut paint = skia_safe::Paint::default();
     paint.set_anti_alias(true);
     paint.set_style(skia_safe::PaintStyle::Stroke);
     paint.set_color4f(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.8), None);
-    paint.set_stroke_width(3.0);
+    paint.set_stroke_width(thickness * 3.0);
     canvas.draw_rect(bounds, &paint);
 
     paint.set_color4f(skia_safe::Color4f::new(1.0, 1.0, 1.0, 0.9), None);
-    paint.set_stroke_width(1.0);
+    paint.set_stroke_width(thickness);
     canvas.draw_rect(bounds, &paint);
 }
 
