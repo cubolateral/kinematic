@@ -26,6 +26,10 @@ pub struct Tween<Object = ()> {
 }
 
 impl<Object> Tween<Object> {
+    pub(crate) fn context(&self) -> (SceneWorld, AnimatorHandle) {
+        (std::rc::Rc::clone(&self.world), self.animator.active())
+    }
+
     /// Creates a tween with a one-second duration and [`Easing::default()`] easing.
     pub fn new(
         world: SceneWorld,

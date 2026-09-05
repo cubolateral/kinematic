@@ -67,6 +67,43 @@ fn main() {
 Scene factories in `Project::scenes` run in vector order. Each scene starts as
 soon as the previous scene reaches the end of its timeline.
 
+## Particle transforms
+
+`morph().play(&from, &to)` replaces an object through particle silhouettes.
+It first turns the source into a silhouette, interpolates particle positions and
+colors, and resolves the destination into its complete appearance.
+
+```rust
+let source = Circle::builder().radius(80.0).fill(Color::RED).build(s);
+let target = Text::builder()
+    .text("Kinematic".to_owned())
+    .position(vec2(240.0, 0.0))
+    .fill(Color::BLUE)
+    .build(s);
+s.get_root().add(&source);
+
+morph()
+    .duration(2.5)
+    .easing(Easing::InOutCubic)
+    .fade_from(false)
+    .play(&source, &target);
+
+target.position_y(120.0).play();
+```
+
+`fade_from` defaults to `true`. Set it to `false` to keep the source visible
+while the destination appears. The source must be attached, and the destination
+may be unattached or attached to the same parent. The destination keeps its own
+local transform. Both objects must contain visible content.
+Shapes, text, groups, and custom drawable objects are sampled through their draw
+callbacks. Appearances are captured when scheduled; later edits do not change the
+captured particle cloud. Masks are limited to 2048 pixels per dimension.
+
+Particle paths are deterministic when seeking, and the original object reappears
+when seeking before the effect.
+The effect type is `Morph`, distinct from the spatial `Transform`
+component and the `Creation`/`Uncreation` effects.
+
 ## Scene tree
 
 Every scene owns an internal root container, available through

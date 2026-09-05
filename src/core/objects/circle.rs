@@ -1,7 +1,11 @@
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    components::{Draw, Style, Transform, stroke_width_for_scale},
+    components::{
+        Draw, ParticleStyle, Style, Transform, draw_complete_styled_path, draw_styled_path,
+        stroke_width_for_scale,
+    },
+    objects::{CreationDraw, particle_visual_key},
     types::Vector2,
 };
 
@@ -26,6 +30,8 @@ pub struct Circle {
     #[trackable]
     pub style: Style,
     #[trackable]
+    pub particles: ParticleStyle,
+    #[trackable]
     pub transform: Transform,
     #[trackable]
     pub draw: Draw,
@@ -36,41 +42,51 @@ impl Default for Circle {
         Self {
             shape: Default::default(),
             style: Default::default(),
+            particles: Default::default(),
             transform: Default::default(),
             draw: Draw {
                 on_draw: |world, entity, canvas, opacity| {
                     let shape = world.get::<&CircleShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
+                    let particles = world.get::<&ParticleStyle>(entity).unwrap();
                     let transform = world.get::<&Transform>(entity).unwrap();
-
-                    let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
-
-                    let mut paint = skia_safe::Paint::new(
-                        skia_safe::Color4f::new(fill_r, fill_g, fill_b, fill_a * opacity),
-                        None,
-                    );
-                    paint.set_anti_alias(true);
-
-                    canvas.draw_circle((0.0, 0.0), shape.radius, &paint);
-
-                    if style.stroke_width > 0.0 {
-                        let [stroke_r, stroke_g, stroke_b, stroke_a] = style.stroke.rgba();
-                        paint.set_color4f(
-                            skia_safe::Color4f::new(
-                                stroke_r,
-                                stroke_g,
-                                stroke_b,
-                                stroke_a * opacity,
-                            ),
-                            None,
+                    let path = skia_safe::Path::circle((0.0, 0.0), shape.radius, None);
+                    if particles.particles_enabled && style.progress < 1.0 {
+                        let stroke_padding =
+                            stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale)
+                                * 0.5;
+                        let extent = shape.radius + stroke_padding;
+                        let bounds = skia_safe::Rect::new(-extent, -extent, extent, extent);
+                        let visual_key = particle_visual_key(
+                            "Circle",
+                            &style,
+                            &[shape.radius, transform.scale.x, transform.scale.y],
+                            &[],
                         );
-                        paint.set_style(skia_safe::PaintStyle::Stroke);
-                        paint.set_stroke_width(stroke_width_for_scale(
-                            style.stroke_width,
-                            transform.scale,
-                        ));
-                        canvas.draw_circle((0.0, 0.0), shape.radius, &paint);
+
+                        if (CreationDraw {
+                            entity,
+                            bounds,
+                            visual_key,
+                            style: &style,
+                            particles: &particles,
+                            opacity,
+                            canvas,
+                        })
+                        .render(|target, target_opacity| {
+                            draw_complete_styled_path(
+                                &path,
+                                &style,
+                                transform.scale,
+                                target_opacity,
+                                target,
+                            );
+                        }) {
+                            return;
+                        }
                     }
+
+                    draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
                 get_box: |world, entity| {
                     let shape = world.get::<&CircleShape>(entity).unwrap();

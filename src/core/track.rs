@@ -48,10 +48,11 @@ impl Track {
                     return;
                 }
 
-                // Boolean tracks hold their starting value until the segment ends.
+                // Discrete tracks hold their starting value until the segment ends.
                 if matches!(
                     (&left.value, &right.value),
                     (TrackValue::Bool(_), TrackValue::Bool(_))
+                        | (TrackValue::U32(_), TrackValue::U32(_))
                 ) {
                     let value = if time < right.time {
                         left.value.clone()
@@ -212,6 +213,7 @@ impl Track {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TrackValue {
     Bool(bool),
+    U32(u32),
     F32(f32),
     Vector2(Vector2),
     Color(Color),
@@ -226,6 +228,13 @@ impl TrackValue {
                     Self::Bool(*a)
                 } else {
                     Self::Bool(*b)
+                }
+            }
+            (Self::U32(a), Self::U32(b)) => {
+                if t < 1.0 {
+                    Self::U32(*a)
+                } else {
+                    Self::U32(*b)
                 }
             }
             (Self::F32(a), Self::F32(b)) => Self::F32(a + (b - a) * t),
@@ -288,6 +297,7 @@ impl std::fmt::Display for TrackValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Bool(value) => write!(f, "{value}"),
+            Self::U32(value) => write!(f, "{value}"),
             Self::F32(value) => write!(f, "{value:.2}"),
             Self::Vector2(value) => write!(f, "[{:.2}, {:.2}]", value.x, value.y),
             Self::Color(value) => {
@@ -333,6 +343,7 @@ macro_rules! impl_track_value_type {
 }
 
 impl_track_value_type!(bool, Bool);
+impl_track_value_type!(u32, U32);
 impl_track_value_type!(f32, F32);
 impl_track_value_type!(Vector2, Vector2);
 impl_track_value_type!(Color, Color);
@@ -653,6 +664,22 @@ mod tests {
         let track_value = true.into_track_value();
 
         assert_eq!(bool::from_track_value(track_value), Some(true));
+    }
+
+    #[test]
+    fn interpolates_u32_values_at_the_segment_end() {
+        let from = TrackValue::U32(42);
+        let to = TrackValue::U32(7);
+
+        assert_eq!(from.lerp(&to, 0.999), from);
+        assert_eq!(from.lerp(&to, 1.0), to);
+    }
+
+    #[test]
+    fn converts_u32_track_values() {
+        let track_value = 42_u32.into_track_value();
+
+        assert_eq!(u32::from_track_value(track_value), Some(42));
     }
 
     fn tween_track() -> Track {

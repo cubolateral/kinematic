@@ -225,20 +225,12 @@ where
     }
 }
 
-/// Plays a default grow-in effect on an object handler.
-pub fn grow_in<T>(handler: &T)
-where
-    T: ObjectHandler,
-    T::Object: ObjectTrackable<Transform>,
-{
-    GrowIn::new().play(handler);
+/// Builds a default grow-in effect.
+pub fn grow_in() -> GrowIn {
+    GrowIn::new()
 }
 
-/// Plays a default grow-out effect on an object handler.
-pub fn grow_out<T>(handler: &T)
-where
-    T: ObjectHandler,
-    T::Object: ObjectTrackable<Transform>,
-{
-    GrowOut::new().play(handler);
+/// Builds a default grow-out effect.
+pub fn grow_out() -> GrowOut {
+    GrowOut::new()
 }

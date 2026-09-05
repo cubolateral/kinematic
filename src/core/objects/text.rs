@@ -1,15 +1,12 @@
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    Easing,
-    components::{Draw, Style, Transform, stroke_width_for_scale},
+    components::{Draw, ParticleStyle, Style, Transform, stroke_width_for_scale},
+    objects::{CreationDraw, particle_visual_key},
     types::{Color, Vector2},
 };
 
 type FontCache = std::collections::HashMap<std::path::PathBuf, skia_safe::Typeface>;
-
-const WRITE_STAGGER: f32 = 0.25;
-const WRITE_OUTLINE_PHASE: f32 = 0.25;
 
 static FONT_CACHE: std::sync::LazyLock<std::sync::Mutex<FontCache>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(FontCache::new()));
@@ -77,21 +74,6 @@ pub struct TextShape {
     /// Horizontal line alignment from `-1.0` left to `1.0` right.
     #[track]
     pub align: f32,
-    /// Normalized progress used by text writing effects.
-    #[track]
-    pub write_progress: f32,
-    /// Initial scale applied to each written unit.
-    #[track]
-    pub write_scale: f32,
-    /// Whether write units are words instead of characters.
-    #[track]
-    pub write_by_word: bool,
-    /// Whether write units are sequenced from right to left.
-    #[track]
-    pub write_reverse: bool,
-    /// Temporary outline width used while writing text without a stroke.
-    #[track]
-    pub write_outline_width: f32,
 
     /// Font used to render the text.
     pub font: Font,
@@ -103,11 +85,6 @@ impl Default for TextShape {
             text: "Text!".to_owned(),
             size: 64.0,
             align: 0.0,
-            write_progress: 1.0,
-            write_scale: 0.0,
-            write_by_word: false,
-            write_reverse: false,
-            write_outline_width: 1.0,
             font: Font::new("assets/fonts/JetBrainsMono-Regular.ttf"),
         }
     }
@@ -120,6 +97,8 @@ pub struct Text {
     pub shape: TextShape,
     #[trackable]
     pub style: Style,
+    #[trackable]
+    pub particles: ParticleStyle,
     #[trackable]
     pub transform: Transform,
     #[trackable]
@@ -140,38 +119,6 @@ fn text_paint(color: Color, opacity: f32) -> skia_safe::Paint {
     );
     paint.set_anti_alias(true);
     paint
-}
-
-fn interpolate_color(from: Color, to: Color, progress: f32) -> Color {
-    Color::new(
-        from.r + (to.r - from.r) * progress,
-        from.g + (to.g - from.g) * progress,
-        from.b + (to.b - from.b) * progress,
-        from.a + (to.a - from.a) * progress,
-    )
-}
-
-fn color_with_alpha(color: Color, alpha: f32) -> Color {
-    Color::new(color.r, color.g, color.b, color.a * alpha)
-}
-
-fn inner_outline_path(path: &skia_safe::Path, width: f32) -> Option<skia_safe::Path> {
-    let mut stroke_paint = text_paint(Color::WHITE, 1.0);
-    stroke_paint.set_style(skia_safe::PaintStyle::Stroke);
-    stroke_paint.set_stroke_width(width * 2.0);
-
-    let mut stroke_builder = skia_safe::PathBuilder::new();
-    if !skia_safe::path_utils::fill_path_with_paint(
-        path,
-        &stroke_paint,
-        &mut stroke_builder,
-        None,
-        None,
-    ) {
-        return None;
-    }
-
-    path.op(&stroke_builder.detach(), skia_safe::PathOp::Intersect)
 }
 
 fn text_lines<'a>(shape: &'a TextShape, font: &skia_safe::Font) -> Vec<TextLine<'a>> {
@@ -207,6 +154,17 @@ fn text_lines<'a>(shape: &'a TextShape, font: &skia_safe::Font) -> Vec<TextLine<
         .collect()
 }
 
+fn text_box(shape: &TextShape) -> Vector2 {
+    let font = shape.font.skia_font(shape.size);
+    let lines = text_lines(shape, &font);
+    let (_, metrics) = font.metrics();
+    let width = lines.iter().map(|line| line.width).fold(0.0, f32::max);
+    let height =
+        metrics.descent - metrics.ascent + font.spacing() * lines.len().saturating_sub(1) as f32;
+
+    Vector2::new(width, height)
+}
+
 fn draw_complete_text(
     shape: &TextShape,
     style: &Style,
@@ -235,134 +193,54 @@ fn draw_complete_text(
     }
 }
 
-fn write_units(text: &str, by_word: bool) -> Vec<(usize, usize)> {
-    if !by_word {
-        return text
-            .char_indices()
-            .filter_map(|(start, character)| {
-                (!character.is_whitespace()).then_some((start, start + character.len_utf8()))
-            })
-            .collect();
-    }
-
-    let mut units = vec![];
-    let mut start = None;
-
-    for (index, character) in text.char_indices() {
-        if character.is_whitespace() {
-            if let Some(start) = start.take() {
-                units.push((start, index));
-            }
-        } else if start.is_none() {
-            start = Some(index);
-        }
-    }
-
-    if let Some(start) = start {
-        units.push((start, text.len()));
-    }
-
-    units
-}
-
-fn draw_written_text(
-    shape: &TextShape,
-    style: &Style,
-    opacity: f32,
-    object_scale: Vector2,
-    canvas: &skia_safe::Canvas,
-) {
-    let font = shape.font.skia_font(shape.size);
-    let layout_paint = text_paint(style.fill, opacity);
-    let lines = text_lines(shape, &font);
-    let units: Vec<_> = lines
-        .iter()
-        .enumerate()
-        .flat_map(|(line_index, line)| {
-            write_units(line.text, shape.write_by_word)
-                .into_iter()
-                .map(move |(start, end)| (line_index, start, end))
-        })
-        .collect();
-
-    if units.is_empty() {
-        return;
-    }
-
-    let (_, metrics) = font.metrics();
-    let progress = shape.write_progress.clamp(0.0, 1.0);
-    let unit_count = units.len() as f32;
-    let sequence_duration = 1.0 + (unit_count - 1.0) * WRITE_STAGGER;
-
-    for (unit_index, (line_index, start, end)) in units.into_iter().enumerate() {
-        let sequence_index = if shape.write_reverse {
-            unit_count as usize - 1 - unit_index
-        } else {
-            unit_index
-        };
-        let unit_start = sequence_index as f32 * WRITE_STAGGER;
-        let local_progress = (progress * sequence_duration - unit_start).clamp(0.0, 1.0);
-
-        let line = &lines[line_index];
-        let unit = &line.text[start..end];
-        let prefix = &line.text[..start];
-        let (prefix_width, _) = font.measure_str(prefix, Some(&layout_paint));
-        let (unit_width, _) = font.measure_str(unit, Some(&layout_paint));
-        let x = line.origin.0 + prefix_width;
-        let center = (
-            x + unit_width * 0.5,
-            line.origin.1 + (metrics.ascent + metrics.descent) * 0.5,
-        );
-        let scale_progress = Easing::OutBack.evaluate(local_progress);
-        let scale = shape.write_scale + (1.0 - shape.write_scale) * scale_progress;
-        let outline_progress = (local_progress / WRITE_OUTLINE_PHASE).clamp(0.0, 1.0);
-        let fill_progress =
-            ((local_progress - WRITE_OUTLINE_PHASE) / (1.0 - WRITE_OUTLINE_PHASE)).clamp(0.0, 1.0);
-        let fill = interpolate_color(Color::TRANSPARENT, style.fill, fill_progress);
-        let save_count = canvas.save();
-
-        canvas.translate(center);
-        canvas.scale((scale, scale));
-        canvas.translate((-center.0, -center.1));
-
-        let mut paint = text_paint(fill, opacity);
-        canvas.draw_str(unit, (x, line.origin.1), &font, &paint);
-
-        if shape.write_outline_width > 0.0 {
-            let outline = color_with_alpha(style.fill, outline_progress);
-            let glyph_path =
-                skia_safe::utils::text_utils::get_path(unit, (x, line.origin.1), &font);
-
-            if let Some(outline_path) = inner_outline_path(&glyph_path, shape.write_outline_width) {
-                paint = text_paint(outline, opacity);
-                canvas.draw_path(&outline_path, &paint);
-            }
-        }
-
-        if style.stroke_width > 0.0 {
-            let stroke = color_with_alpha(style.stroke, fill_progress);
-            paint = text_paint(stroke, opacity);
-            paint.set_style(skia_safe::PaintStyle::Stroke);
-            paint.set_stroke_width(stroke_width_for_scale(
-                style.stroke_width,
-                object_scale * scale,
-            ));
-            canvas.draw_str(unit, (x, line.origin.1), &font, &paint);
-        }
-
-        canvas.restore_to_count(save_count);
-    }
-}
-
 fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
     let shape = world.get::<&TextShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
+    let particles = world.get::<&ParticleStyle>(entity).unwrap();
     let transform = world.get::<&Transform>(entity).unwrap();
 
-    if shape.write_progress >= 1.0 {
-        draw_complete_text(&shape, &style, opacity, transform.scale, canvas);
-    } else {
-        draw_written_text(&shape, &style, opacity, transform.scale, canvas);
+    if particles.particles_enabled && style.progress < 1.0 {
+        let size = text_box(&shape);
+        let stroke_padding =
+            stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5;
+        let bounds = skia_safe::Rect::new(
+            -size.x * 0.5 - stroke_padding,
+            -size.y * 0.5 - stroke_padding,
+            size.x * 0.5 + stroke_padding,
+            size.y * 0.5 + stroke_padding,
+        );
+        let font_path = shape.font.path().to_string_lossy();
+        let visual_key = particle_visual_key(
+            "Text",
+            &style,
+            &[
+                shape.size,
+                shape.align,
+                transform.scale.x,
+                transform.scale.y,
+            ],
+            &[&shape.text, &font_path],
+        );
+
+        if (CreationDraw {
+            entity,
+            bounds,
+            visual_key,
+            style: &style,
+            particles: &particles,
+            opacity,
+            canvas,
+        })
+        .render(|target, target_opacity| {
+            draw_complete_text(&shape, &style, target_opacity, transform.scale, target);
+        }) {
+            return;
+        }
+    }
+
+    let progress = style.progress.clamp(0.0, 1.0);
+    if progress > 0.0 {
+        draw_complete_text(&shape, &style, opacity * progress, transform.scale, canvas);
     }
 }
 
@@ -371,20 +249,11 @@ impl Default for Text {
         Self {
             shape: Default::default(),
             style: Default::default(),
+            particles: Default::default(),
             transform: Default::default(),
             draw: Draw {
                 on_draw: draw_text,
-                get_box: |world, entity| {
-                    let shape = world.get::<&TextShape>(entity).unwrap();
-                    let font = shape.font.skia_font(shape.size);
-                    let lines = text_lines(&shape, &font);
-                    let (_, metrics) = font.metrics();
-                    let width = lines.iter().map(|line| line.width).fold(0.0, f32::max);
-                    let height = metrics.descent - metrics.ascent
-                        + font.spacing() * lines.len().saturating_sub(1) as f32;
-
-                    Vector2::new(width, height)
-                },
+                get_box: |world, entity| text_box(&world.get::<&TextShape>(entity).unwrap()),
                 ..Default::default()
             },
         }
@@ -427,27 +296,6 @@ mod tests {
         assert!(approximately_equal(
             right[1].origin.1 - right[0].origin.1,
             font.spacing(),
-        ));
-    }
-
-    #[test]
-    fn inner_write_outline_matches_the_glyph_boundary() {
-        let shape = TextShape::default();
-        let font = shape.font.skia_font(shape.size);
-        let glyph = skia_safe::utils::text_utils::get_path("Border!", (0.0, 0.0), &font);
-        let outline = inner_outline_path(&glyph, 4.0).unwrap();
-        let glyph_bounds = glyph.compute_tight_bounds();
-        let outline_bounds = outline.compute_tight_bounds();
-
-        assert!(approximately_equal(glyph_bounds.left, outline_bounds.left,));
-        assert!(approximately_equal(glyph_bounds.top, outline_bounds.top,));
-        assert!(approximately_equal(
-            glyph_bounds.right,
-            outline_bounds.right,
-        ));
-        assert!(approximately_equal(
-            glyph_bounds.bottom,
-            outline_bounds.bottom,
         ));
     }
 }

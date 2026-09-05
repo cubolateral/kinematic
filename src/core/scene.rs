@@ -240,7 +240,7 @@ mod tests {
     use crate::core::{
         Easing,
         components::*,
-        effects::{Effect, Unwrite, Write, WriteBy},
+        effects::{Effect, creation, uncreation},
         objects::*,
         types::*,
     };
@@ -483,48 +483,130 @@ mod tests {
     }
 
     #[test]
-    fn text_effect_configuration_is_applied_at_its_start() {
-        struct TextEffectScene;
+    fn creation_effects_toggle_particles_at_their_boundaries() {
+        struct CreationScene;
 
-        impl SceneBuilder for TextEffectScene {
+        impl SceneBuilder for CreationScene {
             fn build(&mut self, scene: &mut Scene) {
-                let text = Text::builder().build(scene);
-                scene.get_root().add(&text);
+                let circle = Circle::builder().build(scene);
+                scene.get_root().add(&circle);
 
-                Write::new().scale(0.25).outline_width(2.0).play(&text);
-
-                Unwrite::new()
-                    .by(WriteBy::Word)
-                    .scale(0.5)
-                    .outline_width(3.0)
-                    .play(&text);
+                creation().duration(2.0).play(&circle);
+                uncreation().duration(2.0).play(&circle);
             }
         }
 
         let mut scene = Scene::new();
-        assert_eq!(scene.build(&mut TextEffectScene), 2.0);
+        assert_eq!(scene.build(&mut CreationScene), 4.0);
 
         scene.update(0.0);
         {
             let world = scene.get_world();
-            let mut query = world.query::<&TextShape>();
-            let shape = query.iter().next().unwrap();
+            let mut query = world.query::<(&Style, &ParticleStyle)>();
+            let (style, particles) = query.iter().next().unwrap();
 
-            assert_eq!(shape.write_progress, 0.0);
-            assert_eq!(shape.write_scale, 0.25);
-            assert!(!shape.write_by_word);
-            assert_eq!(shape.write_outline_width, 2.0);
+            assert_eq!(style.progress, 0.0);
+            assert!(particles.particles_enabled);
         }
 
-        scene.update(1.0);
+        scene.update(4.0);
         let world = scene.get_world();
-        let mut query = world.query::<&TextShape>();
-        let shape = query.iter().next().unwrap();
+        let mut query = world.query::<(&Style, &ParticleStyle)>();
+        let (style, particles) = query.iter().next().unwrap();
 
-        assert_eq!(shape.write_progress, 1.0);
-        assert_eq!(shape.write_scale, 0.5);
-        assert!(shape.write_by_word);
-        assert_eq!(shape.write_outline_width, 3.0);
+        assert_eq!(style.progress, 0.0);
+        assert!(!particles.particles_enabled);
+    }
+
+    #[test]
+    fn creation_particles_form_the_object_silhouette_before_completion() {
+        struct CreationScene;
+
+        impl SceneBuilder for CreationScene {
+            fn build(&mut self, scene: &mut Scene) {
+                let rect = Rect::builder()
+                    .size(vec2(16.0, 16.0))
+                    .fill(Color::RED)
+                    .build(scene);
+                scene.get_root().add(&rect);
+
+                creation().play(&rect);
+            }
+        }
+
+        let mut scene = Scene::new();
+        scene.build(&mut CreationScene);
+        let mut surface = skia_safe::surfaces::raster_n32_premul((64, 64)).unwrap();
+
+        scene.update(0.0);
+        surface.canvas().clear(skia_safe::colors::TRANSPARENT);
+        surface.canvas().translate((32.0, 32.0));
+        scene.draw(surface.canvas());
+        assert_eq!(surface.peek_pixels().unwrap().get_color((32, 32)).a(), 0);
+
+        scene.update(2.4);
+        surface.canvas().clear(skia_safe::colors::TRANSPARENT);
+        scene.draw(surface.canvas());
+        let pixels = surface.peek_pixels().unwrap();
+        assert!(pixels.get_color((32, 32)).a() > 0);
+        assert_eq!(pixels.get_color((8, 8)).a(), 0);
+
+        scene.update(2.5);
+        surface.canvas().clear(skia_safe::colors::TRANSPARENT);
+        scene.draw(surface.canvas());
+        let center = surface.peek_pixels().unwrap().get_color((32, 32));
+        assert_eq!(center.r(), 255);
+        assert_eq!(center.a(), 255);
+    }
+
+    #[test]
+    fn creation_renders_particle_silhouettes_for_every_styled_object() {
+        struct StyledObjectsScene;
+
+        impl SceneBuilder for StyledObjectsScene {
+            fn build(&mut self, scene: &mut Scene) {
+                scene.all(|scene| {
+                    let circle = Circle::builder()
+                        .radius(8.0)
+                        .position(vec2(-32.0, 0.0))
+                        .fill(Color::RED)
+                        .build(scene);
+                    let rect = Rect::builder()
+                        .size(vec2(16.0, 16.0))
+                        .fill(Color::GREEN)
+                        .build(scene);
+                    let text = Text::builder()
+                        .text("A".to_owned())
+                        .size(20.0)
+                        .position(vec2(32.0, 0.0))
+                        .fill(Color::BLUE)
+                        .build(scene);
+                    scene.get_root().add(&circle);
+                    scene.get_root().add(&rect);
+                    scene.get_root().add(&text);
+
+                    creation().play(&circle);
+                    creation().play(&rect);
+                    creation().play(&text);
+                });
+            }
+        }
+
+        let mut scene = Scene::new();
+        scene.build(&mut StyledObjectsScene);
+        scene.update(2.4);
+        let mut surface = skia_safe::surfaces::raster_n32_premul((128, 64)).unwrap();
+        surface.canvas().clear(skia_safe::colors::TRANSPARENT);
+        surface.canvas().translate((64.0, 32.0));
+        scene.draw(surface.canvas());
+        let pixels = surface.peek_pixels().unwrap();
+
+        let has_alpha =
+            |left, right| (0..64).any(|y| (left..right).any(|x| pixels.get_color((x, y)).a() > 0));
+
+        assert!(has_alpha(20, 44));
+        assert!(has_alpha(52, 76));
+        assert!(has_alpha(84, 108));
     }
 
     #[test]

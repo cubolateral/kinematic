@@ -123,6 +123,12 @@ impl FadeIn {
     }
 }
 
+impl Default for FadeIn {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> Effect<T> for FadeIn
 where
     T: ObjectHandler,
@@ -212,6 +218,12 @@ impl FadeOut {
     }
 }
 
+impl Default for FadeOut {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> Effect<T> for FadeOut
 where
     T: ObjectHandler,
@@ -242,20 +254,12 @@ where
     }
 }
 
-/// Plays a default fade-in effect on an object handler.
-pub fn fade_in<T>(handler: &T)
-where
-    T: ObjectHandler,
-    T::Object: ObjectTrackable<Draw> + ObjectTrackable<TransformComponent>,
-{
-    FadeIn::new().play(handler);
+/// Builds a default fade-in effect.
+pub fn fade_in() -> FadeIn {
+    FadeIn::new()
 }
 
-/// Plays a default fade-out effect on an object handler.
-pub fn fade_out<T>(handler: &T)
-where
-    T: ObjectHandler,
-    T::Object: ObjectTrackable<Draw> + ObjectTrackable<TransformComponent>,
-{
-    FadeOut::new().play(handler);
+/// Builds a default fade-out effect.
+pub fn fade_out() -> FadeOut {
+    FadeOut::new()
 }
