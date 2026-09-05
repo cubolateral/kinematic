@@ -8,6 +8,7 @@ pub(crate) mod particle;
 mod rect;
 mod render;
 mod text;
+mod triangle;
 
 pub use camera::*;
 pub use circle::*;
@@ -22,3 +23,4 @@ pub use rect::*;
 pub use render::object_box;
 pub(crate) use render::{active_camera_matrix, draw_entity, draw_entity_outline, pick_entity};
 pub use text::*;
+pub use triangle::*;

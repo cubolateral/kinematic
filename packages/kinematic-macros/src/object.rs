@@ -1,12 +1,36 @@
 use quote::{format_ident, quote};
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
+fn snake_case(name: &str) -> String {
+    let characters: Vec<_> = name.chars().collect();
+    let mut result = String::with_capacity(name.len());
+
+    for (index, character) in characters.iter().copied().enumerate() {
+        let starts_word = character.is_uppercase()
+            && index > 0
+            && (characters[index - 1].is_lowercase()
+                || characters[index - 1].is_numeric()
+                || characters
+                    .get(index + 1)
+                    .is_some_and(|next| next.is_lowercase()));
+
+        if starts_word {
+            result.push('_');
+        }
+
+        result.extend(character.to_lowercase());
+    }
+
+    result
+}
+
 pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let object_name = &input.ident;
     let visibility = &input.vis;
     let builder_name = format_ident!("{}Builder", object_name);
     let handler_name = format_ident!("{}Handler", object_name);
+    let builder_alias = format_ident!("{}", snake_case(&object_name.to_string()));
     let builder_component_trait = format_ident!("__Kinematic{}BuilderComponent", object_name);
     let inspection_type = format_ident!("__Kinematic{}Inspection", object_name);
     let name_type = format_ident!("__Kinematic{}Name", object_name);
@@ -177,6 +201,11 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             pub fn build(self, s: &mut crate::core::Scene) -> #handler_name {
                 s.spawn_object::<#object_name>(self.object, self.name)
             }
+        }
+
+        #[doc = concat!("Alias for [`", stringify!(#object_name), "::builder()`].")]
+        #visibility fn #builder_alias() -> #builder_name {
+            <#object_name as #object_trait>::builder()
         }
 
         #(#component_accessors)*
