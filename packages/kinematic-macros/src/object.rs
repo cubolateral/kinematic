@@ -31,53 +31,29 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let builder_name = format_ident!("{}Builder", object_name);
     let handler_name = format_ident!("{}Handler", object_name);
     let builder_alias = format_ident!("{}", snake_case(&object_name.to_string()));
-    let builder_component_trait = format_ident!("__Kinematic{}BuilderComponent", object_name);
-    let inspection_type = format_ident!("__Kinematic{}Inspection", object_name);
-    let name_type = format_ident!("__Kinematic{}Name", object_name);
-    let object_trait = format_ident!("__Kinematic{}Object", object_name);
-    let object_handler_trait = format_ident!("__Kinematic{}ObjectHandler", object_name);
-    let handler_root_type = format_ident!("__Kinematic{}HandlerRoot", object_name);
-    let object_trackable_trait = format_ident!("__Kinematic{}ObjectTrackable", object_name);
-    let scene_world_type = format_ident!("__Kinematic{}SceneWorld", object_name);
-    let animator_handle_type = format_ident!("__Kinematic{}AnimatorHandle", object_name);
-    let trackable_info_type = format_ident!("__Kinematic{}TrackableInfo", object_name);
-    let trackable_trait = format_ident!("__Kinematic{}Trackable", object_name);
-    let track_property_type = format_ident!("__Kinematic{}TrackProperty", object_name);
-    let track_value_type_trait = format_ident!("__Kinematic{}TrackValueType", object_name);
-    let tween_type = format_ident!("__Kinematic{}Tween", object_name);
-    let vector_type = format_ident!("__Kinematic{}Vector2", object_name);
-    let object_box_fn = format_ident!(
-        "__kinematic_{}_object_box",
-        object_name.to_string().to_lowercase()
-    );
-    let object_global_position_fn = format_ident!(
-        "__kinematic_{}_object_global_position",
-        object_name.to_string().to_lowercase()
-    );
-    let object_global_rotation_fn = format_ident!(
-        "__kinematic_{}_object_global_rotation",
-        object_name.to_string().to_lowercase()
-    );
-    let object_global_scale_fn = format_ident!(
-        "__kinematic_{}_object_global_scale",
-        object_name.to_string().to_lowercase()
-    );
-    let object_global_opacity_fn = format_ident!(
-        "__kinematic_{}_object_global_opacity",
-        object_name.to_string().to_lowercase()
-    );
-    let remove_object_fn = format_ident!(
-        "__kinematic_{}_remove_object",
-        object_name.to_string().to_lowercase()
-    );
-    let save_object_fn = format_ident!(
-        "__kinematic_{}_save_object",
-        object_name.to_string().to_lowercase()
-    );
-    let restore_object_fn = format_ident!(
-        "__kinematic_{}_restore_object",
-        object_name.to_string().to_lowercase()
-    );
+    let builder_component_trait = quote!(kinematic::core::objects::ObjectBuilderComponent);
+    let inspection_type = quote!(kinematic::core::components::Inspection);
+    let name_type = quote!(kinematic::core::components::Name);
+    let object_trait = quote!(kinematic::core::objects::Object);
+    let object_handler_trait = quote!(kinematic::core::objects::ObjectHandler);
+    let handler_root_type = quote!(kinematic::core::objects::HandlerRoot);
+    let object_trackable_trait = quote!(kinematic::core::objects::ObjectTrackable);
+    let scene_world_type = quote!(kinematic::core::SceneWorld);
+    let animator_handle_type = quote!(kinematic::core::AnimatorHandle);
+    let trackable_info_type = quote!(kinematic::core::TrackableInfo);
+    let trackable_trait = quote!(kinematic::core::Trackable);
+    let track_property_type = quote!(kinematic::core::TrackProperty);
+    let track_value_type_trait = quote!(kinematic::core::TrackValueType);
+    let tween_type = quote!(kinematic::core::Tween);
+    let vector_type = quote!(kinematic::core::types::Vector2);
+    let object_box_fn = quote!(kinematic::core::objects::object_box);
+    let object_global_position_fn = quote!(kinematic::core::objects::object_global_position);
+    let object_global_rotation_fn = quote!(kinematic::core::objects::object_global_rotation);
+    let object_global_scale_fn = quote!(kinematic::core::objects::object_global_scale);
+    let object_global_opacity_fn = quote!(kinematic::core::objects::object_global_opacity);
+    let remove_object_fn = quote!(kinematic::core::objects::remove_object);
+    let save_object_fn = quote!(kinematic::core::objects::save_object);
+    let restore_object_fn = quote!(kinematic::core::objects::restore_object);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -149,34 +125,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         .collect();
 
     let expanded = quote! {
-        use crate::core::{
-            SceneWorld as #scene_world_type,
-            AnimatorHandle as #animator_handle_type,
-            Trackable as #trackable_trait,
-            TrackProperty as #track_property_type,
-            TrackValueType as #track_value_type_trait,
-            Tween as #tween_type,
-            types::Vector2 as #vector_type,
-            TrackableInfo as #trackable_info_type,
-            components::Inspection as #inspection_type,
-            components::Name as #name_type,
-            objects::{
-                HandlerRoot as #handler_root_type,
-                Object as #object_trait,
-                ObjectBuilderComponent as #builder_component_trait,
-                ObjectHandler as #object_handler_trait,
-                ObjectTrackable as #object_trackable_trait,
-                object_global_opacity as #object_global_opacity_fn,
-                object_global_position as #object_global_position_fn,
-                object_global_rotation as #object_global_rotation_fn,
-                object_global_scale as #object_global_scale_fn,
-                remove_object as #remove_object_fn,
-                restore_object as #restore_object_fn,
-                save_object as #save_object_fn,
-                object_box as #object_box_fn,
-            },
-        };
-
         /// Builder generated for this scene object.
         #visibility struct #builder_name {
             object: #object_name,
@@ -203,9 +151,9 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
         }
 
-        #[doc = concat!("Alias for [`", stringify!(#object_name), "::builder()`].")]
+        #[doc = concat!("Creates a builder for [`", stringify!(#object_name), "`].")]
         #visibility fn #builder_alias() -> #builder_name {
-            <#object_name as #object_trait>::builder()
+            #builder_name::new()
         }
 
         #(#component_accessors)*
@@ -333,7 +281,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                             .expect("Object handler must contain its object fields.")).clone(),)*
                     };
 
-                    (object, self.get_name())
+                    (object, <Self as #object_handler_trait>::get_name(self))
                 };
 
                 #builder_name {
@@ -368,12 +316,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         }
 
         impl #object_trait for #object_name {
-            type Builder = #builder_name;
             type Handler = #handler_name;
-
-            fn builder() -> Self::Builder {
-                #builder_name::new()
-            }
 
             fn handler(world: #scene_world_type, entity: hecs::Entity, animator: #animator_handle_type) -> Self::Handler {
                 #object_name::handler(world, entity, animator)

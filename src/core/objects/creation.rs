@@ -4,8 +4,8 @@ use std::hash::{Hash, Hasher};
 
 use crate::core::{
     components::{
-        PARTICLE_COUNT, PARTICLE_DISTANCE, PARTICLE_FADE_START, PARTICLE_RADIUS, PARTICLE_STAGGER,
-        ParticleStyle, Style,
+        Morph, PARTICLE_COUNT, PARTICLE_DISTANCE, PARTICLE_FADE_START, PARTICLE_RADIUS,
+        PARTICLE_STAGGER, Style,
     },
     types::{Color, Vector2},
 };
@@ -71,7 +71,7 @@ pub(crate) struct CreationDraw<'a> {
     pub bounds: skia_safe::Rect,
     pub visual_key: u64,
     pub style: &'a Style,
-    pub particles: &'a ParticleStyle,
+    pub morph: &'a Morph,
     pub opacity: f32,
     pub canvas: &'a skia_safe::Canvas,
 }
@@ -84,16 +84,16 @@ impl CreationDraw<'_> {
             bounds,
             visual_key,
             style,
-            particles,
+            morph,
             opacity,
             canvas,
         } = self;
 
-        if !particles.particles_enabled || style.progress >= 1.0 {
+        if !morph.particles_enabled || morph.progress >= 1.0 {
             return false;
         }
 
-        let progress = style.progress.clamp(0.0, 1.0);
+        let progress = morph.progress.clamp(0.0, 1.0);
         if progress <= 0.0 {
             return true;
         }
@@ -465,34 +465,40 @@ fn particle_position(particle: &Particle, distance: f32, progress: f32) -> Vecto
     )
 }
 
-/// Moves a particle between silhouettes using the creation effect's organized-chaos flow.
-pub(crate) fn morph_particle_position(
+/// Precomputed path and delay for one particle between two silhouettes.
+pub(crate) struct MorphParticleRoute {
     from: Vector2,
     to: Vector2,
-    target_bounds: skia_safe::Rect,
-    distance: f32,
-    progress: f32,
-) -> Vector2 {
-    let route = particle_route(to, target_bounds);
-    let progress = smoothstep(progress);
-
-    cubic_bezier(
-        from,
-        from + route.control_1_offset * distance,
-        to + route.control_2_offset * distance,
-        to,
-        progress,
-    )
+    control_1: Vector2,
+    control_2: Vector2,
+    start: f32,
 }
 
-/// Applies the creation effect's center-to-edge wave to a morph particle.
-pub(crate) fn morph_particle_progress(
-    target: Vector2,
-    target_bounds: skia_safe::Rect,
-    progress: f32,
-) -> f32 {
-    let route = particle_route(target, target_bounds);
-    local_particle_progress(progress, route.start, PARTICLE_STAGGER)
+impl MorphParticleRoute {
+    pub(crate) fn new(from: Vector2, to: Vector2, bounds: skia_safe::Rect) -> Self {
+        let route = particle_route(to, bounds);
+        Self {
+            from,
+            to,
+            control_1: from + route.control_1_offset * PARTICLE_DISTANCE,
+            control_2: to + route.control_2_offset * PARTICLE_DISTANCE,
+            start: route.start,
+        }
+    }
+
+    pub(crate) fn position(&self, progress: f32) -> Vector2 {
+        cubic_bezier(
+            self.from,
+            self.control_1,
+            self.control_2,
+            self.to,
+            smoothstep(progress),
+        )
+    }
+
+    pub(crate) fn progress(&self, progress: f32) -> f32 {
+        local_particle_progress(progress, self.start, PARTICLE_STAGGER)
+    }
 }
 
 fn coherent_noise(position: Vector2, salt: u32) -> f32 {

@@ -56,7 +56,7 @@ mod tests {
     #[test]
     fn camera_builder_exposes_only_camera_transform_fields() {
         let mut scene = Scene::new();
-        let camera = Camera::builder()
+        let camera = camera()
             .position(vec2(10.0, 20.0))
             .zoom(2.0)
             .rotation(0.5)
@@ -74,14 +74,12 @@ mod tests {
     #[test]
     fn camera_position_centers_its_view_and_keeps_picking_aligned() {
         let mut scene = Scene::new();
-        let rectangle = Rect::builder()
+        let rectangle = rect()
             .size(vec2(4.0, 4.0))
             .position(vec2(10.0, 0.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let camera = Camera::builder()
-            .position(vec2(10.0, 0.0))
-            .build(&mut scene);
+        let camera = camera().position(vec2(10.0, 0.0)).build(&mut scene);
 
         scene.get_root().add(&rectangle);
         scene.get_root().add(&camera);
@@ -94,11 +92,11 @@ mod tests {
     #[test]
     fn camera_zoom_magnifies_the_scene() {
         let mut scene = Scene::new();
-        let rectangle = Rect::builder()
+        let rectangle = rect()
             .size(vec2(4.0, 4.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let camera = Camera::builder().zoom(2.0).build(&mut scene);
+        let camera = camera().zoom(2.0).build(&mut scene);
 
         scene.get_root().add(&rectangle);
         scene.get_root().add(&camera);
@@ -113,13 +111,13 @@ mod tests {
     #[test]
     fn camera_inherits_ancestor_transforms() {
         let mut scene = Scene::new();
-        let rectangle = Rect::builder()
+        let rectangle = rect()
             .size(vec2(4.0, 4.0))
             .position(vec2(10.0, 0.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let camera = Camera::builder().position(vec2(5.0, 0.0)).build(&mut scene);
-        let rig = Group::builder().position(vec2(5.0, 0.0)).build(&mut scene);
+        let camera = camera().position(vec2(5.0, 0.0)).build(&mut scene);
+        let rig = group().position(vec2(5.0, 0.0)).build(&mut scene);
 
         rig.add(&camera);
         scene.get_root().add(&rectangle);
@@ -132,17 +130,13 @@ mod tests {
     #[test]
     fn last_active_camera_in_tree_order_controls_the_view() {
         let mut scene = Scene::new();
-        let rectangle = Rect::builder()
+        let rectangle = rect()
             .size(vec2(4.0, 4.0))
             .position(vec2(10.0, 0.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let first = Camera::builder()
-            .position(vec2(100.0, 0.0))
-            .build(&mut scene);
-        let second = Camera::builder()
-            .position(vec2(10.0, 0.0))
-            .build(&mut scene);
+        let first = camera().position(vec2(100.0, 0.0)).build(&mut scene);
+        let second = camera().position(vec2(10.0, 0.0)).build(&mut scene);
 
         scene.get_root().add(&rectangle);
         scene.get_root().add(&first);
@@ -155,12 +149,12 @@ mod tests {
     #[test]
     fn camera_rotation_rotates_the_view_and_picking_coordinates() {
         let mut scene = Scene::new();
-        let rectangle = Rect::builder()
+        let rectangle = rect()
             .size(vec2(4.0, 4.0))
             .position(vec2(10.0, 0.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let camera = Camera::builder()
+        let camera = camera()
             .rotation(std::f32::consts::FRAC_PI_2)
             .build(&mut scene);
 

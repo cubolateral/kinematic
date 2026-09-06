@@ -1,7 +1,7 @@
 use crate::core::{
     AnimatorHandle, SceneWorld, TrackInfo, TrackProperty, TrackValue, TrackValueType, Trackable,
     Tween,
-    components::{Animation, Draw, Inspection, Name, Node, Transform},
+    components::{Animation, Draw, Inspection, Morph, Name, Node, Transform},
     objects::{CameraTransform, deactivate_subtree, is_attached},
     types::Vector2,
 };
@@ -17,16 +17,11 @@ struct SnapshotStack(Vec<Vec<SnapshotValue>>);
 
 /// Marker trait for object types that can be spawned into the scene.
 ///
-/// The derive macro generates the builder returned by `Object::builder` and the
-/// typed handler returned by that builder.
+/// The derive macro generates a lowercase builder function and the typed handler
+/// returned by that builder.
 pub trait Object: hecs::DynamicBundle + Sized {
-    /// Builder type returned by [`Object::builder`](Self::builder).
-    type Builder;
     /// Handler type returned after spawning the object into the ECS world.
     type Handler;
-
-    /// Builds an object builder.
-    fn builder() -> Self::Builder;
 
     /// Builds the handler from the spawned entity.
     fn handler(world: SceneWorld, entity: hecs::Entity, animator: AnimatorHandle) -> Self::Handler;
@@ -46,6 +41,7 @@ pub trait Object: hecs::DynamicBundle + Sized {
             hecs::EntityBuilder::new()
                 .add_bundle(object)
                 .add(Animation::default())
+                .add(Morph::default())
                 .add(Node::default())
                 .add(SnapshotStack::default())
                 .add(name)

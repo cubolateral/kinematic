@@ -14,9 +14,6 @@ pub struct Style {
     /// Width used to outline the style.
     #[track]
     pub stroke_width: f32,
-    /// Normalized creation progress of the object.
-    #[track]
-    pub progress: f32,
 }
 
 impl Default for Style {
@@ -25,12 +22,11 @@ impl Default for Style {
             fill: Color::default(),
             stroke: Color::default(),
             stroke_width: 0.0,
-            progress: 1.0,
         }
     }
 }
 
-/// Draws a closed path using its normalized creation opacity.
+/// Draws a closed path.
 pub(crate) fn draw_styled_path(
     path: &skia_safe::Path,
     style: &Style,
@@ -38,12 +34,7 @@ pub(crate) fn draw_styled_path(
     opacity: f32,
     canvas: &skia_safe::Canvas,
 ) {
-    let progress = style.progress.clamp(0.0, 1.0);
-    if progress <= 0.0 {
-        return;
-    }
-
-    draw_complete_styled_path(path, style, scale, opacity * progress, canvas);
+    draw_complete_styled_path(path, style, scale, opacity, canvas);
 }
 
 /// Draws a complete closed path without applying style progress.
@@ -84,15 +75,5 @@ pub(crate) fn stroke_width_for_scale(stroke_width: f32, scale: Vector2) -> f32 {
         stroke_width / scale
     } else {
         stroke_width
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn style_is_fully_created_by_default() {
-        assert_eq!(Style::default().progress, 1.0);
     }
 }

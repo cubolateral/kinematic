@@ -210,8 +210,8 @@ mod tests {
     #[test]
     fn derived_container_initializes_children_on_first_add() {
         let mut scene = Scene::new();
-        let container = TestContainer::builder().build(&mut scene);
-        let child = Rect::builder().build(&mut scene);
+        let container = test_container().build(&mut scene);
+        let child = rect().build(&mut scene);
 
         assert!(
             scene
@@ -238,10 +238,8 @@ mod tests {
     #[test]
     fn non_group_containers_draw_their_children() {
         let mut scene = Scene::new();
-        let container = TestContainer::builder()
-            .position(vec2(4.0, 0.0))
-            .build(&mut scene);
-        let child = Rect::builder()
+        let container = test_container().position(vec2(4.0, 0.0)).build(&mut scene);
+        let child = rect()
             .size(vec2(4.0, 4.0))
             .fill(Color::RED)
             .build(&mut scene);
@@ -270,9 +268,9 @@ mod tests {
     #[test]
     fn containers_reject_cycles_and_multiple_parents() {
         let mut scene = Scene::new();
-        let first = TestContainer::builder().build(&mut scene);
-        let second = TestContainer::builder().build(&mut scene);
-        let child = Rect::builder().build(&mut scene);
+        let first = test_container().build(&mut scene);
+        let second = test_container().build(&mut scene);
+        let child = rect().build(&mut scene);
 
         first.add(&second);
         second.add(&child);
@@ -288,8 +286,8 @@ mod tests {
     #[test]
     fn removing_a_container_updates_its_complete_subtree() {
         let mut scene = Scene::new();
-        let container = TestContainer::builder().build(&mut scene);
-        let child = Rect::builder().build(&mut scene);
+        let container = test_container().build(&mut scene);
+        let child = rect().build(&mut scene);
 
         container.add(&child);
         scene.get_root().add(&container);
@@ -310,8 +308,8 @@ mod tests {
     #[test]
     fn container_bounds_include_transformed_children() {
         let mut scene = Scene::new();
-        let container = TestContainer::builder().build(&mut scene);
-        let child = Rect::builder()
+        let container = test_container().build(&mut scene);
+        let child = rect()
             .size(vec2(10.0, 20.0))
             .position(vec2(30.0, -10.0))
             .scale(vec2(2.0, 1.0))
@@ -328,15 +326,15 @@ mod tests {
     #[test]
     fn container_opacity_composites_the_subtree_once() {
         let mut scene = Scene::new();
-        let first = Rect::builder()
+        let first = rect()
             .size(vec2(8.0, 8.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let second = Rect::builder()
+        let second = rect()
             .size(vec2(8.0, 8.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let container = TestContainer::builder().opacity(0.5).build(&mut scene);
+        let container = test_container().opacity(0.5).build(&mut scene);
 
         container.add(&first);
         container.add(&second);
@@ -363,19 +361,19 @@ mod tests {
     #[test]
     fn handlers_compose_global_values_without_skew() {
         let mut scene = Scene::new();
-        let outer = Group::builder()
+        let outer = group()
             .position(vec2(10.0, 20.0))
             .scale(vec2(2.0, 3.0))
             .rotation(std::f32::consts::FRAC_PI_2)
             .opacity(0.5)
             .build(&mut scene);
-        let inner = Group::builder()
+        let inner = group()
             .position(vec2(4.0, 5.0))
             .scale(vec2(5.0, 7.0))
             .rotation(0.25)
             .opacity(0.4)
             .build(&mut scene);
-        let child = Rect::builder()
+        let child = rect()
             .position(vec2(1.0, 2.0))
             .scale(vec2(0.5, 0.25))
             .rotation(0.125)

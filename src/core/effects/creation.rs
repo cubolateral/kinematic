@@ -1,21 +1,32 @@
-use crate::core::effects::Effect;
 use crate::core::{
-    Easing,
-    components::{ParticleStyle, Style},
-    objects::{ObjectHandler, ObjectTrackable},
+    Easing, Task,
+    components::{Draw, Morph},
+    effects::Effect,
+    objects::ObjectHandler,
 };
 
 fn play_creation<T>(handler: &T, duration: f32, easing: Easing, progress: (f32, f32))
 where
     T: ObjectHandler,
-    T::Object: ObjectTrackable<ParticleStyle> + ObjectTrackable<Style>,
 {
-    handler
-        .animate_from(Style::progress_property(), progress.0, progress.1)
-        .animate_from(ParticleStyle::particles_enabled_property(), true, false)
+    let anchor = handler.animate(
+        Draw::opacity_property(),
+        handler.get(Draw::opacity_property()),
+    );
+    let (world, animator) = anchor.context();
+    let transition = Morph::progress_property()
+        .handle(world.clone(), handler.get_id(), animator.clone())
+        .animate_from::<T::Object>(progress.0, progress.1)
         .duration(duration)
         .easing(easing)
-        .play();
+        .task();
+    let particles = Morph::particles_enabled_property()
+        .handle(world, handler.get_id(), animator.clone())
+        .animate_from::<T::Object>(true, false)
+        .duration(duration)
+        .easing(easing)
+        .task();
+    animator.play(Task::All(vec![transition, particles]));
 }
 
 /// Forms an object from its signature particle cloud.
@@ -39,7 +50,7 @@ impl Creation {
         self
     }
 
-    /// Sets the easing curve used by the shared style progress.
+    /// Sets the easing curve used by the transition.
     pub fn easing(mut self, easing: Easing) -> Self {
         self.easing = easing;
         self
@@ -55,7 +66,6 @@ impl Default for Creation {
 impl<T> Effect<T> for Creation
 where
     T: ObjectHandler,
-    T::Object: ObjectTrackable<ParticleStyle> + ObjectTrackable<Style>,
 {
     fn play(self, handler: &T) {
         play_creation(handler, self.duration, self.easing, (0.0, 1.0));
@@ -83,7 +93,7 @@ impl Uncreation {
         self
     }
 
-    /// Sets the easing curve used by the shared style progress.
+    /// Sets the easing curve used by the transition.
     pub fn easing(mut self, easing: Easing) -> Self {
         self.easing = easing;
         self
@@ -99,7 +109,6 @@ impl Default for Uncreation {
 impl<T> Effect<T> for Uncreation
 where
     T: ObjectHandler,
-    T::Object: ObjectTrackable<ParticleStyle> + ObjectTrackable<Style>,
 {
     fn play(self, handler: &T) {
         play_creation(handler, self.duration, self.easing, (1.0, 0.0));

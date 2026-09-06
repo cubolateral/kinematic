@@ -254,7 +254,7 @@ mod tests {
 
     #[crate::scene]
     fn delayed_object_scene(scene: &mut Scene) {
-        let circle = Circle::builder().build(scene);
+        let circle = circle().build(scene);
 
         scene.wait(32.0);
         scene.get_root().add(&circle);
@@ -265,7 +265,7 @@ mod tests {
     fn object_builder_sets_component_values_and_preserves_object_defaults() {
         let default = Text::default();
         let mut scene = Scene::new();
-        let handler = Text::builder()
+        let handler = text()
             .opacity(0.5)
             .position(vec2(10.0, 20.0))
             .text("Kinematic!".to_owned())
@@ -284,8 +284,8 @@ mod tests {
     #[test]
     fn object_names_default_to_the_type_and_remain_mutable() {
         let mut scene = Scene::new();
-        let circle = Circle::builder().build(&mut scene);
-        let label = Text::builder().name("Caption").build(&mut scene);
+        let circle = circle().build(&mut scene);
+        let label = text().name("Caption").build(&mut scene);
         let root = scene.get_root();
 
         assert_eq!(circle.get_name(), "Circle");
@@ -308,8 +308,8 @@ mod tests {
     #[test]
     fn object_handler_exposes_trackable_fields_directly() {
         let mut scene = Scene::new();
-        let text: TextHandler = Text::builder().build(&mut scene);
-        let circle: CircleHandler = Circle::builder().build(&mut scene);
+        let text: TextHandler = text().build(&mut scene);
+        let circle: CircleHandler = circle().build(&mut scene);
 
         let _ = text.opacity(0.25);
         let _ = circle.position(vec2(10.0, 20.0));
@@ -325,7 +325,7 @@ mod tests {
     #[test]
     fn object_handlers_animate_properties_and_generate_from_shortcuts() {
         let mut scene = Scene::new();
-        let circle: CircleHandler = Circle::builder().build(&mut scene);
+        let circle: CircleHandler = circle().build(&mut scene);
         scene.get_root().add(&circle);
 
         scene.play(
@@ -354,7 +354,7 @@ mod tests {
 
         impl SceneBuilder for HandlerTweenScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = Circle::builder().fill(Color::RED).build(scene);
+                let circle = circle().fill(Color::RED).build(scene);
                 scene.get_root().add(&circle);
                 circle
                     .position_x(256.0)
@@ -382,7 +382,7 @@ mod tests {
 
         impl SceneBuilder for SnapshotScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = Circle::builder().fill(Color::RED).build(scene);
+                let circle = circle().fill(Color::RED).build(scene);
                 scene.get_root().add(&circle);
 
                 circle.save();
@@ -420,7 +420,7 @@ mod tests {
     #[should_panic(expected = "Cannot restore an object without a saved snapshot.")]
     fn object_handler_rejects_restore_without_a_snapshot() {
         let mut scene = Scene::new();
-        let circle = Circle::builder().build(&mut scene);
+        let circle = circle().build(&mut scene);
 
         let _ = circle.restore();
     }
@@ -431,7 +431,7 @@ mod tests {
 
         impl SceneBuilder for ImmediateRestoreScene {
             fn build(&mut self, scene: &mut Scene) {
-                let camera = Camera::builder().build(scene);
+                let camera = camera().build(scene);
                 scene.get_root().add(&camera);
 
                 camera.save();
@@ -466,7 +466,7 @@ mod tests {
 
         impl SceneBuilder for ComponentTweenScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = Circle::builder().build(scene);
+                let circle = circle().build(scene);
                 scene.get_root().add(&circle);
                 circle
                     .position_x(128.0)
@@ -493,7 +493,7 @@ mod tests {
 
         impl SceneBuilder for CreationScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = Circle::builder().build(scene);
+                let circle = circle().build(scene);
                 scene.get_root().add(&circle);
 
                 creation().duration(2.0).play(&circle);
@@ -507,20 +507,36 @@ mod tests {
         scene.update(0.0);
         {
             let world = scene.get_world();
-            let mut query = world.query::<(&Style, &ParticleStyle)>();
-            let (style, particles) = query.iter().next().unwrap();
+            let mut query = world.query::<(&Morph,)>();
+            let (morph,) = query.iter().next().unwrap();
 
-            assert_eq!(style.progress, 0.0);
-            assert!(particles.particles_enabled);
+            assert_eq!(morph.progress, 0.0);
+            assert!(morph.particles_enabled);
         }
 
         scene.update(4.0);
         let world = scene.get_world();
-        let mut query = world.query::<(&Style, &ParticleStyle)>();
-        let (style, particles) = query.iter().next().unwrap();
+        let mut query = world.query::<(&Morph,)>();
+        let (morph,) = query.iter().next().unwrap();
 
-        assert_eq!(style.progress, 0.0);
-        assert!(!particles.particles_enabled);
+        assert_eq!(morph.progress, 0.0);
+        assert!(!morph.particles_enabled);
+    }
+
+    #[test]
+    fn effect_state_is_not_exposed_by_object_inspection() {
+        let mut scene = Scene::new();
+        let rect = rect().build(&mut scene);
+        let world = scene.get_world();
+        let inspection = world.get::<&Inspection>(rect.get_id()).unwrap();
+        let components = (inspection.get)(&world, rect.get_id());
+
+        assert!(components.iter().all(|component| component.name != "Morph"));
+        let style = components
+            .iter()
+            .find(|component| component.name == "Style")
+            .unwrap();
+        assert!((style.get)().iter().all(|track| track.name != "progress"));
     }
 
     #[test]
@@ -529,10 +545,7 @@ mod tests {
 
         impl SceneBuilder for CreationScene {
             fn build(&mut self, scene: &mut Scene) {
-                let rect = Rect::builder()
-                    .size(vec2(16.0, 16.0))
-                    .fill(Color::RED)
-                    .build(scene);
+                let rect = rect().size(vec2(16.0, 16.0)).fill(Color::RED).build(scene);
                 scene.get_root().add(&rect);
 
                 creation().play(&rect);
@@ -571,16 +584,16 @@ mod tests {
         impl SceneBuilder for StyledObjectsScene {
             fn build(&mut self, scene: &mut Scene) {
                 scene.all(|scene| {
-                    let circle = Circle::builder()
+                    let circle = circle()
                         .radius(8.0)
                         .position(vec2(-32.0, 0.0))
                         .fill(Color::RED)
                         .build(scene);
-                    let rect = Rect::builder()
+                    let rect = rect()
                         .size(vec2(16.0, 16.0))
                         .fill(Color::GREEN)
                         .build(scene);
-                    let text = Text::builder()
+                    let text = text()
                         .text("A".to_owned())
                         .size(20.0)
                         .position(vec2(32.0, 0.0))
@@ -620,44 +633,44 @@ mod tests {
 
         impl SceneBuilder for NestedGroupsScene {
             fn build(&mut self, scene: &mut Scene) {
-                let root = Circle::builder().build(scene);
+                let root = circle().build(scene);
                 scene.get_root().add(&root);
                 scene.wait(1.0);
 
                 scene.chain(|scene| {
-                    let chain_object = Circle::builder().build(scene);
+                    let chain_object = circle().build(scene);
                     scene.get_root().add(&chain_object);
                     scene.wait(2.0);
 
                     scene.all(|scene| {
-                        let parallel_object = Circle::builder().build(scene);
+                        let parallel_object = circle().build(scene);
                         scene.get_root().add(&parallel_object);
                         scene.wait(4.0);
 
                         scene.chain(|scene| {
-                            let nested_object = Circle::builder().build(scene);
+                            let nested_object = circle().build(scene);
                             scene.get_root().add(&nested_object);
                             scene.wait(1.0);
 
-                            let nested_end_object = Circle::builder().build(scene);
+                            let nested_end_object = circle().build(scene);
                             scene.get_root().add(&nested_end_object);
                         });
 
                         scene.repeat(2, |scene| {
-                            let repeated_object = Circle::builder().build(scene);
+                            let repeated_object = circle().build(scene);
                             scene.get_root().add(&repeated_object);
                             scene.wait(0.5);
 
-                            let repeated_end_object = Circle::builder().build(scene);
+                            let repeated_end_object = circle().build(scene);
                             scene.get_root().add(&repeated_end_object);
                         });
 
-                        let parallel_end_object = Circle::builder().build(scene);
+                        let parallel_end_object = circle().build(scene);
                         scene.get_root().add(&parallel_end_object);
                     });
 
                     scene.wait(1.0);
-                    let chain_end_object = Circle::builder().build(scene);
+                    let chain_end_object = circle().build(scene);
                     scene.get_root().add(&chain_end_object);
                 });
             }
@@ -694,7 +707,7 @@ mod tests {
     #[test]
     fn draw_renders_objects_directly_into_the_supplied_skia_canvas() {
         let mut scene = Scene::new();
-        let rect = Rect::builder()
+        let rect = rect()
             .size(vec2(8.0, 8.0))
             .fill(Color::RED)
             .opacity(0.5)
@@ -730,8 +743,8 @@ mod tests {
 
         impl SceneBuilder for LifetimeScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = Circle::builder().build(scene);
-                let rect = Rect::builder().build(scene);
+                let circle = circle().build(scene);
+                let rect = rect().build(scene);
                 scene.get_root().add(&circle);
 
                 scene.wait(1.0);
@@ -782,7 +795,7 @@ mod tests {
 
         impl SceneBuilder for ParallelLifetimeScene {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = Circle::builder().build(scene);
+                let circle = circle().build(scene);
 
                 scene.all(|scene| {
                     scene.wait(5.0);

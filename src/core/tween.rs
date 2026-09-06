@@ -2,6 +2,8 @@ use crate::core::{
     AnimatorHandle, Easing, SceneWorld, Task, TrackInfo, TrackProperty, TrackValue, TrackValueType,
 };
 
+type PrepareTween<Object> = Box<dyn FnOnce(&Tween<Object>)>;
+
 struct TweenTarget {
     type_id: std::any::TypeId,
     track_info: &'static TrackInfo,
@@ -19,6 +21,7 @@ pub struct Tween<Object = ()> {
     world: SceneWorld,
     entity: hecs::Entity,
     targets: Vec<TweenTarget>,
+    prepare: Option<PrepareTween<Object>>,
     duration: f32,
     easing: Easing,
     animator: AnimatorHandle,
@@ -28,6 +31,25 @@ pub struct Tween<Object = ()> {
 impl<Object> Tween<Object> {
     pub(crate) fn context(&self) -> (SceneWorld, AnimatorHandle) {
         (std::rc::Rc::clone(&self.world), self.animator.active())
+    }
+
+    // Prepare derived data after all chained properties have been supplied.
+    pub(crate) fn prepare(mut self, prepare: impl FnOnce(&Self) + 'static) -> Self {
+        self.prepare = Some(Box::new(prepare));
+        self
+    }
+
+    // Evaluate a component endpoint in isolation, without changing scene state.
+    pub(crate) fn endpoint<C: hecs::Component + Clone>(&self, base: &C, end: bool) -> C {
+        let mut snapshot = hecs::World::new();
+        let entity = snapshot.spawn((base.clone(),));
+        for target in &self.targets {
+            if target.type_id == std::any::TypeId::of::<C>() {
+                let value = if end { &target.to } else { &target.from };
+                (target.track_info.set)(&snapshot, entity, value.clone());
+            }
+        }
+        snapshot.remove_one::<C>(entity).unwrap()
     }
 
     /// Creates a tween with a one-second duration and [`Easing::default()`] easing.
@@ -49,6 +71,7 @@ impl<Object> Tween<Object> {
                 from,
                 to,
             }],
+            prepare: None,
             duration: 1.0,
             easing: Easing::default(),
             animator,
@@ -75,6 +98,7 @@ impl<Object> Tween<Object> {
                     to,
                 })
                 .collect(),
+            prepare: None,
             duration: 1.0,
             easing: Easing::default(),
             animator,
@@ -190,7 +214,10 @@ impl<Object> Tween<Object> {
     }
 
     /// Converts this description into one task that runs all target fields together.
-    pub fn task(self) -> Task {
+    pub fn task(mut self) -> Task {
+        if let Some(prepare) = self.prepare.take() {
+            prepare(&self);
+        }
         let mut tasks: Vec<_> = self
             .targets
             .into_iter()
@@ -210,5 +237,30 @@ impl<Object> Tween<Object> {
         } else {
             Task::All(tasks)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::core::components::Style;
+    use crate::prelude::*;
+
+    #[test]
+    fn endpoints_include_overrides_without_mutating_the_scene() {
+        let mut scene = Scene::new();
+        let object = text().fill(Color::RED).build(&mut scene);
+        let tween = object.fill(Color::YELLOW).fill(Color::BLUE).animate_from(
+            Style::stroke_width_property(),
+            2.0,
+            8.0,
+        );
+        let from = tween.endpoint(&Style::default(), false);
+        let to = tween.endpoint(&Style::default(), true);
+        assert_eq!(from.fill, Color::RED);
+        assert_eq!(to.fill, Color::BLUE);
+        assert_eq!(from.stroke_width, 2.0);
+        assert_eq!(to.stroke_width, 8.0);
+        assert_eq!(object.get(Style::fill_property()), Color::BLUE);
+        assert_eq!(object.get(Style::stroke_width_property()), 8.0);
     }
 }

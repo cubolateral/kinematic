@@ -35,19 +35,19 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let struct_name = &input.ident;
     let handler_fields_name = format_ident!("__{}HandlerFields", struct_name);
     let tween_fields_trait = format_ident!("__Kinematic{}TweenFields", struct_name);
-    let builder_component_trait = format_ident!("__Kinematic{}BuilderComponent", struct_name);
-    let handler_context_trait = format_ident!("__Kinematic{}HandlerContext", struct_name);
-    let object_trackable_trait = format_ident!("__Kinematic{}ObjectTrackable", struct_name);
-    let scene_world_type = format_ident!("__Kinematic{}SceneWorld", struct_name);
-    let animator_handle_type = format_ident!("__Kinematic{}AnimatorHandle", struct_name);
-    let track_handle_type = format_ident!("__Kinematic{}TrackHandle", struct_name);
-    let track_id_type = format_ident!("__Kinematic{}TrackId", struct_name);
-    let track_info_type = format_ident!("__Kinematic{}TrackInfo", struct_name);
-    let trackable_info_type = format_ident!("__Kinematic{}TrackableInfo", struct_name);
-    let trackable_trait = format_ident!("__Kinematic{}Trackable", struct_name);
-    let track_value_type_trait = format_ident!("__Kinematic{}TrackValueType", struct_name);
-    let tween_type = format_ident!("__Kinematic{}Tween", struct_name);
-    let track_property_type = format_ident!("__Kinematic{}TrackProperty", struct_name);
+    let builder_component_trait = quote!(kinematic::core::objects::ObjectBuilderComponent);
+    let handler_context_trait = quote!(kinematic::core::objects::HandlerContext);
+    let object_trackable_trait = quote!(kinematic::core::objects::ObjectTrackable);
+    let scene_world_type = quote!(kinematic::core::SceneWorld);
+    let animator_handle_type = quote!(kinematic::core::AnimatorHandle);
+    let track_handle_type = quote!(kinematic::core::TrackHandle);
+    let track_id_type = quote!(kinematic::core::TrackId);
+    let track_info_type = quote!(kinematic::core::TrackInfo);
+    let trackable_info_type = quote!(kinematic::core::TrackableInfo);
+    let trackable_trait = quote!(kinematic::core::Trackable);
+    let track_value_type_trait = quote!(kinematic::core::TrackValueType);
+    let tween_type = quote!(kinematic::core::Tween);
+    let track_property_type = quote!(kinematic::core::TrackProperty);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -93,6 +93,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 fn #field_ident(self, value: #field_ty) -> Self;
             }
 
+            #[doc(hidden)]
             impl<T> #setter_trait for T
             where
                 T: #builder_component_trait<#struct_name>,
@@ -344,24 +345,6 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 
     let tracks_ident = format_ident!("__{}_TRACKS", struct_name.to_string().to_uppercase());
     let expanded = quote! {
-        use crate::core::{
-            SceneWorld as #scene_world_type,
-            AnimatorHandle as #animator_handle_type,
-            TrackHandle as #track_handle_type,
-            TrackProperty as #track_property_type,
-            TrackId as #track_id_type,
-            TrackInfo as #track_info_type,
-            Trackable as #trackable_trait,
-            TrackableInfo as #trackable_info_type,
-            TrackValueType as #track_value_type_trait,
-            Tween as #tween_type,
-            objects::{
-                HandlerContext as #handler_context_trait,
-                ObjectBuilderComponent as #builder_component_trait,
-                ObjectTrackable as #object_trackable_trait,
-            },
-        };
-
         #(#type_assertions)*
         #(#builder_setters)*
 
@@ -394,6 +377,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             #(#tween_trait_fns)*
         }
 
+        #[doc(hidden)]
         impl<ObjectType> #tween_fields_trait for #tween_type<ObjectType>
         where
             ObjectType: #object_trackable_trait<#struct_name>,

@@ -1,6 +1,9 @@
 use crate::core::{
     Easing, Task,
-    components::{Draw, Node, PARTICLE_COUNT, PARTICLE_FADE_START, Style, stroke_width_for_scale},
+    components::{
+        Draw, Morph as MorphState, Node, PARTICLE_COUNT, PARTICLE_FADE_START, Style,
+        stroke_width_for_scale,
+    },
     objects::{
         GlobalTransform, Object, ObjectHandler, ObjectTrackable, Rect, attach_child, children,
         deactivate_subtree, global_transform, local_transform,
@@ -15,13 +18,13 @@ use crate::core::{
 /// parent and uses its own local position, scale, and rotation. Appearances are captured
 /// when scheduled, including descendants and their colors. The destination becomes
 /// active at completion and can then receive further effects.
-pub struct Morph {
+pub struct MorphEffect {
     duration: f32,
     easing: Easing,
     fade_from: bool,
 }
 
-impl Morph {
+impl MorphEffect {
     /// Creates a two-second transformation into the destination object.
     pub fn new() -> Self {
         Self {
@@ -55,11 +58,11 @@ impl Morph {
 }
 
 /// Builds a particle morph into an unattached destination object.
-pub fn morph() -> Morph {
-    Morph::new()
+pub fn morph() -> MorphEffect {
+    MorphEffect::new()
 }
 
-impl Morph {
+impl MorphEffect {
     pub fn play<F, T>(self, from: &F, to: &T)
     where
         F: ObjectHandler,
@@ -105,11 +108,7 @@ impl Morph {
             let to_silhouette = capture(&world, to.get_id(), parent, count, start, target_opacity);
             (parent, from_silhouette, to_silhouette)
         };
-        let data = ParticleTransform {
-            from: from_silhouette,
-            to: to_silhouette,
-            easing: self.easing,
-        };
+        let data = ParticleTransform::new(from_silhouette, to_silhouette, self.easing);
         let object = Rect {
             draw: Draw {
                 on_draw: draw_transform,
@@ -159,8 +158,9 @@ impl Morph {
             drop(node);
             deactivate_subtree(&world, carrier.get_id(), end);
         }
-        let progress = carrier
-            .animate_from(Style::progress_property(), 0.0, 1.0)
+        let progress = MorphState::progress_property()
+            .handle(world.clone(), carrier.get_id(), animator.clone())
+            .animate_from::<Rect>(0.0, 1.0)
             .duration(self.duration)
             .easing(Easing::Linear)
             .task();
@@ -327,7 +327,7 @@ fn draw_transform(
 ) {
     let data = world.get::<&ParticleTransform>(entity).unwrap();
     let progress = world
-        .get::<&Style>(entity)
+        .get::<&MorphState>(entity)
         .unwrap()
         .progress
         .clamp(0.0, 1.0);
@@ -339,7 +339,6 @@ mod tests {
     use super::*;
     use crate::core::{
         Scene, SceneBuilder,
-        objects::{Circle, Group, Text},
         types::{Color, vec2},
     };
     use crate::prelude::*;
@@ -360,12 +359,12 @@ mod tests {
     struct MorphScene;
     impl SceneBuilder for MorphScene {
         fn build(&mut self, scene: &mut Scene) {
-            let source = Rect::builder()
+            let source = rect()
                 .size(vec2(20.0, 20.0))
                 .position(vec2(-30.0, 0.0))
                 .fill(Color::RED)
                 .build(scene);
-            let target = Circle::builder()
+            let target = circle()
                 .radius(10.0)
                 .position(vec2(30.0, 0.0))
                 .fill(Color::BLUE)
@@ -407,21 +406,15 @@ mod tests {
         struct Groups;
         impl SceneBuilder for Groups {
             fn build(&mut self, scene: &mut Scene) {
-                let parent = Group::builder()
-                    .position(vec2(12.0, 3.0))
-                    .opacity(0.5)
-                    .build(scene);
-                let source = Group::builder().build(scene);
-                let child = Rect::builder()
-                    .size(vec2(12.0, 12.0))
-                    .fill(Color::RED)
-                    .build(scene);
+                let parent = group().position(vec2(12.0, 3.0)).opacity(0.5).build(scene);
+                let source = group().build(scene);
+                let child = rect().size(vec2(12.0, 12.0)).fill(Color::RED).build(scene);
                 source.add(&child);
                 parent.add(&source);
                 scene.get_root().add(&parent);
-                let target = Text::builder().text("A".to_owned()).size(20.0).build(scene);
+                let target = text().text("A".to_owned()).size(20.0).build(scene);
                 morph().duration(1.0).play(&source, &target);
-                let next = Circle::builder().radius(8.0).build(scene);
+                let next = circle().radius(8.0).build(scene);
                 morph().duration(1.0).play(&target, &next);
             }
         }
@@ -440,11 +433,8 @@ mod tests {
 
         impl SceneBuilder for RoundTrip {
             fn build(&mut self, scene: &mut Scene) {
-                let circle = Circle::builder().radius(10.0).fill(Color::RED).build(scene);
-                let rect = Rect::builder()
-                    .size(vec2(20.0, 20.0))
-                    .fill(Color::BLUE)
-                    .build(scene);
+                let circle = circle().radius(10.0).fill(Color::RED).build(scene);
+                let rect = rect().size(vec2(20.0, 20.0)).fill(Color::BLUE).build(scene);
                 scene.get_root().add(&circle);
 
                 morph().duration(1.0).play(&circle, &rect);
@@ -465,12 +455,12 @@ mod tests {
 
         impl SceneBuilder for KeepSource {
             fn build(&mut self, scene: &mut Scene) {
-                let source = Rect::builder()
+                let source = rect()
                     .size(vec2(20.0, 20.0))
                     .position(vec2(-30.0, 0.0))
                     .fill(Color::RED)
                     .build(scene);
-                let target = Circle::builder()
+                let target = circle()
                     .radius(10.0)
                     .position(vec2(30.0, 0.0))
                     .fill(Color::BLUE)
@@ -497,18 +487,12 @@ mod tests {
         struct Overlap;
         impl SceneBuilder for Overlap {
             fn build(&mut self, scene: &mut Scene) {
-                let source = Rect::builder()
-                    .size(vec2(30.0, 30.0))
-                    .fill(Color::RED)
-                    .build(scene);
-                let overlay = Rect::builder()
+                let source = rect().size(vec2(30.0, 30.0)).fill(Color::RED).build(scene);
+                let overlay = rect()
                     .size(vec2(10.0, 10.0))
                     .fill(Color::GREEN)
                     .build(scene);
-                let target = Circle::builder()
-                    .radius(15.0)
-                    .fill(Color::BLUE)
-                    .build(scene);
+                let target = circle().radius(15.0).fill(Color::BLUE).build(scene);
                 scene.get_root().add(&source);
                 scene.get_root().add(&overlay);
                 morph().duration(1.0).play(&source, &target);
@@ -526,17 +510,14 @@ mod tests {
         struct Nested;
         impl SceneBuilder for Nested {
             fn build(&mut self, scene: &mut Scene) {
-                let parent = Group::builder()
-                    .scale(vec2(2.0, 0.7))
-                    .rotation(0.4)
-                    .build(scene);
-                let source = Rect::builder()
+                let parent = group().scale(vec2(2.0, 0.7)).rotation(0.4).build(scene);
+                let source = rect()
                     .size(vec2(30.0, 12.0))
                     .rotation(0.6)
                     .fill(Color::RED)
                     .build(scene);
-                let target = Group::builder().build(scene);
-                let child = Circle::builder().radius(10.0).build(scene);
+                let target = group().build(scene);
+                let child = circle().radius(10.0).build(scene);
                 target.add(&child);
                 parent.add(&source);
                 scene.get_root().add(&parent);
@@ -562,8 +543,8 @@ mod tests {
     fn morph_rejects_foreign_handlers_even_when_entity_ids_match() {
         let mut scene = Scene::new();
         let mut other = Scene::new();
-        let source = Rect::builder().build(&mut scene);
-        let target = Circle::builder().build(&mut other);
+        let source = rect().build(&mut scene);
+        let target = circle().build(&mut other);
         scene.get_root().add(&source);
         morph().play(&source, &target);
     }
@@ -576,9 +557,9 @@ mod tests {
         let before = {
             let world = scene.get_world();
             world
-                .query::<(&Node, &Style)>()
+                .query::<(&Node, &MorphState)>()
                 .iter()
-                .map(|(node, style)| (node.is_activated, style.progress))
+                .map(|(node, morph)| (node.is_activated, morph.progress))
                 .collect::<Vec<_>>()
         };
         let mut surface = skia_safe::surfaces::raster_n32_premul((160, 80)).unwrap();
@@ -586,9 +567,9 @@ mod tests {
         let after = {
             let world = scene.get_world();
             world
-                .query::<(&Node, &Style)>()
+                .query::<(&Node, &MorphState)>()
                 .iter()
-                .map(|(node, style)| (node.is_activated, style.progress))
+                .map(|(node, morph)| (node.is_activated, morph.progress))
                 .collect::<Vec<_>>()
         };
         assert_eq!(before, after);

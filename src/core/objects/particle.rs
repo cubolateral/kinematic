@@ -1,9 +1,12 @@
+#[cfg(test)]
+thread_local! {
+    pub(crate) static CAPTURE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 use crate::core::{
     Easing,
-    components::{PARTICLE_COUNT, PARTICLE_DISTANCE, PARTICLE_FADE_START, PARTICLE_RADIUS},
-    objects::{
-        draw_particle_batch, morph_particle_position, morph_particle_progress, silhouette_grid,
-    },
+    components::{PARTICLE_COUNT, PARTICLE_FADE_START, PARTICLE_RADIUS},
+    objects::{MorphParticleRoute, draw_particle_batch, silhouette_grid},
     types::Vector2,
 };
 
@@ -20,7 +23,8 @@ pub(crate) struct Silhouette {
 pub(crate) struct ParticleTransform {
     pub(crate) from: Silhouette,
     pub(crate) to: Silhouette,
-    pub(crate) easing: Easing,
+    easing: Easing,
+    routes: Vec<MorphParticleRoute>,
 }
 
 impl Silhouette {
@@ -34,6 +38,8 @@ impl Silhouette {
         count: usize,
         draw: impl FnOnce(&skia_safe::Canvas),
     ) -> Self {
+        #[cfg(test)]
+        CAPTURE_COUNT.set(CAPTURE_COUNT.get() + 1);
         assert!(
             bounds.left.is_finite()
                 && bounds.top.is_finite()
@@ -104,22 +110,44 @@ fn particle_opacity(progress: f32) -> f32 {
 }
 
 impl ParticleTransform {
+    pub(crate) fn new(from: Silhouette, to: Silhouette, easing: Easing) -> Self {
+        let count = if from.is_empty() || to.is_empty() {
+            0
+        } else {
+            PARTICLE_COUNT as usize
+        };
+        let routes = (0..count)
+            .map(|index| {
+                MorphParticleRoute::new(
+                    from.samples[index * from.samples.len() / count].point,
+                    to.samples[index * to.samples.len() / count].point,
+                    to.bounds,
+                )
+            })
+            .collect();
+        Self {
+            from,
+            to,
+            easing,
+            routes,
+        }
+    }
+
     pub(crate) fn draw(&self, canvas: &skia_safe::Canvas, progress: f32, opacity: f32) {
         let data = self;
         if data.from.samples.is_empty() || data.to.samples.is_empty() {
             return;
         }
         let particle_opacity = particle_opacity(progress);
-        let count = PARTICLE_COUNT as usize;
+        let count = data.routes.len();
         let mut positions = Vec::with_capacity(count);
         let mut colors = Vec::with_capacity(count);
-        for index in 0..count {
+        for (index, route) in data.routes.iter().enumerate() {
             let from = &data.from.samples[index * data.from.samples.len() / count];
             let to = &data.to.samples[index * data.to.samples.len() / count];
-            let local = morph_particle_progress(to.point, data.to.bounds, progress);
+            let local = route.progress(progress);
             let t = data.easing.evaluate(local).clamp(0.0, 1.0);
-            let point =
-                morph_particle_position(from.point, to.point, data.to.bounds, PARTICLE_DISTANCE, t);
+            let point = route.position(t);
             let color: [f32; 4] =
                 std::array::from_fn(|i| from.color[i] + (to.color[i] - from.color[i]) * t);
             positions.push(point);

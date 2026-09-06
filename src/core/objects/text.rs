@@ -1,13 +1,14 @@
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    Easing, Tween,
+    Tween,
     components::PARTICLE_COUNT,
-    components::{Draw, ParticleStyle, Style, Transform, stroke_width_for_scale},
+    components::{Draw, Morph, Style, Transform, stroke_width_for_scale},
     objects::{
         CreationDraw, ObjectHandler,
-        particle::{ParticleTransform, Silhouette, morph_opacities},
+        particle::Silhouette,
         particle_visual_key,
+        string_morph::{ContentMorph, ContentMorphTransition, morph_string},
     },
     types::{Color, Vector2},
 };
@@ -104,30 +105,9 @@ pub struct Text {
     #[trackable]
     pub style: Style,
     #[trackable]
-    pub particles: ParticleStyle,
-    #[trackable]
     pub transform: Transform,
     #[trackable]
     pub draw: Draw,
-}
-
-struct TextMorphTransition {
-    particles: ParticleTransform,
-    from_text: String,
-    to_text: String,
-}
-
-#[derive(Default, Trackable)]
-struct TextMorph {
-    #[track]
-    progress: f32,
-    #[track]
-    transition: u32,
-    // Ends at the actual keyframe, even when easing rounds progress to one early.
-    #[track]
-    active: bool,
-
-    transitions: Vec<TextMorphTransition>,
 }
 
 struct TextLine<'a> {
@@ -205,7 +185,7 @@ fn text_morph_silhouette(shape: &TextShape, style: &Style, transform: &Transform
 }
 
 fn draw_text_morph(
-    transition: &TextMorphTransition,
+    transition: &ContentMorphTransition,
     shape: &TextShape,
     style: &Style,
     transform: &Transform,
@@ -213,19 +193,14 @@ fn draw_text_morph(
     opacity: f32,
     canvas: &skia_safe::Canvas,
 ) {
-    let (source_opacity, target_opacity) = morph_opacities(progress);
-    let mut text_shape = shape.clone();
-
-    for (text, fade) in [
-        (&transition.from_text, source_opacity),
-        (&transition.to_text, target_opacity),
-    ] {
-        if fade > 0.0 {
-            text_shape.text.clone_from(text);
-            draw_complete_text(&text_shape, style, opacity * fade, transform.scale, canvas);
-        }
-    }
-    transition.particles.draw(canvas, progress, opacity);
+    let shape_for = |text: &str| {
+        let mut shape = shape.clone();
+        shape.text = text.to_owned();
+        shape
+    };
+    transition.draw(canvas, progress, opacity, |text, opacity| {
+        draw_complete_text(&shape_for(text), style, opacity, transform.scale, canvas);
+    });
 }
 
 fn draw_complete_text(
@@ -259,10 +234,10 @@ fn draw_complete_text(
 fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
     let shape = world.get::<&TextShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
-    let particles = world.get::<&ParticleStyle>(entity).unwrap();
+    let morph_state = world.get::<&Morph>(entity).unwrap();
     let transform = world.get::<&Transform>(entity).unwrap();
 
-    if let Ok(morph) = world.get::<&TextMorph>(entity)
+    if let Ok(morph) = world.get::<&ContentMorph>(entity)
         && morph.active
         && morph.progress > 0.0
     {
@@ -272,13 +247,13 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
             &style,
             &transform,
             morph.progress.clamp(0.0, 1.0),
-            opacity * style.progress.clamp(0.0, 1.0),
+            opacity,
             canvas,
         );
         return;
     }
 
-    if particles.particles_enabled && style.progress < 1.0 {
+    if morph_state.particles_enabled && morph_state.progress < 1.0 {
         let size = text_box(&shape);
         let stroke_padding =
             stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5;
@@ -306,7 +281,7 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
             bounds,
             visual_key,
             style: &style,
-            particles: &particles,
+            morph: &morph_state,
             opacity,
             canvas,
         })
@@ -317,10 +292,7 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
         }
     }
 
-    let progress = style.progress.clamp(0.0, 1.0);
-    if progress > 0.0 {
-        draw_complete_text(&shape, &style, opacity * progress, transform.scale, canvas);
-    }
+    draw_complete_text(&shape, &style, opacity, transform.scale, canvas);
 }
 
 impl Default for Text {
@@ -328,7 +300,6 @@ impl Default for Text {
         Self {
             shape: Default::default(),
             style: Default::default(),
-            particles: Default::default(),
             transform: Default::default(),
             draw: Draw {
                 on_draw: draw_text,
@@ -348,49 +319,7 @@ impl TextHandler {
         let text = text.into();
         let from_text = self.get(TextShape::text_property());
         let tween = self.text(text.clone());
-        let (world, _) = tween.context();
-        let entity = self.get_id();
-        let (from, to) = {
-            let world = world.borrow();
-            let shape = world.get::<&TextShape>(entity).unwrap();
-            let style = world.get::<&Style>(entity).unwrap();
-            let transform = world.get::<&Transform>(entity).unwrap();
-            let mut source_shape = (*shape).clone();
-
-            source_shape.text.clone_from(&from_text);
-            let from = text_morph_silhouette(&source_shape, &style, &transform);
-            let to = text_morph_silhouette(&shape, &style, &transform);
-            (from, to)
-        };
-        let transition_index = {
-            let mut world = world.borrow_mut();
-            let missing = world.get::<&TextMorph>(entity).is_err();
-
-            if missing {
-                world.insert_one(entity, TextMorph::default()).unwrap();
-            }
-
-            let mut morph = world.get::<&mut TextMorph>(entity).unwrap();
-            let transition_index = morph.transitions.len();
-            morph.transitions.push(TextMorphTransition {
-                particles: ParticleTransform {
-                    from,
-                    to,
-                    easing: Easing::Linear,
-                },
-                from_text,
-                to_text: text,
-            });
-            transition_index
-        };
-        tween
-            .animate_from(
-                TextMorph::transition_property(),
-                transition_index as u32,
-                transition_index as u32,
-            )
-            .animate_from(TextMorph::active_property(), true, false)
-            .animate_from(TextMorph::progress_property(), 0.0, 1.0)
+        morph_string(tween, self.get_id(), from_text, text, text_morph_silhouette)
     }
 }
 
@@ -398,7 +327,6 @@ impl TextHandler {
 mod tests {
     use super::*;
     use crate::core::{Scene, SceneBuilder};
-    use crate::prelude::*;
 
     fn pixels(scene: &Scene) -> Vec<skia_safe::Color> {
         let mut surface = skia_safe::surfaces::raster_n32_premul((640, 240)).unwrap();
@@ -423,7 +351,7 @@ mod tests {
 
         impl SceneBuilder for ConsecutiveMorphs {
             fn build(&mut self, scene: &mut Scene) {
-                let text = Text::builder().text("Kinematic".to_owned()).build(scene);
+                let text = text().text("Kinematic".to_owned()).build(scene);
                 scene.get_root().add(&text);
                 text.morph("Is").play();
                 text.morph("Awesome.").play();
@@ -439,7 +367,7 @@ mod tests {
         assert!(first_morph.iter().any(|color| color.a() > 0));
         {
             let world = scene.get_world();
-            let mut query = world.query::<(&TextShape, &TextMorph)>();
+            let mut query = world.query::<(&TextShape, &ContentMorph)>();
             let (shape, morph) = query.iter().next().unwrap();
 
             assert_eq!(shape.text, "Kinematic");
@@ -456,7 +384,7 @@ mod tests {
         scene.update(1.5);
         {
             let world = scene.get_world();
-            let mut query = world.query::<(&TextShape, &TextMorph)>();
+            let mut query = world.query::<(&TextShape, &ContentMorph)>();
             let (shape, morph) = query.iter().next().unwrap();
 
             assert_eq!(shape.text, "Is");

@@ -38,7 +38,7 @@ use kinematic::prelude::*;
 
 #[scene]
 fn example(s: &mut Scene) {
-    let circle = Circle::builder()
+    let circle = circle()
         .radius(128.0)
         .position(vec2(-256.0, 0.0))
         .fill(Color::RED)
@@ -67,6 +67,27 @@ fn main() {
 Scene factories in `Project::scenes` run in vector order. Each scene starts as
 soon as the previous scene reaches the end of its timeline.
 
+## LaTeX formulas
+
+`Latex` uses the native RaTeX layout engine and embedded KaTeX fonts.
+Formula geometry is cached and drawn as Skia vector paths. Size, fill, stroke,
+transform, and creation effects work like other scene objects.
+
+```rust
+let formula = latex()
+    .text(r"\frac{1}{2}".to_owned())
+    .size(64.0)
+    .build(s);
+s.get_root().add(&formula);
+creation().play(&formula);
+formula.morph(r"\sqrt{2}").duration(2.0).play();
+```
+
+`morph` keeps the same object and changes its source when the tween completes,
+including when seeking backward. Use math source without dollar delimiters.
+Rendering uses display style; full LaTeX documents and packages are unsupported.
+Invalid or unsupported source panics when its geometry is first requested.
+
 ## Particle transforms
 
 `morph().play(&from, &to)` replaces an object through particle silhouettes.
@@ -74,8 +95,8 @@ It first turns the source into a silhouette, interpolates particle positions and
 colors, and resolves the destination into its complete appearance.
 
 ```rust
-let source = Circle::builder().radius(80.0).fill(Color::RED).build(s);
-let target = Text::builder()
+let source = circle().radius(80.0).fill(Color::RED).build(s);
+let target = text()
     .text("Kinematic".to_owned())
     .position(vec2(240.0, 0.0))
     .fill(Color::BLUE)
@@ -111,8 +132,8 @@ Every scene owns an internal root container, available through
 timeline lifetime when added to a container:
 
 ```rust
-let circle = Circle::builder().build(&mut scene);
-let child_group = Group::builder().build(&mut scene);
+let circle = circle().build(&mut scene);
+let child_group = group().build(&mut scene);
 
 child_group.add(&circle);
 scene.get_root().add(&child_group);
@@ -129,7 +150,7 @@ the destination canvas resolution.
 Add a camera to any container to control the rendered view:
 
 ```rust
-let camera = Camera::builder()
+let camera = camera()
     .position(vec2(200.0, 0.0))
     .zoom(2.0)
     .rotation(0.25)
