@@ -32,6 +32,42 @@ impl Silhouette {
         self.samples.is_empty()
     }
 
+    pub(crate) fn sample_count(&self) -> usize {
+        self.samples.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn sample_y_span(&self) -> f32 {
+        let minimum = self
+            .samples
+            .iter()
+            .map(|sample| sample.point.y)
+            .fold(f32::INFINITY, f32::min);
+        let maximum = self
+            .samples
+            .iter()
+            .map(|sample| sample.point.y)
+            .fold(f32::NEG_INFINITY, f32::max);
+
+        maximum - minimum
+    }
+
+    #[cfg(test)]
+    pub(crate) fn sample_x_span(&self) -> f32 {
+        let minimum = self
+            .samples
+            .iter()
+            .map(|sample| sample.point.x)
+            .fold(f32::INFINITY, f32::min);
+        let maximum = self
+            .samples
+            .iter()
+            .map(|sample| sample.point.x)
+            .fold(f32::NEG_INFINITY, f32::max);
+
+        maximum - minimum
+    }
+
     /// Samples colors and positions from a drawing in local coordinates.
     pub(crate) fn capture(
         bounds: skia_safe::Rect,
@@ -88,6 +124,40 @@ impl Silhouette {
         };
         Silhouette { bounds, samples }
     }
+
+    pub(crate) fn collapsed_at(&self, anchors: &[Vector2]) -> Self {
+        let fallback = [Vector2::ZERO];
+        let anchors = if anchors.is_empty() {
+            fallback.as_slice()
+        } else {
+            anchors
+        };
+        let samples = self
+            .samples
+            .iter()
+            .map(|sample| {
+                let point = anchors
+                    .iter()
+                    .copied()
+                    .min_by(|left, right| {
+                        sample
+                            .point
+                            .distance_squared(*left)
+                            .total_cmp(&sample.point.distance_squared(*right))
+                    })
+                    .unwrap();
+                Sample {
+                    point,
+                    color: sample.color,
+                }
+            })
+            .collect();
+
+        Self {
+            bounds: self.bounds,
+            samples,
+        }
+    }
 }
 
 fn smoothstep(progress: f32) -> f32 {
@@ -116,6 +186,19 @@ impl ParticleTransform {
         } else {
             PARTICLE_COUNT as usize
         };
+        Self::with_count(from, to, easing, count)
+    }
+
+    pub(crate) fn sampled(from: Silhouette, to: Silhouette, easing: Easing) -> Self {
+        let count = if from.is_empty() || to.is_empty() {
+            0
+        } else {
+            from.samples.len().max(to.samples.len())
+        };
+        Self::with_count(from, to, easing, count)
+    }
+
+    fn with_count(from: Silhouette, to: Silhouette, easing: Easing, count: usize) -> Self {
         let routes = (0..count)
             .map(|index| {
                 MorphParticleRoute::new(

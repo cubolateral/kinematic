@@ -16,6 +16,7 @@ dear-imgui-glow = { version = "0.15.1", features = ["multi-viewport"] }
 hecs = { version = "0.11.1", features = ["macros"] }
 glam = "0.33.3"
 palette = "0.7.6"
+unicode-segmentation = "1.13.3"
 ratex-layout = "0.1.14"
 ratex-parser = "0.1.14"
 ratex-types = "0.1.14"

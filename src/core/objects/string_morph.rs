@@ -10,9 +10,32 @@ use crate::core::{
 };
 
 pub(super) struct ContentMorphTransition {
-    particles: Option<ParticleTransform>,
+    prepared: Option<PreparedContentMorph>,
     pub(super) from_text: String,
     pub(super) to_text: String,
+}
+
+pub(super) enum PreparedContentMorph {
+    Particles(ParticleTransform),
+    Text(TextMorphPlan),
+}
+
+pub(super) struct GlyphLayer {
+    pub(super) glyphs: Vec<skia_safe::GlyphId>,
+    pub(super) positions: Vec<skia_safe::Point>,
+}
+
+pub(super) struct MovingGlyphLayer {
+    pub(super) glyphs: Vec<skia_safe::GlyphId>,
+    pub(super) from: Vec<skia_safe::Point>,
+    pub(super) to: Vec<skia_safe::Point>,
+}
+
+pub(super) struct TextMorphPlan {
+    pub(super) stable: MovingGlyphLayer,
+    pub(super) source: GlyphLayer,
+    pub(super) target: GlyphLayer,
+    pub(super) particles: ParticleTransform,
 }
 
 impl ContentMorphTransition {
@@ -32,10 +55,26 @@ impl ContentMorphTransition {
                 draw(text, opacity * fade);
             }
         }
-        self.particles
+        let PreparedContentMorph::Particles(particles) = self
+            .prepared
             .as_ref()
             .expect("Morph must be prepared before drawing.")
-            .draw(canvas, progress, opacity);
+        else {
+            panic!("Text morph must use its glyph renderer.");
+        };
+        particles.draw(canvas, progress, opacity);
+    }
+
+    pub(super) fn text_plan(&self) -> &TextMorphPlan {
+        let PreparedContentMorph::Text(plan) = self
+            .prepared
+            .as_ref()
+            .expect("Morph must be prepared before drawing.")
+        else {
+            panic!("String morph must use its silhouette renderer.");
+        };
+
+        plan
     }
 }
 
@@ -59,6 +98,53 @@ pub(super) fn morph_string<T: Object, S: hecs::Component + Clone>(
     text: String,
     capture: fn(&S, &Style, &Transform) -> Silhouette,
 ) -> Tween<T> {
+    morph_string_with(
+        tween,
+        entity,
+        from_text,
+        text,
+        move |from_shape, from_style, from_transform, to_shape, to_style, to_transform| {
+            PreparedContentMorph::Particles(ParticleTransform::new(
+                capture(&from_shape, &from_style, &from_transform),
+                capture(&to_shape, &to_style, &to_transform),
+                Easing::Linear,
+            ))
+        },
+    )
+}
+
+pub(super) fn morph_text<T: Object, S: hecs::Component + Clone>(
+    tween: Tween<T>,
+    entity: hecs::Entity,
+    from_text: String,
+    text: String,
+    prepare: fn(&S, &Style, &Transform, &S, &Style, &Transform) -> TextMorphPlan,
+) -> Tween<T> {
+    morph_string_with(
+        tween,
+        entity,
+        from_text,
+        text,
+        move |from_shape, from_style, from_transform, to_shape, to_style, to_transform| {
+            PreparedContentMorph::Text(prepare(
+                &from_shape,
+                &from_style,
+                &from_transform,
+                &to_shape,
+                &to_style,
+                &to_transform,
+            ))
+        },
+    )
+}
+
+fn morph_string_with<T: Object, S: hecs::Component + Clone>(
+    tween: Tween<T>,
+    entity: hecs::Entity,
+    from_text: String,
+    text: String,
+    prepare: impl FnOnce(S, Style, Transform, S, Style, Transform) -> PreparedContentMorph + 'static,
+) -> Tween<T> {
     let (world, _) = tween.context();
     let (shape, style, transform) = {
         let world = world.borrow();
@@ -79,7 +165,7 @@ pub(super) fn morph_string<T: Object, S: hecs::Component + Clone>(
         let mut morph = world.get::<&mut ContentMorph>(entity).unwrap();
         let transition_index = morph.transitions.len();
         morph.transitions.push(ContentMorphTransition {
-            particles: None,
+            prepared: None,
             from_text,
             to_text: text,
         });
@@ -94,24 +180,20 @@ pub(super) fn morph_string<T: Object, S: hecs::Component + Clone>(
         .animate_from(ContentMorph::active_property(), true, false)
         .animate_from(ContentMorph::progress_property(), 0.0, 1.0)
         .prepare(move |tween| {
-            let capture_endpoint = |end| {
-                capture(
-                    &tween.endpoint(&shape, end),
-                    &tween.endpoint(&style, end),
-                    &tween.endpoint(&transform, end),
-                )
-            };
-            let particles = ParticleTransform::new(
-                capture_endpoint(false),
-                capture_endpoint(true),
-                Easing::Linear,
+            let prepared = prepare(
+                tween.endpoint(&shape, false),
+                tween.endpoint(&style, false),
+                tween.endpoint(&transform, false),
+                tween.endpoint(&shape, true),
+                tween.endpoint(&style, true),
+                tween.endpoint(&transform, true),
             );
             world
                 .borrow()
                 .get::<&mut ContentMorph>(entity)
                 .unwrap()
                 .transitions[transition_index]
-                .particles = Some(particles);
+                .prepared = Some(prepared);
         })
 }
 

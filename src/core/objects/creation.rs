@@ -4,8 +4,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::core::{
     components::{
-        Morph, PARTICLE_COUNT, PARTICLE_DISTANCE, PARTICLE_FADE_START, PARTICLE_RADIUS,
-        PARTICLE_STAGGER, Style,
+        Morph, PARTICLE_DISTANCE, PARTICLE_FADE_START, PARTICLE_RADIUS, PARTICLE_STAGGER, Style,
     },
     types::{Color, Vector2},
 };
@@ -68,8 +67,10 @@ pub(crate) fn particle_visual_key(
 /// Parameters for one silhouette-forming particle draw.
 pub(crate) struct CreationDraw<'a> {
     pub entity: hecs::Entity,
+    pub cache_slot: u64,
     pub bounds: skia_safe::Rect,
     pub visual_key: u64,
+    pub particle_count: usize,
     pub style: &'a Style,
     pub morph: &'a Morph,
     pub opacity: f32,
@@ -81,8 +82,10 @@ impl CreationDraw<'_> {
     pub fn render(self, draw_complete: impl Fn(&skia_safe::Canvas, f32)) -> bool {
         let Self {
             entity,
+            cache_slot,
             bounds,
             visual_key,
+            particle_count,
             style,
             morph,
             opacity,
@@ -102,8 +105,11 @@ impl CreationDraw<'_> {
         }
 
         let density = mask_density(canvas, bounds);
-        let fingerprint = cache_fingerprint(visual_key, bounds, density);
-        let entity_key = entity.to_bits().get();
+        let fingerprint = cache_fingerprint(visual_key, bounds, density, particle_count);
+        let entity_key = entity
+            .to_bits()
+            .get()
+            .wrapping_add(cache_slot.rotate_left(32));
         let rendered = PARTICLE_CACHE.with(|cache| {
             let mut cache = cache.borrow_mut();
             let rebuild = cache
@@ -111,7 +117,9 @@ impl CreationDraw<'_> {
                 .is_none_or(|cached| cached.fingerprint != fingerprint);
 
             if rebuild {
-                let Some(cached) = build_cache(bounds, density, fingerprint, &draw_complete) else {
+                let Some(cached) =
+                    build_cache(bounds, density, fingerprint, particle_count, &draw_complete)
+                else {
                     return false;
                 };
 
@@ -154,7 +162,12 @@ fn mask_density(canvas: &skia_safe::Canvas, bounds: skia_safe::Rect) -> f32 {
     (MAX_ATLAS_DIMENSION / bounds.width().max(bounds.height())).min(desired)
 }
 
-fn cache_fingerprint(visual_key: u64, bounds: skia_safe::Rect, density: f32) -> u64 {
+fn cache_fingerprint(
+    visual_key: u64,
+    bounds: skia_safe::Rect,
+    density: f32,
+    particle_count: usize,
+) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     visual_key.hash(&mut hasher);
     bounds.left.to_bits().hash(&mut hasher);
@@ -162,7 +175,7 @@ fn cache_fingerprint(visual_key: u64, bounds: skia_safe::Rect, density: f32) -> 
     bounds.right.to_bits().hash(&mut hasher);
     bounds.bottom.to_bits().hash(&mut hasher);
     density.to_bits().hash(&mut hasher);
-    PARTICLE_COUNT.hash(&mut hasher);
+    particle_count.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -170,6 +183,7 @@ fn build_cache(
     bounds: skia_safe::Rect,
     density: f32,
     fingerprint: u64,
+    particle_count: usize,
     draw_complete: &impl Fn(&skia_safe::Canvas, f32),
 ) -> Option<CachedParticles> {
     let origin = Vector2::new(
@@ -185,9 +199,7 @@ fn build_cache(
     mask_canvas.translate((-origin.x, -origin.y));
     draw_complete(mask_canvas, 1.0);
 
-    let particle_count = usize::try_from(PARTICLE_COUNT)
-        .unwrap_or(MAX_PARTICLE_COUNT)
-        .clamp(1, MAX_PARTICLE_COUNT);
+    let particle_count = particle_count.clamp(1, MAX_PARTICLE_COUNT);
     let targets = silhouette_grid(&mut surface, particle_count, origin, density, bounds);
     let mut particles: Vec<_> = targets
         .into_iter()

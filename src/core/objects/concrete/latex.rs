@@ -165,8 +165,10 @@ fn draw_latex(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Can
 
         if (CreationDraw {
             entity,
+            cache_slot: 0,
             bounds,
             visual_key,
+            particle_count: PARTICLE_COUNT as usize,
             style: &style,
             morph: &morph_state,
             opacity,

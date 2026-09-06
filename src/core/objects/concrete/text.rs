@@ -1,14 +1,18 @@
 use kinematic_macros::{Object, Trackable};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::core::{
-    Tween,
+    Easing, Task, Tween,
     components::PARTICLE_COUNT,
     components::{Draw, Morph, Style, Transform, stroke_width_for_scale},
     objects::{
         CreationDraw, ObjectHandler,
-        particle::Silhouette,
+        particle::{ParticleTransform, Silhouette, morph_opacities},
         particle_visual_key,
-        string_morph::{ContentMorph, ContentMorphTransition, morph_string},
+        string_morph::{
+            ContentMorph, ContentMorphTransition, GlyphLayer, MovingGlyphLayer, TextMorphPlan,
+            morph_text,
+        },
     },
     types::{Color, Vector2},
 };
@@ -170,7 +174,149 @@ fn text_box(shape: &TextShape) -> Vector2 {
     Vector2::new(width, height)
 }
 
-fn text_morph_silhouette(shape: &TextShape, style: &Style, transform: &Transform) -> Silhouette {
+struct LayoutCluster {
+    text: String,
+    glyphs: Vec<skia_safe::GlyphId>,
+    positions: Vec<skia_safe::Point>,
+    origin: Vector2,
+}
+
+fn text_clusters(shape: &TextShape) -> Vec<LayoutCluster> {
+    let font = shape.font.skia_font(shape.size);
+    let mut clusters = Vec::new();
+
+    for line in text_lines(shape, &font) {
+        let mut advance = 0.0;
+        for text in line.text.graphemes(true) {
+            let glyphs = font.text_to_glyphs_vec(text);
+            let origin = Vector2::new(line.origin.0 + advance, line.origin.1);
+            let mut glyph_positions = vec![skia_safe::Point::default(); glyphs.len()];
+            font.get_pos(
+                &glyphs,
+                &mut glyph_positions,
+                Some(skia_safe::Point::new(origin.x, origin.y)),
+            );
+            clusters.push(LayoutCluster {
+                text: text.to_owned(),
+                glyphs,
+                positions: glyph_positions,
+                origin,
+            });
+            advance += font.measure_str(text, None).0;
+        }
+    }
+
+    clusters
+}
+
+fn match_clusters(from: &[LayoutCluster], to: &[LayoutCluster]) -> Vec<(usize, usize)> {
+    let columns = to.len() + 1;
+    let mut lengths = vec![0usize; (from.len() + 1) * columns];
+
+    for from_index in (0..from.len()).rev() {
+        for to_index in (0..to.len()).rev() {
+            let index = from_index * columns + to_index;
+            lengths[index] = if from[from_index].text == to[to_index].text {
+                1 + lengths[(from_index + 1) * columns + to_index + 1]
+            } else {
+                lengths[(from_index + 1) * columns + to_index]
+                    .max(lengths[from_index * columns + to_index + 1])
+            };
+        }
+    }
+
+    let mut matches = Vec::new();
+    let (mut from_index, mut to_index) = (0, 0);
+    while from_index < from.len() && to_index < to.len() {
+        if from[from_index].text == to[to_index].text {
+            matches.push((from_index, to_index));
+            from_index += 1;
+            to_index += 1;
+        } else if lengths[(from_index + 1) * columns + to_index]
+            >= lengths[from_index * columns + to_index + 1]
+        {
+            from_index += 1;
+        } else {
+            to_index += 1;
+        }
+    }
+
+    let mut matched_from = vec![false; from.len()];
+    let mut matched_to = vec![false; to.len()];
+    for &(from_index, to_index) in &matches {
+        matched_from[from_index] = true;
+        matched_to[to_index] = true;
+    }
+
+    for source in 0..from.len() {
+        if matched_from[source] {
+            continue;
+        }
+        let target = (0..to.len())
+            .filter(|&target| !matched_to[target] && from[source].text == to[target].text)
+            .min_by(|&left, &right| {
+                from[source]
+                    .origin
+                    .distance_squared(to[left].origin)
+                    .total_cmp(&from[source].origin.distance_squared(to[right].origin))
+                    .then_with(|| left.cmp(&right))
+            });
+        if let Some(target) = target {
+            matched_from[source] = true;
+            matched_to[target] = true;
+            matches.push((source, target));
+        }
+    }
+
+    matches.sort_unstable();
+    matches
+}
+
+fn glyph_layer(clusters: &[LayoutCluster], included: impl Fn(usize) -> bool) -> GlyphLayer {
+    let mut glyphs = Vec::new();
+    let mut positions = Vec::new();
+    for (index, cluster) in clusters.iter().enumerate() {
+        if included(index) {
+            glyphs.extend_from_slice(&cluster.glyphs);
+            positions.extend_from_slice(&cluster.positions);
+        }
+    }
+
+    GlyphLayer { glyphs, positions }
+}
+
+fn draw_glyphs(
+    glyphs: &[skia_safe::GlyphId],
+    positions: &[skia_safe::Point],
+    font: &skia_safe::Font,
+    style: &Style,
+    opacity: f32,
+    scale: Vector2,
+    canvas: &skia_safe::Canvas,
+) {
+    if glyphs.is_empty() {
+        return;
+    }
+    let mut paint = text_paint(style.fill, opacity);
+    canvas.draw_glyphs_at(glyphs, positions, (0.0, 0.0), font, &paint);
+
+    if style.stroke_width <= 0.0 {
+        return;
+    }
+    paint.set_color4f(text_paint(style.stroke, opacity).color4f(), None);
+    paint.set_style(skia_safe::PaintStyle::Stroke);
+    paint.set_stroke_width(stroke_width_for_scale(style.stroke_width, scale));
+    canvas.draw_glyphs_at(glyphs, positions, (0.0, 0.0), font, &paint);
+}
+
+fn capture_text_morph_silhouette(
+    shape: &TextShape,
+    style: &Style,
+    transform: &Transform,
+    glyphs: &[skia_safe::GlyphId],
+    positions: &[skia_safe::Point],
+    particle_count: usize,
+) -> Silhouette {
     let size = text_box(shape);
     let padding = stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5 + 2.0;
     let bounds = skia_safe::Rect::new(
@@ -179,9 +325,144 @@ fn text_morph_silhouette(shape: &TextShape, style: &Style, transform: &Transform
         size.x * 0.5 + padding,
         size.y * 0.5 + padding,
     );
-    Silhouette::capture(bounds, PARTICLE_COUNT as usize, |canvas| {
-        draw_complete_text(shape, style, 1.0, transform.scale, canvas);
+    Silhouette::capture(bounds, particle_count, |canvas| {
+        let font = shape.font.skia_font(shape.size);
+        draw_glyphs(
+            glyphs,
+            positions,
+            &font,
+            style,
+            1.0,
+            transform.scale,
+            canvas,
+        );
     })
+}
+
+fn text_morph_silhouette(
+    shape: &TextShape,
+    style: &Style,
+    transform: &Transform,
+    layer: &GlyphLayer,
+    total_glyphs: usize,
+) -> Silhouette {
+    let particle_count = if layer.glyphs.is_empty() {
+        0
+    } else {
+        ((PARTICLE_COUNT as usize * layer.glyphs.len()).div_ceil(total_glyphs.max(1)))
+            .clamp(128, PARTICLE_COUNT as usize)
+    };
+
+    capture_text_morph_silhouette(
+        shape,
+        style,
+        transform,
+        &layer.glyphs,
+        &layer.positions,
+        particle_count,
+    )
+}
+
+fn prepare_text_morph(
+    from_shape: &TextShape,
+    from_style: &Style,
+    from_transform: &Transform,
+    to_shape: &TextShape,
+    to_style: &Style,
+    to_transform: &Transform,
+) -> TextMorphPlan {
+    let from = text_clusters(from_shape);
+    let to = text_clusters(to_shape);
+    let matches = match_clusters(&from, &to);
+    let last_from_match = matches
+        .iter()
+        .max_by_key(|(from_index, _)| from_index)
+        .map(|(from_index, _)| *from_index);
+    let last_to_match = matches
+        .iter()
+        .max_by_key(|(_, to_index)| to_index)
+        .map(|(_, to_index)| *to_index);
+    let mut matched_from = vec![false; from.len()];
+    let mut matched_to = vec![false; to.len()];
+    let mut stable = MovingGlyphLayer {
+        glyphs: Vec::new(),
+        from: Vec::new(),
+        to: Vec::new(),
+    };
+    let mut from_anchors = Vec::new();
+    let mut to_anchors = Vec::new();
+
+    for (from_index, to_index) in matches {
+        let source = &from[from_index];
+        let target = &to[to_index];
+        assert_eq!(
+            source.glyphs.len(),
+            target.glyphs.len(),
+            "Equal text clusters must contain the same glyph count."
+        );
+        matched_from[from_index] = true;
+        matched_to[to_index] = true;
+        stable.glyphs.extend_from_slice(&source.glyphs);
+        stable.from.extend_from_slice(&source.positions);
+        stable.to.extend_from_slice(&target.positions);
+        from_anchors.push(source.origin);
+        to_anchors.push(target.origin);
+    }
+
+    let source = glyph_layer(&from, |index| !matched_from[index]);
+    let target = glyph_layer(&to, |index| !matched_to[index]);
+    let from_glyph_count = from.iter().map(|cluster| cluster.glyphs.len()).sum();
+    let to_glyph_count = to.iter().map(|cluster| cluster.glyphs.len()).sum();
+    let mut from_silhouette = text_morph_silhouette(
+        from_shape,
+        from_style,
+        from_transform,
+        &source,
+        from_glyph_count,
+    );
+    let mut to_silhouette =
+        text_morph_silhouette(to_shape, to_style, to_transform, &target, to_glyph_count);
+
+    if from_silhouette.is_empty() && !to_silhouette.is_empty() {
+        if let Some(cluster) = last_from_match.map(|index| &from[index]) {
+            from_silhouette = capture_text_morph_silhouette(
+                from_shape,
+                from_style,
+                from_transform,
+                &cluster.glyphs,
+                &cluster.positions,
+                to_silhouette.sample_count(),
+            );
+        }
+        if from_silhouette.is_empty() {
+            from_silhouette = to_silhouette.collapsed_at(&from_anchors);
+        }
+    } else if to_silhouette.is_empty() && !from_silhouette.is_empty() {
+        if let Some(cluster) = last_to_match.map(|index| &to[index]) {
+            to_silhouette = capture_text_morph_silhouette(
+                to_shape,
+                to_style,
+                to_transform,
+                &cluster.glyphs,
+                &cluster.positions,
+                from_silhouette.sample_count(),
+            );
+        }
+        if to_silhouette.is_empty() {
+            to_silhouette = from_silhouette.collapsed_at(&to_anchors);
+        }
+    }
+
+    TextMorphPlan {
+        stable,
+        source,
+        target,
+        particles: ParticleTransform::sampled(
+            from_silhouette,
+            to_silhouette,
+            crate::core::Easing::Linear,
+        ),
+    }
 }
 
 fn draw_text_morph(
@@ -193,14 +474,240 @@ fn draw_text_morph(
     opacity: f32,
     canvas: &skia_safe::Canvas,
 ) {
-    let shape_for = |text: &str| {
-        let mut shape = shape.clone();
-        shape.text = text.to_owned();
-        shape
+    let plan = transition.text_plan();
+    let font = shape.font.skia_font(shape.size);
+    let (source_opacity, target_opacity) = morph_opacities(progress);
+    draw_glyphs(
+        &plan.source.glyphs,
+        &plan.source.positions,
+        &font,
+        style,
+        opacity * source_opacity,
+        transform.scale,
+        canvas,
+    );
+    draw_glyphs(
+        &plan.target.glyphs,
+        &plan.target.positions,
+        &font,
+        style,
+        opacity * target_opacity,
+        transform.scale,
+        canvas,
+    );
+    plan.particles.draw(canvas, progress, opacity);
+
+    let movement = progress * progress * (3.0 - 2.0 * progress);
+    let positions: Vec<_> = plan
+        .stable
+        .from
+        .iter()
+        .zip(&plan.stable.to)
+        .map(|(from, to)| {
+            skia_safe::Point::new(
+                from.x + (to.x - from.x) * movement,
+                from.y + (to.y - from.y) * movement,
+            )
+        })
+        .collect();
+    draw_glyphs(
+        &plan.stable.glyphs,
+        &positions,
+        &font,
+        style,
+        opacity,
+        transform.scale,
+        canvas,
+    );
+}
+
+struct WriteStep {
+    target: GlyphLayer,
+    bounds: skia_safe::Rect,
+    visual_key: u64,
+}
+
+struct WritePlan {
+    steps: Vec<WriteStep>,
+    character_duration: f32,
+    interval: f32,
+    particle_count: usize,
+    easing: Easing,
+    reverse: bool,
+}
+
+const WRITE_INTERVAL_RATIO: f32 = 0.1;
+
+#[derive(Default, Trackable)]
+struct WriteState {
+    #[track]
+    progress: f32,
+    #[track]
+    transition: u32,
+    #[track]
+    active: bool,
+
+    plans: Vec<WritePlan>,
+}
+
+fn prepare_write_plan(
+    shape: &TextShape,
+    style: &Style,
+    transform: &Transform,
+    duration: f32,
+    easing: Easing,
+    reverse: bool,
+) -> WritePlan {
+    let clusters = text_clusters(shape);
+    let count = clusters.len();
+    let character_duration =
+        duration / (1.0 + count.saturating_sub(1) as f32 * WRITE_INTERVAL_RATIO);
+    let interval = character_duration * WRITE_INTERVAL_RATIO;
+    let particle_count = if count == 0 {
+        0
+    } else {
+        (PARTICLE_COUNT as usize)
+            .div_ceil(count)
+            .clamp(128, PARTICLE_COUNT as usize)
     };
-    transition.draw(canvas, progress, opacity, |text, opacity| {
-        draw_complete_text(&shape_for(text), style, opacity, transform.scale, canvas);
-    });
+    let mut steps = Vec::with_capacity(clusters.len());
+    let font_path = shape.font.path().to_string_lossy();
+
+    for (index, cluster) in clusters.iter().enumerate() {
+        let target = glyph_layer(&clusters, |candidate| candidate == index);
+        let bounds = glyph_layer_bounds(shape, style, transform, &target);
+        let visual_key = particle_visual_key(
+            "Write",
+            style,
+            &[
+                shape.size,
+                transform.scale.x,
+                transform.scale.y,
+                index as f32,
+            ],
+            &[&cluster.text, &font_path],
+        );
+        steps.push(WriteStep {
+            target,
+            bounds,
+            visual_key,
+        });
+    }
+
+    WritePlan {
+        steps,
+        character_duration,
+        interval,
+        particle_count,
+        easing,
+        reverse,
+    }
+}
+
+fn glyph_layer_bounds(
+    shape: &TextShape,
+    style: &Style,
+    transform: &Transform,
+    layer: &GlyphLayer,
+) -> skia_safe::Rect {
+    let font = shape.font.skia_font(shape.size);
+    let mut glyph_bounds = vec![skia_safe::Rect::default(); layer.glyphs.len()];
+    font.get_bounds(&layer.glyphs, &mut glyph_bounds, None);
+    let mut bounds: Option<skia_safe::Rect> = None;
+
+    for (mut glyph, position) in glyph_bounds.into_iter().zip(&layer.positions) {
+        if glyph.is_empty() {
+            continue;
+        }
+        glyph.offset((position.x, position.y));
+        match &mut bounds {
+            Some(bounds) => bounds.join(glyph),
+            None => bounds = Some(glyph),
+        }
+    }
+
+    let Some(mut bounds) = bounds else {
+        return skia_safe::Rect::default();
+    };
+    let padding = stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5 + 2.0;
+    bounds.outset((padding, padding));
+    bounds
+}
+
+fn draw_write(
+    entity: hecs::Entity,
+    state: &WriteState,
+    shape: &TextShape,
+    style: &Style,
+    transform: &Transform,
+    opacity: f32,
+    canvas: &skia_safe::Canvas,
+) {
+    let plan = &state.plans[state.transition as usize];
+    let font = shape.font.skia_font(shape.size);
+
+    for (index, step) in plan.steps.iter().enumerate() {
+        let order = if plan.reverse {
+            plan.steps.len() - index - 1
+        } else {
+            index
+        };
+        let elapsed = state.progress - order as f32 * plan.interval;
+        if elapsed < 0.0 {
+            if plan.reverse {
+                draw_glyphs(
+                    &step.target.glyphs,
+                    &step.target.positions,
+                    &font,
+                    style,
+                    opacity,
+                    transform.scale,
+                    canvas,
+                );
+            }
+            continue;
+        }
+        let local = plan
+            .easing
+            .evaluate((elapsed / plan.character_duration).clamp(0.0, 1.0));
+        let progress = if plan.reverse { 1.0 - local } else { local };
+        let morph = Morph {
+            progress,
+            particles_enabled: true,
+        };
+        if !(CreationDraw {
+            entity,
+            cache_slot: index as u64 + 1,
+            bounds: step.bounds,
+            visual_key: step.visual_key,
+            particle_count: plan.particle_count,
+            style,
+            morph: &morph,
+            opacity,
+            canvas,
+        })
+        .render(|target, target_opacity| {
+            draw_glyphs(
+                &step.target.glyphs,
+                &step.target.positions,
+                &font,
+                style,
+                target_opacity,
+                transform.scale,
+                target,
+            );
+        }) {
+            draw_glyphs(
+                &step.target.glyphs,
+                &step.target.positions,
+                &font,
+                style,
+                opacity,
+                transform.scale,
+                canvas,
+            );
+        }
+    }
 }
 
 fn draw_complete_text(
@@ -236,6 +743,13 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
     let style = world.get::<&Style>(entity).unwrap();
     let morph_state = world.get::<&Morph>(entity).unwrap();
     let transform = world.get::<&Transform>(entity).unwrap();
+
+    if let Ok(write) = world.get::<&WriteState>(entity)
+        && write.active
+    {
+        draw_write(entity, &write, &shape, &style, &transform, opacity, canvas);
+        return;
+    }
 
     if let Ok(morph) = world.get::<&ContentMorph>(entity)
         && morph.active
@@ -278,8 +792,10 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
 
         if (CreationDraw {
             entity,
+            cache_slot: 0,
             bounds,
             visual_key,
+            particle_count: PARTICLE_COUNT as usize,
             style: &style,
             morph: &morph_state,
             opacity,
@@ -319,14 +835,85 @@ impl TextHandler {
         let text = text.into();
         let from_text = self.get(TextShape::text_property());
         let tween = self.text(text.clone());
-        morph_string(tween, self.get_id(), from_text, text, text_morph_silhouette)
+        morph_text(tween, self.get_id(), from_text, text, prepare_text_morph)
+    }
+
+    pub(crate) fn play_write(&self, duration: f32, easing: Easing, reverse: bool) {
+        let opacity = self.get(Draw::opacity_property());
+        let anchor = self.animate(Draw::opacity_property(), opacity);
+        let (world, animator) = anchor.context();
+        let plan = {
+            let world = world.borrow();
+            prepare_write_plan(
+                &world.get::<&TextShape>(self.get_id()).unwrap(),
+                &world.get::<&Style>(self.get_id()).unwrap(),
+                &world.get::<&Transform>(self.get_id()).unwrap(),
+                duration,
+                easing,
+                reverse,
+            )
+        };
+        if plan.steps.is_empty() {
+            return;
+        }
+        let total_duration = duration;
+        let transition = {
+            let mut world = world.borrow_mut();
+            if world.get::<&WriteState>(self.get_id()).is_err() {
+                world
+                    .insert_one(self.get_id(), WriteState::default())
+                    .unwrap();
+            }
+            let mut state = world.get::<&mut WriteState>(self.get_id()).unwrap();
+            let transition = state.plans.len() as u32;
+            state.plans.push(plan);
+            transition
+        };
+        let progress = WriteState::progress_property()
+            .handle(world.clone(), self.get_id(), animator.clone())
+            .animate_from::<Text>(0.0, total_duration)
+            .duration(total_duration)
+            .easing(Easing::Linear)
+            .task();
+        let transition = WriteState::transition_property()
+            .handle(world.clone(), self.get_id(), animator.clone())
+            .animate_from::<Text>(transition, transition)
+            .duration(total_duration)
+            .easing(Easing::Linear)
+            .task();
+        let activate = WriteState::active_property()
+            .handle(world.clone(), self.get_id(), animator.clone())
+            .animate_from::<Text>(false, true)
+            .duration(0.0)
+            .easing(Easing::Linear)
+            .task();
+        let active = WriteState::active_property()
+            .handle(world.clone(), self.get_id(), animator.clone())
+            .animate_from::<Text>(true, false)
+            .duration(total_duration)
+            .easing(Easing::Linear)
+            .task();
+        let animation = Task::All(vec![activate, progress, transition, active]);
+        if reverse {
+            let hide = Draw::opacity_property()
+                .handle(world, self.get_id(), animator.clone())
+                .animate_from::<Text>(opacity, 0.0)
+                .duration(0.0)
+                .task();
+            animator.play(Task::Chain(vec![animation, hide]));
+        } else {
+            animator.play(animation);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{Scene, SceneBuilder};
+    use crate::core::{
+        Scene, SceneBuilder,
+        effects::{Effect, unwrite, write},
+    };
 
     fn pixels(scene: &Scene) -> Vec<skia_safe::Color> {
         let mut surface = skia_safe::surfaces::raster_n32_premul((640, 240)).unwrap();
@@ -433,5 +1020,179 @@ mod tests {
             right[1].origin.1 - right[0].origin.1,
             font.spacing(),
         ));
+    }
+
+    #[test]
+    fn morph_matches_reordered_and_repeated_graphemes() {
+        let from = text_clusters(&TextShape {
+            text: "ABBA".to_owned(),
+            ..Default::default()
+        });
+        let to = text_clusters(&TextShape {
+            text: "BABA".to_owned(),
+            ..Default::default()
+        });
+        let matches = match_clusters(&from, &to);
+
+        assert_eq!(matches.len(), 4);
+        assert!(
+            matches
+                .iter()
+                .all(|&(source, target)| from[source].text == to[target].text)
+        );
+    }
+
+    #[test]
+    fn morph_treats_joined_emoji_as_one_character() {
+        let from = text_clusters(&TextShape {
+            text: "A👨‍👩‍👧B".to_owned(),
+            ..Default::default()
+        });
+        let to = text_clusters(&TextShape {
+            text: "B👨‍👩‍👧A".to_owned(),
+            ..Default::default()
+        });
+
+        assert_eq!(from.len(), 3);
+        assert_eq!(to.len(), 3);
+        assert_eq!(match_clusters(&from, &to).len(), 3);
+    }
+
+    #[test]
+    fn morph_keeps_common_glyphs_out_of_particle_silhouettes() {
+        let from = TextShape {
+            text: "KEEP".to_owned(),
+            ..Default::default()
+        };
+        let to = TextShape {
+            text: "SKEEP!".to_owned(),
+            ..Default::default()
+        };
+        let plan = prepare_text_morph(
+            &from,
+            &Style::default(),
+            &Transform::default(),
+            &to,
+            &Style::default(),
+            &Transform::default(),
+        );
+
+        assert_eq!(plan.stable.glyphs.len(), 4);
+        assert!(plan.source.glyphs.is_empty());
+        assert_eq!(plan.target.glyphs.len(), 2);
+        assert!(plan.particles.from.sample_y_span() > 1.0);
+        assert!(plan.particles.from.sample_x_span() < text_box(&from).x * 0.5);
+    }
+
+    #[test]
+    fn write_staggers_character_morphs_without_waiting_for_each_one() {
+        struct WrittenText;
+
+        impl SceneBuilder for WrittenText {
+            fn build(&mut self, scene: &mut Scene) {
+                let label = text().text("ABC".to_owned()).build(scene);
+                scene.get_root().add(&label);
+                write().duration(1.0).play(&label);
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut WrittenText), 1.0);
+
+        scene.update(0.5);
+        let world = scene.get_world();
+        let mut query = world.query::<(&TextShape, &WriteState)>();
+        let (shape, state) = query.iter().next().unwrap();
+        assert_eq!(shape.text, "ABC");
+        assert_eq!(state.progress, 0.5);
+        assert!(state.active);
+        let plan = &state.plans[state.transition as usize];
+        assert_eq!(plan.steps.len(), 3);
+        assert!(plan.interval < plan.character_duration);
+        assert!(approximately_equal(
+            plan.character_duration + plan.interval * 2.0,
+            1.0,
+        ));
+
+        drop(query);
+        drop(world);
+        scene.update(1.0);
+        let world = scene.get_world();
+        assert!(!world.query::<&WriteState>().iter().next().unwrap().active);
+    }
+
+    #[test]
+    fn write_activates_only_at_its_scheduled_time() {
+        struct DelayedWrite;
+
+        impl SceneBuilder for DelayedWrite {
+            fn build(&mut self, scene: &mut Scene) {
+                let label = text().text("AB".to_owned()).build(scene);
+                scene.get_root().add(&label);
+                scene.wait(1.0);
+                write().duration(1.0).play(&label);
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut DelayedWrite), 2.0);
+        scene.update(0.5);
+        assert!(
+            !scene
+                .get_world()
+                .query::<&WriteState>()
+                .iter()
+                .next()
+                .unwrap()
+                .active
+        );
+        scene.update(1.0);
+        assert!(
+            scene
+                .get_world()
+                .query::<&WriteState>()
+                .iter()
+                .next()
+                .unwrap()
+                .active
+        );
+    }
+
+    #[test]
+    fn unwrite_runs_in_reverse_and_keeps_the_text_hidden() {
+        struct UnwrittenText;
+
+        impl SceneBuilder for UnwrittenText {
+            fn build(&mut self, scene: &mut Scene) {
+                let label = text().text("ABC".to_owned()).build(scene);
+                scene.get_root().add(&label);
+                unwrite().duration(1.0).play(&label);
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut UnwrittenText), 1.0);
+        scene.update(0.0);
+        {
+            let world = scene.get_world();
+            let mut query = world.query::<&WriteState>();
+            let state = query.iter().next().unwrap();
+            assert!(state.plans[state.transition as usize].reverse);
+            assert!(state.active);
+        }
+
+        scene.update(1.0);
+        let world = scene.get_world();
+        assert!(!world.query::<&WriteState>().iter().next().unwrap().active);
+        assert_eq!(
+            world
+                .query::<(&TextShape, &Draw)>()
+                .iter()
+                .next()
+                .unwrap()
+                .1
+                .opacity,
+            0.0,
+        );
     }
 }

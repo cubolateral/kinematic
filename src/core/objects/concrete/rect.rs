@@ -2,7 +2,7 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
     components::{
-        Draw, Morph, Style, Transform, draw_complete_styled_path, draw_styled_path,
+        Draw, Morph, PARTICLE_COUNT, Style, Transform, draw_complete_styled_path, draw_styled_path,
         stroke_width_for_scale,
     },
     objects::{CreationDraw, particle_visual_key},
@@ -81,8 +81,10 @@ impl Default for Rect {
 
                         if (CreationDraw {
                             entity,
+                            cache_slot: 0,
                             bounds,
                             visual_key,
+                            particle_count: PARTICLE_COUNT as usize,
                             style: &style,
                             morph: &morph,
                             opacity,
