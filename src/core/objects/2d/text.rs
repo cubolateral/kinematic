@@ -4,7 +4,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::core::{
     Easing, Task, Tween,
     components::PARTICLE_COUNT,
-    components::{Draw, Morph, Style, Transform, stroke_width_for_scale},
+    components::{Draw, Morph, Style, Transform2D, stroke_width_for_scale},
     objects::{
         CreationDraw, ObjectHandler,
         particle::{ParticleTransform, Silhouette, morph_opacities},
@@ -103,13 +103,15 @@ impl Default for TextShape {
 
 /// Built-in text scene object.
 #[derive(Object, hecs::Bundle)]
+#[object(spatial = "2d", builder = "text")]
+#[morph]
 pub struct Text {
     #[trackable]
     pub shape: TextShape,
     #[trackable]
     pub style: Style,
     #[trackable]
-    pub transform: Transform,
+    pub transform: Transform2D,
     #[trackable]
     pub draw: Draw,
 }
@@ -312,7 +314,7 @@ fn draw_glyphs(
 fn capture_text_morph_silhouette(
     shape: &TextShape,
     style: &Style,
-    transform: &Transform,
+    transform: &Transform2D,
     glyphs: &[skia_safe::GlyphId],
     positions: &[skia_safe::Point],
     particle_count: usize,
@@ -342,7 +344,7 @@ fn capture_text_morph_silhouette(
 fn text_morph_silhouette(
     shape: &TextShape,
     style: &Style,
-    transform: &Transform,
+    transform: &Transform2D,
     layer: &GlyphLayer,
     total_glyphs: usize,
 ) -> Silhouette {
@@ -366,10 +368,10 @@ fn text_morph_silhouette(
 fn prepare_text_morph(
     from_shape: &TextShape,
     from_style: &Style,
-    from_transform: &Transform,
+    from_transform: &Transform2D,
     to_shape: &TextShape,
     to_style: &Style,
-    to_transform: &Transform,
+    to_transform: &Transform2D,
 ) -> TextMorphPlan {
     let from = text_clusters(from_shape);
     let to = text_clusters(to_shape);
@@ -469,7 +471,7 @@ fn draw_text_morph(
     transition: &ContentMorphTransition,
     shape: &TextShape,
     style: &Style,
-    transform: &Transform,
+    transform: &Transform2D,
     progress: f32,
     opacity: f32,
     canvas: &skia_safe::Canvas,
@@ -553,7 +555,7 @@ struct WriteState {
 fn prepare_write_plan(
     shape: &TextShape,
     style: &Style,
-    transform: &Transform,
+    transform: &Transform2D,
     duration: f32,
     easing: Easing,
     reverse: bool,
@@ -607,7 +609,7 @@ fn prepare_write_plan(
 fn glyph_layer_bounds(
     shape: &TextShape,
     style: &Style,
-    transform: &Transform,
+    transform: &Transform2D,
     layer: &GlyphLayer,
 ) -> skia_safe::Rect {
     let font = shape.font.skia_font(shape.size);
@@ -639,7 +641,7 @@ fn draw_write(
     state: &WriteState,
     shape: &TextShape,
     style: &Style,
-    transform: &Transform,
+    transform: &Transform2D,
     opacity: f32,
     canvas: &skia_safe::Canvas,
 ) {
@@ -742,7 +744,7 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
     let shape = world.get::<&TextShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let morph_state = world.get::<&Morph>(entity).unwrap();
-    let transform = world.get::<&Transform>(entity).unwrap();
+    let transform = world.get::<&Transform2D>(entity).unwrap();
 
     if let Ok(write) = world.get::<&WriteState>(entity)
         && write.active
@@ -847,7 +849,7 @@ impl TextHandler {
             prepare_write_plan(
                 &world.get::<&TextShape>(self.get_id()).unwrap(),
                 &world.get::<&Style>(self.get_id()).unwrap(),
-                &world.get::<&Transform>(self.get_id()).unwrap(),
+                &world.get::<&Transform2D>(self.get_id()).unwrap(),
                 duration,
                 easing,
                 reverse,
@@ -939,7 +941,7 @@ mod tests {
         impl SceneBuilder for ConsecutiveMorphs {
             fn build(&mut self, scene: &mut Scene) {
                 let text = text().text("Kinematic".to_owned()).build(scene);
-                scene.get_root().add(&text);
+                scene.get_world_2d().add(&text);
                 text.morph("Is").play();
                 text.morph("Awesome.").play();
             }
@@ -948,7 +950,7 @@ mod tests {
         let mut scene = Scene::new();
         assert_eq!(scene.build(&mut ConsecutiveMorphs), 2.0);
 
-        assert_eq!(scene.get_world().len(), 2);
+        assert_eq!(scene.get_world().len(), 4);
         scene.update(0.5);
         let first_morph = pixels(&scene);
         assert!(first_morph.iter().any(|color| color.a() > 0));
@@ -1071,10 +1073,10 @@ mod tests {
         let plan = prepare_text_morph(
             &from,
             &Style::default(),
-            &Transform::default(),
+            &Transform2D::default(),
             &to,
             &Style::default(),
-            &Transform::default(),
+            &Transform2D::default(),
         );
 
         assert_eq!(plan.stable.glyphs.len(), 4);
@@ -1091,7 +1093,7 @@ mod tests {
         impl SceneBuilder for WrittenText {
             fn build(&mut self, scene: &mut Scene) {
                 let label = text().text("ABC".to_owned()).build(scene);
-                scene.get_root().add(&label);
+                scene.get_world_2d().add(&label);
                 write().duration(1.0).play(&label);
             }
         }
@@ -1128,7 +1130,7 @@ mod tests {
         impl SceneBuilder for DelayedWrite {
             fn build(&mut self, scene: &mut Scene) {
                 let label = text().text("AB".to_owned()).build(scene);
-                scene.get_root().add(&label);
+                scene.get_world_2d().add(&label);
                 scene.wait(1.0);
                 write().duration(1.0).play(&label);
             }
@@ -1165,7 +1167,7 @@ mod tests {
         impl SceneBuilder for UnwrittenText {
             fn build(&mut self, scene: &mut Scene) {
                 let label = text().text("ABC".to_owned()).build(scene);
-                scene.get_root().add(&label);
+                scene.get_world_2d().add(&label);
                 unwrite().duration(1.0).play(&label);
             }
         }

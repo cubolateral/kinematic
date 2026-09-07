@@ -1,4 +1,7 @@
+pub(crate) mod canvases;
 mod encoder;
+pub(crate) mod plan;
+pub(crate) mod target;
 
 use glow::HasContext;
 

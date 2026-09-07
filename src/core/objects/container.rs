@@ -1,6 +1,6 @@
 use crate::core::{
-    AnimatorHandle, SceneWorld,
-    components::Node,
+    AnimatorHandle, SceneWorld, Tween,
+    components::{Node, View},
     objects::{Object, ObjectHandler},
 };
 
@@ -20,6 +20,10 @@ pub trait ContainerHandler {
 
     /// Adds an object subtree to this container at the current scheduling time.
     fn add(&self, handler: &impl ObjectHandler) {
+        assert!(
+            std::rc::Rc::ptr_eq(&self.container_world(), &handler.object_world()),
+            "Added object must belong to this scene."
+        );
         attach_child(
             &self.container_world(),
             self.container_entity(),
@@ -52,23 +56,49 @@ impl RootHandler {
             .to_owned()
     }
 
-    /// Adds an object subtree to the root at the current scheduling time.
-    pub fn add(&self, handler: &impl ObjectHandler) {
-        <Self as ContainerHandler>::add(self, handler);
-    }
-}
-
-impl ContainerHandler for RootHandler {
-    fn container_world(&self) -> SceneWorld {
-        std::rc::Rc::clone(&self.world)
+    /// Returns whether the root currently renders World 2D.
+    pub fn is_view_2d(&self) -> bool {
+        self.world
+            .borrow()
+            .get::<&View>(self.entity)
+            .expect("Root must contain a View component.")
+            .view_2d
     }
 
-    fn container_entity(&self) -> hecs::Entity {
-        self.entity
+    /// Animates the selected world. True selects 2D and false selects 3D.
+    pub fn view_2d(&self, enabled: bool) -> Tween {
+        View::view_2d_property()
+            .handle(
+                std::rc::Rc::clone(&self.world),
+                self.entity,
+                self.animator.clone(),
+            )
+            .animate(enabled)
     }
 
-    fn container_time(&self) -> f32 {
-        self.animator.time()
+    /// Animates the selected world from an explicit starting value.
+    pub fn view_2d_from(&self, from: bool, to: bool) -> Tween {
+        View::view_2d_property()
+            .handle(
+                std::rc::Rc::clone(&self.world),
+                self.entity,
+                self.animator.clone(),
+            )
+            .animate_from(from, to)
+    }
+
+    /// Adds a canvas to the internal root at the current scheduling time.
+    pub(crate) fn add(&self, handler: &impl ObjectHandler) {
+        assert!(
+            std::rc::Rc::ptr_eq(&self.world, &handler.object_world()),
+            "Added canvas must belong to this scene."
+        );
+        attach_child(
+            &self.world,
+            self.entity,
+            handler.get_id(),
+            self.animator.time(),
+        );
     }
 }
 
@@ -96,6 +126,33 @@ pub(crate) fn attach_child(
         !contains_entity(&world, child, parent),
         "Adding this object would create a container cycle."
     );
+
+    use crate::core::{
+        components::Transform3D,
+        objects::{CameraTransform3D, CanvasDimension, CanvasSettings},
+    };
+    let parent_is_root = world.get::<&Node>(parent).unwrap().is_root;
+    if !parent_is_root {
+        assert!(
+            world.get::<&CanvasSettings>(child).is_err(),
+            "Canvases must be attached to the scene root."
+        );
+        let parent_3d = world.get::<&Transform3D>(parent).is_ok()
+            || world
+                .get::<&CanvasSettings>(parent)
+                .is_ok_and(|s| s.dimension == CanvasDimension::Three);
+        let child_3d = world.get::<&Transform3D>(child).is_ok();
+        let child_3d = child_3d || world.get::<&CameraTransform3D>(child).is_ok();
+        assert_eq!(
+            parent_3d, child_3d,
+            "Cannot mix 2D and 3D objects in a spatial container."
+        );
+    } else {
+        assert!(
+            world.get::<&CanvasSettings>(child).is_ok(),
+            "Only canvases can be attached to the scene root; use World2D or World3D for objects."
+        );
+    }
 
     for (container, node) in world.query::<(hecs::Entity, &Node)>().iter() {
         let Some(children) = &node.children else {
@@ -191,9 +248,10 @@ mod tests {
     };
 
     #[derive(Object, Container, hecs::Bundle)]
+    #[object(spatial = "2d", builder = "test_container")]
     struct TestContainer {
         #[trackable]
-        transform: Transform,
+        transform: Transform2D,
         #[trackable]
         draw: Draw,
     }
@@ -245,7 +303,7 @@ mod tests {
             .build(&mut scene);
 
         container.add(&child);
-        scene.get_root().add(&container);
+        scene.get_world_2d().add(&container);
 
         let image_info = skia_safe::ImageInfo::new(
             (16, 16),
@@ -290,7 +348,7 @@ mod tests {
         let child = rect().build(&mut scene);
 
         container.add(&child);
-        scene.get_root().add(&container);
+        scene.get_world_2d().add(&container);
         scene.wait(2.0);
         container.remove();
 
@@ -338,7 +396,7 @@ mod tests {
 
         container.add(&first);
         container.add(&second);
-        scene.get_root().add(&container);
+        scene.get_world_2d().add(&container);
 
         let image_info = skia_safe::ImageInfo::new(
             (16, 16),
@@ -361,13 +419,13 @@ mod tests {
     #[test]
     fn handlers_compose_global_values_without_skew() {
         let mut scene = Scene::new();
-        let outer = group()
+        let outer = group_2d()
             .position(vec2(10.0, 20.0))
             .scale(vec2(2.0, 3.0))
             .rotation(std::f32::consts::FRAC_PI_2)
             .opacity(0.5)
             .build(&mut scene);
-        let inner = group()
+        let inner = group_2d()
             .position(vec2(4.0, 5.0))
             .scale(vec2(5.0, 7.0))
             .rotation(0.25)
@@ -382,7 +440,7 @@ mod tests {
 
         inner.add(&child);
         outer.add(&inner);
-        scene.get_root().add(&outer);
+        scene.get_world_2d().add(&outer);
 
         let inner_position = vec2(-5.0, 28.0);
         let scaled_child_position = vec2(10.0, 42.0);

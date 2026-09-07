@@ -1,7 +1,7 @@
 use crate::core::effects::Effect;
 use crate::core::{
     Easing,
-    components::{Draw, Transform as TransformComponent},
+    components::{Draw, Transform2D as TransformComponent},
     objects::{ObjectHandler, ObjectTrackable},
     types::Vector2,
 };

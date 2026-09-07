@@ -4,7 +4,7 @@ use crate::core::{
     Tween,
     components::PARTICLE_COUNT,
     components::{
-        Draw, Morph, Style, Transform, draw_complete_styled_path, stroke_width_for_scale,
+        Draw, Morph, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale,
     },
     objects::{
         CreationDraw, ObjectHandler,
@@ -49,17 +49,19 @@ impl Default for LatexShape {
 ///     .text(r"\frac{1}{2}".to_owned())
 ///     .size(64.0)
 ///     .build(&mut scene);
-/// scene.get_root().add(&formula);
+/// scene.get_world_2d().add(&formula);
 /// formula.morph(r"\sqrt{2}").duration(2.0).play();
 /// ```
 #[derive(Object, hecs::Bundle)]
+#[object(spatial = "2d", builder = "latex")]
+#[morph]
 pub struct Latex {
     #[trackable]
     pub shape: LatexShape,
     #[trackable]
     pub style: Style,
     #[trackable]
-    pub transform: Transform,
+    pub transform: Transform2D,
     #[trackable]
     pub draw: Draw,
 }
@@ -68,7 +70,11 @@ fn latex_box(shape: &LatexShape) -> Vector2 {
     geometry(&shape.text).size * shape.size.max(0.0)
 }
 
-fn latex_morph_silhouette(shape: &LatexShape, style: &Style, transform: &Transform) -> Silhouette {
+fn latex_morph_silhouette(
+    shape: &LatexShape,
+    style: &Style,
+    transform: &Transform2D,
+) -> Silhouette {
     let size = latex_box(shape);
     let padding = stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5 + 2.0;
     let bounds = skia_safe::Rect::new(
@@ -86,7 +92,7 @@ fn draw_latex_morph(
     transition: &ContentMorphTransition,
     shape: &LatexShape,
     style: &Style,
-    transform: &Transform,
+    transform: &Transform2D,
     progress: f32,
     opacity: f32,
     canvas: &skia_safe::Canvas,
@@ -128,7 +134,7 @@ fn draw_latex(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Can
     let shape = world.get::<&LatexShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let morph_state = world.get::<&Morph>(entity).unwrap();
-    let transform = world.get::<&Transform>(entity).unwrap();
+    let transform = world.get::<&Transform2D>(entity).unwrap();
 
     if let Ok(morph) = world.get::<&ContentMorph>(entity)
         && morph.active
@@ -242,7 +248,7 @@ mod tests {
             fn build(&mut self, scene: &mut Scene) {
                 let formula = latex().text(r"\frac{1}{2}".to_owned()).build(scene);
                 assert_eq!(formula.get_name(), "Latex");
-                scene.get_root().add(&formula);
+                scene.get_world_2d().add(&formula);
                 creation().duration(1.0).play(&formula);
                 formula.morph(r"\sqrt{2}").play();
                 formula.morph(r"e^{i\pi}+1=0").play();
@@ -250,7 +256,7 @@ mod tests {
         }
         let mut scene = Scene::new();
         assert_eq!(scene.build(&mut FormulaScene), 3.0);
-        assert_eq!(scene.get_world().len(), 2);
+        assert_eq!(scene.get_world().len(), 4);
         scene.update(0.0);
         assert!(pixels(&scene).iter().all(|color| color.a() == 0));
         scene.update(0.5);
@@ -292,7 +298,7 @@ mod tests {
             .fill(Color::BLUE)
             .build(&mut scene);
         assert!(pixels(&scene).iter().all(|color| color.a() == 0));
-        scene.get_root().add(&formula);
+        scene.get_world_2d().add(&formula);
         let bounds = formula.get_box();
         let rendered = pixels(&scene);
         assert!(

@@ -5,8 +5,8 @@ use crate::core::{
         stroke_width_for_scale,
     },
     objects::{
-        GlobalTransform, Object, ObjectHandler, ObjectTrackable, Rect, attach_child, children,
-        deactivate_subtree, global_transform, local_transform,
+        GlobalTransform, Morphable, Object, ObjectHandler, ObjectTrackable, Rect, attach_child,
+        children, deactivate_subtree, global_transform, local_transform,
         particle::{ParticleTransform, Silhouette},
     },
     types::Vector2,
@@ -67,8 +67,8 @@ impl MorphEffect {
     where
         F: ObjectHandler,
         T: ObjectHandler,
-        F::Object: ObjectTrackable<Draw>,
-        T::Object: ObjectTrackable<Draw>,
+        F::Object: ObjectTrackable<Draw> + Morphable,
+        T::Object: ObjectTrackable<Draw> + Morphable,
     {
         let (world, animator) = from
             .animate(Draw::opacity_property(), from.get(Draw::opacity_property()))
@@ -369,7 +369,7 @@ mod tests {
                 .position(vec2(30.0, 0.0))
                 .fill(Color::BLUE)
                 .build(scene);
-            scene.get_root().add(&source);
+            scene.get_world_2d().add(&source);
             scene.wait(1.0);
             morph()
                 .duration(2.0)
@@ -397,8 +397,16 @@ mod tests {
         assert_eq!(pixels(&scene, 2.0), middle);
         assert_eq!(pixels(&scene, 0.5), before);
         let world = scene.get_world();
-        let mut nodes = world.query::<&Node>();
-        assert_eq!(nodes.iter().filter(|node| node.is_activated).count(), 2);
+        let mut nodes = world.query::<(hecs::Entity, &Node)>();
+        assert_eq!(
+            nodes
+                .iter()
+                .filter(|(entity, node)| {
+                    node.is_activated && world.get::<&CanvasSettings>(*entity).is_err()
+                })
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -406,12 +414,15 @@ mod tests {
         struct Groups;
         impl SceneBuilder for Groups {
             fn build(&mut self, scene: &mut Scene) {
-                let parent = group().position(vec2(12.0, 3.0)).opacity(0.5).build(scene);
-                let source = group().build(scene);
+                let parent = group_2d()
+                    .position(vec2(12.0, 3.0))
+                    .opacity(0.5)
+                    .build(scene);
+                let source = group_2d().build(scene);
                 let child = rect().size(vec2(12.0, 12.0)).fill(Color::RED).build(scene);
                 source.add(&child);
                 parent.add(&source);
-                scene.get_root().add(&parent);
+                scene.get_world_2d().add(&parent);
                 let target = text().text("A".to_owned()).size(20.0).build(scene);
                 morph().duration(1.0).play(&source, &target);
                 let next = circle().radius(8.0).build(scene);
@@ -435,7 +446,7 @@ mod tests {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().radius(10.0).fill(Color::RED).build(scene);
                 let rect = rect().size(vec2(20.0, 20.0)).fill(Color::BLUE).build(scene);
-                scene.get_root().add(&circle);
+                scene.get_world_2d().add(&circle);
 
                 morph().duration(1.0).play(&circle, &rect);
                 morph().duration(1.0).play(&rect, &circle);
@@ -465,7 +476,7 @@ mod tests {
                     .position(vec2(30.0, 0.0))
                     .fill(Color::BLUE)
                     .build(scene);
-                scene.get_root().add(&source);
+                scene.get_world_2d().add(&source);
 
                 morph()
                     .duration(1.0)
@@ -493,8 +504,8 @@ mod tests {
                     .fill(Color::GREEN)
                     .build(scene);
                 let target = circle().radius(15.0).fill(Color::BLUE).build(scene);
-                scene.get_root().add(&source);
-                scene.get_root().add(&overlay);
+                scene.get_world_2d().add(&source);
+                scene.get_world_2d().add(&overlay);
                 morph().duration(1.0).play(&source, &target);
             }
         }
@@ -510,17 +521,17 @@ mod tests {
         struct Nested;
         impl SceneBuilder for Nested {
             fn build(&mut self, scene: &mut Scene) {
-                let parent = group().scale(vec2(2.0, 0.7)).rotation(0.4).build(scene);
+                let parent = group_2d().scale(vec2(2.0, 0.7)).rotation(0.4).build(scene);
                 let source = rect()
                     .size(vec2(30.0, 12.0))
                     .rotation(0.6)
                     .fill(Color::RED)
                     .build(scene);
-                let target = group().build(scene);
+                let target = group_2d().build(scene);
                 let child = circle().radius(10.0).build(scene);
                 target.add(&child);
                 parent.add(&source);
-                scene.get_root().add(&parent);
+                scene.get_world_2d().add(&parent);
                 scene.wait(1.0);
                 morph().duration(1.0).play(&source, &target);
             }
@@ -545,7 +556,7 @@ mod tests {
         let mut other = Scene::new();
         let source = rect().build(&mut scene);
         let target = circle().build(&mut other);
-        scene.get_root().add(&source);
+        scene.get_world_2d().add(&source);
         morph().play(&source, &target);
     }
 

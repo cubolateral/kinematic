@@ -1,6 +1,6 @@
 use crate::core::{
-    components::{Draw, Node, Transform},
-    objects::{CameraTransform, GlobalTransform, children, local_transform},
+    components::{Draw, Node, Transform2D},
+    objects::{CameraTransform2D, CanvasSettings, GlobalTransform, children, local_transform},
     types::Vector2,
 };
 
@@ -9,7 +9,13 @@ pub(crate) fn active_camera_matrix(
     root: hecs::Entity,
 ) -> Option<skia_safe::Matrix> {
     let mut camera = None;
-    find_active_camera(world, root, GlobalTransform::default(), &mut camera);
+    if world.get::<&CanvasSettings>(root).is_ok() {
+        for child in children(world, root) {
+            find_active_camera(world, child, GlobalTransform::default(), &mut camera);
+        }
+    } else {
+        find_active_camera(world, root, GlobalTransform::default(), &mut camera);
+    }
     camera
 }
 
@@ -19,6 +25,9 @@ fn find_active_camera(
     parent: GlobalTransform,
     camera: &mut Option<skia_safe::Matrix>,
 ) {
+    if world.get::<&CanvasSettings>(entity).is_ok() {
+        return;
+    }
     let node = world
         .get::<&Node>(entity)
         .expect("Camera traversal object must contain a Node component.");
@@ -29,7 +38,7 @@ fn find_active_camera(
     let global = parent.append(local_transform(world, entity));
     let matrix = transform_matrix(global);
 
-    if world.get::<&CameraTransform>(entity).is_ok() && matrix.invert().is_some() {
+    if world.get::<&CameraTransform2D>(entity).is_ok() && matrix.invert().is_some() {
         *camera = Some(matrix);
     }
 
@@ -48,6 +57,9 @@ fn draw_entity_with_parent(
     parent: GlobalTransform,
     canvas: &skia_safe::Canvas,
 ) {
+    if world.get::<&CanvasSettings>(entity).is_ok() {
+        return;
+    }
     let node = world
         .get::<&Node>(entity)
         .expect("Drawn object must contain a Node component.");
@@ -55,9 +67,9 @@ fn draw_entity_with_parent(
         return;
     }
 
-    let draw = world
-        .get::<&Draw>(entity)
-        .expect("Drawn object must contain a Draw component.");
+    let Ok(draw) = world.get::<&Draw>(entity) else {
+        return;
+    };
     let opacity = draw.opacity.clamp(0.0, 1.0);
     if opacity <= 0.0 {
         return;
@@ -113,6 +125,9 @@ fn draw_entity_outline_with_parent(
     thickness: f32,
     canvas: &skia_safe::Canvas,
 ) -> bool {
+    if world.get::<&CanvasSettings>(entity).is_ok() || world.get::<&Draw>(entity).is_err() {
+        return false;
+    }
     let node = world
         .get::<&Node>(entity)
         .expect("Outlined object must contain a Node component.");
@@ -154,12 +169,13 @@ fn pick_entity_with_parent(
     point: Vector2,
     parent: GlobalTransform,
 ) -> Option<hecs::Entity> {
+    if world.get::<&CanvasSettings>(entity).is_ok() {
+        return None;
+    }
     let node = world
         .get::<&Node>(entity)
         .expect("Picked object must contain a Node component.");
-    let draw = world
-        .get::<&Draw>(entity)
-        .expect("Picked object must contain a Draw component.");
+    let draw = world.get::<&Draw>(entity).ok()?;
 
     if !node.is_activated || draw.opacity <= 0.0 {
         return None;
@@ -197,9 +213,10 @@ pub fn object_box(world: &hecs::World, entity: hecs::Entity) -> Vector2 {
 }
 
 fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::Rect> {
-    let draw = world
-        .get::<&Draw>(entity)
-        .expect("Bounded object must contain a Draw component.");
+    if world.get::<&CanvasSettings>(entity).is_ok() {
+        return None;
+    }
+    let draw = world.get::<&Draw>(entity).ok()?;
     let size = (draw.get_box)(world, entity);
     let own = (size.x > 0.0 && size.y > 0.0)
         .then(|| skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y));
@@ -223,7 +240,7 @@ fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::
 
 fn transformed_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::Rect> {
     let bounds = local_bounds(world, entity)?;
-    let Ok(transform) = world.get::<&Transform>(entity) else {
+    let Ok(transform) = world.get::<&Transform2D>(entity) else {
         return Some(bounds);
     };
     let sin = transform.rotation.sin();
@@ -332,4 +349,76 @@ fn union_bounds(left: skia_safe::Rect, right: skia_safe::Rect) -> skia_safe::Rec
         left.right.max(right.right),
         left.bottom.max(right.bottom),
     )
+}
+
+/// Draws one canvas scope using only its explicitly associated camera.
+pub(crate) fn draw_canvas2d(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+    let settings = world.get::<&CanvasSettings>(entity).unwrap();
+    let [r, g, b, a] = settings.clear.rgba();
+    canvas.clear(skia_safe::Color4f::new(r, g, b, a));
+    let saved = canvas.save();
+    canvas.translate((
+        settings.resolution.0 as f32 * 0.5,
+        settings.resolution.1 as f32 * 0.5,
+    ));
+    if let Some(camera) = settings
+        .camera
+        .and_then(|camera| camera_view_matrix(world, camera))
+        .or_else(|| active_camera_matrix(world, entity))
+    {
+        if let Some(view) = camera.invert() {
+            canvas.concat(&view);
+        }
+    }
+    for child in children(world, entity) {
+        draw_entity(world, child, canvas);
+    }
+    canvas.restore_to_count(saved);
+}
+
+pub(crate) fn draw_canvas_outline2d(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    target: hecs::Entity,
+    thickness: f32,
+    canvas: &skia_safe::Canvas,
+) {
+    let saved = canvas.save();
+    if let Some(view) = canvas_camera_matrix(world, scope).and_then(|matrix| matrix.invert()) {
+        canvas.concat(&view);
+    }
+    for child in children(world, scope) {
+        draw_entity_outline(world, child, target, thickness, canvas);
+    }
+    canvas.restore_to_count(saved);
+}
+
+pub(crate) fn pick_canvas2d(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    point: Vector2,
+) -> Option<hecs::Entity> {
+    let point = canvas_camera_matrix(world, scope).map_or(point, |matrix| {
+        let point = matrix.map_point((point.x, point.y));
+        Vector2::new(point.x, point.y)
+    });
+    children(world, scope)
+        .into_iter()
+        .rev()
+        .find_map(|child| pick_entity(world, child, point))
+}
+
+fn canvas_camera_matrix(world: &hecs::World, scope: hecs::Entity) -> Option<skia_safe::Matrix> {
+    let settings = world.get::<&CanvasSettings>(scope).ok()?;
+    settings
+        .camera
+        .and_then(|camera| camera_view_matrix(world, camera))
+        .or_else(|| active_camera_matrix(world, scope))
+}
+
+fn camera_view_matrix(world: &hecs::World, camera: hecs::Entity) -> Option<skia_safe::Matrix> {
+    world.get::<&CameraTransform2D>(camera).ok()?;
+    Some(transform_matrix(crate::core::objects::global_transform(
+        world, camera,
+    )))
 }

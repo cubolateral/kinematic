@@ -35,12 +35,28 @@ pub(super) fn draw(
     let scene_range = editor.get_scene_range();
     let root = editor.get_scene().get_root().get_id();
     let world = editor.get_scene().get_world();
-    let mut objects = vec![];
+    let (root_lifetime, root_name) = {
+        let root_node = world
+            .get::<&Node>(root)
+            .expect("Timeline root must contain a Node component.");
+        let root_name = world
+            .get::<&Name>(root)
+            .expect("Timeline root must contain a Name component.");
+        (root_node.lifetime, root_name.get().to_owned())
+    };
+    let mut objects = vec![ObjectRow {
+        entity: root,
+        lifetime: root_lifetime,
+        name: root_name,
+        branches: vec![],
+        is_last: true,
+        is_highlighted: selected == Some(root),
+    }];
 
     collect_rows(
         &world,
         root,
-        &mut vec![],
+        &mut vec![false],
         selected,
         selected == Some(root),
         &mut objects,

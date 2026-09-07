@@ -1,8 +1,8 @@
 use crate::core::effects::Effect;
 use crate::core::{
     Easing,
-    components::Transform,
-    objects::{ObjectHandler, ObjectTrackable},
+    components::Transform2D,
+    objects::{Object2DHandler, ObjectTrackable},
     types::Vector2,
 };
 
@@ -65,13 +65,13 @@ fn play_grow<T>(
     position: (Vector2, Vector2),
     rotation: (f32, f32),
 ) where
-    T: ObjectHandler,
-    T::Object: ObjectTrackable<Transform>,
+    T: Object2DHandler,
+    T::Object: ObjectTrackable<Transform2D>,
 {
     handler
-        .animate_from(Transform::scale_property(), scale.0, scale.1)
-        .animate_from(Transform::position_property(), position.0, position.1)
-        .animate_from(Transform::rotation_property(), rotation.0, rotation.1)
+        .animate_from(Transform2D::scale_property(), scale.0, scale.1)
+        .animate_from(Transform2D::position_property(), position.0, position.1)
+        .animate_from(Transform2D::rotation_property(), rotation.0, rotation.1)
         .duration(duration)
         .easing(easing)
         .play();
@@ -129,13 +129,13 @@ impl Default for GrowIn {
 
 impl<T> Effect<T> for GrowIn
 where
-    T: ObjectHandler,
-    T::Object: ObjectTrackable<Transform>,
+    T: Object2DHandler,
+    T::Object: ObjectTrackable<Transform2D>,
 {
     fn play(self, handler: &T) {
-        let position = handler.get(Transform::position_property());
-        let scale = handler.get(Transform::scale_property());
-        let rotation = handler.get(Transform::rotation_property());
+        let position = handler.get(Transform2D::position_property());
+        let scale = handler.get(Transform2D::scale_property());
+        let rotation = handler.get(Transform2D::rotation_property());
         let start_position = self
             .from
             .resolve(position, handler.get_box(), scale, rotation);
@@ -203,13 +203,13 @@ impl Default for GrowOut {
 
 impl<T> Effect<T> for GrowOut
 where
-    T: ObjectHandler,
-    T::Object: ObjectTrackable<Transform>,
+    T: Object2DHandler,
+    T::Object: ObjectTrackable<Transform2D>,
 {
     fn play(self, handler: &T) {
-        let position = handler.get(Transform::position_property());
-        let scale = handler.get(Transform::scale_property());
-        let rotation = handler.get(Transform::rotation_property());
+        let position = handler.get(Transform2D::position_property());
+        let scale = handler.get(Transform2D::scale_property());
+        let rotation = handler.get(Transform2D::rotation_property());
         let end_position = self
             .from
             .resolve(position, handler.get_box(), scale, rotation);

@@ -1,7 +1,7 @@
 use quote::{format_ident, quote};
 use syn::{Error, ItemFn, ReturnType, Safety, parse_macro_input};
 
-/// Converts a scene-building function into a zero-argument scene factory.
+/// Converts a scene-building function into a project-resolution scene factory.
 pub fn scene(
     attribute: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
@@ -80,14 +80,14 @@ pub fn scene(
 
     quote! {
         #(#attributes)*
-        #visibility fn #name() -> kinematic::core::Scene {
+        #visibility fn #name(resolution: (u32, u32)) -> kinematic::core::Scene {
             struct #builder_name;
 
             impl kinematic::core::SceneBuilder for #builder_name {
                 fn build(&mut self, #inputs) #body
             }
 
-            let mut scene = kinematic::core::Scene::new_named(stringify!(#name));
+            let mut scene = kinematic::core::Scene::new_named(stringify!(#name), resolution);
             scene.build(&mut #builder_name);
             scene
         }

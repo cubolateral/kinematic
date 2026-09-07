@@ -9,6 +9,7 @@ kinematic-macros = { path = "packages/kinematic-macros" }
 
 sdl3 = { version = "0.18.4", features = ["build-from-source"] }
 glow = "0.17.0"
+three-d = { version = "0.19", default-features = false }
 skia-safe = { version = "0.99.0", features = ["gl"] }
 dear-imgui-rs = { version = "0.15.1", features = ["multi-viewport"] }
 dear-imgui-sdl3 = { version = "0.15.1", features = ["multi-viewport"] }

@@ -2,7 +2,7 @@ use kinematic_macros::Trackable;
 
 use crate::core::{
     Easing, Tween,
-    components::{Style, Transform},
+    components::{Style, Transform2D},
     objects::{
         Object,
         particle::{ParticleTransform, Silhouette, morph_opacities},
@@ -96,7 +96,7 @@ pub(super) fn morph_string<T: Object, S: hecs::Component + Clone>(
     entity: hecs::Entity,
     from_text: String,
     text: String,
-    capture: fn(&S, &Style, &Transform) -> Silhouette,
+    capture: fn(&S, &Style, &Transform2D) -> Silhouette,
 ) -> Tween<T> {
     morph_string_with(
         tween,
@@ -118,7 +118,7 @@ pub(super) fn morph_text<T: Object, S: hecs::Component + Clone>(
     entity: hecs::Entity,
     from_text: String,
     text: String,
-    prepare: fn(&S, &Style, &Transform, &S, &Style, &Transform) -> TextMorphPlan,
+    prepare: fn(&S, &Style, &Transform2D, &S, &Style, &Transform2D) -> TextMorphPlan,
 ) -> Tween<T> {
     morph_string_with(
         tween,
@@ -143,7 +143,7 @@ fn morph_string_with<T: Object, S: hecs::Component + Clone>(
     entity: hecs::Entity,
     from_text: String,
     text: String,
-    prepare: impl FnOnce(S, Style, Transform, S, Style, Transform) -> PreparedContentMorph + 'static,
+    prepare: impl FnOnce(S, Style, Transform2D, S, Style, Transform2D) -> PreparedContentMorph + 'static,
 ) -> Tween<T> {
     let (world, _) = tween.context();
     let (shape, style, transform) = {
@@ -151,7 +151,7 @@ fn morph_string_with<T: Object, S: hecs::Component + Clone>(
         (
             (*world.get::<&S>(entity).unwrap()).clone(),
             (*world.get::<&Style>(entity).unwrap()).clone(),
-            (*world.get::<&Transform>(entity).unwrap()).clone(),
+            (*world.get::<&Transform2D>(entity).unwrap()).clone(),
         )
     };
     let transition_index = {
@@ -220,7 +220,7 @@ mod tests {
                     .stroke(self.style.stroke)
                     .stroke_width(self.style.stroke_width)
                     .build(scene);
-                scene.get_root().add(&object);
+                scene.get_world_2d().add(&object);
                 let tween = object.morph(r"\frac{1}{2}");
                 if self.animate {
                     tween
@@ -241,7 +241,7 @@ mod tests {
                     .stroke(self.style.stroke)
                     .stroke_width(self.style.stroke_width)
                     .build(scene);
-                scene.get_root().add(&object);
+                scene.get_world_2d().add(&object);
                 let tween = object.morph("DE\nF");
                 if self.animate {
                     tween

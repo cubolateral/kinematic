@@ -87,11 +87,24 @@ impl App {
     }
 
     pub fn run(&mut self, project: Project) {
+        // Load another function table for the same SDL context; no additional GL context is created.
+        let video = self.sdl.video().unwrap();
+        let three_gl = unsafe {
+            glow::Context::from_loader_function(|name| {
+                video
+                    .gl_get_proc_address(name)
+                    .map(|f| f as *const std::ffi::c_void)
+                    .unwrap_or(std::ptr::null())
+            })
+        };
+        let three_context = three_d::Context::from_gl_context(std::sync::Arc::new(three_gl))
+            .expect("Three-d must initialize against the SDL context.");
         let mut editor = Editor::new(
             project,
             &mut self.imgui_renderer,
             &mut self.skia_context,
             &self.gl,
+            three_context,
         );
 
         let mut events = self.sdl.event_pump().unwrap();
@@ -101,6 +114,13 @@ impl App {
             for event in events.poll_iter() {
                 if let Some(raw) = event.to_ll() {
                     self.imgui_sdl.process_event(&mut self.imgui, &raw);
+                }
+
+                // SDL3 0.18 does not expose TextInput through Event::to_ll().
+                if let sdl3::event::Event::TextInput { text, .. } = &event {
+                    for character in text.chars() {
+                        self.imgui.io_mut().add_input_character(character);
+                    }
                 }
 
                 match event {
@@ -142,5 +162,8 @@ impl App {
         }
 
         editor.shutdown(&self.gl);
+        self.imgui_renderer
+            .texture_map_mut()
+            .remove(editor.get_preview().get_imgui_texture_id());
     }
 }

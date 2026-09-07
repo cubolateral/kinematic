@@ -4,7 +4,7 @@ use crate::core::{components::Draw, types::Vector2};
 
 /// View transformation used by a camera.
 #[derive(Clone, Debug, Trackable)]
-pub struct CameraTransform {
+pub struct CameraTransform2D {
     /// Position observed at the center of the viewport.
     #[track]
     pub position: Vector2,
@@ -16,7 +16,7 @@ pub struct CameraTransform {
     pub rotation: f32,
 }
 
-impl Default for CameraTransform {
+impl Default for CameraTransform2D {
     fn default() -> Self {
         Self {
             position: Vector2::ZERO,
@@ -26,16 +26,18 @@ impl Default for CameraTransform {
     }
 }
 
-/// Scene camera whose active view controls scene rendering.
+/// Two-dimensional scene camera whose active view controls scene rendering.
 #[derive(Object, hecs::Bundle)]
-pub struct Camera {
+#[object(spatial = "2d", builder = "camera_2d")]
+#[morph]
+pub struct Camera2D {
     #[trackable]
-    pub camera_transform: CameraTransform,
+    pub camera_transform: CameraTransform2D,
 
     pub draw: Draw,
 }
 
-impl Default for Camera {
+impl Default for Camera2D {
     fn default() -> Self {
         Self {
             camera_transform: Default::default(),
@@ -56,14 +58,14 @@ mod tests {
     #[test]
     fn camera_builder_exposes_only_camera_transform_fields() {
         let mut scene = Scene::new();
-        let camera = camera()
+        let camera = camera_2d()
             .position(vec2(10.0, 20.0))
             .zoom(2.0)
             .rotation(0.5)
             .build(&mut scene);
 
         let world = scene.get_world();
-        let transform = world.get::<&CameraTransform>(camera.get_id()).unwrap();
+        let transform = world.get::<&CameraTransform2D>(camera.get_id()).unwrap();
 
         assert_eq!(transform.position, vec2(10.0, 20.0));
         assert_eq!(transform.zoom, 2.0);
@@ -79,10 +81,10 @@ mod tests {
             .position(vec2(10.0, 0.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let camera = camera().position(vec2(10.0, 0.0)).build(&mut scene);
+        let camera = camera_2d().position(vec2(10.0, 0.0)).build(&mut scene);
 
-        scene.get_root().add(&rectangle);
-        scene.get_root().add(&camera);
+        scene.get_world_2d().add(&rectangle);
+        scene.get_world_2d().add(&camera);
 
         let mut surface = render(&scene);
         assert_eq!(surface.peek_pixels().unwrap().get_color((16, 16)).r(), 255);
@@ -96,10 +98,10 @@ mod tests {
             .size(vec2(4.0, 4.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let camera = camera().zoom(2.0).build(&mut scene);
+        let camera = camera_2d().zoom(2.0).build(&mut scene);
 
-        scene.get_root().add(&rectangle);
-        scene.get_root().add(&camera);
+        scene.get_world_2d().add(&rectangle);
+        scene.get_world_2d().add(&camera);
 
         let mut surface = render(&scene);
         let pixels = surface.peek_pixels().unwrap();
@@ -116,12 +118,12 @@ mod tests {
             .position(vec2(10.0, 0.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let camera = camera().position(vec2(5.0, 0.0)).build(&mut scene);
-        let rig = group().position(vec2(5.0, 0.0)).build(&mut scene);
+        let camera = camera_2d().position(vec2(5.0, 0.0)).build(&mut scene);
+        let rig = group_2d().position(vec2(5.0, 0.0)).build(&mut scene);
 
         rig.add(&camera);
-        scene.get_root().add(&rectangle);
-        scene.get_root().add(&rig);
+        scene.get_world_2d().add(&rectangle);
+        scene.get_world_2d().add(&rig);
 
         let mut surface = render(&scene);
         assert_eq!(surface.peek_pixels().unwrap().get_color((16, 16)).r(), 255);
@@ -135,12 +137,12 @@ mod tests {
             .position(vec2(10.0, 0.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let first = camera().position(vec2(100.0, 0.0)).build(&mut scene);
-        let second = camera().position(vec2(10.0, 0.0)).build(&mut scene);
+        let first = camera_2d().position(vec2(100.0, 0.0)).build(&mut scene);
+        let second = camera_2d().position(vec2(10.0, 0.0)).build(&mut scene);
 
-        scene.get_root().add(&rectangle);
-        scene.get_root().add(&first);
-        scene.get_root().add(&second);
+        scene.get_world_2d().add(&rectangle);
+        scene.get_world_2d().add(&first);
+        scene.get_world_2d().add(&second);
 
         let mut surface = render(&scene);
         assert_eq!(surface.peek_pixels().unwrap().get_color((16, 16)).r(), 255);
@@ -154,12 +156,12 @@ mod tests {
             .position(vec2(10.0, 0.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let camera = camera()
+        let camera = camera_2d()
             .rotation(std::f32::consts::FRAC_PI_2)
             .build(&mut scene);
 
-        scene.get_root().add(&rectangle);
-        scene.get_root().add(&camera);
+        scene.get_world_2d().add(&rectangle);
+        scene.get_world_2d().add(&camera);
 
         assert_eq!(scene.pick(vec2(0.0, -10.0)), Some(rectangle.get_id()));
 

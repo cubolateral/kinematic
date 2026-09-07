@@ -2,8 +2,8 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
     components::{
-        Draw, Morph, PARTICLE_COUNT, Style, Transform, draw_complete_styled_path, draw_styled_path,
-        stroke_width_for_scale,
+        Draw, Morph, PARTICLE_COUNT, Style, Transform2D, draw_complete_styled_path,
+        draw_styled_path, stroke_width_for_scale,
     },
     objects::{CreationDraw, particle_visual_key},
     types::{Vector2, vec2},
@@ -137,6 +137,8 @@ fn line_box(shape: &LineShape) -> Vector2 {
 }
 
 #[derive(Object, hecs::Bundle)]
+#[object(spatial = "2d", builder = "line")]
+#[morph]
 /// Built-in line scene object with independently animatable arrowheads.
 pub struct Line {
     #[trackable]
@@ -144,7 +146,7 @@ pub struct Line {
     #[trackable]
     pub style: Style,
     #[trackable]
-    pub transform: Transform,
+    pub transform: Transform2D,
     #[trackable]
     pub draw: Draw,
 }
@@ -160,7 +162,7 @@ impl Default for Line {
                     let shape = world.get::<&LineShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let morph = world.get::<&Morph>(entity).unwrap();
-                    let transform = world.get::<&Transform>(entity).unwrap();
+                    let transform = world.get::<&Transform2D>(entity).unwrap();
                     let Some(geometry) = line_geometry(&shape) else {
                         return;
                     };

@@ -2,8 +2,8 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
     components::{
-        Draw, Morph, PARTICLE_COUNT, Style, Transform, draw_complete_styled_path, draw_styled_path,
-        stroke_width_for_scale,
+        Draw, Morph, PARTICLE_COUNT, Style, Transform2D, draw_complete_styled_path,
+        draw_styled_path, stroke_width_for_scale,
     },
     objects::{CreationDraw, particle_visual_key},
     types::Vector2,
@@ -23,6 +23,8 @@ impl Default for CircleShape {
 }
 
 #[derive(Object, hecs::Bundle)]
+#[object(spatial = "2d", builder = "circle")]
+#[morph]
 /// Built-in circular scene object.
 pub struct Circle {
     #[trackable]
@@ -30,7 +32,7 @@ pub struct Circle {
     #[trackable]
     pub style: Style,
     #[trackable]
-    pub transform: Transform,
+    pub transform: Transform2D,
     #[trackable]
     pub draw: Draw,
 }
@@ -46,7 +48,7 @@ impl Default for Circle {
                     let shape = world.get::<&CircleShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let morph = world.get::<&Morph>(entity).unwrap();
-                    let transform = world.get::<&Transform>(entity).unwrap();
+                    let transform = world.get::<&Transform2D>(entity).unwrap();
                     let path = skia_safe::Path::circle((0.0, 0.0), shape.radius, None);
                     if morph.particles_enabled && morph.progress < 1.0 {
                         let stroke_padding =

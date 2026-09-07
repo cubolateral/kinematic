@@ -2,12 +2,13 @@ use crate::core::{
     Easing, Task,
     components::{Draw, Morph},
     effects::Effect,
-    objects::ObjectHandler,
+    objects::{Morphable, ObjectHandler},
 };
 
 fn play_creation<T>(handler: &T, duration: f32, easing: Easing, progress: (f32, f32))
 where
     T: ObjectHandler,
+    T::Object: Morphable,
 {
     let anchor = handler.animate(
         Draw::opacity_property(),
@@ -66,6 +67,7 @@ impl Default for Creation {
 impl<T> Effect<T> for Creation
 where
     T: ObjectHandler,
+    T::Object: Morphable,
 {
     fn play(self, handler: &T) {
         play_creation(handler, self.duration, self.easing, (0.0, 1.0));
@@ -109,6 +111,7 @@ impl Default for Uncreation {
 impl<T> Effect<T> for Uncreation
 where
     T: ObjectHandler,
+    T::Object: Morphable,
 {
     fn play(self, handler: &T) {
         play_creation(handler, self.duration, self.easing, (1.0, 0.0));

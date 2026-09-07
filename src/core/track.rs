@@ -1,7 +1,7 @@
 use crate::core::{
     AnimatorHandle, Easing, SceneWorld, Tween,
     objects::HandlerContext,
-    types::{Color, Vector2},
+    types::{Color, Quaternion, Vector2, Vector3},
 };
 
 /// Getter function used by a track to read its current value from the ECS world.
@@ -214,6 +214,8 @@ pub enum TrackValue {
     U32(u32),
     F32(f32),
     Vector2(Vector2),
+    Vector3(Vector3),
+    Quaternion(Quaternion),
     Color(Color),
     String(String),
 }
@@ -237,6 +239,12 @@ impl TrackValue {
             }
             (Self::F32(a), Self::F32(b)) => Self::F32(a + (b - a) * t),
             (Self::Vector2(a), Self::Vector2(b)) => Self::Vector2(a + (b - a) * t),
+            (Self::Vector3(a), Self::Vector3(b)) => Self::Vector3(a.lerp(*b, t)),
+            (Self::Quaternion(a), Self::Quaternion(b)) => {
+                let a = normalized_quaternion(*a);
+                let b = normalized_quaternion(*b);
+                Self::Quaternion(a.slerp(b, t).normalize())
+            }
             (Self::Color(a), Self::Color(b)) => {
                 let [ar, ag, ab, aa] = a.rgba();
                 let [br, bg, bb, ba] = b.rgba();
@@ -267,6 +275,8 @@ impl std::fmt::Display for TrackValue {
             Self::U32(value) => write!(f, "{value}"),
             Self::F32(value) => write!(f, "{value:.2}"),
             Self::Vector2(value) => write!(f, "[{:.2}, {:.2}]", value.x, value.y),
+            Self::Vector3(v) => write!(f, "[{:.2}, {:.2}, {:.2}]", v.x, v.y, v.z),
+            Self::Quaternion(v) => write!(f, "[{:.2}, {:.2}, {:.2}, {:.2}]", v.x, v.y, v.z, v.w),
             Self::Color(value) => {
                 let [r, g, b, a] = value.rgba();
                 write!(f, "[{r:.2}, {g:.2}, {b:.2}, {a:.2}]")
@@ -314,6 +324,8 @@ impl_track_value_type!(u32, U32);
 impl_track_value_type!(f32, F32);
 impl_track_value_type!(Vector2, Vector2);
 impl_track_value_type!(Color, Color);
+impl_track_value_type!(Vector3, Vector3);
+impl_track_value_type!(Quaternion, Quaternion);
 impl_track_value_type!(String, String);
 
 /// Typed interface for updating a single tracked component field.
@@ -579,6 +591,37 @@ mod tests {
     }
 
     #[test]
+    fn vector3_tracks_lerp_and_convert() {
+        let a = Vector3::new(2.0, 4.0, -2.0).into_track_value();
+        let b = Vector3::new(10.0, -4.0, 6.0).into_track_value();
+        assert_eq!(
+            Vector3::from_track_value(a.lerp(&b, 0.25)),
+            Some(Vector3::new(4.0, 2.0, 0.0))
+        );
+    }
+
+    #[test]
+    fn quaternion_tracks_slerp_normalize_and_take_the_short_path() {
+        let a = Quaternion::IDENTITY;
+        let b = Quaternion::from_rotation_y(std::f32::consts::FRAC_PI_2);
+        for target in [b, -b, b * 2.0] {
+            let value = a.into_track_value().lerp(&target.into_track_value(), 0.5);
+            let q = Quaternion::from_track_value(value).unwrap();
+            assert!((q.length() - 1.0).abs() < 1e-6);
+            assert!(q.abs_diff_eq(
+                Quaternion::from_rotation_y(std::f32::consts::FRAC_PI_4),
+                1e-6
+            ));
+        }
+        let same = b.into_track_value().lerp(&(-b).into_track_value(), 0.5);
+        assert!(
+            Quaternion::from_track_value(same)
+                .unwrap()
+                .abs_diff_eq(b, 1e-6)
+        );
+    }
+
+    #[test]
     fn interpolates_vector_values() {
         let value = TrackValue::Vector2(Vector2::ZERO)
             .lerp(&TrackValue::Vector2(Vector2::new(10.0, 20.0)), 0.5);
@@ -703,4 +746,13 @@ pub trait Trackable {
 
     /// Returns metadata for the whole trackable component.
     fn info() -> &'static TrackableInfo;
+}
+
+/// Interprets invalid rotations as identity and normalizes valid rotations.
+pub(crate) fn normalized_quaternion(value: Quaternion) -> Quaternion {
+    if value.is_finite() && value.length_squared() > f32::EPSILON {
+        value.normalize()
+    } else {
+        Quaternion::IDENTITY
+    }
 }

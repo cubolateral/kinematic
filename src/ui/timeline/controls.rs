@@ -36,11 +36,18 @@ pub(super) fn draw(
 }
 
 pub(in crate::ui) fn shortcuts(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interactive: bool) {
-    if !interactive {
+    let io = ui.io();
+    if !interactive
+        || io.want_text_input()
+        || ui.is_any_item_active()
+        || io.key_ctrl()
+        || io.key_alt()
+        || io.key_super()
+    {
         return;
     }
 
-    let shift = ui.io().key_shift();
+    let shift = io.key_shift();
 
     if ui.is_key_pressed(dear_imgui_rs::Key::LeftArrow) {
         if shift {

@@ -4,7 +4,7 @@ use crate::core::types::Vector2;
 
 #[derive(Clone, Trackable, Debug)]
 /// Spatial transformation of an entity in logical canvas coordinates.
-pub struct Transform {
+pub struct Transform2D {
     /// Position of the entity.
     #[track]
     pub position: Vector2,
@@ -16,7 +16,7 @@ pub struct Transform {
     pub rotation: f32,
 }
 
-impl Default for Transform {
+impl Default for Transform2D {
     fn default() -> Self {
         Self {
             position: Vector2::ZERO,

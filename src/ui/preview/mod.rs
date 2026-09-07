@@ -29,6 +29,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         ));
         ui.same_line();
         let plain_keyboard_input = !ui.io().want_text_input()
+            && !ui.is_any_item_active()
             && !ui.io().key_ctrl()
             && !ui.io().key_shift()
             && !ui.io().key_alt()
@@ -45,6 +46,9 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         ui.same_line();
         ui.text(format!("Zoom: {:.0}%", state.zoom() * 100.0));
         ui.separator();
+        if let Some(error) = editor.get_render_error() {
+            ui.text_wrapped(error);
+        }
 
         clicked = image::draw_interactive(ui, preview, ui.content_region_avail(), state, editor);
     });

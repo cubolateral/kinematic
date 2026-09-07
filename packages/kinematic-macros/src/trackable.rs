@@ -241,8 +241,13 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         });
 
         match type_name(field_ty).as_deref() {
-            Some("Vector2") => {
-                for suffix in ["x", "y"] {
+            Some(name @ ("Vector2" | "Vector3")) => {
+                let axes: &[&str] = if name == "Vector3" {
+                    &["x", "y", "z"]
+                } else {
+                    &["x", "y"]
+                };
+                for suffix in axes {
                     let method_name = format_ident!("{}_{}", field_ident, suffix);
                     let from_method_name = format_ident!("{}_from", method_name);
                     let component_field = format_ident!("{}", suffix);

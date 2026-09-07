@@ -18,6 +18,8 @@ pub(crate) struct Editor {
     selection: Selection,
     timeline: Timeline,
     preview: Canvas,
+    canvases: crate::renderer::canvases::Canvases,
+    render_error: Option<String>,
     renderer: Renderer,
     pending_export_time: Option<f32>,
     is_exporting: bool,
@@ -32,12 +34,13 @@ impl Editor {
         project: Project,
         imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
         skia_context: &mut skia_safe::gpu::DirectContext,
-        gl: &glow::Context,
+        gl: &std::rc::Rc<glow::Context>,
+        three_context: three_d::Context,
     ) -> Self {
         println!("Project initialized: {}", project.name);
         project.validate();
 
-        let scenes = create_scenes(&project.scenes);
+        let scenes = create_scenes(&project.scenes, project.resolution);
         let duration = scenes.last().map_or(0.0, |scene| scene.end);
         let timeline = Timeline::new(duration, project.fps);
 
@@ -51,6 +54,8 @@ impl Editor {
             selection: Selection::default(),
             timeline,
             preview,
+            canvases: crate::renderer::canvases::Canvases::new(three_context, gl),
+            render_error: None,
             renderer,
             pending_export_time: None,
             is_exporting: false,
@@ -113,20 +118,47 @@ impl Editor {
             .flatten();
         let scene = &self.scenes[self.active_scene].scene;
 
-        self.preview.draw(skia_context, gl, window_size, |canvas| {
-            canvas.clear(skia_safe::colors::BLACK);
-
-            let save_count = canvas.save();
-
-            canvas.translate((width as f32 * 0.5, height as f32 * 0.5));
-            scene.draw(canvas);
-
-            if let Some(entity) = selected {
-                scene.draw_outline(entity, canvas, 2.0 / self.preview_scale.max(0.001));
+        let result = self
+            .canvases
+            .render(scene, &mut self.preview.target, skia_context);
+        if let Err(error) = result {
+            self.render_error = Some(error);
+            if self.is_exporting {
+                self.renderer.cancel();
+                self.is_exporting = false;
+                self.pending_export_time = None;
             }
-
-            canvas.restore_to_count(save_count);
-        });
+            self.preview.draw(skia_context, gl, window_size, |canvas| {
+                canvas.clear(skia_safe::colors::BLACK);
+            });
+            return;
+        }
+        self.render_error = None;
+        if let Some(entity) = selected {
+            let output = scene.get_view();
+            let output_size = scene
+                .get_world()
+                .get::<&crate::core::objects::CanvasSettings>(output.entity)
+                .map(|settings| settings.resolution)
+                .unwrap_or((width, height));
+            let scale = (
+                width as f32 / output_size.0.max(1) as f32,
+                height as f32 / output_size.1.max(1) as f32,
+            );
+            self.preview.draw(skia_context, gl, window_size, |canvas| {
+                let saved = canvas.save();
+                canvas.translate((width as f32 * 0.5, height as f32 * 0.5));
+                canvas.scale(scale);
+                scene.draw_outline(
+                    entity,
+                    canvas,
+                    2.0 / (self.preview_scale * scale.0).max(0.001),
+                );
+                canvas.restore_to_count(saved);
+            });
+        }
+        crate::renderer::target::reset_gl(gl, window_size);
+        skia_context.reset(None);
 
         if self.is_exporting {
             self.process_export_frame(gl);
@@ -175,7 +207,13 @@ impl Editor {
     }
 
     pub fn get_export_message(&self) -> Option<&str> {
-        self.renderer.message()
+        self.render_error
+            .as_deref()
+            .or_else(|| self.renderer.message())
+    }
+
+    pub fn get_render_error(&self) -> Option<&str> {
+        self.render_error.as_deref()
     }
 
     pub fn shutdown(&mut self, gl: &glow::Context) {
@@ -222,6 +260,19 @@ impl Editor {
     }
 
     pub fn select_at(&mut self, point: Vector2) {
+        let project_size = self.project.resolution;
+        let output = self.get_scene().get_view();
+        let source_size = self
+            .get_scene()
+            .get_world()
+            .get::<&crate::core::objects::CanvasSettings>(output.entity)
+            .map(|settings| settings.resolution)
+            .unwrap_or(project_size);
+        let point = point
+            * Vector2::new(
+                source_size.0 as f32 / project_size.0.max(1) as f32,
+                source_size.1 as f32 / project_size.1.max(1) as f32,
+            );
         match self.get_scene().pick(point) {
             Some(entity) => self.selection.select(entity),
             None => self.selection.clear(),
@@ -284,13 +335,16 @@ fn active_scene_at(scenes: &[EditorScene], time: f32) -> usize {
         .unwrap_or(scenes.len() - 1)
 }
 
-fn create_scenes(factories: &[fn() -> Scene]) -> Vec<EditorScene> {
+fn create_scenes(
+    factories: &[crate::core::SceneFactory],
+    resolution: (u32, u32),
+) -> Vec<EditorScene> {
     let mut start = 0.0;
 
     factories
         .iter()
         .map(|create_scene| {
-            let scene = create_scene();
+            let scene = create_scene(resolution);
             let end = start + scene.get_duration();
             let editor_scene = EditorScene { scene, start, end };
             start = end;
@@ -302,6 +356,7 @@ fn create_scenes(factories: &[fn() -> Scene]) -> Vec<EditorScene> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::objects::ObjectHandler;
 
     #[crate::scene]
     fn opening(scene: &mut Scene) {
@@ -315,11 +370,22 @@ mod tests {
 
     #[test]
     fn scene_factories_create_ordered_project_ranges() {
-        let factories: [fn() -> Scene; 2] = [opening, ending];
-        let scenes = create_scenes(&factories);
+        let factories: [crate::core::SceneFactory; 2] = [opening, ending];
+        let scenes = create_scenes(&factories, (1280, 720));
 
         assert_eq!(scenes[0].scene.get_name(), "opening");
         assert_eq!([scenes[0].start, scenes[0].end], [0.0, 2.0]);
+        assert_eq!(
+            scenes[0]
+                .scene
+                .get_world()
+                .get::<&crate::core::objects::CanvasSettings>(
+                    scenes[0].scene.get_world_2d().get_id(),
+                )
+                .unwrap()
+                .resolution,
+            (1280, 720)
+        );
         assert_eq!(scenes[1].scene.get_name(), "ending");
         assert_eq!([scenes[1].start, scenes[1].end], [2.0, 5.0]);
     }

@@ -44,7 +44,7 @@ fn example(s: &mut Scene) {
         .fill(Color::RED)
         .build(s);
 
-    s.get_root().add(&circle);
+    s.get_world_2d().add(&circle);
 
     circle
         .position_x(256.0)
@@ -67,6 +67,36 @@ fn main() {
 Scene factories in `Project::scenes` run in vector order. Each scene starts as
 soon as the previous scene reaches the end of its timeline.
 
+The built-in 2D world is rendered by default. A 3D scene only needs its camera,
+objects, and a change to the root's `view_2d` track:
+
+```rust
+#[scene]
+fn scene_3d(s: &mut Scene) {
+    s.get_root().view_2d(false).immediate();
+
+    let world_2d = s.get_world_2d();
+    world_2d.add(&text().build(s));
+
+    let world_3d = s.get_world_3d();
+    let camera = camera_3d().build(s);
+    world_3d.add(&camera);
+    world_3d.set_camera(&camera);
+
+    let screen = projection().source(&world_2d).build(s);
+    world_3d.add(&screen);
+    world_3d.add(&cuboid().build(s));
+}
+```
+
+`view_2d` is a discrete boolean track: `true` selects `World 2D` and `false`
+selects `World 3D`. Schedule additional immediate changes to alternate between
+them during the video.
+
+For picture-in-picture or other off-screen work, build a canvas with its own
+resolution and attach it with `Scene::add_canvas_2d` or
+`Scene::add_canvas_3d`.
+
 ## LaTeX formulas
 
 `Latex` uses the native RaTeX layout engine and embedded KaTeX fonts.
@@ -78,7 +108,7 @@ let formula = latex()
     .text(r"\frac{1}{2}".to_owned())
     .size(64.0)
     .build(s);
-s.get_root().add(&formula);
+s.get_world_2d().add(&formula);
 creation().play(&formula);
 formula.morph(r"\sqrt{2}").duration(2.0).play();
 ```
@@ -101,7 +131,7 @@ let target = text()
     .position(vec2(240.0, 0.0))
     .fill(Color::BLUE)
     .build(s);
-s.get_root().add(&source);
+s.get_world_2d().add(&source);
 
 morph()
     .duration(2.5)
@@ -127,36 +157,36 @@ component and the `Creation`/`Uncreation` effects.
 
 ## Scene tree
 
-Every scene owns an internal root container, available through
-`Scene::get_root()`. Objects are inactive after `build()` and begin their
+Every scene owns built-in `World 2D` and `World 3D` canvases at the project
+resolution. Objects are inactive after `build()` and begin their
 timeline lifetime when added to a container:
 
 ```rust
 let circle = circle().build(&mut scene);
-let child_group = group().build(&mut scene);
+let child_group = group_2d().build(&mut scene);
 
 child_group.add(&circle);
-scene.get_root().add(&child_group);
+scene.get_world_2d().add(&child_group);
 ```
 
 The `Container` derive gives an object's generated handler the `add` method.
-`Group` uses it to organize transformable subtrees, but hierarchy traversal is
+`Group2D` uses it to organize transformable subtrees, but hierarchy traversal is
 not coupled to that concrete type. Container transforms are inherited through
 the tree, and container opacity is composited once over its complete subtree at
 the destination canvas resolution.
 
-## Camera
+## Camera2D
 
 Add a camera to any container to control the rendered view:
 
 ```rust
-let camera = camera()
+let camera = camera_2d()
     .position(vec2(200.0, 0.0))
     .zoom(2.0)
     .rotation(0.25)
     .build(&mut scene);
 
-scene.get_root().add(&camera);
+scene.get_world_2d().add(&camera);
 ```
 
 Camera properties belong to `CameraTransform`, separately from the `Transform`

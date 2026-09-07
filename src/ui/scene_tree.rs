@@ -1,5 +1,5 @@
 use crate::{
-    core::components::{Name, Node},
+    core::components::{Inspection, Name, Node},
     editor::Editor,
 };
 
@@ -94,6 +94,11 @@ fn draw_children(
         let position = ui.cursor_screen_pos();
         let row_id = format!("##scene_tree_{}", entity.to_bits());
         let was_clicked = selectable_row(ui, row_id);
+        if ui.is_item_hovered() {
+            if let Ok(inspection) = world.get::<&Inspection>(entity) {
+                ui.tooltip_text(format!("Type: {}", inspection.object_name));
+            }
+        }
 
         let text_y = position[1] + (ROW_HEIGHT - text_size(ui, name.get())[1]) * 0.5;
         let draw_list = ui.get_window_draw_list();

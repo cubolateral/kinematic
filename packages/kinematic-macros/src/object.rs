@@ -1,36 +1,76 @@
 use quote::{format_ident, quote};
 use syn::{Data, DeriveInput, Fields, parse_macro_input};
 
-fn snake_case(name: &str) -> String {
-    let characters: Vec<_> = name.chars().collect();
-    let mut result = String::with_capacity(name.len());
-
-    for (index, character) in characters.iter().copied().enumerate() {
-        let starts_word = character.is_uppercase()
-            && index > 0
-            && (characters[index - 1].is_lowercase()
-                || characters[index - 1].is_numeric()
-                || characters
-                    .get(index + 1)
-                    .is_some_and(|next| next.is_lowercase()));
-
-        if starts_word {
-            result.push('_');
-        }
-
-        result.extend(character.to_lowercase());
-    }
-
-    result
-}
-
 pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let object_name = &input.ident;
     let visibility = &input.vis;
     let builder_name = format_ident!("{}Builder", object_name);
     let handler_name = format_ident!("{}Handler", object_name);
-    let builder_alias = format_ident!("{}", snake_case(&object_name.to_string()));
+    let mut alias = None;
+    let mut spatial = None;
+    let mut morph = false;
+    for attr in &input.attrs {
+        if attr.path().is_ident("morph") {
+            morph = true;
+        } else if attr.path().is_ident("object") {
+            if let Err(error) = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("builder") {
+                    alias = Some(meta.value()?.parse::<syn::LitStr>()?.value());
+                } else if meta.path.is_ident("spatial") {
+                    spatial = Some(meta.value()?.parse::<syn::LitStr>()?.value());
+                } else {
+                    return Err(meta.error("Unknown object option."));
+                }
+                Ok(())
+            }) {
+                return error.to_compile_error().into();
+            }
+        }
+    }
+    let alias = match alias {
+        Some(alias) => alias,
+        None => {
+            return syn::Error::new_spanned(
+                object_name,
+                "Object must declare an explicit builder name with `builder = \"...\"`.",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
+    let spatial = match spatial {
+        Some(spatial) => spatial,
+        None => {
+            return syn::Error::new_spanned(
+                object_name,
+                "Object must declare an explicit spatial type: `2d`, `3d` or `none`.",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
+    if !["2d", "3d", "none"].contains(&spatial.as_str()) {
+        return syn::Error::new_spanned(object_name, "Spatial dimension must be 2d, 3d or none.")
+            .to_compile_error()
+            .into();
+    }
+    if morph && spatial != "2d" {
+        return syn::Error::new_spanned(object_name, "Morph requires a 2D object.")
+            .to_compile_error()
+            .into();
+    }
+    let builder_alias = match syn::parse_str::<syn::Ident>(&alias) {
+        Ok(alias) => alias,
+        Err(_) => {
+            return syn::Error::new_spanned(
+                object_name,
+                "Builder name must be a valid identifier.",
+            )
+            .to_compile_error()
+            .into();
+        }
+    };
     let builder_component_trait = quote!(kinematic::core::objects::ObjectBuilderComponent);
     let inspection_type = quote!(kinematic::core::components::Inspection);
     let name_type = quote!(kinematic::core::components::Name);
@@ -124,6 +164,48 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         })
         .collect();
 
+    let spatial_impl = match spatial.as_str() {
+        "2d" => quote! {
+        impl kinematic::core::objects::Object2DHandler for #handler_name {
+            fn get_box(&self) -> #vector_type {
+                let world = self.world.borrow();
+                #object_box_fn(&world, self.entity)
+            }
+
+            fn get_global_position(&self) -> #vector_type {
+                let world = self.world.borrow();
+                #object_global_position_fn(&world, self.entity)
+            }
+
+            fn get_global_rotation(&self) -> f32 {
+                let world = self.world.borrow();
+                #object_global_rotation_fn(&world, self.entity)
+            }
+
+            fn get_global_scale(&self) -> #vector_type {
+                let world = self.world.borrow();
+                #object_global_scale_fn(&world, self.entity)
+            }
+
+            fn get_global_opacity(&self) -> f32 {
+                let world = self.world.borrow();
+                #object_global_opacity_fn(&world, self.entity)
+            }
+
+        }
+
+        },
+        "3d" => quote! {
+            impl kinematic::core::objects::Object3DHandler for #handler_name {}
+        },
+        _ => quote! {},
+    };
+    let morph_impl = if morph {
+        quote! { impl kinematic::core::objects::Morphable for #object_name {} }
+    } else {
+        quote! {}
+    };
+
     let expanded = quote! {
         /// Builder generated for this scene object.
         #visibility struct #builder_name {
@@ -177,6 +259,10 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         impl #object_handler_trait for #handler_name {
             type Object = #object_name;
 
+            fn object_world(&self) -> #scene_world_type {
+                std::rc::Rc::clone(&self.world)
+            }
+
             fn get_id(&self) -> hecs::Entity {
                 self.entity
             }
@@ -200,31 +286,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
             fn remove(&self) {
                 #remove_object_fn(&self.world, self.entity, self.animator.time());
-            }
-
-            fn get_box(&self) -> #vector_type {
-                let world = self.world.borrow();
-                #object_box_fn(&world, self.entity)
-            }
-
-            fn get_global_position(&self) -> #vector_type {
-                let world = self.world.borrow();
-                #object_global_position_fn(&world, self.entity)
-            }
-
-            fn get_global_rotation(&self) -> f32 {
-                let world = self.world.borrow();
-                #object_global_rotation_fn(&world, self.entity)
-            }
-
-            fn get_global_scale(&self) -> #vector_type {
-                let world = self.world.borrow();
-                #object_global_scale_fn(&world, self.entity)
-            }
-
-            fn get_global_opacity(&self) -> f32 {
-                let world = self.world.borrow();
-                #object_global_opacity_fn(&world, self.entity)
             }
 
             fn get<T: #track_value_type_trait>(
@@ -269,6 +330,9 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 )
             }
         }
+
+        #spatial_impl
+        #morph_impl
 
         impl #handler_name {
             /// Creates an identical object in the supplied scene.
@@ -317,6 +381,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         impl #object_trait for #object_name {
             type Handler = #handler_name;
+            const MORPHABLE: bool = #morph;
 
             fn handler(world: #scene_world_type, entity: hecs::Entity, animator: #animator_handle_type) -> Self::Handler {
                 #object_name::handler(world, entity, animator)

@@ -44,6 +44,7 @@ impl Ui {
         let _font = ui.push_font(self.font);
         let io = ui.io();
         let plain_keyboard_input = !io.want_text_input()
+            && !ui.is_any_item_active()
             && !io.key_ctrl()
             && !io.key_shift()
             && !io.key_alt()
