@@ -1,4 +1,7 @@
-use crate::core::{Easing, TrackInfo, TrackValue};
+use crate::core::{
+    Easing, TrackInfo, TrackValue,
+    types::{Quaternion, Vector3},
+};
 
 /// A unit of work in a [`Scene`](crate::core::Scene) timeline.
 ///
@@ -14,6 +17,18 @@ pub enum Task {
         track_info: &'static TrackInfo,
         from: TrackValue,
         to: TrackValue,
+        duration: f32,
+        easing: Easing,
+    },
+    /// Rotates a quaternion through an axis-angle path without losing full turns.
+    #[doc(hidden)]
+    RotationTween {
+        entity: hecs::Entity,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        from: Quaternion,
+        axis: Vector3,
+        angle: f32,
         duration: f32,
         easing: Easing,
     },

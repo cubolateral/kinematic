@@ -1,4 +1,7 @@
-use crate::core::{Easing, Track, TrackInfo, TrackValue};
+use crate::core::{
+    Easing, Track, TrackInfo, TrackValue,
+    types::{Quaternion, Vector3},
+};
 
 /// Associates a track with the component field it animates.
 ///
@@ -25,6 +28,36 @@ impl Animation {
         duration: f32,
         easing: Easing,
     ) {
+        self.track_mut(type_id, track_info)
+            .add_tween(current_time, from, to, duration, easing);
+    }
+
+    pub fn animate_rotation(
+        &mut self,
+        current_time: f32,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        from: Quaternion,
+        axis: Vector3,
+        angle: f32,
+        duration: f32,
+        easing: Easing,
+    ) {
+        self.track_mut(type_id, track_info).add_rotation_tween(
+            current_time,
+            from,
+            axis,
+            angle,
+            duration,
+            easing,
+        );
+    }
+
+    fn track_mut(
+        &mut self,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+    ) -> &mut Track {
         let index = match self
             .tracks
             .iter()
@@ -40,8 +73,6 @@ impl Animation {
             }
         };
 
-        self.tracks[index]
-            .track
-            .add_tween(current_time, from, to, duration, easing);
+        &mut self.tracks[index].track
     }
 }

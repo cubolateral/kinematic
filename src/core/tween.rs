@@ -1,5 +1,7 @@
 use crate::core::{
     AnimatorHandle, Easing, SceneWorld, Task, TrackInfo, TrackProperty, TrackValue, TrackValueType,
+    normalized_quaternion,
+    types::{Quaternion, Vector3},
 };
 
 type PrepareTween<Object> = Box<dyn FnOnce(&Tween<Object>)>;
@@ -9,6 +11,13 @@ struct TweenTarget {
     track_info: &'static TrackInfo,
     from: TrackValue,
     to: TrackValue,
+    rotation: Option<RotationTarget>,
+}
+
+struct RotationTarget {
+    from: Quaternion,
+    axis: Vector3,
+    angle: f32,
 }
 
 /// Describes simultaneous interpolation of one or more tracked fields.
@@ -70,6 +79,7 @@ impl<Object> Tween<Object> {
                 track_info,
                 from,
                 to,
+                rotation: None,
             }],
             prepare: None,
             duration: 1.0,
@@ -96,6 +106,7 @@ impl<Object> Tween<Object> {
                     track_info,
                     from,
                     to,
+                    rotation: None,
                 })
                 .collect(),
             prepare: None,
@@ -142,12 +153,14 @@ impl<Object> Tween<Object> {
             .find(|target| target.type_id == type_id && std::ptr::eq(target.track_info, track_info))
         {
             target.to = to;
+            target.rotation = None;
         } else {
             self.targets.push(TweenTarget {
                 type_id,
                 track_info,
                 from,
                 to,
+                rotation: None,
             });
         }
 
@@ -178,12 +191,14 @@ impl<Object> Tween<Object> {
         {
             target.from = from;
             target.to = to;
+            target.rotation = None;
         } else {
             self.targets.push(TweenTarget {
                 type_id,
                 track_info,
                 from,
                 to,
+                rotation: None,
             });
         }
 
@@ -199,6 +214,55 @@ impl<Object> Tween<Object> {
     /// Sets the easing function used by every target field.
     pub fn easing(mut self, easing: Easing) -> Self {
         self.easing = easing;
+        self
+    }
+
+    /// Adds or replaces an axis-angle quaternion target.
+    #[doc(hidden)]
+    pub fn rotate_track(
+        mut self,
+        property: TrackProperty<Quaternion>,
+        axis: Vector3,
+        angle: f32,
+    ) -> Self {
+        validate_rotation(axis, angle);
+        let axis = axis.normalize();
+        let type_id = property.get_type_id();
+        let track_info = property.get_info();
+        let from = normalized_quaternion(
+            property
+                .handle(
+                    std::rc::Rc::clone(&self.world),
+                    self.entity,
+                    self.animator.clone(),
+                )
+                .get(),
+        );
+        let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
+
+        {
+            let world = self.world.borrow();
+            (track_info.set)(&world, self.entity, TrackValue::Quaternion(to));
+        }
+
+        if let Some(target) = self
+            .targets
+            .iter_mut()
+            .find(|target| target.type_id == type_id && std::ptr::eq(target.track_info, track_info))
+        {
+            target.from = TrackValue::Quaternion(from);
+            target.to = TrackValue::Quaternion(to);
+            target.rotation = Some(RotationTarget { from, axis, angle });
+        } else {
+            self.targets.push(TweenTarget {
+                type_id,
+                track_info,
+                from: TrackValue::Quaternion(from),
+                to: TrackValue::Quaternion(to),
+                rotation: Some(RotationTarget { from, axis, angle }),
+            });
+        }
+
         self
     }
 
@@ -221,14 +285,26 @@ impl<Object> Tween<Object> {
         let mut tasks: Vec<_> = self
             .targets
             .into_iter()
-            .map(|target| Task::Tween {
-                entity: self.entity,
-                type_id: target.type_id,
-                track_info: target.track_info,
-                from: target.from,
-                to: target.to,
-                duration: self.duration,
-                easing: self.easing,
+            .map(|target| match target.rotation {
+                Some(rotation) => Task::RotationTween {
+                    entity: self.entity,
+                    type_id: target.type_id,
+                    track_info: target.track_info,
+                    from: rotation.from,
+                    axis: rotation.axis,
+                    angle: rotation.angle,
+                    duration: self.duration,
+                    easing: self.easing,
+                },
+                None => Task::Tween {
+                    entity: self.entity,
+                    type_id: target.type_id,
+                    track_info: target.track_info,
+                    from: target.from,
+                    to: target.to,
+                    duration: self.duration,
+                    easing: self.easing,
+                },
             })
             .collect();
 
@@ -238,6 +314,49 @@ impl<Object> Tween<Object> {
             Task::All(tasks)
         }
     }
+}
+
+impl Tween<()> {
+    pub(crate) fn new_rotation<Object>(
+        world: SceneWorld,
+        entity: hecs::Entity,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        from: Quaternion,
+        axis: Vector3,
+        angle: f32,
+        animator: AnimatorHandle,
+    ) -> Tween<Object> {
+        validate_rotation(axis, angle);
+        let axis = axis.normalize();
+        let from = normalized_quaternion(from);
+        let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
+
+        Tween {
+            world,
+            entity,
+            targets: vec![TweenTarget {
+                type_id,
+                track_info,
+                from: TrackValue::Quaternion(from),
+                to: TrackValue::Quaternion(to),
+                rotation: Some(RotationTarget { from, axis, angle }),
+            }],
+            prepare: None,
+            duration: 1.0,
+            easing: Easing::default(),
+            animator,
+            object: std::marker::PhantomData,
+        }
+    }
+}
+
+fn validate_rotation(axis: Vector3, angle: f32) {
+    assert!(
+        axis.is_finite() && axis.length_squared() > f32::EPSILON,
+        "Rotation axis must be finite and non-zero."
+    );
+    assert!(angle.is_finite(), "Rotation angle must be finite.");
 }
 
 #[cfg(test)]

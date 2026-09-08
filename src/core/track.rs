@@ -16,6 +16,13 @@ pub(crate) struct Keyframe {
     pub time: f32,
     pub value: TrackValue,
     pub easing: Option<Easing>,
+    interpolation: TrackInterpolation,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TrackInterpolation {
+    Value,
+    QuaternionAxisAngle { axis: Vector3, angle: f32 },
 }
 
 #[derive(Debug)]
@@ -73,7 +80,20 @@ impl Track {
                     }
                 };
 
-                set(world, entity, left.value.lerp(&right.value, t));
+                let value = match left.interpolation {
+                    TrackInterpolation::Value => left.value.lerp(&right.value, t),
+                    TrackInterpolation::QuaternionAxisAngle { axis, angle } => {
+                        let TrackValue::Quaternion(start) = &left.value else {
+                            panic!("Axis-angle interpolation requires a quaternion track.");
+                        };
+                        TrackValue::Quaternion(normalized_quaternion(
+                            normalized_quaternion(*start)
+                                * Quaternion::from_axis_angle(axis, angle * t),
+                        ))
+                    }
+                };
+
+                set(world, entity, value);
             }
             (Some(left), None) => set(world, entity, left.value.clone()),
             (None, Some(right)) => set(world, entity, right.value.clone()),
@@ -110,6 +130,39 @@ impl Track {
         self.set_keyframe(start_time + duration, to, None);
     }
 
+    /// Appends a quaternion tween that preserves its axis, direction and winding.
+    pub fn add_rotation_tween(
+        &mut self,
+        start_time: f32,
+        from: Quaternion,
+        axis: Vector3,
+        angle: f32,
+        duration: f32,
+        easing: Easing,
+    ) {
+        let from = normalized_quaternion(from);
+        let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
+
+        if duration == 0.0 {
+            self.add_tween(
+                start_time,
+                TrackValue::Quaternion(from),
+                TrackValue::Quaternion(to),
+                duration,
+                easing,
+            );
+            return;
+        }
+
+        self.set_keyframe_with_interpolation(
+            start_time,
+            TrackValue::Quaternion(from),
+            Some(easing),
+            TrackInterpolation::QuaternionAxisAngle { axis, angle },
+        );
+        self.set_keyframe(start_time + duration, TrackValue::Quaternion(to), None);
+    }
+
     /// Returns all keyframes at `time` in insertion order.
     pub fn keyframes_at(&self, time: f32) -> &[Keyframe] {
         let start = self
@@ -123,6 +176,16 @@ impl Track {
     }
 
     fn set_keyframe(&mut self, time: f32, value: TrackValue, easing: Option<Easing>) {
+        self.set_keyframe_with_interpolation(time, value, easing, TrackInterpolation::Value);
+    }
+
+    fn set_keyframe_with_interpolation(
+        &mut self,
+        time: f32,
+        value: TrackValue,
+        easing: Option<Easing>,
+        interpolation: TrackInterpolation,
+    ) {
         self.clear_current_tween_range();
 
         if let Some(last) = self.keyframes.last_mut() {
@@ -136,6 +199,7 @@ impl Track {
             if time == last.time && easing.is_some() && last.value == value {
                 // Share continuous endpoints; preserve both values for a jump.
                 last.easing = easing;
+                last.interpolation = interpolation;
                 return;
             }
         }
@@ -146,6 +210,7 @@ impl Track {
             time,
             value,
             easing,
+            interpolation,
         });
     }
 
@@ -431,6 +496,37 @@ impl<T: TrackValueType> TrackHandle<T> {
             self.info,
             from.into_track_value(),
             to.into_track_value(),
+            self.animator.clone(),
+        )
+    }
+}
+
+impl TrackHandle<Quaternion> {
+    /// Creates a local axis-angle rotation that preserves direction and winding.
+    #[doc(hidden)]
+    pub fn rotate_for<Object>(&self, axis: Vector3, angle: f32) -> Tween<Object> {
+        let from = normalized_quaternion(self.get());
+        assert!(
+            axis.is_finite() && axis.length_squared() > f32::EPSILON,
+            "Rotation axis must be finite and non-zero."
+        );
+        assert!(angle.is_finite(), "Rotation angle must be finite.");
+        let axis = axis.normalize();
+        let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
+
+        {
+            let mut world = self.world.borrow_mut();
+            (self.replace)(&mut world, self.entity, to);
+        }
+
+        Tween::new_rotation(
+            std::rc::Rc::clone(&self.world),
+            self.entity,
+            self.type_id,
+            self.info,
+            from,
+            axis,
+            angle,
             self.animator.clone(),
         )
     }

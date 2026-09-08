@@ -488,6 +488,64 @@ mod tests {
     }
 
     #[test]
+    fn handler_tweens_add_relative_scalar_and_vector_targets() {
+        let mut scene = Scene::new();
+        let circle = circle().build(&mut scene);
+        scene.get_world_2d().add(&circle);
+
+        circle
+            .position_by(vec2(10.0, 20.0))
+            .position_x_by(6.0)
+            .opacity_by(-0.5)
+            .duration(2.0)
+            .easing(Easing::Linear)
+            .play();
+
+        let tasks = scene.animator.tasks();
+        Animator::get_duration_for_tasks(&tasks, &mut scene);
+        scene.update(1.0);
+        let world = scene.get_world();
+        let transform = world.get::<&Transform2D>(circle.get_id()).unwrap();
+        let draw = world.get::<&Draw2D>(circle.get_id()).unwrap();
+
+        assert_eq!(transform.position, vec2(8.0, 10.0));
+        assert_eq!(draw.opacity, 0.75);
+    }
+
+    #[test]
+    fn quaternion_axis_rotation_preserves_a_complete_turn() {
+        let mut scene = Scene::new();
+        let cube = cuboid().build(&mut scene);
+        scene.get_world_3d().add(&cube);
+
+        cube.rotate_y(std::f32::consts::TAU)
+            .duration(2.0)
+            .easing(Easing::Linear)
+            .play();
+
+        let tasks = scene.animator.tasks();
+        Animator::get_duration_for_tasks(&tasks, &mut scene);
+
+        scene.update(1.0);
+        let halfway = scene
+            .get_world()
+            .get::<&Transform3D>(cube.get_id())
+            .unwrap()
+            .rotation
+            * Vector3::X;
+        assert!(halfway.abs_diff_eq(-Vector3::X, 1e-5));
+
+        scene.update(2.0);
+        let complete = scene
+            .get_world()
+            .get::<&Transform3D>(cube.get_id())
+            .unwrap()
+            .rotation
+            * Vector3::X;
+        assert!(complete.abs_diff_eq(Vector3::X, 1e-5));
+    }
+
+    #[test]
     fn handler_tween_play_registers_in_scene_animator() {
         struct HandlerTweenScene;
 

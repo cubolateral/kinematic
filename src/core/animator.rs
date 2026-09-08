@@ -120,6 +120,27 @@ impl Animator {
                 *duration
             }
 
+            Task::RotationTween {
+                entity,
+                type_id,
+                track_info,
+                from,
+                axis,
+                angle,
+                duration,
+                easing,
+            } => {
+                scene
+                    .get_world()
+                    .get::<&mut Animation>(*entity)
+                    .unwrap()
+                    .animate_rotation(
+                        start_time, *type_id, track_info, *from, *axis, *angle, *duration, *easing,
+                    );
+
+                *duration
+            }
+
             Task::Wait(duration) => *duration,
 
             Task::Chain(tasks) => {
@@ -164,7 +185,9 @@ impl Animator {
 
     pub(crate) fn task_duration(task: &Task) -> f32 {
         match task {
-            Task::Tween { duration, .. } | Task::Wait(duration) => *duration,
+            Task::Tween { duration, .. }
+            | Task::RotationTween { duration, .. }
+            | Task::Wait(duration) => *duration,
             Task::Chain(tasks) => tasks.iter().map(Self::task_duration).sum(),
             Task::All(tasks) => tasks.iter().map(Self::task_duration).fold(0.0, f32::max),
             Task::Repeat(repetitions, tasks) => {
