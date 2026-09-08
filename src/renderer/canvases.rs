@@ -1,13 +1,13 @@
 use super::{
-    plan::{canvas_order, visible_subtree_3d},
+    plan::{active_subtree, canvas_order, visible_subtree_3d},
     target::{Target, reset_gl},
 };
 use crate::core::{
     Scene, SceneIdentity,
     components::{Draw3D, GeometryKey, RenderContext3D},
     objects::{
-        CanvasDimension, CanvasSettings, CanvasTexture, Perspective, draw_canvas2d,
-        global_matrix3d, global_rotation3d,
+        CanvasDimension, CanvasSettings, CanvasTexture, Perspective, ProjectionSource,
+        draw_canvas2d_with_images, global_matrix3d, global_rotation3d,
     },
 };
 use glow::HasContext;
@@ -82,10 +82,32 @@ impl Canvases {
 
             match settings.dimension {
                 CanvasDimension::Two => {
+                    skia.reset(None);
+                    let sources: HashSet<_> = active_subtree(&world, *entity)
+                        .into_iter()
+                        .filter_map(|entity| {
+                            world
+                                .get::<&ProjectionSource>(entity)
+                                .ok()
+                                .and_then(|source| source.0)
+                        })
+                        .collect();
+                    let images: HashMap<_, _> = sources
+                        .into_iter()
+                        .map(|source| {
+                            self.targets
+                                .get(&source)
+                                .ok_or("Projection source texture is unavailable.")?
+                                .image(skia)
+                                .map(|image| (source, image))
+                        })
+                        .collect::<Result<_, _>>()?;
                     self.targets
                         .get_mut(&key)
                         .unwrap()
-                        .draw_skia(skia, |canvas| draw_canvas2d(&world, *entity, canvas));
+                        .draw_skia(skia, |canvas| {
+                            draw_canvas2d_with_images(&world, *entity, canvas, &images)
+                        });
                 }
                 CanvasDimension::Three => {
                     reset_gl(&self.gl, settings.resolution);

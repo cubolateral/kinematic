@@ -119,15 +119,15 @@ fn canvases_require_explicit_resolution_and_camera_scope() {
 }
 
 #[test]
-fn projection_builder_sizes_the_plane_from_canvas_resolution() {
+fn projection_3d_builder_sizes_the_plane_from_canvas_resolution() {
     let mut scene = Scene::new();
     let source = canvas_2d().resolution((1920, 1080)).build(&mut scene);
-    let default_scale = projection().source(&source).build(&mut scene);
-    let custom_after_source = projection()
+    let default_scale = projection_3d().source(&source).build(&mut scene);
+    let custom_after_source = projection_3d()
         .source(&source)
         .pixels_per_unit(200.0)
         .build(&mut scene);
-    let custom_before_source = projection()
+    let custom_before_source = projection_3d()
         .pixels_per_unit(200.0)
         .source(&source)
         .build(&mut scene);
@@ -149,6 +149,19 @@ fn projection_builder_sizes_the_plane_from_canvas_resolution() {
                 .abs_diff_eq(vec2(9.6, 5.4), 1e-5)
         );
     }
+}
+
+#[test]
+fn projection_2d_builder_sizes_the_rect_from_canvas_resolution() {
+    let mut scene = Scene::new();
+    let source = canvas_3d().resolution((960, 540)).build(&mut scene);
+    let projection = projection_2d().source(&source).build(&mut scene);
+    let world = scene.get_world();
+
+    assert_eq!(
+        world.get::<&RectShape>(projection.get_id()).unwrap().size,
+        vec2(960.0, 540.0)
+    );
 }
 
 #[test]
@@ -243,7 +256,7 @@ fn projections_order_dependencies_and_reject_cycles_and_inactive_sources() {
     let camera = camera_3d().build(&mut scene);
     world.add(&camera);
     world.set_camera(&camera);
-    let projection = projection().source(&source).build(&mut scene);
+    let projection = projection_3d().source(&source).build(&mut scene);
     world.add(&projection);
     scene.add_canvas_2d(&source);
     scene.get_root().view_2d(false).immediate();
@@ -260,6 +273,58 @@ fn projections_order_dependencies_and_reject_cycles_and_inactive_sources() {
     projection.remove();
     scene.update(0.0);
     assert_eq!(canvas_order(&scene).unwrap(), vec![world.get_id()]);
+}
+
+#[test]
+fn projection_2d_orders_its_canvas_3d_dependency() {
+    let mut scene = Scene::new_with_resolution((64, 64));
+    let world_2d = scene.get_world_2d();
+    let world_3d = scene.get_world_3d();
+    let camera = camera_3d().build(&mut scene);
+    world_3d.add(&camera);
+    world_3d.set_camera(&camera);
+    let projection = projection_2d().source(&world_3d).build(&mut scene);
+    world_2d.add(&projection);
+    scene.update(0.0);
+
+    assert_eq!(
+        canvas_order(&scene).unwrap(),
+        vec![world_3d.get_id(), world_2d.get_id()]
+    );
+}
+
+#[test]
+fn projections_accept_sources_with_the_same_dimension() {
+    let mut scene_2d = Scene::new_with_resolution((64, 64));
+    let output_2d = scene_2d.get_world_2d();
+    let source_2d = canvas_2d().resolution((32, 32)).build(&mut scene_2d);
+    scene_2d.add_canvas_2d(&source_2d);
+    let projection_2d = projection_2d().source(&source_2d).build(&mut scene_2d);
+    output_2d.add(&projection_2d);
+    scene_2d.update(0.0);
+    assert_eq!(
+        canvas_order(&scene_2d).unwrap(),
+        vec![source_2d.get_id(), output_2d.get_id()]
+    );
+
+    let mut scene_3d = Scene::new_with_resolution((64, 64));
+    let output_3d = scene_3d.get_world_3d();
+    let output_camera = camera_3d().build(&mut scene_3d);
+    output_3d.add(&output_camera);
+    output_3d.set_camera(&output_camera);
+    let source_3d = canvas_3d().resolution((32, 32)).build(&mut scene_3d);
+    let source_camera = camera_3d().build(&mut scene_3d);
+    source_3d.add(&source_camera);
+    source_3d.set_camera(&source_camera);
+    scene_3d.add_canvas_3d(&source_3d);
+    let projection_3d = projection_3d().source(&source_3d).build(&mut scene_3d);
+    output_3d.add(&projection_3d);
+    scene_3d.get_root().view_2d(false).immediate();
+    scene_3d.update(0.0);
+    assert_eq!(
+        canvas_order(&scene_3d).unwrap(),
+        vec![source_3d.get_id(), output_3d.get_id()]
+    );
 }
 
 #[test]

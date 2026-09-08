@@ -1,7 +1,7 @@
 use crate::core::{
     Scene, SceneIdentity,
     components::{Draw3D, Node},
-    objects::{CanvasDimension, CanvasSettings, ProjectionSource, children, validate_canvas},
+    objects::{CanvasSettings, ProjectionSource, children, validate_canvas},
 };
 use std::collections::HashMap;
 
@@ -91,15 +91,12 @@ pub(crate) fn canvas_order(scene: &Scene) -> Result<Vec<hecs::Entity>, String> {
         let mut dependencies = Vec::new();
         for child in active_subtree(&world, entity) {
             if let Ok(source) = world.get::<&ProjectionSource>(child) {
-                let source = source.0.ok_or("Projection requires a Canvas2D source.")?;
+                let source = source.0.ok_or("Projection requires a canvas source.")?;
                 if source.scene != scene_id {
                     return Err("Projection source belongs to another scene.".into());
                 }
-                if !world
-                    .get::<&CanvasSettings>(source.entity)
-                    .is_ok_and(|s| s.dimension == CanvasDimension::Two)
-                {
-                    return Err("Projection requires a Canvas2D source.".into());
+                if world.get::<&CanvasSettings>(source.entity).is_err() {
+                    return Err("Projection requires a canvas source.".into());
                 }
                 if !dependencies.contains(&source.entity) {
                     dependencies.push(source.entity);

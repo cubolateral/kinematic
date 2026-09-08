@@ -1,7 +1,10 @@
 use crate::core::{
     SceneWorld,
     components::Node,
-    objects::{CameraTransform2D, Perspective, contains_entity},
+    objects::{
+        CameraTransform2D, Canvas2DHandler, Canvas3DHandler, ObjectHandler, Perspective,
+        contains_entity,
+    },
     types::Color,
 };
 use kinematic_macros::Trackable;
@@ -60,6 +63,38 @@ impl CanvasSettings {
 /// Canvas reference used by a projection, without a GPU texture in the scene.
 #[derive(Clone, Default)]
 pub struct ProjectionSource(pub(crate) Option<CanvasTexture>);
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// Canvas handler accepted as the source of a 2D or 3D projection.
+#[doc(hidden)]
+pub trait ProjectionCanvas: ObjectHandler + sealed::Sealed {
+    fn projection_texture(&self) -> CanvasTexture;
+
+    fn projection_resolution(&self) -> (u32, u32) {
+        self.object_world()
+            .borrow()
+            .get::<&CanvasSettings>(self.get_id())
+            .expect("Canvas handler must contain CanvasSettings.")
+            .resolution
+    }
+}
+
+impl sealed::Sealed for Canvas2DHandler {}
+impl ProjectionCanvas for Canvas2DHandler {
+    fn projection_texture(&self) -> CanvasTexture {
+        self.get_texture()
+    }
+}
+
+impl sealed::Sealed for Canvas3DHandler {}
+impl ProjectionCanvas for Canvas3DHandler {
+    fn projection_texture(&self) -> CanvasTexture {
+        self.get_texture()
+    }
+}
 
 pub(crate) fn scene_identity(world: &SceneWorld) -> u64 {
     world

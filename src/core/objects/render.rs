@@ -1,8 +1,12 @@
 use crate::core::{
     components::{Draw2D, Node, Transform2D},
-    objects::{CameraTransform2D, CanvasSettings, GlobalTransform, children, local_transform},
+    objects::{
+        CameraTransform2D, CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource,
+        children, draw_projection_2d, local_transform,
+    },
     types::Vector2,
 };
+use std::collections::HashMap;
 
 pub(crate) fn active_camera_matrix(
     world: &hecs::World,
@@ -48,7 +52,7 @@ fn find_active_camera(
 }
 
 pub(crate) fn draw_entity(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
-    draw_entity_with_parent(world, entity, GlobalTransform::default(), canvas);
+    draw_entity_with_parent(world, entity, GlobalTransform::default(), canvas, None);
 }
 
 fn draw_entity_with_parent(
@@ -56,6 +60,7 @@ fn draw_entity_with_parent(
     entity: hecs::Entity,
     parent: GlobalTransform,
     canvas: &skia_safe::Canvas,
+    images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
 ) {
     if world.get::<&CanvasSettings>(entity).is_ok() {
         return;
@@ -82,22 +87,43 @@ fn draw_entity_with_parent(
 
     if children.is_empty() || opacity >= 1.0 {
         (draw.on_draw)(world, entity, canvas, opacity);
+        draw_projection_2d_entity(world, entity, canvas, opacity, images);
 
         for child in children {
-            draw_entity_with_parent(world, child, global, canvas);
+            draw_entity_with_parent(world, child, global, canvas, images);
         }
     } else {
         let layer_count = canvas.save_layer_alpha_f(None, opacity);
         (draw.on_draw)(world, entity, canvas, 1.0);
+        draw_projection_2d_entity(world, entity, canvas, 1.0, images);
 
         for child in children {
-            draw_entity_with_parent(world, child, global, canvas);
+            draw_entity_with_parent(world, child, global, canvas, images);
         }
 
         canvas.restore_to_count(layer_count);
     }
 
     canvas.restore_to_count(save_count);
+}
+
+fn draw_projection_2d_entity(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    canvas: &skia_safe::Canvas,
+    opacity: f32,
+    images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
+) {
+    let Ok(source) = world.get::<&ProjectionSource>(entity) else {
+        return;
+    };
+    let Some(image) = source
+        .0
+        .and_then(|source| images.and_then(|images| images.get(&source)))
+    else {
+        return;
+    };
+    draw_projection_2d(world, entity, image, canvas, opacity);
 }
 
 pub(crate) fn draw_entity_outline(
@@ -356,7 +382,26 @@ fn union_bounds(left: skia_safe::Rect, right: skia_safe::Rect) -> skia_safe::Rec
 }
 
 /// Draws one canvas scope using only its explicitly associated camera.
+#[cfg(test)]
 pub(crate) fn draw_canvas2d(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+    draw_canvas2d_inner(world, entity, canvas, None);
+}
+
+pub(crate) fn draw_canvas2d_with_images(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    canvas: &skia_safe::Canvas,
+    images: &HashMap<CanvasTexture, skia_safe::Image>,
+) {
+    draw_canvas2d_inner(world, entity, canvas, Some(images));
+}
+
+fn draw_canvas2d_inner(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    canvas: &skia_safe::Canvas,
+    images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
+) {
     let settings = world.get::<&CanvasSettings>(entity).unwrap();
     let [r, g, b, a] = settings.clear.rgba();
     canvas.clear(skia_safe::Color4f::new(r, g, b, a));
@@ -381,7 +426,7 @@ pub(crate) fn draw_canvas2d(world: &hecs::World, entity: hecs::Entity, canvas: &
         }
     }
     for child in children(world, entity) {
-        draw_entity(world, child, canvas);
+        draw_entity_with_parent(world, child, GlobalTransform::default(), canvas, images);
     }
     canvas.restore_to_count(saved);
 }

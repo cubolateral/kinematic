@@ -120,6 +120,36 @@ impl Target {
         self.framebuffer.unwrap()
     }
 
+    /// Borrows this target's color texture as a Skia image for the current draw pass.
+    pub fn image(
+        &self,
+        skia: &mut skia_safe::gpu::DirectContext,
+    ) -> Result<skia_safe::Image, String> {
+        let info = skia_safe::gpu::gl::TextureInfo {
+            target: glow::TEXTURE_2D,
+            id: self.texture().0.get(),
+            format: skia_safe::gpu::gl::Format::RGBA8.into(),
+            ..Default::default()
+        };
+        let backend = unsafe {
+            skia_safe::gpu::backend_textures::make_gl(
+                (self.size.0 as i32, self.size.1 as i32),
+                skia_safe::gpu::Mipmapped::No,
+                info,
+                "Kinematic canvas",
+            )
+        };
+        skia_safe::gpu::images::borrow_texture_from(
+            skia,
+            &backend,
+            skia_safe::gpu::SurfaceOrigin::BottomLeft,
+            skia_safe::ColorType::RGBA8888,
+            skia_safe::AlphaType::Premul,
+            None,
+        )
+        .ok_or("Canvas texture could not be borrowed by Skia.".into())
+    }
+
     pub fn draw_skia(
         &mut self,
         skia: &mut skia_safe::gpu::DirectContext,

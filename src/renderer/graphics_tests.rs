@@ -62,7 +62,7 @@ fn graphics_canvas_projection_alpha_orientation() {
         .build(&mut scene);
     world.add(&camera);
     world.set_camera(&camera);
-    let screen = projection()
+    let screen = projection_3d()
         .source(&overlay)
         .size(vec2(4.0, 4.0))
         .build(&mut scene);
@@ -121,6 +121,14 @@ fn graphics_canvas_projection_alpha_orientation() {
     );
     assert_pixel(&pixels, 48, 32, [0, 255, 0, 255]);
     assert_pixel(&pixels, 16, 32, [255, 0, 0, 255]);
+
+    let projection = projection_2d().source(&world).build(&mut scene);
+    overlay.add(&projection);
+    scene.get_root().view_2d(true).immediate();
+    scene.update(1.0);
+    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    assert_eq!(read(&gl, &output), pixels);
+
     reset_gl(&gl, (64, 64));
     assert_eq!(unsafe { gl.get_error() }, glow::NO_ERROR);
     let allocations: Vec<_> = renderer

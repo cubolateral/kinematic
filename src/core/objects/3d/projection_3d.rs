@@ -3,7 +3,7 @@ use crate::core::{
         Draw3D, GeometryKey, RenderContext3D, Transform3D, render_states, validate_dimensions,
         validate_transformation,
     },
-    objects::{Canvas2DHandler, CanvasSettings, ObjectHandler, PlaneShape, global_matrix3d},
+    objects::{PlaneShape, ProjectionCanvas, global_matrix3d},
 };
 use kinematic_macros::Object;
 use three_d::Geometry;
@@ -11,11 +11,11 @@ use three_d::Geometry;
 use super::super::canvas::ProjectionSource;
 
 #[derive(Clone, Copy)]
-pub(crate) struct ProjectionSettings {
+pub(crate) struct Projection3DSettings {
     pixels_per_unit: f32,
 }
 
-impl Default for ProjectionSettings {
+impl Default for Projection3DSettings {
     fn default() -> Self {
         Self {
             pixels_per_unit: 256.0,
@@ -23,10 +23,10 @@ impl Default for ProjectionSettings {
     }
 }
 
-/// Unlit plane sampling the premultiplied output of a Canvas2D.
+/// Unlit 3D plane sampling the premultiplied output of a canvas.
 #[derive(Object, hecs::Bundle)]
-#[object(spatial = "3d", builder = "projection")]
-pub struct Projection {
+#[object(spatial = "3d", builder = "projection_3d")]
+pub struct Projection3D {
     #[trackable]
     pub shape: PlaneShape,
     #[trackable]
@@ -34,16 +34,16 @@ pub struct Projection {
     #[trackable]
     pub draw: Draw3D,
     pub source: ProjectionSource,
-    settings: ProjectionSettings,
+    settings: Projection3DSettings,
 }
 
-impl Default for Projection {
+impl Default for Projection3D {
     fn default() -> Self {
         Self {
             shape: PlaneShape::default(),
             transform: Transform3D::default(),
             draw: Draw3D {
-                on_draw: draw_projection,
+                on_draw: draw_projection_3d,
                 get_box: |world, entity| {
                     world
                         .get::<&PlaneShape>(entity)
@@ -55,17 +55,17 @@ impl Default for Projection {
                 ..Default::default()
             },
             source: ProjectionSource::default(),
-            settings: ProjectionSettings::default(),
+            settings: Projection3DSettings::default(),
         }
     }
 }
 
-impl ProjectionBuilder {
-    /// Sets the Canvas2D-to-world scale used to size the projection plane.
+impl Projection3DBuilder {
+    /// Sets the canvas-to-world scale used to size the projection plane.
     pub fn pixels_per_unit(mut self, pixels_per_unit: f32) -> Self {
         assert!(
             pixels_per_unit.is_finite() && pixels_per_unit > 0.0,
-            "Projection pixels per unit must be finite and positive."
+            "Projection3D pixels per unit must be finite and positive."
         );
         if self.object.source.0.is_some() {
             self.object.shape.size *= self.object.settings.pixels_per_unit / pixels_per_unit;
@@ -74,14 +74,9 @@ impl ProjectionBuilder {
         self
     }
 
-    pub fn source(mut self, canvas: &Canvas2DHandler) -> Self {
-        let resolution = canvas
-            .object_world()
-            .borrow()
-            .get::<&CanvasSettings>(canvas.get_id())
-            .expect("Canvas2D handler must contain CanvasSettings.")
-            .resolution;
-        self.object.source = ProjectionSource(Some(canvas.get_texture()));
+    pub fn source(mut self, canvas: &impl ProjectionCanvas) -> Self {
+        let resolution = canvas.projection_resolution();
+        self.object.source = ProjectionSource(Some(canvas.projection_texture()));
         let scale = self.object.settings.pixels_per_unit;
         self.object.shape.size =
             glam::vec2(resolution.0 as f32 / scale, resolution.1 as f32 / scale);
@@ -89,7 +84,7 @@ impl ProjectionBuilder {
     }
 }
 
-fn draw_projection(
+fn draw_projection_3d(
     world: &hecs::World,
     entity: hecs::Entity,
     context: &mut RenderContext3D<'_>,
@@ -106,22 +101,22 @@ fn draw_projection(
         .get::<&ProjectionSource>(entity)
         .unwrap()
         .0
-        .ok_or("Projection requires a source canvas.")?;
+        .ok_or("Projection3D requires a source canvas.")?;
     let texture = context
         .canvas_texture(source)
-        .ok_or("Projection source texture is unavailable.")?;
+        .ok_or("Projection3D source texture is unavailable.")?;
     let camera = context.camera;
     let mesh = context.geometry(GeometryKey::new::<PlaneShape>(0), three_d::CpuMesh::square);
     mesh.set_transformation(transformation.to_cols_array_2d().into());
-    mesh.render_with_material(&ProjectionMaterial { texture }, camera, &[]);
+    mesh.render_with_material(&Projection3DMaterial { texture }, camera, &[]);
     Ok(())
 }
 
-struct ProjectionMaterial {
+struct Projection3DMaterial {
     texture: glow::NativeTexture,
 }
 
-impl three_d::Material for ProjectionMaterial {
+impl three_d::Material for Projection3DMaterial {
     fn id(&self) -> three_d::EffectMaterialId {
         three_d::EffectMaterialId(0)
     }

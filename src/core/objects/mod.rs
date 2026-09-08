@@ -20,6 +20,8 @@ pub use render::object_box;
 pub use three_d::*;
 pub use two_d::*;
 
+#[cfg(test)]
 pub(crate) use render::draw_canvas2d;
+pub(crate) use render::draw_canvas2d_with_images;
 pub(crate) use render::{active_camera_matrix, draw_entity};
 pub(crate) use render::{draw_canvas_outline2d, pick_canvas2d};
