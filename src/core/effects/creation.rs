@@ -1,6 +1,6 @@
 use crate::core::{
     Easing, Task,
-    components::{Draw, Morph},
+    components::{Draw2D, Morph},
     effects::Effect,
     objects::{Morphable, ObjectHandler},
 };
@@ -11,8 +11,8 @@ where
     T::Object: Morphable,
 {
     let anchor = handler.animate(
-        Draw::opacity_property(),
-        handler.get(Draw::opacity_property()),
+        Draw2D::opacity_property(),
+        handler.get(Draw2D::opacity_property()),
     );
     let (world, animator) = anchor.context();
     let transition = Morph::progress_property()

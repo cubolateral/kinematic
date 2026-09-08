@@ -1,7 +1,7 @@
 use crate::core::effects::Effect;
 use crate::core::{
     Easing,
-    components::{Draw, Transform2D as TransformComponent},
+    components::{Draw2D, Transform2D as TransformComponent},
     objects::{ObjectHandler, ObjectTrackable},
     types::Vector2,
 };
@@ -43,10 +43,10 @@ fn play_fade<T>(
     rotation: (f32, f32),
 ) where
     T: ObjectHandler,
-    T::Object: ObjectTrackable<Draw> + ObjectTrackable<TransformComponent>,
+    T::Object: ObjectTrackable<Draw2D> + ObjectTrackable<TransformComponent>,
 {
     handler
-        .animate_from(Draw::opacity_property(), opacity.0, opacity.1)
+        .animate_from(Draw2D::opacity_property(), opacity.0, opacity.1)
         .animate_from(TransformComponent::scale_property(), scale.0, scale.1)
         .animate_from(
             TransformComponent::position_property(),
@@ -132,7 +132,7 @@ impl Default for FadeIn {
 impl<T> Effect<T> for FadeIn
 where
     T: ObjectHandler,
-    T::Object: ObjectTrackable<Draw> + ObjectTrackable<TransformComponent>,
+    T::Object: ObjectTrackable<Draw2D> + ObjectTrackable<TransformComponent>,
 {
     fn play(self, handler: &T) {
         let position = handler.get(TransformComponent::position_property());
@@ -227,7 +227,7 @@ impl Default for FadeOut {
 impl<T> Effect<T> for FadeOut
 where
     T: ObjectHandler,
-    T::Object: ObjectTrackable<Draw> + ObjectTrackable<TransformComponent>,
+    T::Object: ObjectTrackable<Draw2D> + ObjectTrackable<TransformComponent>,
 {
     fn play(self, handler: &T) {
         let position = handler.get(TransformComponent::position_property());

@@ -1,5 +1,5 @@
 use crate::core::{
-    components::{Draw, Node, Transform2D},
+    components::{Draw2D, Node, Transform2D},
     objects::{CameraTransform2D, CanvasSettings, GlobalTransform, children, local_transform},
     types::Vector2,
 };
@@ -67,7 +67,7 @@ fn draw_entity_with_parent(
         return;
     }
 
-    let Ok(draw) = world.get::<&Draw>(entity) else {
+    let Ok(draw) = world.get::<&Draw2D>(entity) else {
         return;
     };
     let opacity = draw.opacity.clamp(0.0, 1.0);
@@ -125,7 +125,7 @@ fn draw_entity_outline_with_parent(
     thickness: f32,
     canvas: &skia_safe::Canvas,
 ) -> bool {
-    if world.get::<&CanvasSettings>(entity).is_ok() || world.get::<&Draw>(entity).is_err() {
+    if world.get::<&CanvasSettings>(entity).is_ok() || world.get::<&Draw2D>(entity).is_err() {
         return false;
     }
     let node = world
@@ -175,7 +175,7 @@ fn pick_entity_with_parent(
     let node = world
         .get::<&Node>(entity)
         .expect("Picked object must contain a Node component.");
-    let draw = world.get::<&Draw>(entity).ok()?;
+    let draw = world.get::<&Draw2D>(entity).ok()?;
 
     if !node.is_activated || draw.opacity <= 0.0 {
         return None;
@@ -216,7 +216,7 @@ fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::
     if world.get::<&CanvasSettings>(entity).is_ok() {
         return None;
     }
-    let draw = world.get::<&Draw>(entity).ok()?;
+    let draw = world.get::<&Draw2D>(entity).ok()?;
     let size = (draw.get_box)(world, entity);
     let own = (size.x > 0.0 && size.y > 0.0)
         .then(|| skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y));

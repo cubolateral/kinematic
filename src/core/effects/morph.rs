@@ -1,7 +1,7 @@
 use crate::core::{
     Easing, Task,
     components::{
-        Draw, Morph as MorphState, Node, PARTICLE_COUNT, PARTICLE_FADE_START, Style,
+        Draw2D, Morph as MorphState, Node, PARTICLE_COUNT, PARTICLE_FADE_START, Style,
         stroke_width_for_scale,
     },
     objects::{
@@ -67,16 +67,19 @@ impl MorphEffect {
     where
         F: ObjectHandler,
         T: ObjectHandler,
-        F::Object: ObjectTrackable<Draw> + Morphable,
-        T::Object: ObjectTrackable<Draw> + Morphable,
+        F::Object: ObjectTrackable<Draw2D> + Morphable,
+        T::Object: ObjectTrackable<Draw2D> + Morphable,
     {
         let (world, animator) = from
-            .animate(Draw::opacity_property(), from.get(Draw::opacity_property()))
+            .animate(
+                Draw2D::opacity_property(),
+                from.get(Draw2D::opacity_property()),
+            )
             .context();
         let source_opacity = stored_opacity(&world, from.get_id());
         let target_opacity = stored_opacity(&world, to.get_id());
         let (target_world, _) = to
-            .animate(Draw::opacity_property(), target_opacity)
+            .animate(Draw2D::opacity_property(), target_opacity)
             .context();
         assert!(
             std::rc::Rc::ptr_eq(&world, &target_world),
@@ -110,7 +113,7 @@ impl MorphEffect {
         };
         let data = ParticleTransform::new(from_silhouette, to_silhouette, self.easing);
         let object = Rect {
-            draw: Draw {
+            draw: Draw2D {
                 on_draw: draw_transform,
                 get_box: |world, entity| {
                     let data = world.get::<&ParticleTransform>(entity).unwrap();
@@ -167,7 +170,7 @@ impl MorphEffect {
         let fade_duration = self.duration * (1.0 - PARTICLE_FADE_START);
         let target_fade = Task::Chain(vec![
             Task::Wait(self.duration - fade_duration),
-            to.animate_from(Draw::opacity_property(), 0.0, target_opacity)
+            to.animate_from(Draw2D::opacity_property(), 0.0, target_opacity)
                 .duration(fade_duration)
                 .easing(Easing::Linear)
                 .task(),
@@ -175,7 +178,7 @@ impl MorphEffect {
         let mut tasks = vec![progress, target_fade];
         if self.fade_from {
             tasks.push(
-                from.animate_from(Draw::opacity_property(), source_opacity, 0.0)
+                from.animate_from(Draw2D::opacity_property(), source_opacity, 0.0)
                     .duration(self.duration * (1.0 - PARTICLE_FADE_START))
                     .easing(Easing::Linear)
                     .task(),
@@ -193,7 +196,7 @@ fn stored_opacity(world: &crate::core::SceneWorld, entity: hecs::Entity) -> f32 
         return opacity.0;
     }
 
-    let opacity = world.borrow().get::<&Draw>(entity).unwrap().opacity;
+    let opacity = world.borrow().get::<&Draw2D>(entity).unwrap().opacity;
     world
         .borrow_mut()
         .insert_one(entity, MorphOpacity(opacity))
@@ -239,7 +242,7 @@ fn record(
     let local = local_transform(world, entity);
     let global = parent.append(local);
     let relative = skia_safe::Matrix::concat(basis, &matrix(global));
-    let draw = world.get::<&Draw>(entity).unwrap();
+    let draw = world.get::<&Draw2D>(entity).unwrap();
     let size = (draw.get_box)(world, entity);
     let padding = world
         .get::<&Style>(entity)

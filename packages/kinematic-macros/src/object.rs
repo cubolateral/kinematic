@@ -228,7 +228,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
 
             /// Spawns the configured object as inactive in `scene` and returns its handler.
-            pub fn build(self, s: &mut crate::core::Scene) -> #handler_name {
+            pub fn build(self, s: &mut kinematic::core::Scene) -> #handler_name {
                 s.spawn_object::<#object_name>(self.object, self.name)
             }
         }
@@ -336,7 +336,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         impl #handler_name {
             /// Creates an identical object in the supplied scene.
-            pub fn copy(&self, s: &mut crate::core::Scene) -> #handler_name {
+            pub fn copy(&self, s: &mut kinematic::core::Scene) -> #handler_name {
                 let (object, name) = {
                     let world = self.world.borrow();
                     let object = #object_name {

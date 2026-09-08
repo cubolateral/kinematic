@@ -4,7 +4,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::core::{
     Easing, Task, Tween,
     components::PARTICLE_COUNT,
-    components::{Draw, Morph, Style, Transform2D, stroke_width_for_scale},
+    components::{Draw2D, Morph, Style, Transform2D, stroke_width_for_scale},
     objects::{
         CreationDraw, ObjectHandler,
         particle::{ParticleTransform, Silhouette, morph_opacities},
@@ -113,7 +113,7 @@ pub struct Text {
     #[trackable]
     pub transform: Transform2D,
     #[trackable]
-    pub draw: Draw,
+    pub draw: Draw2D,
 }
 
 struct TextLine<'a> {
@@ -819,7 +819,7 @@ impl Default for Text {
             shape: Default::default(),
             style: Default::default(),
             transform: Default::default(),
-            draw: Draw {
+            draw: Draw2D {
                 on_draw: draw_text,
                 get_box: |world, entity| text_box(&world.get::<&TextShape>(entity).unwrap()),
                 ..Default::default()
@@ -841,8 +841,8 @@ impl TextHandler {
     }
 
     pub(crate) fn play_write(&self, duration: f32, easing: Easing, reverse: bool) {
-        let opacity = self.get(Draw::opacity_property());
-        let anchor = self.animate(Draw::opacity_property(), opacity);
+        let opacity = self.get(Draw2D::opacity_property());
+        let anchor = self.animate(Draw2D::opacity_property(), opacity);
         let (world, animator) = anchor.context();
         let plan = {
             let world = world.borrow();
@@ -897,7 +897,7 @@ impl TextHandler {
             .task();
         let animation = Task::All(vec![activate, progress, transition, active]);
         if reverse {
-            let hide = Draw::opacity_property()
+            let hide = Draw2D::opacity_property()
                 .handle(world, self.get_id(), animator.clone())
                 .animate_from::<Text>(opacity, 0.0)
                 .duration(0.0)
@@ -1188,7 +1188,7 @@ mod tests {
         assert!(!world.query::<&WriteState>().iter().next().unwrap().active);
         assert_eq!(
             world
-                .query::<(&TextShape, &Draw)>()
+                .query::<(&TextShape, &Draw2D)>()
                 .iter()
                 .next()
                 .unwrap()

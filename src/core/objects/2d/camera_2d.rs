@@ -1,6 +1,6 @@
 use kinematic_macros::{Object, Trackable};
 
-use crate::core::{components::Draw, types::Vector2};
+use crate::core::{components::Draw2D, types::Vector2};
 
 /// View transformation used by a camera.
 #[derive(Clone, Debug, Trackable)]
@@ -34,7 +34,7 @@ pub struct Camera2D {
     #[trackable]
     pub camera_transform: CameraTransform2D,
 
-    pub draw: Draw,
+    pub draw: Draw2D,
 }
 
 impl Default for Camera2D {

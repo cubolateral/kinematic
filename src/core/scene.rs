@@ -1,6 +1,6 @@
 use crate::core::{
     Animator, Scheduling, Task, TrackableInfo, Tween,
-    components::{Animation, Draw, Inspection, Name, Node, View},
+    components::{Animation, Draw2D, Inspection, Name, Node, View},
     objects::{
         Canvas2D, Canvas2DHandler, Canvas3D, Canvas3DHandler, Object, ObjectHandler, RootHandler,
         active_camera_matrix, canvas_2d, canvas_3d, children, draw_entity,
@@ -56,7 +56,7 @@ impl Scene {
             hecs::EntityBuilder::new()
                 .add(SceneIdentity(id))
                 .add(Animation::default())
-                .add(Draw::default())
+                .add(Draw2D::default())
                 .add(Inspection {
                     object_name: "Root",
                     get: root_trackables,
@@ -384,7 +384,7 @@ mod tests {
             .text("Kinematic!".to_owned())
             .build(&mut scene);
         let world = scene.get_world();
-        let draw = world.get::<&Draw>(handler.get_id()).unwrap();
+        let draw = world.get::<&Draw2D>(handler.get_id()).unwrap();
         let transform = world.get::<&Transform2D>(handler.get_id()).unwrap();
         let shape = world.get::<&TextShape>(handler.get_id()).unwrap();
 
@@ -430,7 +430,7 @@ mod tests {
         let _ = circle.fill(Color::RED);
         let _ = circle.fill_r(0.75);
         let world = scene.get_world();
-        let draw = world.get::<&Draw>(text.get_id()).unwrap();
+        let draw = world.get::<&Draw2D>(text.get_id()).unwrap();
 
         assert_eq!(draw.opacity, 0.25);
     }

@@ -2,7 +2,7 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
     components::{
-        Draw, Morph, PARTICLE_COUNT, Style, Transform2D, draw_complete_styled_path,
+        Draw2D, Morph, PARTICLE_COUNT, Style, Transform2D, draw_complete_styled_path,
         draw_styled_path, stroke_width_for_scale,
     },
     objects::{CreationDraw, particle_visual_key},
@@ -148,7 +148,7 @@ pub struct Line {
     #[trackable]
     pub transform: Transform2D,
     #[trackable]
-    pub draw: Draw,
+    pub draw: Draw2D,
 }
 
 impl Default for Line {
@@ -157,7 +157,7 @@ impl Default for Line {
             shape: Default::default(),
             style: Default::default(),
             transform: Default::default(),
-            draw: Draw {
+            draw: Draw2D {
                 on_draw: |world, entity, canvas, opacity| {
                     let shape = world.get::<&LineShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();

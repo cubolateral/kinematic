@@ -1,4 +1,4 @@
-use crate::core::components::Draw;
+use crate::core::components::Draw2D;
 use kinematic_macros::{Container, Object};
 
 use super::super::canvas::{
@@ -12,14 +12,14 @@ use super::super::{Camera2DHandler, ObjectHandler};
 pub struct Canvas2D {
     #[trackable]
     pub settings: CanvasSettings,
-    pub draw: Draw,
+    pub draw: Draw2D,
 }
 
 impl Default for Canvas2D {
     fn default() -> Self {
         Self {
             settings: CanvasSettings::new(CanvasDimension::Two),
-            draw: Draw::default(),
+            draw: Draw2D::default(),
         }
     }
 }

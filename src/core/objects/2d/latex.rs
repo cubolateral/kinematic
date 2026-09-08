@@ -4,7 +4,7 @@ use crate::core::{
     Tween,
     components::PARTICLE_COUNT,
     components::{
-        Draw, Morph, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale,
+        Draw2D, Morph, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale,
     },
     objects::{
         CreationDraw, ObjectHandler,
@@ -63,7 +63,7 @@ pub struct Latex {
     #[trackable]
     pub transform: Transform2D,
     #[trackable]
-    pub draw: Draw,
+    pub draw: Draw2D,
 }
 
 fn latex_box(shape: &LatexShape) -> Vector2 {
@@ -196,7 +196,7 @@ impl Default for Latex {
             shape: Default::default(),
             style: Default::default(),
             transform: Default::default(),
-            draw: Draw {
+            draw: Draw2D {
                 on_draw: draw_latex,
                 get_box: |world, entity| latex_box(&world.get::<&LatexShape>(entity).unwrap()),
                 ..Default::default()

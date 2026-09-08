@@ -17,7 +17,7 @@ Kinematic is in early development, so its API may change.
 - User-facing object names with type-based defaults.
 - Hierarchical scene trees with reusable 2D and 3D containers and inherited transforms.
 - Animatable orthographic 2D and perspective 3D cameras.
-- Built-in 3D cuboids, spheres, planes, metallic-roughness materials, and lighting.
+- Built-in and custom `Draw3D` meshes with reusable geometry caches, materials, and lighting.
 - 2D canvas projection onto 3D surfaces.
 - Sequential and parallel animation tasks.
 - Sequential multi-scene projects.
@@ -122,6 +122,59 @@ selects `World 3D`. Schedule additional immediate changes to alternate between
 them during the video. Three-dimensional position, quaternion rotation, scale,
 camera perspective, and material properties can be animated through the same
 typed builder and handler API used by 2D objects.
+
+Rendering callbacks are dimension-specific components: `Draw2D` receives a
+Skia canvas, while `Draw3D` receives a `RenderContext3D`. The 3D context exposes
+the active camera, render target, three-d context, canvas textures, and a mesh
+cache keyed by `GeometryKey`. This lets application-defined objects participate
+in the same scene tree and reuse GPU geometry across objects and frames:
+
+```rust
+use kinematic::{hecs, prelude::*, three_d};
+
+#[derive(Clone)]
+struct CustomShape;
+
+#[derive(Object, hecs::Bundle)]
+#[object(spatial = "3d", builder = "custom_cube")]
+struct CustomCube {
+    #[trackable]
+    transform: Transform3D,
+
+    shape: CustomShape,
+    draw: Draw3D,
+}
+
+impl Default for CustomCube {
+    fn default() -> Self {
+        Self {
+            transform: Transform3D::default(),
+            shape: CustomShape,
+            draw: Draw3D {
+                on_draw: draw_custom,
+                get_box: |_, _| Vector3::ONE,
+            },
+        }
+    }
+}
+
+fn draw_custom(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    context: &mut RenderContext3D<'_>,
+) -> Result<(), String> {
+    context.render_material(
+        GeometryKey::new::<CustomShape>(0),
+        three_d::CpuMesh::cube,
+        global_matrix3d(world, entity),
+        &Material::default(),
+    )
+}
+```
+
+The bounds callback returns the object's local size. A cache key must change
+whenever the generated CPU geometry changes; transforms and material values do
+not belong in the key.
 
 For picture-in-picture, texture projection, or other off-screen work, build a
 canvas with its own resolution and attach it with `Scene::add_canvas_2d` or

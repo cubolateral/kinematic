@@ -116,17 +116,20 @@ fn projection_builder_sizes_the_plane_from_canvas_resolution() {
         .build(&mut scene);
     let world = scene.get_world();
 
-    assert_eq!(
+    assert!(
         world
             .get::<&PlaneShape>(default_scale.get_id())
             .unwrap()
-            .size,
-        vec2(19.2, 10.8)
+            .size
+            .abs_diff_eq(vec2(7.5, 4.21875), 1e-5)
     );
     for projection in [custom_after_source, custom_before_source] {
-        assert_eq!(
-            world.get::<&PlaneShape>(projection.get_id()).unwrap().size,
-            vec2(9.6, 5.4)
+        assert!(
+            world
+                .get::<&PlaneShape>(projection.get_id())
+                .unwrap()
+                .size
+                .abs_diff_eq(vec2(9.6, 5.4), 1e-5)
         );
     }
 }

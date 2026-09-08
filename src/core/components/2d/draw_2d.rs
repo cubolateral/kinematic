@@ -2,11 +2,11 @@ use kinematic_macros::Trackable;
 
 use crate::core::types::Vector2;
 
-/// Local rendering callback and opacity for an entity.
+/// Local two-dimensional rendering callback and opacity for an entity.
 ///
-/// The callbacks receive the current entity state and must not mutate the ECS world.
+/// The callback receives the current entity state and must not mutate the ECS world.
 #[derive(Clone, Trackable)]
-pub struct Draw {
+pub struct Draw2D {
     /// Transparency applied while drawing this entity, from `0.0` to `1.0`.
     #[track]
     pub opacity: f32,
@@ -18,7 +18,7 @@ pub struct Draw {
     pub get_box: fn(&hecs::World, hecs::Entity) -> Vector2,
 }
 
-impl Default for Draw {
+impl Default for Draw2D {
     fn default() -> Self {
         Self {
             on_draw: |_, _, _, _| {},

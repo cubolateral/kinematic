@@ -253,7 +253,7 @@ mod tests {
         #[trackable]
         transform: Transform2D,
         #[trackable]
-        draw: Draw,
+        draw: Draw2D,
     }
 
     impl Default for TestContainer {

@@ -1,7 +1,7 @@
 use crate::core::{
     AnimatorHandle, SceneWorld, TrackInfo, TrackProperty, TrackValue, TrackValueType, Trackable,
     Tween,
-    components::{Animation, Draw, Inspection, Morph, Name, Node, Transform2D},
+    components::{Animation, Draw2D, Draw3D, Inspection, Morph, Name, Node, Transform2D},
     objects::{CameraTransform2D, deactivate_subtree, is_attached},
     types::Vector2,
 };
@@ -307,7 +307,7 @@ pub fn object_global_opacity(world: &hecs::World, entity: hecs::Entity) -> f32 {
     let mut current = Some(entity);
 
     while let Some(entity) = current {
-        if let Ok(draw) = world.get::<&Draw>(entity) {
+        if let Ok(draw) = world.get::<&Draw2D>(entity) {
             opacity *= draw.opacity.clamp(0.0, 1.0);
         }
 
@@ -380,7 +380,9 @@ pub trait Object3DHandler: ObjectHandler {
     }
 }
 
-pub(crate) fn global_matrix3d(world: &hecs::World, entity: hecs::Entity) -> glam::Mat4 {
+/// Returns an object's complete three-dimensional scene transform.
+#[doc(hidden)]
+pub fn global_matrix3d(world: &hecs::World, entity: hecs::Entity) -> glam::Mat4 {
     let local = if let Ok(transform) = world.get::<&crate::core::objects::CameraTransform3D>(entity)
     {
         glam::Mat4::from_rotation_translation(
@@ -420,16 +422,10 @@ pub(crate) fn object_box3d(world: &hecs::World, entity: hecs::Entity) -> glam::V
 }
 
 fn bounds3d(world: &hecs::World, entity: hecs::Entity) -> Option<(glam::Vec3, glam::Vec3)> {
-    use crate::core::objects::{CuboidShape, PlaneShape, SphereShape};
-    let size = if let Ok(shape) = world.get::<&CuboidShape>(entity) {
-        Some(shape.size.abs())
-    } else if let Ok(shape) = world.get::<&SphereShape>(entity) {
-        Some(glam::Vec3::splat(shape.radius.abs() * 2.0))
-    } else if let Ok(shape) = world.get::<&PlaneShape>(entity) {
-        Some(shape.size.abs().extend(0.0))
-    } else {
-        None
-    };
+    let size = world
+        .get::<&Draw3D>(entity)
+        .ok()
+        .map(|draw| (draw.get_box)(world, entity));
     let (mut min, mut max) = size.map_or(
         (
             glam::Vec3::splat(f32::INFINITY),

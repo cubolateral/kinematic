@@ -197,7 +197,8 @@ impl AnimatorHandle {
             .unwrap_or_else(|| self.clone())
     }
 
-    pub(crate) fn time(&self) -> f32 {
+    #[doc(hidden)]
+    pub fn time(&self) -> f32 {
         self.context.time.get()
     }
 

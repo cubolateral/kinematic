@@ -92,7 +92,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     renderer.render(&scene, &mut output, &mut skia).unwrap();
     assert_pixel(&read(&gl, &output), 32, 48, [64, 32, 127, 255]);
     screen.remove();
-    scene.update(0.0);
+    scene.update(1.0);
     renderer.render(&scene, &mut output, &mut skia).unwrap();
     assert_pixel(&read(&gl, &output), 32, 48, [0, 0, 255, 255]);
 
