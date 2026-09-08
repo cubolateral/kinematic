@@ -195,16 +195,11 @@ impl Scene {
 
         builder.build(self);
 
-        let tasks = self.animator.tasks();
-        Animator::get_duration_for_tasks(&tasks, self)
+        self.animator.take_schedule().compile(self)
     }
 
     pub(crate) fn get_duration(&self) -> f32 {
-        self.animator
-            .tasks()
-            .iter()
-            .map(Animator::task_duration)
-            .sum()
+        self.animator.duration()
     }
 
     pub(crate) fn get_name(&self) -> &'static str {
@@ -228,36 +223,67 @@ impl Scene {
 
     /// Adds a sequential group to the current scene timeline.
     pub fn chain(&mut self, schedule: impl FnOnce(&mut Scene)) {
-        self.schedule_group(Scheduling::Sequential, schedule, Task::Chain);
+        self.schedule_group(Scheduling::Sequential, false, schedule);
     }
 
     /// Adds a simultaneous group to the current scene timeline.
     pub fn all(&mut self, schedule: impl FnOnce(&mut Scene)) {
-        self.schedule_group(Scheduling::Parallel, schedule, Task::All);
+        self.schedule_group(Scheduling::Parallel, false, schedule);
     }
 
-    /// Repeats a sequential group on the current scene timeline.
-    pub fn repeat(&mut self, repetitions: usize, schedule: impl FnOnce(&mut Scene)) {
-        self.schedule_group(Scheduling::Sequential, schedule, |tasks| {
-            Task::Repeat(repetitions, tasks)
-        });
+    /// Loops one finite animation cycle without advancing the scene timeline.
+    ///
+    /// The closure runs once. Only its animations repeat, until the scene or
+    /// object's lifetime ends. Use a `for` loop for finite repetition and waits
+    /// or other finite animations to establish the scene duration.
+    /// Cycles cannot create, attach, remove objects, or contain another repeat.
+    pub fn repeat(&mut self, schedule: impl FnOnce(&mut Scene)) {
+        let values = {
+            let world = self.world.borrow();
+            let mut values = Vec::new();
+            for (entity, inspection) in world.query::<(hecs::Entity, &Inspection)>().iter() {
+                for component in (inspection.get)(&world, entity) {
+                    for info in (component.get)() {
+                        values.push((entity, info, (info.get)(&world, entity)));
+                    }
+                }
+            }
+            values
+        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.schedule_group(Scheduling::Sequential, true, schedule);
+        }));
+        // A background cycle does not advance the outer construction values.
+        let world = self.world.borrow();
+        for (entity, info, value) in values {
+            (info.set)(&world, entity, value);
+        }
+        if let Err(error) = result {
+            std::panic::resume_unwind(error);
+        }
     }
 
     fn schedule_group(
         &mut self,
         scheduling: Scheduling,
+        repeating: bool,
         schedule: impl FnOnce(&mut Scene),
-        build_task: impl FnOnce(Vec<Task>) -> Task,
     ) {
-        let group = self.animator.group(scheduling);
+        let group = self.animator.group(scheduling, repeating);
         let previous = group.handle().activate();
         let parent = std::mem::replace(&mut self.animator, group);
-
-        schedule(self);
-
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| schedule(self)));
         let group = std::mem::replace(&mut self.animator, parent);
         group.handle().restore(previous);
-        self.play(build_task(group.tasks()));
+        if let Err(error) = result {
+            std::panic::resume_unwind(error);
+        }
+        let schedule = group.take_schedule();
+        self.animator.handle().schedule(if repeating {
+            schedule.repeated()
+        } else {
+            schedule
+        });
     }
 
     #[doc(hidden)]
@@ -329,6 +355,243 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn finite_for_loops_rebuild_relative_targets() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        for _ in 0..3 {
+            object
+                .position_x_by(10.0)
+                .duration(1.0)
+                .easing(Easing::Linear)
+                .play();
+        }
+        assert_eq!(scene.animator.take_schedule().compile(&scene), 3.0);
+        scene.update(2.5);
+        assert_eq!(object.get(Transform2D::position_property()).x, 25.0);
+    }
+
+    #[test]
+    fn task_repeat_and_groups_share_the_same_schedule() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        let cycle = Task::Repeat(vec![Task::All(vec![
+            object
+                .opacity_from(0.0, 1.0)
+                .duration(1.0)
+                .easing(Easing::Linear)
+                .task(),
+            Task::Chain(vec![Task::Wait(1.0)]),
+        ])]);
+        scene.play(Task::Chain(vec![Task::Wait(2.0), cycle, Task::Wait(3.0)]));
+        assert_eq!(scene.animator.take_schedule().compile(&scene), 5.0);
+        scene.update(4.5);
+        assert_eq!(object.get(Draw2D::opacity_property()), 0.5);
+    }
+
+    #[test]
+    fn repeat_is_seekable_and_does_not_advance_the_outer_timeline() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        scene.wait(3.0);
+        scene.all(|scene| {
+            scene.repeat(|scene| {
+                scene.chain(|_| {
+                    object
+                        .position_y(10.0)
+                        .duration(1.0)
+                        .easing(Easing::Linear)
+                        .play();
+                    object
+                        .position_y(0.0)
+                        .duration(1.0)
+                        .easing(Easing::Linear)
+                        .play();
+                });
+            });
+            object
+                .opacity(0.0)
+                .duration(4.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+        scene.wait(3.0);
+        assert_eq!(scene.animator.take_schedule().compile(&scene), 10.0);
+        assert_eq!(scene.get_duration(), 10.0);
+        for (time, y) in [
+            (3.5, 5.0),
+            (6.5, 5.0),
+            (3.0, 0.0),
+            (4.0, 10.0),
+            (101.5, 5.0),
+            (1.0, 0.0),
+        ] {
+            scene.update(time);
+            assert_eq!(object.get(Transform2D::position_property()).y, y);
+        }
+        scene.update(5.0);
+        assert_eq!(object.get(Draw2D::opacity_property()), 0.5);
+        let world = scene.get_world();
+        let animation = world.get::<&Animation>(object.get_id()).unwrap();
+        let track = animation
+            .tracks
+            .iter()
+            .find(|track| track.track.repeat.is_some())
+            .unwrap();
+        assert!(track.track.keyframes.len() <= 5);
+    }
+
+    #[test]
+    fn repeat_restores_construction_values_and_holds_at_the_start_of_each_cycle() {
+        let mut scene = Scene::new();
+        let object = circle().position(vec2(0.0, 2.0)).build(&mut scene);
+        scene.get_world_2d().add(&object);
+        object
+            .position_y(4.0)
+            .duration(1.0)
+            .easing(Easing::Linear)
+            .play();
+        scene.repeat(|scene| {
+            scene.wait(1.0);
+            object
+                .position_y(8.0)
+                .duration(1.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+        assert_eq!(object.get(Transform2D::position_property()).y, 4.0);
+        assert_eq!(scene.get_duration(), 1.0);
+        scene.wait(6.0);
+        scene.animator.take_schedule().compile(&scene);
+        for (time, y) in [(0.5, 3.0), (2.5, 6.0), (3.5, 4.0), (1.5, 4.0), (6.5, 6.0)] {
+            scene.update(time);
+            assert_eq!(object.get(Transform2D::position_property()).y, y);
+        }
+    }
+
+    #[test]
+    fn repeated_axis_rotation_preserves_signed_multiple_turns() {
+        let mut scene = Scene::new();
+        let object = cuboid().build(&mut scene);
+        scene.get_world_3d().add(&object);
+        scene.repeat(|_| {
+            object
+                .rotate_y(-2.0 * std::f32::consts::TAU)
+                .duration(4.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+        scene.wait(12.0);
+        scene.animator.take_schedule().compile(&scene);
+        for time in [0.5, 4.5, 100.5, 0.5] {
+            scene.update(time);
+            let direction = object.get(Transform3D::rotation_property()) * Vector3::X;
+            assert!(direction.abs_diff_eq(Vector3::Z, 1e-5));
+        }
+        scene.update(4.0);
+        let direction = object.get(Transform3D::rotation_property()) * Vector3::X;
+        assert!(direction.abs_diff_eq(Vector3::X, 1e-5));
+    }
+
+    #[test]
+    fn nested_parallel_branches_compile_in_property_time_order() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        scene.all(|scene| {
+            scene.chain(|scene| {
+                scene.wait(2.0);
+                scene.all(|scene| {
+                    scene.all(|_| {
+                        object
+                            .position_from(vec2(10.0, 0.0), vec2(20.0, 0.0))
+                            .duration(1.0)
+                            .easing(Easing::Linear)
+                            .play();
+                    });
+                });
+            });
+            object
+                .position_from(Vector2::ZERO, vec2(10.0, 0.0))
+                .duration(1.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+        assert_eq!(scene.animator.take_schedule().compile(&scene), 3.0);
+        for (time, x) in [(2.5, 15.0), (0.5, 5.0), (1.5, 10.0)] {
+            scene.update(time);
+            assert_eq!(object.get(Transform2D::position_property()).x, x);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Repeat overlaps another animation")]
+    fn repeat_rejects_competing_property_animation() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.repeat(|_| {
+            object.opacity(0.0).play();
+        });
+        scene.wait(4.0);
+        object.opacity(0.5).play();
+        scene.animator.take_schedule().compile(&scene);
+    }
+
+    #[test]
+    #[should_panic(expected = "Repeat overlaps another animation")]
+    fn repeat_rejects_another_cycle_on_the_same_property() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.repeat(|_| {
+            object.opacity(0.0).play();
+        });
+        scene.repeat(|_| {
+            object.opacity(0.5).play();
+        });
+        scene.animator.take_schedule().compile(&scene);
+    }
+
+    #[test]
+    fn rejected_repeat_restores_the_active_scope_and_values() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.wait(2.0);
+        let error = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            scene.repeat(|scene| {
+                object.opacity(0.0).play();
+                scene.repeat(|_| {});
+            });
+        }));
+        assert!(error.is_err());
+        assert_eq!(object.get(Draw2D::opacity_property()), 1.0);
+        assert_eq!(scene.get_duration(), 2.0);
+        object.opacity(0.5).play();
+        assert_eq!(scene.get_duration(), 3.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "finite, positive duration")]
+    fn repeat_rejects_zero_duration_cycles() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.repeat(|_| {
+            object.opacity(0.0).immediate();
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "create, attach, or remove objects outside repeat")]
+    fn repeat_rejects_lifetime_changes_through_existing_handlers() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.repeat(|_| {
+            object.remove();
+        });
+    }
 
     #[test]
     fn scene_creates_project_sized_worlds_and_defaults_to_world_2d() {
@@ -478,8 +741,7 @@ mod tests {
             .immediate();
         scene.play(circle.opacity_from(0.0, 1.0).duration(1.0).task());
 
-        let tasks = scene.animator.tasks();
-        Animator::get_duration_for_tasks(&tasks, &mut scene);
+        scene.animator.take_schedule().compile(&scene);
         scene.update(0.5);
         let world = scene.get_world();
         let transform = world.get::<&Transform2D>(circle.get_id()).unwrap();
@@ -501,8 +763,7 @@ mod tests {
             .easing(Easing::Linear)
             .play();
 
-        let tasks = scene.animator.tasks();
-        Animator::get_duration_for_tasks(&tasks, &mut scene);
+        scene.animator.take_schedule().compile(&scene);
         scene.update(1.0);
         let world = scene.get_world();
         let transform = world.get::<&Transform2D>(circle.get_id()).unwrap();
@@ -523,8 +784,7 @@ mod tests {
             .easing(Easing::Linear)
             .play();
 
-        let tasks = scene.animator.tasks();
-        Animator::get_duration_for_tasks(&tasks, &mut scene);
+        scene.animator.take_schedule().compile(&scene);
 
         scene.update(1.0);
         let halfway = scene
@@ -853,13 +1113,13 @@ mod tests {
                             scene.get_world_2d().add(&nested_end_object);
                         });
 
-                        scene.repeat(2, |scene| {
-                            let repeated_object = circle().build(scene);
-                            scene.get_world_2d().add(&repeated_object);
+                        scene.chain(|scene| {
+                            let short_chain_object = circle().build(scene);
+                            scene.get_world_2d().add(&short_chain_object);
                             scene.wait(0.5);
 
-                            let repeated_end_object = circle().build(scene);
-                            scene.get_world_2d().add(&repeated_end_object);
+                            let short_chain_end_object = circle().build(scene);
+                            scene.get_world_2d().add(&short_chain_end_object);
                         });
 
                         let parallel_end_object = circle().build(scene);
@@ -895,9 +1155,9 @@ mod tests {
                 [3.0, f32::INFINITY],
                 [3.0, f32::INFINITY],
                 [3.0, f32::INFINITY],
+                [3.0, f32::INFINITY],
                 [3.5, f32::INFINITY],
                 [4.0, f32::INFINITY],
-                [7.0, f32::INFINITY],
                 [8.0, f32::INFINITY],
             ]
         );
@@ -995,7 +1255,7 @@ mod tests {
     }
 
     #[test]
-    fn object_created_after_parallel_work_starts_at_the_latest_group_time() {
+    fn object_added_in_parallel_uses_the_group_start() {
         struct ParallelLifetimeScene;
 
         impl SceneBuilder for ParallelLifetimeScene {
@@ -1022,8 +1282,8 @@ mod tests {
             .find(|(entity, node)| !node.is_root && world.get::<&CanvasSettings>(*entity).is_err())
             .unwrap();
 
-        assert_eq!(node.lifetime, [5.0, f32::INFINITY]);
-        assert!(!node.is_activated);
+        assert_eq!(node.lifetime, [0.0, f32::INFINITY]);
+        assert!(node.is_activated);
     }
 
     #[test]

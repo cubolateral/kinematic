@@ -71,6 +71,51 @@ fn main() {
 Scene factories in `Project::scenes` run in vector order. Each scene starts as
 soon as the previous scene reaches the end of its timeline.
 
+## Animation groups and loops
+
+`scene.chain(...)` schedules its children in sequence. `scene.all(...)` starts
+all children at the group start, including object attachment and effects; its
+duration is the longest child. Use a nested `chain` to delay a parallel branch.
+Concurrent animations of the same property are rejected.
+
+`scene.repeat(...)` describes one finite cycle and repeats it without advancing
+the outer timeline. The closure runs once; playback and seeking evaluate the
+stored cycle directly. For example, this scene levitates for ten seconds:
+
+```rust
+#[scene]
+fn levitation(s: &mut Scene) {
+    let object = circle().build(s);
+    s.get_world_2d().add(&object);
+
+    s.repeat(|_| {
+        object.position_y(-40.0).duration(1.0).easing(Easing::InOutSine).play();
+        object.position_y(0.0).duration(1.0).easing(Easing::InOutSine).play();
+    });
+    s.wait(10.0);
+}
+```
+
+Cycles must contain animation and have a finite, positive duration. They may
+contain `chain`, `all`, and waits, but cannot nest another `repeat` or create,
+attach, or remove objects. Create objects before entering the cycle. A repeated
+property cannot have another animation at or after the cycle starts, except an
+instantaneous setup at its start. Other properties can animate independently.
+
+Repetition ends visually with the scene or object's lifetime. A scene containing
+only background cycles needs a finite duration, established with waits or other
+animations. The Timeline shows the first cycle normally and repeats its segments
+and keyframes with reduced opacity.
+
+For a finite number of repetitions, use a Rust `for` loop. This replaces the old
+`scene.repeat(count, ...)` API. The task equivalent is now `Task::Repeat(tasks)`.
+Each iteration of a `for` constructs fresh animations and can create objects.
+
+For continuous 3D spinning, repeat `object.rotate_y(TAU)` with linear easing.
+The axis-angle path preserves direction and full turns; `object.rotation(q)`
+interpolates orientations along the shortest quaternion path. Match the cycle's
+end and start for a seamless loop; repetition does not automatically close it.
+
 ## 2D and 3D rendering
 
 Kinematic treats 2D and 3D as equal parts of the same animation model. Skia

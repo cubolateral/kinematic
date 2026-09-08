@@ -7,7 +7,7 @@ use crate::core::{
 ///
 /// Tasks are sequenced by the containing scene. [`Self::Chain`] runs its
 /// children sequentially, [`Self::All`] starts its children together, and
-/// [`Self::Repeat`] repeats its children sequentially.
+/// [`Self::Repeat`] loops a finite cycle without advancing the containing timeline.
 #[derive(Clone)]
 pub enum Task {
     /// Interpolates one tracked component field over a duration.
@@ -38,6 +38,7 @@ pub enum Task {
     Chain(Vec<Task>),
     /// Runs all child tasks from the same timeline position.
     All(Vec<Task>),
-    /// Repeats a sequence of child tasks a fixed number of times.
-    Repeat(usize, Vec<Task>),
+    /// Loops a finite, positive-duration sequence without advancing the timeline.
+    /// Nested repeats and concurrent writes to the same property are rejected.
+    Repeat(Vec<Task>),
 }

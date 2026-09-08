@@ -25,10 +25,28 @@ enum TrackInterpolation {
     QuaternionAxisAngle { axis: Vector3, angle: f32 },
 }
 
+/// A finite cycle evaluated periodically from its scene start.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TrackRepeat {
+    pub start: f32,
+    pub duration: f32,
+}
+
+impl TrackRepeat {
+    pub(crate) fn local_time(self, time: f32) -> f32 {
+        if time < self.start {
+            time
+        } else {
+            self.start + (time - self.start).rem_euclid(self.duration)
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Track {
     pub info: &'static TrackInfo,
     pub keyframes: Vec<Keyframe>,
+    pub repeat: Option<TrackRepeat>,
     current_tween_range: (f32, f32),
     current_tween_start: usize,
 }
@@ -39,6 +57,7 @@ impl Track {
         Self {
             info,
             keyframes: vec![],
+            repeat: None,
             current_tween_range: (0.0, 0.0),
             current_tween_start: 0,
         }
@@ -46,6 +65,7 @@ impl Track {
 
     pub fn update(&mut self, world: &hecs::World, entity: hecs::Entity, time: f32) {
         let set = self.info.set;
+        let time = self.repeat.map_or(time, |repeat| repeat.local_time(time));
 
         match self.find_keyframes(time) {
             (Some(left), Some(right)) => {

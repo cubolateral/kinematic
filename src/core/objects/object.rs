@@ -40,6 +40,7 @@ pub trait Object: hecs::DynamicBundle + Sized {
         object: Self,
         name: Name,
     ) -> Self::Handler {
+        animator.assert_finite_scope();
         let mut builder = hecs::EntityBuilder::new();
         builder
             .add_bundle(object)

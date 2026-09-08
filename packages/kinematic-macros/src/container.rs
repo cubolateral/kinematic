@@ -26,6 +26,7 @@ pub fn derive_container(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             }
 
             fn container_time(&self) -> f32 {
+                self.animator.assert_finite_scope();
                 self.animator.time()
             }
         }

@@ -99,6 +99,78 @@ impl TrackView {
             SEGMENT_THICKNESS * 0.5,
         );
 
+        let loop_label_x = if let Some(repeat) = track.repeat {
+            let repeat_start = time_offset + repeat.start;
+            let visible_start = repeat_start.max(start);
+            if visible_start < end {
+                draw_list.add_line_h(
+                    self.time.x(self.layout, visible_start),
+                    end_x,
+                    center,
+                    self.inactive,
+                    SEGMENT_THICKNESS * 0.5,
+                );
+                let pixels_per_second =
+                    self.layout.timeline_width / (self.time.end - self.time.start);
+                for cycle in visible_repeat_cycles(
+                    repeat_start,
+                    repeat.duration,
+                    [start, end],
+                    pixels_per_second,
+                ) {
+                    let offset = cycle as f32 * repeat.duration;
+
+                    for pair in track.keyframes.windows(2) {
+                        let [left, right] = pair else { continue };
+                        if left.time < repeat.start
+                            || right.time > repeat.start + repeat.duration
+                            || left.easing.is_none()
+                            || right.time <= left.time
+                        {
+                            continue;
+                        }
+
+                        let segment_start = (time_offset + left.time + offset).max(start);
+                        let segment_end = (time_offset + right.time + offset).min(end);
+                        if segment_end > segment_start {
+                            draw_list.add_line_h(
+                                self.time.x(self.layout, segment_start),
+                                self.time.x(self.layout, segment_end),
+                                center,
+                                ui.get_color_u32_from_packed(self.active, 0.25),
+                                SEGMENT_THICKNESS,
+                            );
+                        }
+                    }
+
+                    for keyframe in &track.keyframes {
+                        if keyframe.time < repeat.start
+                            || keyframe.time > repeat.start + repeat.duration
+                        {
+                            continue;
+                        }
+                        let time = time_offset + keyframe.time + offset;
+                        if time < start || time > end {
+                            continue;
+                        }
+                        draw_list
+                            .add_circle(
+                                [self.time.x(self.layout, time), center],
+                                KEYFRAME_RADIUS,
+                                self.text,
+                            )
+                            .filled(true)
+                            .build();
+                    }
+                }
+                Some(self.time.x(self.layout, visible_start) + 4.0)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         if self.time.end > self.time.start {
             for pair in track.keyframes.windows(2) {
                 let [left, right] = pair else { continue };
@@ -146,6 +218,11 @@ impl TrackView {
             if hovered {
                 hovered_time = Some((keyframe.time, keyframe_time));
             }
+        }
+
+        if let Some(x) = loop_label_x {
+            // Draw the label after every segment so the accent line stays behind it.
+            draw_list.add_text([x, top - 8.0], self.text, "LOOP");
         }
 
         if let Some((local_time, project_time)) = hovered_time {
@@ -212,4 +289,39 @@ fn visible_lifetime(lifetime: [f32; 2], time: TimeRange) -> Option<[f32; 2]> {
     let end = lifetime[1].min(time.end);
 
     (end > start).then_some([start, end])
+}
+
+// Dense cycles share one band; expanded cycles are limited to the visible range.
+fn visible_repeat_cycles(
+    start: f32,
+    duration: f32,
+    visible: [f32; 2],
+    pixels_per_second: f32,
+) -> std::ops::Range<u64> {
+    if visible[1] <= start || duration * pixels_per_second < 24.0 {
+        return 0..0;
+    }
+    let first = (((visible[0].max(start) - start) / duration).floor() as u64).max(1);
+    let end = ((visible[1] - start) / duration).ceil() as u64;
+    first..end.max(first)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::visible_repeat_cycles;
+
+    #[test]
+    fn repeat_markers_follow_the_visible_cycles_after_panning() {
+        assert_eq!(
+            visible_repeat_cycles(3.0, 2.0, [103.0, 109.0], 20.0),
+            50..53
+        );
+        assert_eq!(visible_repeat_cycles(3.0, 2.0, [0.0, 10.0], 20.0), 1..4);
+    }
+
+    #[test]
+    fn dense_or_future_cycles_do_not_expand_into_markers() {
+        assert!(visible_repeat_cycles(0.0, 0.001, [0.0, 100.0], 10.0).is_empty());
+        assert!(visible_repeat_cycles(10.0, 2.0, [0.0, 5.0], 20.0).is_empty());
+    }
 }

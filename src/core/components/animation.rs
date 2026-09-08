@@ -1,7 +1,4 @@
-use crate::core::{
-    Easing, Track, TrackInfo, TrackValue,
-    types::{Quaternion, Vector3},
-};
+use crate::core::{Track, TrackInfo};
 
 /// Associates a track with the component field it animates.
 ///
@@ -18,42 +15,7 @@ pub(crate) struct Animation {
 }
 
 impl Animation {
-    pub fn animate(
-        &mut self,
-        current_time: f32,
-        type_id: std::any::TypeId,
-        track_info: &'static TrackInfo,
-        from: TrackValue,
-        to: TrackValue,
-        duration: f32,
-        easing: Easing,
-    ) {
-        self.track_mut(type_id, track_info)
-            .add_tween(current_time, from, to, duration, easing);
-    }
-
-    pub fn animate_rotation(
-        &mut self,
-        current_time: f32,
-        type_id: std::any::TypeId,
-        track_info: &'static TrackInfo,
-        from: Quaternion,
-        axis: Vector3,
-        angle: f32,
-        duration: f32,
-        easing: Easing,
-    ) {
-        self.track_mut(type_id, track_info).add_rotation_tween(
-            current_time,
-            from,
-            axis,
-            angle,
-            duration,
-            easing,
-        );
-    }
-
-    fn track_mut(
+    pub(crate) fn track_mut(
         &mut self,
         type_id: std::any::TypeId,
         track_info: &'static TrackInfo,

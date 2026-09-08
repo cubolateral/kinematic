@@ -285,6 +285,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
 
             fn remove(&self) {
+                self.animator.assert_finite_scope();
                 #remove_object_fn(&self.world, self.entity, self.animator.time());
             }
 

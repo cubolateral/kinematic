@@ -89,6 +89,7 @@ impl RootHandler {
 
     /// Adds a canvas to the internal root at the current scheduling time.
     pub(crate) fn add(&self, handler: &impl ObjectHandler) {
+        self.animator.assert_finite_scope();
         assert!(
             std::rc::Rc::ptr_eq(&self.world, &handler.object_world()),
             "Added canvas must belong to this scene."
