@@ -3,7 +3,8 @@
 Kinematic is a Rust animation editor and library built around an ECS scene,
 typed animation tracks, and a timeline-based workflow. It uses
 [SDL3](https://github.com/libsdl-org/SDL) and OpenGL for the application runtime,
-[Skia](https://skia.org/) for drawing, and
+[Skia](https://skia.org/) for 2D rendering,
+[three-d](https://github.com/asny/three-d) for 3D rendering, and
 [Dear ImGui](https://github.com/ocornut/imgui) for the editor UI, and
 [FFmpeg](https://ffmpeg.org/) as its video exporter.
 
@@ -12,9 +13,12 @@ Kinematic is in early development, so its API may change.
 ## Features
 
 - Typed scene objects and trackable component fields.
+- First-class 2D and 3D canvases rendered with Skia and three-d, respectively.
 - User-facing object names with type-based defaults.
-- Hierarchical scene trees with reusable containers and inherited transforms.
-- Animatable cameras with position, zoom, and rotation.
+- Hierarchical scene trees with reusable 2D and 3D containers and inherited transforms.
+- Animatable orthographic 2D and perspective 3D cameras.
+- Built-in 3D cuboids, spheres, planes, metallic-roughness materials, and lighting.
+- 2D canvas projection onto 3D surfaces.
 - Sequential and parallel animation tasks.
 - Sequential multi-scene projects.
 - Built-in easing functions.
@@ -67,35 +71,62 @@ fn main() {
 Scene factories in `Project::scenes` run in vector order. Each scene starts as
 soon as the previous scene reaches the end of its timeline.
 
-The built-in 2D world is rendered by default. A 3D scene only needs its camera,
+## 2D and 3D rendering
+
+Kinematic treats 2D and 3D as equal parts of the same animation model. Skia
+renders vector-based `Canvas2D` content, while three-d renders depth-tested
+`Canvas3D` content with perspective cameras, meshes, materials, and lighting.
+Both dimensions use the same scene tree, typed tracks, timeline, seeking, and
+MP4 export workflow.
+
+Every scene includes `World 2D` and `World 3D` canvases at the project
+resolution. The 2D world is selected by default. A 3D scene needs a camera,
 objects, and a change to the root's `view_2d` track:
 
 ```rust
 #[scene]
 fn scene_3d(s: &mut Scene) {
-    s.get_root().view_2d(false).immediate();
+     s.get_root().view_2d(false).immediate();
 
-    let world_2d = s.get_world_2d();
-    world_2d.add(&text().build(s));
+    let camera = camera_3d().position(vec3(0.0, 0.0, 3.0)).build(s);
+    s.get_world_3d().add(&camera);
+    s.get_world_3d().set_camera(&camera);
 
-    let world_3d = s.get_world_3d();
-    let camera = camera_3d().build(s);
-    world_3d.add(&camera);
-    world_3d.set_camera(&camera);
+    let group = group_3d().build(s);
+    s.get_world_3d().add(&group);
 
-    let screen = projection().source(&world_2d).build(s);
-    world_3d.add(&screen);
-    world_3d.add(&cuboid().build(s));
+    group.add(
+        &cuboid()
+            .position(vec3(-1.0, 0.0, 0.0))
+            .albedo(Color::BLUE)
+            .build(s),
+    );
+    group.add(
+        &sphere()
+            .position(vec3(1.0, 0.0, 0.0))
+            .albedo(Color::RED)
+            .build(s),
+    );
+
+    group
+        .rotation(Quaternion::from_rotation_y(PI))
+        .duration(2.5)
+        .play();
+
+    s.wait(1.0);
 }
 ```
 
 `view_2d` is a discrete boolean track: `true` selects `World 2D` and `false`
 selects `World 3D`. Schedule additional immediate changes to alternate between
-them during the video.
+them during the video. Three-dimensional position, quaternion rotation, scale,
+camera perspective, and material properties can be animated through the same
+typed builder and handler API used by 2D objects.
 
-For picture-in-picture or other off-screen work, build a canvas with its own
-resolution and attach it with `Scene::add_canvas_2d` or
-`Scene::add_canvas_3d`.
+For picture-in-picture, texture projection, or other off-screen work, build a
+canvas with its own resolution and attach it with `Scene::add_canvas_2d` or
+`Scene::add_canvas_3d`. A `projection` displays a 2D canvas as an unlit plane in
+3D, allowing vector graphics, formulas, and text to be composed with 3D objects.
 
 ## LaTeX formulas
 
