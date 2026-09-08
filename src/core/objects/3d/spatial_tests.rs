@@ -1,7 +1,7 @@
 use crate::core::components::{Inspection, Morph};
 use crate::core::objects::draw_canvas2d;
 use crate::prelude::*;
-use crate::renderer::plan::{active_subtree, canvas_order, order_dependencies};
+use crate::renderer::plan::{active_subtree, canvas_order, order_dependencies, visible_subtree_3d};
 
 #[test]
 fn spatial_handlers_compose_transforms_and_bounds() {
@@ -35,6 +35,23 @@ fn spatial_handlers_compose_transforms_and_bounds() {
         1e-5
     ));
     assert_eq!(child.get_box(), vec3(2.0, 3.0, 4.0));
+}
+
+#[test]
+fn container_visibility_hides_its_3d_subtree() {
+    let mut scene = Scene::new();
+    let canvas = canvas_3d().build(&mut scene);
+    let parent = group_3d().visibility(false).build(&mut scene);
+    let child = cuboid().build(&mut scene);
+    parent.add(&child);
+    canvas.add(&parent);
+    scene.add_canvas_3d(&canvas);
+
+    let world = scene.get_world();
+    let visible = visible_subtree_3d(&world, canvas.get_id());
+    assert!(visible.contains(&canvas.get_id()));
+    assert!(!visible.contains(&parent.get_id()));
+    assert!(!visible.contains(&child.get_id()));
 }
 
 #[test]

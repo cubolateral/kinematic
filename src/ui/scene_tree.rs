@@ -1,9 +1,13 @@
 use crate::{
-    core::components::{Inspection, Name, Node},
+    core::components::{Draw2D, Draw3D, Inspection, Name, Node},
     editor::Editor,
 };
 
-use super::widgets::{hierarchy_prefix, text_size};
+use super::{
+    controls,
+    icons::{EYE, EYE_SLASH},
+    widgets::{hierarchy_prefix, text_size},
+};
 
 const ROW_HEIGHT: f32 = 24.0;
 pub(super) const WINDOW_NAME: &str = "Scene Tree";
@@ -23,7 +27,11 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
             .get::<&Name>(root)
             .expect("Root must contain a Name component.");
         let position = ui.cursor_screen_pos();
-        let root_clicked = selectable_row(ui, format!("##scene_tree_{}", root.to_bits()));
+        let root_clicked = selectable_row(
+            ui,
+            format!("##scene_tree_{}", root.to_bits()),
+            [0.0, ROW_HEIGHT],
+        );
         let draw_list = ui.get_window_draw_list();
 
         draw_list.add_text(
@@ -48,6 +56,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         if children.is_empty() {
             ui.text_disabled("   No objects.");
         } else {
+            let root_visibility = object_visibility(&world, root).unwrap_or(true);
             draw_children(
                 &world,
                 ui,
@@ -55,6 +64,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
                 &mut vec![],
                 selected,
                 selected == Some(root),
+                root_visibility,
                 &mut clicked,
             );
         }
@@ -81,6 +91,7 @@ fn draw_children(
     branches: &mut Vec<bool>,
     selected: Option<hecs::Entity>,
     ancestor_selected: bool,
+    ancestor_visible: bool,
     clicked: &mut Option<hecs::Entity>,
 ) {
     for (index, entity) in children.iter().copied().enumerate() {
@@ -92,8 +103,14 @@ fn draw_children(
             .expect("Scene tree object must contain a Name component.");
         let tree = hierarchy_prefix(branches, is_last);
         let position = ui.cursor_screen_pos();
+        let row_width = ui.content_region_avail_width();
+        let visibility = object_visibility(world, entity);
+        let effective_visibility = ancestor_visible && visibility.unwrap_or(true);
         let row_id = format!("##scene_tree_{}", entity.to_bits());
-        let was_clicked = selectable_row(ui, row_id);
+        let selectable_width = visibility
+            .map(|_| (row_width - ROW_HEIGHT).max(1.0))
+            .unwrap_or(0.0);
+        let was_clicked = selectable_row(ui, row_id, [selectable_width, ROW_HEIGHT]);
         if ui.is_item_hovered() {
             if let Ok(inspection) = world.get::<&Inspection>(entity) {
                 ui.tooltip_text(format!("Type: {}", inspection.object_name));
@@ -122,6 +139,11 @@ fn draw_children(
             name.get(),
         );
         drop(draw_list);
+        drop(name);
+        if let Some(visibility) = visibility {
+            ui.same_line_with_spacing(0.0, 0.0);
+            visibility_button(world, ui, entity, visibility, effective_visibility);
+        }
 
         if was_clicked {
             *clicked = Some(entity);
@@ -139,23 +161,59 @@ fn draw_children(
             branches,
             selected,
             is_highlighted,
+            effective_visibility,
             clicked,
         );
         branches.pop();
     }
 }
 
-fn selectable_row(ui: &dear_imgui_rs::Ui, id: String) -> bool {
+fn visibility_button(
+    world: &hecs::World,
+    ui: &dear_imgui_rs::Ui,
+    entity: hecs::Entity,
+    visibility: bool,
+    effective_visibility: bool,
+) {
+    let _id = ui.push_id(&format!("visibility_{}", entity.to_bits()));
+    let clicked = controls::text_button_colored(
+        ui,
+        if visibility { EYE } else { EYE_SLASH },
+        [ROW_HEIGHT, ROW_HEIGHT],
+        if effective_visibility {
+            dear_imgui_rs::StyleColor::Text
+        } else {
+            dear_imgui_rs::StyleColor::TextDisabled
+        },
+    );
+    if ui.is_item_hovered() {
+        ui.tooltip_text(if visibility { "Hide" } else { "Show" });
+    }
+    if clicked {
+        if let Ok(mut draw) = world.get::<&mut Draw2D>(entity) {
+            draw.visibility = !draw.visibility;
+        } else if let Ok(mut draw) = world.get::<&mut Draw3D>(entity) {
+            draw.visibility = !draw.visibility;
+        }
+    }
+}
+
+fn object_visibility(world: &hecs::World, entity: hecs::Entity) -> Option<bool> {
+    world
+        .get::<&Draw2D>(entity)
+        .map(|draw| draw.visibility)
+        .or_else(|_| world.get::<&Draw3D>(entity).map(|draw| draw.visibility))
+        .ok()
+}
+
+fn selectable_row(ui: &dear_imgui_rs::Ui, id: String, size: [f32; 2]) -> bool {
     let transparent = [0.0; 4];
     let _header = ui.push_style_color(dear_imgui_rs::StyleColor::Header, transparent);
     let _header_hovered =
         ui.push_style_color(dear_imgui_rs::StyleColor::HeaderHovered, transparent);
     let _header_active = ui.push_style_color(dear_imgui_rs::StyleColor::HeaderActive, transparent);
 
-    ui.selectable_config(id)
-        .selected(false)
-        .size([0.0, ROW_HEIGHT])
-        .build()
+    ui.selectable_config(id).selected(false).size(size).build()
 }
 
 fn active_children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity> {

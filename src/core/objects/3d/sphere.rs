@@ -32,7 +32,7 @@ pub struct Sphere {
     pub material: Material,
     #[trackable]
     pub transform: Transform3D,
-
+    #[trackable]
     pub draw: Draw3D,
 }
 
@@ -47,6 +47,7 @@ impl Default for Sphere {
                 get_box: |world, entity| {
                     glam::Vec3::splat(world.get::<&SphereShape>(entity).unwrap().radius.abs() * 2.0)
                 },
+                ..Default::default()
             },
         }
     }

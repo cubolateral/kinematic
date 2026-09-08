@@ -1,6 +1,6 @@
 use crate::core::{
     Scene, SceneIdentity,
-    components::Node,
+    components::{Draw3D, Node},
     objects::{CanvasDimension, CanvasSettings, ProjectionSource, children, validate_canvas},
 };
 use std::collections::HashMap;
@@ -39,6 +39,28 @@ pub(crate) fn order_dependencies(
         visit(entity, graph, &mut Vec::new(), &mut ordered)?;
     }
     Ok(ordered)
+}
+
+pub(crate) fn visible_subtree_3d(world: &hecs::World, root: hecs::Entity) -> Vec<hecs::Entity> {
+    fn visit(world: &hecs::World, entity: hecs::Entity, result: &mut Vec<hecs::Entity>) {
+        if !world
+            .get::<&Node>(entity)
+            .is_ok_and(|node| node.is_activated)
+            || !world
+                .get::<&Draw3D>(entity)
+                .is_ok_and(|draw| draw.visibility)
+        {
+            return;
+        }
+        result.push(entity);
+        for child in children(world, entity) {
+            visit(world, child, result);
+        }
+    }
+
+    let mut result = Vec::new();
+    visit(world, root, &mut result);
+    result
 }
 
 pub(crate) fn active_subtree(world: &hecs::World, root: hecs::Entity) -> Vec<hecs::Entity> {

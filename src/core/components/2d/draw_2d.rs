@@ -7,6 +7,9 @@ use crate::core::types::Vector2;
 /// The callback receives the current entity state and must not mutate the ECS world.
 #[derive(Clone, Trackable)]
 pub struct Draw2D {
+    /// Whether this entity and, for containers, its subtree are drawn.
+    #[track]
+    pub visibility: bool,
     /// Transparency applied while drawing this entity, from `0.0` to `1.0`.
     #[track]
     pub opacity: f32,
@@ -21,9 +24,10 @@ pub struct Draw2D {
 impl Default for Draw2D {
     fn default() -> Self {
         Self {
+            visibility: true,
+            opacity: 1.0,
             on_draw: |_, _, _, _| {},
             get_box: |_, _| Vector2::ZERO,
-            opacity: 1.0,
         }
     }
 }

@@ -31,7 +31,7 @@ pub struct Projection {
     pub shape: PlaneShape,
     #[trackable]
     pub transform: Transform3D,
-
+    #[trackable]
     pub draw: Draw3D,
     pub source: ProjectionSource,
     settings: ProjectionSettings,
@@ -52,6 +52,7 @@ impl Default for Projection {
                         .abs()
                         .extend(0.0)
                 },
+                ..Default::default()
             },
             source: ProjectionSource::default(),
             settings: ProjectionSettings::default(),

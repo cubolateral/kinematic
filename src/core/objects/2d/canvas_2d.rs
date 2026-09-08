@@ -12,6 +12,7 @@ use super::super::{Camera2DHandler, ObjectHandler};
 pub struct Canvas2D {
     #[trackable]
     pub settings: CanvasSettings,
+    #[trackable]
     pub draw: Draw2D,
 }
 

@@ -29,7 +29,7 @@ pub struct Cuboid {
     pub material: Material,
     #[trackable]
     pub transform: Transform3D,
-
+    #[trackable]
     pub draw: Draw3D,
 }
 
@@ -42,6 +42,7 @@ impl Default for Cuboid {
             draw: Draw3D {
                 on_draw: draw_cuboid,
                 get_box: |world, entity| world.get::<&CuboidShape>(entity).unwrap().size.abs(),
+                ..Default::default()
             },
         }
     }

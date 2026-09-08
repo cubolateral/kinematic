@@ -71,7 +71,7 @@ fn draw_entity_with_parent(
         return;
     };
     let opacity = draw.opacity.clamp(0.0, 1.0);
-    if opacity <= 0.0 {
+    if !draw.visibility || opacity <= 0.0 {
         return;
     }
 
@@ -125,7 +125,11 @@ fn draw_entity_outline_with_parent(
     thickness: f32,
     canvas: &skia_safe::Canvas,
 ) -> bool {
-    if world.get::<&CanvasSettings>(entity).is_ok() || world.get::<&Draw2D>(entity).is_err() {
+    if world.get::<&CanvasSettings>(entity).is_ok()
+        || !world
+            .get::<&Draw2D>(entity)
+            .is_ok_and(|draw| draw.visibility)
+    {
         return false;
     }
     let node = world
@@ -177,7 +181,7 @@ fn pick_entity_with_parent(
         .expect("Picked object must contain a Node component.");
     let draw = world.get::<&Draw2D>(entity).ok()?;
 
-    if !node.is_activated || draw.opacity <= 0.0 {
+    if !node.is_activated || !draw.visibility || draw.opacity <= 0.0 {
         return None;
     }
 
@@ -356,6 +360,12 @@ pub(crate) fn draw_canvas2d(world: &hecs::World, entity: hecs::Entity, canvas: &
     let settings = world.get::<&CanvasSettings>(entity).unwrap();
     let [r, g, b, a] = settings.clear.rgba();
     canvas.clear(skia_safe::Color4f::new(r, g, b, a));
+    if !world
+        .get::<&Draw2D>(entity)
+        .is_ok_and(|draw| draw.visibility)
+    {
+        return;
+    }
     let saved = canvas.save();
     canvas.translate((
         settings.resolution.0 as f32 * 0.5,
@@ -383,6 +393,12 @@ pub(crate) fn draw_canvas_outline2d(
     thickness: f32,
     canvas: &skia_safe::Canvas,
 ) {
+    if !world
+        .get::<&Draw2D>(scope)
+        .is_ok_and(|draw| draw.visibility)
+    {
+        return;
+    }
     let saved = canvas.save();
     if let Some(view) = canvas_camera_matrix(world, scope).and_then(|matrix| matrix.invert()) {
         canvas.concat(&view);
@@ -398,6 +414,12 @@ pub(crate) fn pick_canvas2d(
     scope: hecs::Entity,
     point: Vector2,
 ) -> Option<hecs::Entity> {
+    if !world
+        .get::<&Draw2D>(scope)
+        .is_ok_and(|draw| draw.visibility)
+    {
+        return None;
+    }
     let point = canvas_camera_matrix(world, scope).map_or(point, |matrix| {
         let point = matrix.map_point((point.x, point.y));
         Vector2::new(point.x, point.y)

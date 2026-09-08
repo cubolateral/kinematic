@@ -29,7 +29,7 @@ pub struct Plane {
     pub material: Material,
     #[trackable]
     pub transform: Transform3D,
-
+    #[trackable]
     pub draw: Draw3D,
 }
 
@@ -49,6 +49,7 @@ impl Default for Plane {
                         .abs()
                         .extend(0.0)
                 },
+                ..Default::default()
             },
         }
     }

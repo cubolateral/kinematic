@@ -1,6 +1,10 @@
 use dear_imgui_rs::{StyleColor, StyleVar, Ui};
 
 pub(super) fn text_button(ui: &Ui, label: &str, size: [f32; 2]) -> bool {
+    text_button_colored(ui, label, size, StyleColor::Text)
+}
+
+pub(super) fn text_button_colored(ui: &Ui, label: &str, size: [f32; 2], color: StyleColor) -> bool {
     let transparent = [0.0, 0.0, 0.0, 0.0];
     let _background = ui.push_style_color(StyleColor::Button, transparent);
     let _hovered = ui.push_style_color(StyleColor::ButtonHovered, transparent);
@@ -19,7 +23,7 @@ pub(super) fn text_button(ui: &Ui, label: &str, size: [f32; 2]) -> bool {
     let text_color = if ui.is_item_hovered() {
         StyleColor::TextLink
     } else {
-        StyleColor::Text
+        color
     };
     ui.get_window_draw_list()
         .add_text(text_position, ui.get_color_u32(text_color), label);

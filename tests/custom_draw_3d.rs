@@ -25,6 +25,7 @@ impl Default for CustomMesh {
             draw: Draw3D {
                 on_draw: draw_custom_mesh,
                 get_box: |world, entity| world.get::<&CustomShape>(entity).unwrap().size,
+                ..Default::default()
             },
         }
     }

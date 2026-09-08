@@ -33,7 +33,7 @@ impl Default for CameraTransform2D {
 pub struct Camera2D {
     #[trackable]
     pub camera_transform: CameraTransform2D,
-
+    #[trackable]
     pub draw: Draw2D,
 }
 

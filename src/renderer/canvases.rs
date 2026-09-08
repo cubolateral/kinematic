@@ -1,5 +1,5 @@
 use super::{
-    plan::{active_subtree, canvas_order},
+    plan::{canvas_order, visible_subtree_3d},
     target::{Target, reset_gl},
 };
 use crate::core::{
@@ -126,7 +126,7 @@ impl Canvases {
                                 sun,
                                 &resolve_texture,
                             );
-                            for child in active_subtree(&world, *entity) {
+                            for child in visible_subtree_3d(&world, *entity) {
                                 if let Ok(draw) = world.get::<&Draw3D>(child) {
                                     (draw.on_draw)(&world, child, &mut render)
                                         .map_err(std::io::Error::other)?;

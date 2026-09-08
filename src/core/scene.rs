@@ -382,6 +382,19 @@ mod tests {
     }
 
     #[test]
+    fn container_visibility_hides_its_2d_subtree() {
+        let mut scene = Scene::new();
+        let group = group_2d().visibility(false).build(&mut scene);
+        let object = rect().size(vec2(10.0, 10.0)).build(&mut scene);
+        group.add(&object);
+        scene.get_world_2d().add(&group);
+
+        assert_eq!(scene.pick(Vector2::ZERO), None);
+        group.visibility(true).immediate();
+        assert_eq!(scene.pick(Vector2::ZERO), Some(object.get_id()));
+    }
+
+    #[test]
     fn delay_offsets_tweens_tasks_and_scopes() {
         let mut scene = Scene::new();
         let tween_object = circle().build(&mut scene);

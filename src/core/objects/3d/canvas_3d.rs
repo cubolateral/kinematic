@@ -1,5 +1,7 @@
 use kinematic_macros::{Container, Object};
 
+use crate::core::components::Draw3D;
+
 use super::super::canvas::{
     CanvasDimension, CanvasSettings, CanvasTexture, scene_identity, validate_canvas,
 };
@@ -11,12 +13,15 @@ use super::super::{Camera3DHandler, ObjectHandler};
 pub struct Canvas3D {
     #[trackable]
     pub settings: CanvasSettings,
+    #[trackable]
+    pub draw: Draw3D,
 }
 
 impl Default for Canvas3D {
     fn default() -> Self {
         Self {
             settings: CanvasSettings::new(CanvasDimension::Three),
+            draw: Draw3D::default(),
         }
     }
 }

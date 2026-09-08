@@ -1,4 +1,7 @@
-use crate::core::types::{Quaternion, Vector3};
+use crate::core::{
+    components::Draw3D,
+    types::{Quaternion, Vector3},
+};
 use kinematic_macros::{Object, Trackable};
 
 /// Local three-dimensional camera position and rotation.
@@ -67,6 +70,8 @@ pub struct Camera3D {
     pub perspective: Perspective,
     #[trackable]
     pub camera_transform: CameraTransform3D,
+    #[trackable]
+    pub draw: Draw3D,
 }
 
 #[cfg(test)]

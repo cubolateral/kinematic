@@ -136,8 +136,12 @@ impl<'a> RenderContext3D<'a> {
 }
 
 /// Local three-dimensional rendering callback and bounds for an entity.
-#[derive(Clone)]
+#[derive(Clone, kinematic_macros::Trackable)]
 pub struct Draw3D {
+    /// Whether this entity and, for containers, its subtree are drawn.
+    #[track]
+    pub visibility: bool,
+
     /// Draws this entity using its current ECS state.
     pub on_draw: fn(&hecs::World, hecs::Entity, &mut RenderContext3D<'_>) -> Result<(), String>,
 
@@ -148,6 +152,7 @@ pub struct Draw3D {
 impl Default for Draw3D {
     fn default() -> Self {
         Self {
+            visibility: true,
             on_draw: |_, _, _| Ok(()),
             get_box: |_, _| glam::Vec3::ZERO,
         }
