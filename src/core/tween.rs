@@ -31,6 +31,7 @@ pub struct Tween<Object = ()> {
     entity: hecs::Entity,
     targets: Vec<TweenTarget>,
     prepare: Option<PrepareTween<Object>>,
+    delay: f32,
     duration: f32,
     easing: Easing,
     animator: AnimatorHandle,
@@ -82,6 +83,7 @@ impl<Object> Tween<Object> {
                 rotation: None,
             }],
             prepare: None,
+            delay: 0.0,
             duration: 1.0,
             easing: Easing::default(),
             animator,
@@ -110,6 +112,7 @@ impl<Object> Tween<Object> {
                 })
                 .collect(),
             prepare: None,
+            delay: 0.0,
             duration: 1.0,
             easing: Easing::default(),
             animator,
@@ -211,6 +214,12 @@ impl<Object> Tween<Object> {
         self
     }
 
+    /// Delays this tween by the specified number of timeline seconds.
+    pub fn delay(mut self, duration: f32) -> Self {
+        self.delay = duration;
+        self
+    }
+
     /// Sets the easing function used by every target field.
     pub fn easing(mut self, easing: Easing) -> Self {
         self.easing = easing;
@@ -308,10 +317,16 @@ impl<Object> Tween<Object> {
             })
             .collect();
 
-        if tasks.len() == 1 {
+        let task = if tasks.len() == 1 {
             tasks.pop().unwrap()
         } else {
             Task::All(tasks)
+        };
+
+        if self.delay == 0.0 {
+            task
+        } else {
+            task.delay(self.delay)
         }
     }
 }
@@ -343,6 +358,7 @@ impl Tween<()> {
                 rotation: Some(RotationTarget { from, axis, angle }),
             }],
             prepare: None,
+            delay: 0.0,
             duration: 1.0,
             easing: Easing::default(),
             animator,

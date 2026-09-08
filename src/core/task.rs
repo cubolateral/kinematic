@@ -42,3 +42,10 @@ pub enum Task {
     /// Nested repeats and concurrent writes to the same property are rejected.
     Repeat(Vec<Task>),
 }
+
+impl Task {
+    /// Delays this task by the specified number of timeline seconds.
+    pub fn delay(self, duration: f32) -> Self {
+        Self::Chain(vec![Self::Wait(duration), self])
+    }
+}

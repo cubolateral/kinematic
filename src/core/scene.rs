@@ -221,6 +221,14 @@ impl Scene {
         self.play(Task::Wait(duration));
     }
 
+    /// Delays a sequential group by the specified number of timeline seconds.
+    pub fn delay(&mut self, duration: f32, schedule: impl FnOnce(&mut Scene)) {
+        self.chain(|scene| {
+            scene.wait(duration);
+            schedule(scene);
+        });
+    }
+
     /// Adds a sequential group to the current scene timeline.
     pub fn chain(&mut self, schedule: impl FnOnce(&mut Scene)) {
         self.schedule_group(Scheduling::Sequential, false, schedule);
@@ -371,6 +379,60 @@ mod tests {
         assert_eq!(scene.animator.take_schedule().compile(&scene), 3.0);
         scene.update(2.5);
         assert_eq!(object.get(Transform2D::position_property()).x, 25.0);
+    }
+
+    #[test]
+    fn delay_offsets_tweens_tasks_and_scopes() {
+        let mut scene = Scene::new();
+        let tween_object = circle().build(&mut scene);
+        let task_object = circle().build(&mut scene);
+        let scope_object = circle().build(&mut scene);
+        scene.get_world_2d().add(&tween_object);
+        scene.get_world_2d().add(&task_object);
+        scene.get_world_2d().add(&scope_object);
+
+        scene.all(|scene| {
+            tween_object
+                .position_x(100.0)
+                .delay(0.5)
+                .duration(1.0)
+                .easing(Easing::Linear)
+                .play();
+            scene.play(
+                task_object
+                    .position_x(100.0)
+                    .duration(1.0)
+                    .easing(Easing::Linear)
+                    .task()
+                    .delay(1.0),
+            );
+            scene.delay(1.5, |_| {
+                scope_object
+                    .position_x(100.0)
+                    .duration(1.0)
+                    .easing(Easing::Linear)
+                    .play();
+            });
+        });
+
+        assert_eq!(scene.animator.take_schedule().compile(&scene), 2.5);
+        for (time, tween_x, task_x, scope_x) in [
+            (0.25, 0.0, 0.0, 0.0),
+            (0.75, 25.0, 0.0, 0.0),
+            (1.25, 75.0, 25.0, 0.0),
+            (1.75, 100.0, 75.0, 25.0),
+        ] {
+            scene.update(time);
+            assert_eq!(
+                tween_object.get(Transform2D::position_property()).x,
+                tween_x
+            );
+            assert_eq!(task_object.get(Transform2D::position_property()).x, task_x);
+            assert_eq!(
+                scope_object.get(Transform2D::position_property()).x,
+                scope_x
+            );
+        }
     }
 
     #[test]
