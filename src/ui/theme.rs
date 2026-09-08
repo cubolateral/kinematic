@@ -131,7 +131,7 @@ pub(super) fn initialize(context: &mut Context) -> FontId {
 fn load_font(context: &mut Context) -> FontId {
     const FONT: &[u8] = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/assets/fonts/JetBrainsMono-Regular.ttf"
+        "/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf"
     ));
 
     context

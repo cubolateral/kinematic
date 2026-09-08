@@ -73,6 +73,49 @@ impl Font {
     }
 }
 
+impl From<&str> for Font {
+    fn from(path: &str) -> Self {
+        Self::new(path)
+    }
+}
+
+impl From<String> for Font {
+    fn from(path: String) -> Self {
+        Self::new(path)
+    }
+}
+
+impl From<&std::path::Path> for Font {
+    fn from(path: &std::path::Path) -> Self {
+        Self::new(path)
+    }
+}
+
+impl From<std::path::PathBuf> for Font {
+    fn from(path: std::path::PathBuf) -> Self {
+        Self::new(path)
+    }
+}
+
+/// Fonts bundled with Kinematic.
+pub mod fonts {
+    /// CaskaydiaMono Nerd Font.
+    pub const CASKAYDIA_MONO: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/fonts/CaskaydiaMonoNerdFont-Regular.ttf"
+    );
+    /// Hack Nerd Font Mono.
+    pub const HACK_MONO: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/fonts/HackNerdFontMono-Regular.ttf"
+    );
+    /// JetBrainsMono Nerd Font.
+    pub const JETBRAINS_MONO: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf"
+    );
+}
+
 /// Content and typography of a text object.
 #[derive(Clone, Trackable)]
 pub struct TextShape {
@@ -85,6 +128,9 @@ pub struct TextShape {
     /// Horizontal line alignment from `-1.0` left to `1.0` right.
     #[track]
     pub align: f32,
+    /// Extra glyph thickness in logical canvas units.
+    #[track]
+    pub thickness: f32,
 
     /// Font used to render the text.
     pub font: Font,
@@ -96,7 +142,8 @@ impl Default for TextShape {
             text: "Text!".to_owned(),
             size: 64.0,
             align: 0.0,
-            font: Font::new("assets/fonts/JetBrainsMono-Regular.ttf"),
+            thickness: 0.0,
+            font: Font::new(fonts::HACK_MONO),
         }
     }
 }
@@ -116,19 +163,31 @@ pub struct Text {
     pub draw: Draw2D,
 }
 
+impl TextBuilder {
+    /// Sets a bundled font or the path to a user-provided TTF or OTF file.
+    pub fn font(mut self, font: impl Into<Font>) -> Self {
+        self.object.shape.font = font.into();
+        self
+    }
+}
+
 struct TextLine<'a> {
     text: &'a str,
     width: f32,
     origin: (f32, f32),
 }
 
-fn text_paint(color: Color, opacity: f32) -> skia_safe::Paint {
+fn text_paint(color: Color, opacity: f32, thickness: f32) -> skia_safe::Paint {
     let [r, g, b, a] = color.rgba();
     let mut paint = skia_safe::Paint::new(
         skia_safe::Color4f::new(r, g, b, a * opacity.clamp(0.0, 1.0)),
         None,
     );
     paint.set_anti_alias(true);
+    if thickness > 0.0 {
+        paint.set_style(skia_safe::PaintStyle::StrokeAndFill);
+        paint.set_stroke_width(thickness);
+    }
     paint
 }
 
@@ -173,7 +232,9 @@ fn text_box(shape: &TextShape) -> Vector2 {
     let height =
         metrics.descent - metrics.ascent + font.spacing() * lines.len().saturating_sub(1) as f32;
 
-    Vector2::new(width, height)
+    let thickness = shape.thickness.max(0.0);
+
+    Vector2::new(width + thickness, height + thickness)
 }
 
 struct LayoutCluster {
@@ -291,6 +352,7 @@ fn draw_glyphs(
     glyphs: &[skia_safe::GlyphId],
     positions: &[skia_safe::Point],
     font: &skia_safe::Font,
+    thickness: f32,
     style: &Style,
     opacity: f32,
     scale: Vector2,
@@ -299,13 +361,13 @@ fn draw_glyphs(
     if glyphs.is_empty() {
         return;
     }
-    let mut paint = text_paint(style.fill, opacity);
+    let mut paint = text_paint(style.fill, opacity, thickness);
     canvas.draw_glyphs_at(glyphs, positions, (0.0, 0.0), font, &paint);
 
     if style.stroke_width <= 0.0 {
         return;
     }
-    paint.set_color4f(text_paint(style.stroke, opacity).color4f(), None);
+    paint.set_color4f(text_paint(style.stroke, opacity, 0.0).color4f(), None);
     paint.set_style(skia_safe::PaintStyle::Stroke);
     paint.set_stroke_width(stroke_width_for_scale(style.stroke_width, scale));
     canvas.draw_glyphs_at(glyphs, positions, (0.0, 0.0), font, &paint);
@@ -333,6 +395,7 @@ fn capture_text_morph_silhouette(
             glyphs,
             positions,
             &font,
+            shape.thickness,
             style,
             1.0,
             transform.scale,
@@ -483,6 +546,7 @@ fn draw_text_morph(
         &plan.source.glyphs,
         &plan.source.positions,
         &font,
+        shape.thickness,
         style,
         opacity * source_opacity,
         transform.scale,
@@ -492,6 +556,7 @@ fn draw_text_morph(
         &plan.target.glyphs,
         &plan.target.positions,
         &font,
+        shape.thickness,
         style,
         opacity * target_opacity,
         transform.scale,
@@ -516,6 +581,7 @@ fn draw_text_morph(
         &plan.stable.glyphs,
         &positions,
         &font,
+        shape.thickness,
         style,
         opacity,
         transform.scale,
@@ -583,6 +649,7 @@ fn prepare_write_plan(
             style,
             &[
                 shape.size,
+                shape.thickness,
                 transform.scale.x,
                 transform.scale.y,
                 index as f32,
@@ -631,7 +698,9 @@ fn glyph_layer_bounds(
     let Some(mut bounds) = bounds else {
         return skia_safe::Rect::default();
     };
-    let padding = stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5 + 2.0;
+    let padding = shape.thickness.max(0.0) * 0.5
+        + stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5
+        + 2.0;
     bounds.outset((padding, padding));
     bounds
 }
@@ -661,6 +730,7 @@ fn draw_write(
                     &step.target.glyphs,
                     &step.target.positions,
                     &font,
+                    shape.thickness,
                     style,
                     opacity,
                     transform.scale,
@@ -693,6 +763,7 @@ fn draw_write(
                 &step.target.glyphs,
                 &step.target.positions,
                 &font,
+                shape.thickness,
                 style,
                 target_opacity,
                 transform.scale,
@@ -703,6 +774,7 @@ fn draw_write(
                 &step.target.glyphs,
                 &step.target.positions,
                 &font,
+                shape.thickness,
                 style,
                 opacity,
                 transform.scale,
@@ -720,7 +792,7 @@ fn draw_complete_text(
     canvas: &skia_safe::Canvas,
 ) {
     let font = shape.font.skia_font(shape.size);
-    let mut paint = text_paint(style.fill, opacity);
+    let mut paint = text_paint(style.fill, opacity, shape.thickness);
     let lines = text_lines(shape, &font);
 
     for line in &lines {
@@ -731,7 +803,7 @@ fn draw_complete_text(
         return;
     }
 
-    paint.set_color4f(text_paint(style.stroke, opacity).color4f(), None);
+    paint.set_color4f(text_paint(style.stroke, opacity, 0.0).color4f(), None);
     paint.set_style(skia_safe::PaintStyle::Stroke);
     paint.set_stroke_width(stroke_width_for_scale(style.stroke_width, scale));
 
@@ -786,6 +858,7 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
             &[
                 shape.size,
                 shape.align,
+                shape.thickness,
                 transform.scale.x,
                 transform.scale.y,
             ],
@@ -932,6 +1005,32 @@ mod tests {
         }
 
         colors
+    }
+
+    #[test]
+    fn builder_accepts_bundled_and_user_fonts_with_trackable_thickness() {
+        let mut scene = Scene::new();
+        let bundled = text()
+            .font(fonts::HACK_MONO)
+            .thickness(3.0)
+            .build(&mut scene);
+        let custom_path = std::path::PathBuf::from(fonts::CASKAYDIA_MONO);
+        let custom = text().font(custom_path.clone()).build(&mut scene);
+        let world = scene.get_world();
+
+        assert_eq!(
+            world.get::<&TextShape>(bundled.get_id()).unwrap().font,
+            Font::new(fonts::HACK_MONO)
+        );
+        assert_eq!(
+            world.get::<&TextShape>(custom.get_id()).unwrap().font,
+            Font::new(custom_path)
+        );
+        assert_eq!(
+            world.get::<&TextShape>(bundled.get_id()).unwrap().thickness,
+            3.0
+        );
+        assert_eq!(TextShape::thickness_property().get_info().name, "thickness");
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use crate::editor::Timeline;
+use crate::ui::icons;
 
 use super::metrics::{BUTTON_SIZE, FULLSCREEN_SCRUBBER_HEIGHT, FULLSCREEN_SCRUBBER_THICKNESS};
 
@@ -108,13 +109,14 @@ pub(in crate::ui) fn fullscreen_controls(
 fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interactive: bool) {
     let is_playing = timeline.is_playing();
 
-    if transport_button(ui, "<<", "Go to start [Shift + LeftArrow]") && interactive {
+    if transport_button(ui, icons::BACKWARD_FAST, "Go to start [Shift + LeftArrow]") && interactive
+    {
         timeline.go_to_start();
     }
 
     ui.same_line();
 
-    if transport_button(ui, "<", "Previous frame [LeftArrow]") && interactive {
+    if transport_button(ui, icons::BACKWARD, "Previous frame [LeftArrow]") && interactive {
         timeline.previous_frame();
     }
 
@@ -122,7 +124,11 @@ fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interacti
 
     if transport_button(
         ui,
-        if is_playing { "||" } else { "|>" },
+        if is_playing {
+            icons::PAUSE
+        } else {
+            icons::PLAY
+        },
         if is_playing {
             "Pause [Space]"
         } else {
@@ -135,13 +141,13 @@ fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interacti
 
     ui.same_line();
 
-    if transport_button(ui, ">", "Next frame [RightArrow]") && interactive {
+    if transport_button(ui, icons::FORWARD, "Next frame [RightArrow]") && interactive {
         timeline.next_frame();
     }
 
     ui.same_line();
 
-    if transport_button(ui, ">>", "Go to end [Shift + RightArrow]") && interactive {
+    if transport_button(ui, icons::FORWARD_FAST, "Go to end [Shift + RightArrow]") && interactive {
         timeline.go_to_end();
     }
 }
@@ -155,7 +161,11 @@ fn transport_width(ui: &dear_imgui_rs::Ui) -> f32 {
 fn fullscreen_button(ui: &dear_imgui_rs::Ui, is_fullscreen: bool) -> bool {
     transport_button(
         ui,
-        "[]",
+        if is_fullscreen {
+            icons::COMPRESS
+        } else {
+            icons::EXPAND
+        },
         if is_fullscreen {
             "Exit fullscreen [F]"
         } else {

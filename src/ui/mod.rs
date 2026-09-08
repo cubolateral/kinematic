@@ -1,6 +1,7 @@
 //! Dear ImGui editor shell and panel composition.
 
 mod export;
+mod icons;
 mod inspector;
 mod preview;
 mod scene_tree;
