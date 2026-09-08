@@ -54,19 +54,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     let controls_size = [viewport_size[0], CONTROLS_HEIGHT.min(viewport_size[1])];
     let mut toggle_fullscreen = false;
 
-    let _text = ui.push_style_color(dear_imgui_rs::StyleColor::Text, [1.0, 1.0, 1.0, 1.0]);
-    let _button = ui.push_style_color(dear_imgui_rs::StyleColor::Button, [0.12, 0.12, 0.12, 1.0]);
-    let _button_hovered = ui.push_style_color(
-        dear_imgui_rs::StyleColor::ButtonHovered,
-        [0.22, 0.22, 0.22, 1.0],
-    );
-    let _button_active = ui.push_style_color(
-        dear_imgui_rs::StyleColor::ButtonActive,
-        [0.32, 0.32, 0.32, 1.0],
-    );
-    let _scrubber =
-        ui.push_style_color(dear_imgui_rs::StyleColor::FrameBg, [0.35, 0.35, 0.35, 1.0]);
-
     ui.window("Fullscreen controls.")
         .position(controls_pos, dear_imgui_rs::Condition::Always)
         .size(controls_size, dear_imgui_rs::Condition::Always)
