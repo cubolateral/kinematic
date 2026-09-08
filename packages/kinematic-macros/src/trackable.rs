@@ -106,6 +106,43 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 }
             }
         });
+
+        let component_fields: &[&str] = match type_name(field_ty).as_deref() {
+            Some("Vector2") => &["x", "y"],
+            Some("Vector3") => &["x", "y", "z"],
+            Some("Color") => &["r", "g", "b", "a"],
+            _ => &[],
+        };
+
+        for component_field in component_fields {
+            let method_name = format_ident!("{}_{}", field_ident, component_field);
+            let component_field = format_ident!("{}", component_field);
+            let setter_trait = format_ident!(
+                "__Kinematic{}{}BuilderSetter",
+                struct_name,
+                type_fragment(&method_name)
+            );
+
+            builder_setters.push(quote! {
+                #[doc(hidden)]
+                #field_visibility trait #setter_trait: Sized {
+                    fn #method_name(self, value: f32) -> Self;
+                }
+
+                #[doc(hidden)]
+                impl<T> #setter_trait for T
+                where
+                    T: #builder_component_trait<#struct_name>,
+                {
+                    fn #method_name(mut self, value: f32) -> Self {
+                        <T as #builder_component_trait<#struct_name>>::component_mut(
+                            &mut self,
+                        ).#field_ident.#component_field = value;
+                        self
+                    }
+                }
+            });
+        }
     }
 
     for (id, field) in tracked_fields.iter().enumerate() {

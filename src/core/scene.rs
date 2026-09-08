@@ -395,6 +395,32 @@ mod tests {
     }
 
     #[test]
+    fn object_builder_sets_vector_axes_and_color_channels_individually() {
+        let default = Triangle::default();
+        let mut scene = Scene::new();
+        let handler = triangle()
+            .position_y(24.0)
+            .scale_x(2.0)
+            .fill_r(0.25)
+            .build(&mut scene);
+        let world = scene.get_world();
+        let transform = world.get::<&Transform2D>(handler.get_id()).unwrap();
+        let style = world.get::<&Style>(handler.get_id()).unwrap();
+
+        assert_eq!(transform.position, vec2(default.transform.position.x, 24.0));
+        assert_eq!(transform.scale, vec2(2.0, default.transform.scale.y));
+        assert_eq!(
+            style.fill,
+            Color::new(
+                0.25,
+                default.style.fill.g,
+                default.style.fill.b,
+                default.style.fill.a,
+            )
+        );
+    }
+
+    #[test]
     fn object_names_default_to_the_type_and_remain_mutable() {
         let mut scene = Scene::new();
         let circle = circle().build(&mut scene);
