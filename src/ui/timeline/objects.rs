@@ -7,7 +7,7 @@ use super::{
 use crate::{
     core::components::{Name, Node},
     editor::Editor,
-    ui::widgets::{draw_panel_rect, hierarchy_prefix, selection_color, text_size},
+    ui::widgets::{draw_panel_rect, hierarchy_prefix, text_size},
 };
 
 const OBJECT_HEIGHT: f32 = 24.0;
@@ -117,19 +117,27 @@ pub(super) fn draw(
 
         if end > start {
             let fill = if is_highlighted {
-                selection_color(ui)
+                Some(ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg))
             } else if timeline_hovered {
-                ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBgHovered)
+                Some(ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBgHovered))
             } else {
-                ui.get_color_u32(dear_imgui_rs::StyleColor::WindowBg)
+                Some(ui.get_color_u32(dear_imgui_rs::StyleColor::WindowBg))
             };
+
+            let border = ui.get_color_u32(if is_highlighted {
+                dear_imgui_rs::StyleColor::CheckMark
+            } else {
+                dear_imgui_rs::StyleColor::Border
+            });
+            let border_thickness = if is_highlighted { 2.0 } else { 1.0 };
 
             draw_panel_rect(
                 draw_list,
                 timeline_min,
                 timeline_max,
-                Some(fill),
-                ui.get_color_u32(dear_imgui_rs::StyleColor::Border),
+                fill,
+                border,
+                border_thickness,
             );
         }
 

@@ -1,5 +1,5 @@
 use crate::editor::Timeline;
-use crate::ui::icons;
+use crate::ui::{controls, icons};
 
 use super::metrics::{BUTTON_SIZE, FULLSCREEN_SCRUBBER_HEIGHT, FULLSCREEN_SCRUBBER_THICKNESS};
 
@@ -223,7 +223,7 @@ fn time_at_position(position: f32, start: f32, width: f32, duration: f32) -> f32
 }
 
 fn transport_button(ui: &dear_imgui_rs::Ui, label: &str, tooltip: &str) -> bool {
-    let clicked = ui.button_config(label).size([BUTTON_SIZE; 2]).build();
+    let clicked = controls::text_button(ui, label, [BUTTON_SIZE; 2]);
 
     if ui.is_item_hovered() {
         ui.tooltip_text(tooltip);

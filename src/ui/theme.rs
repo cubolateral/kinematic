@@ -61,21 +61,21 @@ impl Appearance {
             (StyleColor::DockingEmptyBg, background),
             (StyleColor::Border, border),
             (StyleColor::BorderShadow, border),
-            (StyleColor::FrameBg, surface),
+            (StyleColor::FrameBg, background),
             (StyleColor::FrameBgHovered, hover),
             (StyleColor::FrameBgActive, active),
             (StyleColor::TitleBg, background),
             (StyleColor::TitleBgActive, surface),
             (StyleColor::TitleBgCollapsed, disabled),
             (StyleColor::MenuBarBg, background),
-            (StyleColor::Button, surface),
+            (StyleColor::Button, background),
             (StyleColor::ButtonHovered, hover),
             (StyleColor::ButtonActive, active),
             (StyleColor::Header, surface),
             (StyleColor::HeaderHovered, hover),
             (StyleColor::HeaderActive, active),
             (StyleColor::CheckMark, accent),
-            (StyleColor::CheckboxSelectedBg, accent),
+            (StyleColor::CheckboxSelectedBg, background),
             (StyleColor::SliderGrab, hover),
             (StyleColor::SliderGrabActive, accent),
             (StyleColor::ScrollbarBg, background),
@@ -152,7 +152,7 @@ fn apply_geometry(context: &mut Context) {
     style.set_window_border_size(1.0);
     style.set_child_border_size(1.0);
     style.set_popup_border_size(1.0);
-    style.set_frame_border_size(0.0);
+    style.set_frame_border_size(1.0);
 
     style.set_window_padding([8.0, 8.0]);
     style.set_frame_padding([6.0, 4.0]);

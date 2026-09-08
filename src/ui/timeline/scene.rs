@@ -42,13 +42,20 @@ pub(super) fn draw(
         } else {
             ui.get_color_u32(dear_imgui_rs::StyleColor::WindowBg)
         };
+        let is_active = index == active_scene;
+        let border = ui.get_color_u32(if is_active {
+            dear_imgui_rs::StyleColor::CheckMark
+        } else {
+            dear_imgui_rs::StyleColor::Border
+        });
 
         draw_panel_rect(
             draw_list,
             min,
             max,
             Some(fill),
-            ui.get_color_u32(dear_imgui_rs::StyleColor::Border),
+            border,
+            if is_active { 2.0 } else { 1.0 },
         );
 
         let text_height = text_size(ui, name)[1];

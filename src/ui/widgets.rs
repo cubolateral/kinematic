@@ -1,19 +1,19 @@
-pub(super) fn selection_color(ui: &dear_imgui_rs::Ui) -> u32 {
-    ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg)
-}
-
 pub(super) fn draw_panel_rect(
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     min: [f32; 2],
     max: [f32; 2],
     fill: Option<u32>,
     border: u32,
+    border_thickness: f32,
 ) {
     if let Some(fill) = fill {
         draw_list.add_rect(min, max, fill).filled(true).build();
     }
 
-    draw_list.add_rect(min, max, border).build();
+    draw_list
+        .add_rect(min, max, border)
+        .thickness(border_thickness)
+        .build();
 }
 
 pub(super) fn text_size(ui: &dear_imgui_rs::Ui, text: &str) -> [f32; 2] {

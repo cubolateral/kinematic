@@ -1,5 +1,6 @@
 //! Dear ImGui editor shell and panel composition.
 
+mod controls;
 mod export;
 mod icons;
 mod inspector;
