@@ -1,7 +1,7 @@
 use crate::core::{
     AnimatorHandle, Easing, SceneWorld, Tween,
     objects::HandlerContext,
-    types::{Color, Quaternion, Vector2, Vector3},
+    types::{Color, Quad, Quaternion, Vector2, Vector3},
 };
 
 /// Getter function used by a track to read its current value from the ECS world.
@@ -298,6 +298,7 @@ pub enum TrackValue {
     Bool(bool),
     U32(u32),
     F32(f32),
+    Quad(Quad),
     Vector2(Vector2),
     Vector3(Vector3),
     Quaternion(Quaternion),
@@ -323,6 +324,7 @@ impl TrackValue {
                 }
             }
             (Self::F32(a), Self::F32(b)) => Self::F32(a + (b - a) * t),
+            (Self::Quad(a), Self::Quad(b)) => Self::Quad(a.lerp(*b, t)),
             (Self::Vector2(a), Self::Vector2(b)) => Self::Vector2(a + (b - a) * t),
             (Self::Vector3(a), Self::Vector3(b)) => Self::Vector3(a.lerp(*b, t)),
             (Self::Quaternion(a), Self::Quaternion(b)) => {
@@ -359,6 +361,11 @@ impl std::fmt::Display for TrackValue {
             Self::Bool(value) => write!(f, "{value}"),
             Self::U32(value) => write!(f, "{value}"),
             Self::F32(value) => write!(f, "{value:.2}"),
+            Self::Quad(value) => write!(
+                f,
+                "[{:.2}, {:.2}, {:.2}, {:.2}]",
+                value.a, value.b, value.c, value.d
+            ),
             Self::Vector2(value) => write!(f, "[{:.2}, {:.2}]", value.x, value.y),
             Self::Vector3(v) => write!(f, "[{:.2}, {:.2}, {:.2}]", v.x, v.y, v.z),
             Self::Quaternion(v) => write!(f, "[{:.2}, {:.2}, {:.2}, {:.2}]", v.x, v.y, v.z, v.w),
@@ -407,6 +414,7 @@ macro_rules! impl_track_value_type {
 impl_track_value_type!(bool, Bool);
 impl_track_value_type!(u32, U32);
 impl_track_value_type!(f32, F32);
+impl_track_value_type!(Quad, Quad);
 impl_track_value_type!(Vector2, Vector2);
 impl_track_value_type!(Color, Color);
 impl_track_value_type!(Vector3, Vector3);
@@ -743,6 +751,14 @@ mod tests {
             .lerp(&TrackValue::Vector2(Vector2::new(10.0, 20.0)), 0.5);
 
         assert!(matches!(value, TrackValue::Vector2(vector) if vector == Vector2::new(5.0, 10.0)));
+    }
+
+    #[test]
+    fn interpolates_quad_values() {
+        let value = TrackValue::Quad(Quad::new(0.0, 10.0, 20.0, 30.0))
+            .lerp(&TrackValue::Quad(Quad::new(10.0, 20.0, 30.0, 40.0)), 0.5);
+
+        assert_eq!(value, TrackValue::Quad(Quad::new(5.0, 15.0, 25.0, 35.0)));
     }
 
     #[test]

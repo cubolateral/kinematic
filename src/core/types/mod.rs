@@ -1,7 +1,9 @@
 mod color;
+mod quad;
 mod vector2;
 
 pub use color::*;
+pub use quad::*;
 pub use vector2::*;
 
 /// Three-dimensional vector used by scene geometry and transforms.

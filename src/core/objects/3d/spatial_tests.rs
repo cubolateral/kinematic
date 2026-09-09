@@ -155,12 +155,25 @@ fn projection_3d_builder_sizes_the_plane_from_canvas_resolution() {
 fn projection_2d_builder_sizes_the_rect_from_canvas_resolution() {
     let mut scene = Scene::new();
     let source = canvas_3d().resolution((960, 540)).build(&mut scene);
-    let projection = projection_2d().source(&source).build(&mut scene);
+    let projection = projection_2d()
+        .source(&source)
+        .round([10, 20, 30, 40])
+        .stroke(Color::WHITE)
+        .stroke_width(4.0)
+        .build(&mut scene);
     let world = scene.get_world();
 
     assert_eq!(
         world.get::<&RectShape>(projection.get_id()).unwrap().size,
         vec2(960.0, 540.0)
+    );
+    assert_eq!(
+        world.get::<&Style>(projection.get_id()).unwrap().fill,
+        Color::TRANSPARENT
+    );
+    assert_eq!(
+        world.get::<&RectShape>(projection.get_id()).unwrap().round,
+        Quad::new(10.0, 20.0, 30.0, 40.0)
     );
 }
 

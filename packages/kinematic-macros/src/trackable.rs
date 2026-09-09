@@ -88,10 +88,20 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             type_fragment(field_ident)
         );
 
+        let (setter_generic, setter_value_type, setter_value) =
+            if type_name(field_ty).as_deref() == Some("Quad") {
+                (
+                    quote!(<Value: Into<#field_ty>>),
+                    quote!(Value),
+                    quote!(value.into()),
+                )
+            } else {
+                (quote!(), quote!(#field_ty), quote!(value))
+            };
         builder_setters.push(quote! {
             #[doc(hidden)]
             #field_visibility trait #setter_trait: Sized {
-                fn #field_ident(self, value: #field_ty) -> Self;
+                fn #field_ident #setter_generic (self, value: #setter_value_type) -> Self;
             }
 
             #[doc(hidden)]
@@ -99,10 +109,10 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             where
                 T: #builder_component_trait<#struct_name>,
             {
-                fn #field_ident(mut self, value: #field_ty) -> Self {
+                fn #field_ident #setter_generic (mut self, value: #setter_value_type) -> Self {
                     <T as #builder_component_trait<#struct_name>>::component_mut(
                         &mut self,
-                    ).#field_ident = value;
+                    ).#field_ident = #setter_value;
                     self
                 }
             }
@@ -111,6 +121,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         let component_fields: &[&str] = match type_name(field_ty).as_deref() {
             Some("Vector2") => &["x", "y"],
             Some("Vector3") => &["x", "y", "z"],
+            Some("Quad") => &["a", "b", "c", "d"],
             Some("Color") => &["r", "g", "b", "a"],
             _ => &[],
         };
@@ -207,38 +218,51 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             ),
         });
 
+        let (value_generic, value_type, from_generic, from_type, to_type) =
+            if type_name(field_ty).as_deref() == Some("Quad") {
+                (
+                    quote!(<Value: Into<#field_ty>>),
+                    quote!(Value),
+                    quote!(<FromValue: Into<#field_ty>, ToValue: Into<#field_ty>>),
+                    quote!(FromValue),
+                    quote!(ToValue),
+                )
+            } else {
+                let input = quote!(<#field_ty as #track_value_type_trait>::Input);
+                (quote!(), input.clone(), quote!(), input.clone(), input)
+            };
         tween_fns.push(quote! {
-            pub fn #field_ident(
+            pub fn #field_ident #value_generic (
                 &self,
-                value: <#field_ty as #track_value_type_trait>::Input,
+                value: #value_type,
             ) -> #tween_type<<Next as #handler_context_trait>::Object> {
                 self.#field_ident.animate::< <Next as #handler_context_trait>::Object >(value.into())
             }
 
-            pub fn #from_method_name(
+            pub fn #from_method_name #from_generic (
                 &self,
-                from: <#field_ty as #track_value_type_trait>::Input,
-                to: <#field_ty as #track_value_type_trait>::Input,
+                from: #from_type,
+                to: #to_type,
             ) -> #tween_type<<Next as #handler_context_trait>::Object> {
                 self.#field_ident.animate_from::< <Next as #handler_context_trait>::Object >(from.into(), to.into())
             }
         });
         tween_trait_fns.push(quote! {
-            fn #field_ident(
+            fn #field_ident #value_generic (
                 self,
-                value: <#field_ty as #track_value_type_trait>::Input,
+                value: #value_type,
             ) -> Self;
 
-            fn #from_method_name(
+            fn #from_method_name #from_generic (
                 self,
-                from: <#field_ty as #track_value_type_trait>::Input,
-                to: <#field_ty as #track_value_type_trait>::Input,
+                from: #from_type,
+                to: #to_type,
             ) -> Self;
         });
         tween_impl_fns.push(quote! {
-            fn #field_ident(
+            fn #field_ident #value_generic (
                 self,
-                value: <#field_ty as #track_value_type_trait>::Input,
+                value: #value_type,
             ) -> Self {
                 self.set_track::<#field_ty>(
                     std::any::TypeId::of::<#struct_name>(),
@@ -247,10 +271,10 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 )
             }
 
-            fn #from_method_name(
+            fn #from_method_name #from_generic (
                 self,
-                from: <#field_ty as #track_value_type_trait>::Input,
-                to: <#field_ty as #track_value_type_trait>::Input,
+                from: #from_type,
+                to: #to_type,
             ) -> Self {
                 self.animate_from(
                     #struct_name::#property_name(),
@@ -309,11 +333,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         }
 
         match type_name(field_ty).as_deref() {
-            Some(name @ ("Vector2" | "Vector3")) => {
-                let axes: &[&str] = if name == "Vector3" {
-                    &["x", "y", "z"]
-                } else {
-                    &["x", "y"]
+            Some(name @ ("Vector2" | "Vector3" | "Quad")) => {
+                let axes: &[&str] = match name {
+                    "Vector3" => &["x", "y", "z"],
+                    "Quad" => &["a", "b", "c", "d"],
+                    _ => &["x", "y"],
                 };
                 for suffix in axes {
                     let method_name = format_ident!("{}_{}", field_ident, suffix);
