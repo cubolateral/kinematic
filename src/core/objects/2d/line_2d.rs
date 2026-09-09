@@ -11,7 +11,7 @@ use crate::core::{
 
 #[derive(Clone, Trackable)]
 /// Geometry of a line, including optional arrowheads at either end.
-pub struct LineShape {
+pub struct Line2DShape {
     /// Starting point in local coordinates.
     #[track]
     pub from: Vector2,
@@ -29,7 +29,7 @@ pub struct LineShape {
     pub to_arrow_size: f32,
 }
 
-impl Default for LineShape {
+impl Default for Line2DShape {
     fn default() -> Self {
         Self {
             from: vec2(-128.0, 0.0),
@@ -46,7 +46,7 @@ struct LineGeometry {
     bounds: skia_safe::Rect,
 }
 
-fn line_geometry(shape: &LineShape) -> Option<LineGeometry> {
+fn line_geometry(shape: &Line2DShape) -> Option<LineGeometry> {
     let offset = shape.to - shape.from;
     let length = offset.length();
     let thickness = shape.thickness.max(0.0);
@@ -126,7 +126,7 @@ fn line_geometry(shape: &LineShape) -> Option<LineGeometry> {
     })
 }
 
-fn line_box(shape: &LineShape) -> Vector2 {
+fn line_box(shape: &Line2DShape) -> Vector2 {
     let Some(geometry) = line_geometry(shape) else {
         return Vector2::ZERO;
     };
@@ -137,12 +137,12 @@ fn line_box(shape: &LineShape) -> Vector2 {
 }
 
 #[derive(Object, hecs::Bundle)]
-#[object(spatial = "2d", builder = "line")]
+#[object(spatial = "2d", builder = "line_2d")]
 #[morph]
 /// Built-in line scene object with independently animatable arrowheads.
-pub struct Line {
+pub struct Line2D {
     #[trackable]
-    pub shape: LineShape,
+    pub shape: Line2DShape,
     #[trackable]
     pub style: Style,
     #[trackable]
@@ -151,7 +151,7 @@ pub struct Line {
     pub draw: Draw2D,
 }
 
-impl Default for Line {
+impl Default for Line2D {
     fn default() -> Self {
         Self {
             shape: Default::default(),
@@ -159,7 +159,7 @@ impl Default for Line {
             transform: Default::default(),
             draw: Draw2D {
                 on_draw: |world, entity, canvas, opacity| {
-                    let shape = world.get::<&LineShape>(entity).unwrap();
+                    let shape = world.get::<&Line2DShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let morph = world.get::<&Morph>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
@@ -178,7 +178,7 @@ impl Default for Line {
                             geometry.bounds.bottom + stroke_padding,
                         );
                         let visual_key = particle_visual_key(
-                            "Line",
+                            "Line2D",
                             &style,
                             &[
                                 shape.from.x,
@@ -220,7 +220,7 @@ impl Default for Line {
 
                     draw_styled_path(&geometry.path, &style, transform.scale, opacity, canvas);
                 },
-                get_box: |world, entity| line_box(&world.get::<&LineShape>(entity).unwrap()),
+                get_box: |world, entity| line_box(&world.get::<&Line2DShape>(entity).unwrap()),
                 ..Default::default()
             },
         }
@@ -233,9 +233,9 @@ mod tests {
     use crate::core::{Scene, objects::*, types::vec2};
 
     #[test]
-    fn line_alias_builds_the_configured_line() {
+    fn line_2d_builder_builds_the_configured_line() {
         let mut scene = Scene::new();
-        let line = line()
+        let line = line_2d()
             .from(vec2(-100.0, 20.0))
             .to(vec2(100.0, 20.0))
             .thickness(10.0)
@@ -243,7 +243,7 @@ mod tests {
             .to_arrow_size(40.0)
             .build(&mut scene);
         let world = scene.get_world();
-        let shape = world.get::<&LineShape>(line.get_id()).unwrap();
+        let shape = world.get::<&Line2DShape>(line.get_id()).unwrap();
 
         assert_eq!(shape.from, vec2(-100.0, 20.0));
         assert_eq!(shape.to, vec2(100.0, 20.0));
@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn negative_arrow_sizes_are_ignored_when_building_geometry() {
-        let shape = LineShape {
+        let shape = Line2DShape {
             from_arrow_size: -10.0,
             to_arrow_size: 32.0,
             ..Default::default()

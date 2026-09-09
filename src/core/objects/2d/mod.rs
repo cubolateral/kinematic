@@ -1,21 +1,23 @@
 mod camera_2d;
 mod canvas_2d;
 mod circle;
+mod ellipse;
 mod group_2d;
 mod latex;
-mod line;
+mod line_2d;
 mod projection_2d;
 mod rect;
+mod regular_polygon_2d;
 mod text;
-mod triangle;
 
 pub use camera_2d::*;
 pub use canvas_2d::*;
 pub use circle::*;
+pub use ellipse::*;
 pub use group_2d::*;
 pub use latex::*;
-pub use line::*;
+pub use line_2d::*;
 pub use projection_2d::*;
 pub use rect::*;
+pub use regular_polygon_2d::*;
 pub use text::*;
-pub use triangle::*;

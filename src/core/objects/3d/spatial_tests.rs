@@ -12,7 +12,7 @@ fn spatial_handlers_compose_transforms_and_bounds() {
         .rotation(Quaternion::from_rotation_z(std::f32::consts::FRAC_PI_2))
         .scale(vec3(2.0, 3.0, 4.0))
         .build(&mut scene);
-    let child = cuboid()
+    let child = cube()
         .position(vec3(1.0, 0.0, 1.0))
         .rotation(Quaternion::from_rotation_y(0.5))
         .size(vec3(2.0, 3.0, 4.0))
@@ -42,7 +42,7 @@ fn container_visibility_hides_its_3d_subtree() {
     let mut scene = Scene::new();
     let canvas = canvas_3d().build(&mut scene);
     let parent = group_3d().visibility(false).build(&mut scene);
-    let child = cuboid().build(&mut scene);
+    let child = cube().build(&mut scene);
     parent.add(&child);
     canvas.add(&parent);
     scene.add_canvas_3d(&canvas);
@@ -59,7 +59,7 @@ fn dimensional_containers_reject_mixing_and_foreign_scenes() {
     let mut scene = Scene::new();
     let two = canvas_2d().resolution((64, 32)).build(&mut scene);
     let three = canvas_3d().resolution((64, 32)).build(&mut scene);
-    let cube = cuboid().build(&mut scene);
+    let cube = cube().build(&mut scene);
     let rectangle = rect().build(&mut scene);
     for action in [0, 1] {
         assert!(
@@ -208,11 +208,11 @@ fn camera_lens_rejects_invalid_ranges() {
 
 #[test]
 fn spatial_tracks_snapshots_and_lifetime_are_seekable_without_morph() {
-    struct Setup(Option<CuboidHandler>);
+    struct Setup(Option<PrismHandler>);
     impl SceneBuilder for Setup {
         fn build(&mut self, scene: &mut Scene) {
             let canvas = canvas_3d().resolution((64, 64)).build(scene);
-            let cube = cuboid().build(scene);
+            let cube = cube().build(scene);
             canvas.add(&cube);
             scene.add_canvas_3d(&canvas);
             cube.save();
@@ -247,14 +247,14 @@ fn spatial_tracks_snapshots_and_lifetime_are_seekable_without_morph() {
     assert!(active_subtree(&scene.get_world(), scene.get_root().get_id()).contains(&cube.get_id()));
     let world = scene.get_world();
     assert!(world.get::<&Morph>(cube.get_id()).is_err());
-    assert!(!<Cuboid as Object>::MORPHABLE);
+    assert!(!<Prism as Object>::MORPHABLE);
     let inspection = world.get::<&Inspection>(cube.get_id()).unwrap();
     assert!(
         (inspection.get)(&world, cube.get_id())
             .iter()
             .all(|c| c.name != "Morph")
     );
-    assert_eq!(cube.get_name(), "Cuboid");
+    assert_eq!(cube.get_name(), "Prism");
     assert!(scene.pick(Vector2::ZERO).is_none());
     let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
     scene.draw(surface.canvas());

@@ -10,27 +10,27 @@ use crate::core::{
 };
 
 #[derive(Clone, Trackable)]
-/// Geometry of a triangular object.
-pub struct TriangleShape {
+/// Geometry of an elliptical object.
+pub struct EllipseShape {
     #[track]
-    pub size: Vector2,
+    pub radius: Vector2,
 }
 
-impl Default for TriangleShape {
+impl Default for EllipseShape {
     fn default() -> Self {
         Self {
-            size: vec2(256.0, 256.0),
+            radius: vec2(128.0, 64.0),
         }
     }
 }
 
 #[derive(Object, hecs::Bundle)]
-#[object(spatial = "2d", builder = "triangle")]
+#[object(spatial = "2d", builder = "ellipse")]
 #[morph]
-/// Built-in triangular scene object.
-pub struct Triangle {
+/// Built-in elliptical scene object.
+pub struct Ellipse {
     #[trackable]
-    pub shape: TriangleShape,
+    pub shape: EllipseShape,
     #[trackable]
     pub style: Style,
     #[trackable]
@@ -39,7 +39,7 @@ pub struct Triangle {
     pub draw: Draw2D,
 }
 
-impl Default for Triangle {
+impl Default for Ellipse {
     fn default() -> Self {
         Self {
             shape: Default::default(),
@@ -47,48 +47,35 @@ impl Default for Triangle {
             transform: Default::default(),
             draw: Draw2D {
                 on_draw: |world, entity, canvas, opacity| {
-                    let shape = world.get::<&TriangleShape>(entity).unwrap();
+                    let shape = world.get::<&EllipseShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let morph = world.get::<&Morph>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
-                    let half_size = shape.size * 0.5;
-                    let path = skia_safe::Path::polygon(
-                        &[
-                            (0.0, -half_size.y).into(),
-                            (-half_size.x, half_size.y).into(),
-                            (half_size.x, half_size.y).into(),
-                        ],
-                        true,
-                        None,
-                        None,
-                    );
+                    let radius = shape.radius.abs();
+                    let bounds = skia_safe::Rect::new(-radius.x, -radius.y, radius.x, radius.y);
+                    let path = skia_safe::Path::oval(bounds, None);
 
                     if morph.particles_enabled && morph.progress < 1.0 {
                         let stroke_padding =
                             stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale)
                                 * 0.5;
-                        let bounds = skia_safe::Rect::new(
-                            -half_size.x - stroke_padding,
-                            -half_size.y - stroke_padding,
-                            half_size.x + stroke_padding,
-                            half_size.y + stroke_padding,
+                        let particle_bounds = skia_safe::Rect::new(
+                            bounds.left - stroke_padding,
+                            bounds.top - stroke_padding,
+                            bounds.right + stroke_padding,
+                            bounds.bottom + stroke_padding,
                         );
                         let visual_key = particle_visual_key(
-                            "Triangle",
+                            "Ellipse",
                             &style,
-                            &[
-                                shape.size.x,
-                                shape.size.y,
-                                transform.scale.x,
-                                transform.scale.y,
-                            ],
+                            &[radius.x, radius.y, transform.scale.x, transform.scale.y],
                             &[],
                         );
 
                         if (CreationDraw {
                             entity,
                             cache_slot: 0,
-                            bounds,
+                            bounds: particle_bounds,
                             visual_key,
                             particle_count: PARTICLE_COUNT as usize,
                             style: &style,
@@ -111,7 +98,9 @@ impl Default for Triangle {
 
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
-                get_box: |world, entity| world.get::<&TriangleShape>(entity).unwrap().size,
+                get_box: |world, entity| {
+                    world.get::<&EllipseShape>(entity).unwrap().radius.abs() * 2.0
+                },
                 ..Default::default()
             },
         }
@@ -123,19 +112,14 @@ mod tests {
     use crate::core::{Scene, objects::*, types::vec2};
 
     #[test]
-    fn triangle_alias_builds_a_sized_triangle() {
+    fn ellipse_builder_sets_trackable_radii() {
         let mut scene = Scene::new();
-        let builder: TriangleBuilder = triangle().size(vec2(320.0, 180.0));
-        let triangle = builder.build(&mut scene);
+        let ellipse = ellipse().radius(vec2(160.0, 80.0)).build(&mut scene);
 
-        assert_eq!(triangle.get_box(), vec2(320.0, 180.0));
+        assert_eq!(ellipse.get_box(), vec2(320.0, 160.0));
         assert_eq!(
-            scene
-                .get_world()
-                .get::<&TriangleShape>(triangle.get_id())
-                .unwrap()
-                .size,
-            vec2(320.0, 180.0)
+            ellipse.get(EllipseShape::radius_property()),
+            vec2(160.0, 80.0)
         );
     }
 }

@@ -141,7 +141,7 @@ fn scene_3d(s: &mut Scene) {
     s.get_world_3d().add(&group);
 
     group.add(
-        &cuboid()
+        &cube()
             .position(vec3(-1.0, 0.0, 0.0))
             .albedo(Color::BLUE)
             .build(s),

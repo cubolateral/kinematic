@@ -551,7 +551,7 @@ mod tests {
     #[test]
     fn repeated_axis_rotation_preserves_signed_multiple_turns() {
         let mut scene = Scene::new();
-        let object = cuboid().build(&mut scene);
+        let object = cube().build(&mut scene);
         scene.get_world_3d().add(&object);
         scene.repeat(|_| {
             object
@@ -734,9 +734,9 @@ mod tests {
 
     #[test]
     fn object_builder_sets_vector_axes_and_color_channels_individually() {
-        let default = Triangle::default();
+        let default = RegularPolygon2D::default();
         let mut scene = Scene::new();
-        let handler = triangle()
+        let handler = regular_polygon_2d()
             .position_y(24.0)
             .scale_x(2.0)
             .fill_r(0.25)
@@ -851,7 +851,7 @@ mod tests {
     #[test]
     fn quaternion_axis_rotation_preserves_a_complete_turn() {
         let mut scene = Scene::new();
-        let cube = cuboid().build(&mut scene);
+        let cube = cube().build(&mut scene);
         scene.get_world_3d().add(&cube);
 
         cube.rotate_y(std::f32::consts::TAU)

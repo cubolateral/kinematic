@@ -4,6 +4,7 @@ mod creation;
 mod latex_geometry;
 mod object;
 pub(crate) mod particle;
+mod regular_polygon;
 mod render;
 mod string_morph;
 #[path = "3d/mod.rs"]
@@ -16,6 +17,7 @@ pub use container::*;
 pub(crate) use creation::{CreationDraw, particle_visual_key};
 pub(crate) use creation::{MorphParticleRoute, draw_particle_batch, silhouette_grid};
 pub use object::*;
+pub(crate) use regular_polygon::regular_polygon_vertices;
 pub use render::object_box;
 pub use three_d::*;
 pub use two_d::*;

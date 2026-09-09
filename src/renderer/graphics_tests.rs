@@ -96,7 +96,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     renderer.render(&scene, &mut output, &mut skia).unwrap();
     assert_pixel(&read(&gl, &output), 32, 48, [0, 0, 255, 255]);
 
-    let cube = cuboid().size(vec3(0.8, 0.8, 0.8)).build(&mut scene);
+    let cube = cube().size(vec3(0.8, 0.8, 0.8)).build(&mut scene);
     let ball = sphere()
         .radius(0.3)
         .position(vec3(1.0, 0.0, 0.0))
