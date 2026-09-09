@@ -46,7 +46,7 @@ impl Default for LatexShape {
 ///
 /// let mut scene = Scene::new();
 /// let formula = latex()
-///     .text(r"\frac{1}{2}".to_owned())
+///     .text(r"\frac{1}{2}")
 ///     .size(64.0)
 ///     .build(&mut scene);
 /// scene.get_world_2d().add(&formula);
@@ -246,7 +246,7 @@ mod tests {
         struct FormulaScene;
         impl SceneBuilder for FormulaScene {
             fn build(&mut self, scene: &mut Scene) {
-                let formula = latex().text(r"\frac{1}{2}".to_owned()).build(scene);
+                let formula = latex().text(r"\frac{1}{2}").build(scene);
                 assert_eq!(formula.get_name(), "Latex");
                 scene.get_world_2d().add(&formula);
                 creation().duration(1.0).play(&formula);
@@ -293,7 +293,7 @@ mod tests {
     fn formulas_draw_decorations_colors_and_scale_within_their_bounds() {
         let mut scene = Scene::new();
         let formula = latex()
-            .text(r"\boxed{\color{red}{\frac{x^2}{\sqrt{2}}}}+\cancel{y}".to_owned())
+            .text(r"\boxed{\color{red}{\frac{x^2}{\sqrt{2}}}}+\cancel{y}")
             .size(48.0)
             .fill(Color::BLUE)
             .build(&mut scene);

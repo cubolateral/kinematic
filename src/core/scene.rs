@@ -295,7 +295,7 @@ impl Scene {
     }
 
     #[doc(hidden)]
-    pub fn spawn_object<T: Object>(&mut self, object: T, name: String) -> T::Handler {
+    pub fn spawn_object<T: Object>(&mut self, object: T, name: impl Into<String>) -> T::Handler {
         T::spawn(
             std::rc::Rc::clone(&self.world),
             self.animator.handle().active(),
@@ -719,7 +719,7 @@ mod tests {
         let handler = text()
             .opacity(0.5)
             .position(vec2(10.0, 20.0))
-            .text("Kinematic!".to_owned())
+            .text("Kinematic!")
             .build(&mut scene);
         let world = scene.get_world();
         let draw = world.get::<&Draw2D>(handler.get_id()).unwrap();
@@ -1126,7 +1126,7 @@ mod tests {
                         .fill(Color::GREEN)
                         .build(scene);
                     let text = text()
-                        .text("A".to_owned())
+                        .text("A")
                         .size(20.0)
                         .position(vec2(32.0, 0.0))
                         .fill(Color::BLUE)

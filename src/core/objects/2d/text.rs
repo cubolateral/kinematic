@@ -1039,7 +1039,7 @@ mod tests {
 
         impl SceneBuilder for ConsecutiveMorphs {
             fn build(&mut self, scene: &mut Scene) {
-                let text = text().text("Kinematic".to_owned()).build(scene);
+                let text = text().text("Kinematic").build(scene);
                 scene.get_world_2d().add(&text);
                 text.morph("Is").play();
                 text.morph("Awesome.").play();
@@ -1191,7 +1191,7 @@ mod tests {
 
         impl SceneBuilder for WrittenText {
             fn build(&mut self, scene: &mut Scene) {
-                let label = text().text("ABC".to_owned()).build(scene);
+                let label = text().text("ABC").build(scene);
                 scene.get_world_2d().add(&label);
                 write().duration(1.0).play(&label);
             }
@@ -1228,7 +1228,7 @@ mod tests {
 
         impl SceneBuilder for DelayedWrite {
             fn build(&mut self, scene: &mut Scene) {
-                let label = text().text("AB".to_owned()).build(scene);
+                let label = text().text("AB").build(scene);
                 scene.get_world_2d().add(&label);
                 scene.wait(1.0);
                 write().duration(1.0).play(&label);
@@ -1265,7 +1265,7 @@ mod tests {
 
         impl SceneBuilder for UnwrittenText {
             fn build(&mut self, scene: &mut Scene) {
-                let label = text().text("ABC".to_owned()).build(scene);
+                let label = text().text("ABC").build(scene);
                 scene.get_world_2d().add(&label);
                 unwrite().duration(1.0).play(&label);
             }

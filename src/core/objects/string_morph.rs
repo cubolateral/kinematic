@@ -214,7 +214,7 @@ mod tests {
         fn build(&mut self, scene: &mut Scene) {
             let task = if self.latex {
                 let object = latex()
-                    .text("x".to_owned())
+                    .text("x")
                     .size(self.size)
                     .fill(self.style.fill)
                     .stroke(self.style.stroke)
@@ -235,7 +235,7 @@ mod tests {
                 .task()
             } else {
                 let object = text()
-                    .text("A\nBC".to_owned())
+                    .text("A\nBC")
                     .size(self.size)
                     .fill(self.style.fill)
                     .stroke(self.style.stroke)

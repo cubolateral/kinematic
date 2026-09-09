@@ -89,7 +89,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         );
 
         let (setter_generic, setter_value_type, setter_value) =
-            if type_name(field_ty).as_deref() == Some("Quad") {
+            if matches!(type_name(field_ty).as_deref(), Some("Quad" | "String")) {
                 (
                     quote!(<Value: Into<#field_ty>>),
                     quote!(Value),
@@ -219,7 +219,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         });
 
         let (value_generic, value_type, from_generic, from_type, to_type) =
-            if type_name(field_ty).as_deref() == Some("Quad") {
+            if matches!(type_name(field_ty).as_deref(), Some("Quad" | "String")) {
                 (
                     quote!(<Value: Into<#field_ty>>),
                     quote!(Value),

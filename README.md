@@ -18,7 +18,7 @@ Kinematic is in early development, so its API may change.
 - Hierarchical scene trees with reusable 2D and 3D containers and inherited transforms.
 - Animatable orthographic 2D and perspective 3D cameras.
 - Built-in and custom `Draw3D` meshes with reusable geometry caches, materials, and lighting.
-- 2D canvas projection onto 3D surfaces.
+- Bidirectional projection of 2D and 3D canvases.
 - Sequential and parallel animation tasks.
 - Sequential multi-scene projects.
 - Built-in easing functions.
@@ -222,9 +222,27 @@ whenever the generated CPU geometry changes; transforms and material values do
 not belong in the key.
 
 For picture-in-picture, texture projection, or other off-screen work, build a
-canvas with its own resolution and attach it with `Scene::add_canvas_2d` or
-`Scene::add_canvas_3d`. A `projection` displays a 2D canvas as an unlit plane in
-3D, allowing vector graphics, formulas, and text to be composed with 3D objects.
+canvas with its own resolution and register it with `Scene::add_canvas_2d` or
+`Scene::add_canvas_3d`. Both projection types accept either canvas type:
+`projection_2d` displays the canvas in the 2D world, while `projection_3d`
+displays it as an unlit plane in the 3D world.
+
+```rust
+let canvas = canvas_3d().resolution((640, 360)).build(s);
+s.add_canvas_3d(&canvas);
+
+let projection = projection_2d()
+    .source(&canvas)
+    .round(16)
+    .stroke(Color::WHITE)
+    .stroke_width(4.0)
+    .build(s);
+s.get_world_2d().add(&projection);
+```
+
+`Projection2D` uses a transparent fill by default, so its source remains
+visible and a stroke can be drawn over it. Rounded rectangles accept one, two,
+three, or four values (`round(10)`, `round([10, 30])`, and so on).
 
 ## LaTeX formulas
 
@@ -234,7 +252,7 @@ transform, and creation effects work like other scene objects.
 
 ```rust
 let formula = latex()
-    .text(r"\frac{1}{2}".to_owned())
+    .text(r"\frac{1}{2}")
     .size(64.0)
     .build(s);
 s.get_world_2d().add(&formula);
@@ -256,7 +274,7 @@ colors, and resolves the destination into its complete appearance.
 ```rust
 let source = circle().radius(80.0).fill(Color::RED).build(s);
 let target = text()
-    .text("Kinematic".to_owned())
+    .text("Kinematic")
     .position(vec2(240.0, 0.0))
     .fill(Color::BLUE)
     .build(s);
