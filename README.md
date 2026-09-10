@@ -20,6 +20,7 @@ Kinematic is in early development, so its API may change.
 - Built-in and custom `Draw3D` meshes with reusable geometry caches, materials, and lighting.
 - Bidirectional projection of 2D and 3D canvases.
 - Sequential and parallel animation tasks.
+- Reactive signals that run after tracks and can temporarily override properties.
 - Sequential multi-scene projects.
 - Built-in easing functions.
 - Hierarchical timeline and selection from the Scene Tree, Timeline, or Preview.
@@ -115,6 +116,44 @@ For continuous 3D spinning, repeat `object.rotate_y(TAU)` with linear easing.
 The axis-angle path preserves direction and full turns; `object.rotation(q)`
 interpolates orientations along the shortest quaternion path. Match the cycle's
 end and start for a seamless loop; repetition does not automatically close it.
+
+## Signals
+
+Use `signal` to run logic after the scene's tracks have been evaluated. The
+callback receives a fresh clone of the object handler on every evaluation, and
+direct `set_*` methods temporarily override track values until the next update:
+
+```rust
+#[scene]
+fn follow_camera(s: &mut Scene) {
+    let circle = circle().build(s);
+    s.get_world_2d().add(&circle);
+
+    s.get_world_2d().signal(move |handler| {
+        handler.set_camera_position(circle.get_global_position());
+    });
+}
+```
+
+Signals begin at the current animator time and do not extend the scene
+duration. Keep the returned `SignalHandle` and call `stop()` to end one at the
+current animator time. Signals can be evaluated while seeking in either
+direction, and are skipped while their target object is inactive.
+
+When a callback uses another handler, that handler must be moved into the
+stored callback because signals outlive the builder closure:
+
+```rust
+let circle = circle().build(s);
+let circle_for_signal = circle.clone();
+
+canvas.signal(move |handler| {
+    handler.set_camera_position(circle_for_signal.get_global_position());
+});
+```
+
+Signals cannot be created inside `repeat()`, and callbacks cannot alter the
+scene structure or timeline.
 
 ## 2D and 3D rendering
 

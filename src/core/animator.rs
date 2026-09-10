@@ -1,5 +1,5 @@
 use crate::core::{
-    Easing, Scene, Task, TrackInfo, TrackValue,
+    Easing, Scene, SignalContext, SignalHandle, Task, TrackInfo, TrackValue,
     components::Animation,
     normalized_quaternion,
     track::TrackRepeat,
@@ -16,6 +16,7 @@ pub struct AnimatorHandle {
 struct AnimatorContext {
     time: std::rc::Rc<std::cell::Cell<f32>>,
     active: std::cell::RefCell<std::rc::Weak<std::cell::RefCell<AnimatorState>>>,
+    signals: std::rc::Rc<SignalContext>,
 }
 
 struct AnimatorState {
@@ -278,6 +279,7 @@ impl Animator {
         let context = std::rc::Rc::new(AnimatorContext {
             time: scene_time,
             active: std::cell::RefCell::new(std::rc::Rc::downgrade(&state)),
+            signals: std::rc::Rc::new(SignalContext::default()),
         });
         Self {
             handle: AnimatorHandle { state, context },
@@ -358,10 +360,47 @@ impl AnimatorHandle {
     /// Rejects scene mutations that cannot be replayed as a periodic animation.
     #[doc(hidden)]
     pub fn assert_finite_scope(&self) {
+        self.assert_timeline_mutation();
         assert!(
             !self.active().state.borrow().repeating,
             "Repeat cycles can only schedule animations and waits; create, attach, or remove objects outside repeat."
         );
+    }
+
+    /// Rejects timeline and scene-structure changes while a signal is running.
+    #[doc(hidden)]
+    pub fn assert_timeline_mutation(&self) {
+        assert!(
+            !self.context.signals.is_evaluating(),
+            "Signals cannot alter the scene structure or timeline while they are evaluated."
+        );
+    }
+
+    pub(crate) fn signal(
+        &self,
+        target: hecs::Entity,
+        callback: impl FnMut() + 'static,
+    ) -> SignalHandle {
+        let active = self.active();
+        active.assert_finite_scope();
+        let start = active.state.borrow().time();
+        self.context.signals.add(target, start, callback, active)
+    }
+
+    pub(crate) fn signals(&self) -> std::rc::Rc<SignalContext> {
+        std::rc::Rc::clone(&self.context.signals)
+    }
+
+    pub(crate) fn record_signal_override(
+        &self,
+        entity: hecs::Entity,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        value: TrackValue,
+    ) {
+        self.context
+            .signals
+            .record_override(entity, type_id, track_info, value);
     }
 
     fn sync_scene_time(&self) {
@@ -373,6 +412,7 @@ impl AnimatorHandle {
     }
 
     pub(crate) fn schedule(&self, schedule: Schedule) {
+        self.assert_timeline_mutation();
         let active = self.active();
         let mut state = active.state.borrow_mut();
         assert!(

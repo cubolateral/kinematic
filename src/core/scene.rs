@@ -110,11 +110,14 @@ impl Scene {
         }
     }
 
-    /// Evaluates every animation track at `time` and writes its value to the ECS world.
+    /// Restores signal overrides, updates nodes and tracks, then evaluates active signals.
     ///
     /// This updates scene state only; rendering remains in [`Self::draw`].
     pub fn update(&self, time: f32) {
+        let signals = self.animator.handle().signals();
         let world = self.world.borrow_mut();
+
+        signals.restore_overrides(&world);
 
         for node in world.query::<&mut Node>().iter() {
             node.update(time);
@@ -132,6 +135,9 @@ impl Scene {
                 track.track.update(&world, entity, time);
             }
         }
+        drop(world);
+
+        signals.evaluate(&self.world, time);
     }
 
     /// Draws the built-in 2D world without applying its output-size translation.
@@ -363,6 +369,193 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn signal_overrides_a_tween_after_tracks_are_evaluated() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        object.signal(|handler| handler.set_position(vec2(25.0, 0.0)));
+        object
+            .position_x(100.0)
+            .duration(2.0)
+            .easing(Easing::Linear)
+            .play();
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(1.0);
+
+        assert_eq!(object.get_position(), vec2(25.0, 0.0));
+    }
+
+    #[test]
+    fn signal_interval_supports_forward_and_backward_seeks() {
+        let mut scene = Scene::new();
+        let object = circle().position(vec2(3.0, 0.0)).build(&mut scene);
+        scene.get_world_2d().add(&object);
+        scene.wait(1.0);
+        let signaled = object.clone();
+        let signal = object.signal(move |_| signaled.set_position(vec2(9.0, 0.0)));
+        scene.wait(1.0);
+        signal.stop();
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.5);
+        assert_eq!(object.get_position(), vec2(3.0, 0.0));
+        scene.update(1.5);
+        assert_eq!(object.get_position(), vec2(9.0, 0.0));
+        scene.update(2.0);
+        assert_eq!(object.get_position(), vec2(3.0, 0.0));
+        scene.update(1.5);
+        assert_eq!(object.get_position(), vec2(9.0, 0.0));
+        scene.update(0.5);
+        assert_eq!(object.get_position(), vec2(3.0, 0.0));
+    }
+
+    #[test]
+    fn stopping_a_signal_uses_the_current_animator_time() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        let signaled = object.clone();
+        let signal = object.signal(move |_| signaled.set_position(vec2(4.0, 0.0)));
+        scene.wait(1.0);
+        signal.stop();
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.999);
+        assert_eq!(object.get_position(), vec2(4.0, 0.0));
+        scene.update(1.0);
+        assert_eq!(object.get_position(), Vector2::ZERO);
+    }
+
+    #[test]
+    fn multiple_signals_save_a_property_original_only_once() {
+        let mut scene = Scene::new();
+        let object = circle().position(vec2(3.0, 0.0)).build(&mut scene);
+        scene.get_world_2d().add(&object);
+        let first = object.clone();
+        let first_signal = object.signal(move |_| first.set_position(vec2(10.0, 0.0)));
+        let second = object.clone();
+        let second_signal = object.signal(move |_| second.set_position(vec2(20.0, 0.0)));
+        scene.wait(1.0);
+        first_signal.stop();
+        second_signal.stop();
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.5);
+        assert_eq!(object.get_position(), vec2(20.0, 0.0));
+        scene.update(1.0);
+        assert_eq!(object.get_position(), vec2(3.0, 0.0));
+    }
+
+    #[test]
+    fn signal_does_not_run_while_its_target_is_inactive() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+        let callback_calls = std::rc::Rc::clone(&calls);
+        object.signal(move |_| callback_calls.set(callback_calls.get() + 1));
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.0);
+
+        assert_eq!(calls.get(), 0);
+    }
+
+    #[test]
+    fn signal_can_read_another_handler_without_borrowing_the_scene_world() {
+        let mut scene = Scene::new();
+        let tracked = circle().position(vec2(7.0, 8.0)).build(&mut scene);
+        scene.get_world_2d().add(&tracked);
+        let canvas = scene.get_world_2d();
+        let signaled_canvas = canvas.clone();
+        let tracked = tracked.clone();
+        canvas.signal(move |_| signaled_canvas.set_camera_position(tracked.get_global_position()));
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.0);
+
+        assert_eq!(canvas.get_camera_position(), vec2(7.0, 8.0));
+    }
+
+    #[test]
+    fn signal_does_not_advance_scene_duration() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        object.signal(|_| {});
+
+        assert_eq!(scene.animator.take_schedule().compile(&scene), 0.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "create, attach, or remove objects outside repeat")]
+    fn signal_is_rejected_inside_repeat() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+
+        scene.repeat(|_| {
+            object.signal(|_| {});
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "Signals cannot alter the scene structure or timeline")]
+    fn signal_cannot_create_a_tween_while_it_is_evaluated() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        let signaled = object.clone();
+        object.signal(move |_| {
+            let _ = signaled.position(vec2(1.0, 2.0));
+        });
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Signals cannot alter the scene structure or timeline")]
+    fn signal_cannot_remove_an_object_while_it_is_evaluated() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        let signaled = object.clone();
+        object.signal(move |_| signaled.remove());
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Signals cannot alter the scene structure or timeline")]
+    fn signal_cannot_attach_an_object_while_it_is_evaluated() {
+        let mut scene = Scene::new();
+        let canvas = scene.get_world_2d();
+        let child = circle().build(&mut scene);
+        let parent = canvas.clone();
+        canvas.signal(move |_| parent.add(&child));
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Signals cannot alter the scene structure or timeline")]
+    fn signal_cannot_play_an_existing_tween_while_it_is_evaluated() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        let queued = object.position(vec2(1.0, 2.0));
+        object.set_position(Vector2::ZERO);
+        let mut queued = Some(queued);
+        object.signal(move |_| queued.take().unwrap().play());
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.0);
+    }
 
     #[test]
     fn finite_for_loops_rebuild_relative_targets() {

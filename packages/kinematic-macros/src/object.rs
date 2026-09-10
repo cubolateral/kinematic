@@ -248,6 +248,16 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             fields: #handler_fields_type,
         }
 
+        impl Clone for #handler_name {
+            fn clone(&self) -> Self {
+                <#object_name as #object_trait>::handler(
+                    std::rc::Rc::clone(&self.world),
+                    self.entity,
+                    self.animator.clone(),
+                )
+            }
+        }
+
         impl std::ops::Deref for #handler_name {
             type Target = #handler_fields_type;
 
@@ -261,6 +271,10 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
             fn object_world(&self) -> #scene_world_type {
                 std::rc::Rc::clone(&self.world)
+            }
+
+            fn object_animator(&self) -> #animator_handle_type {
+                self.animator.clone()
             }
 
             fn get_id(&self) -> hecs::Entity {
@@ -324,6 +338,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
 
             fn restore(&self) -> #tween_type<#object_name> {
+                self.animator.assert_timeline_mutation();
                 #restore_object_fn(
                     &self.world,
                     self.entity,

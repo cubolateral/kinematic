@@ -1,6 +1,6 @@
 use crate::core::{
-    AnimatorHandle, SceneWorld, TrackInfo, TrackProperty, TrackValue, TrackValueType, Trackable,
-    Tween,
+    AnimatorHandle, SceneWorld, SignalHandle, TrackInfo, TrackProperty, TrackValue, TrackValueType,
+    Trackable, Tween,
     components::{Animation, Draw2D, Draw3D, Inspection, Morph, Name, Node, Transform2D},
     objects::{deactivate_subtree, is_attached},
     types::Vector2,
@@ -59,12 +59,15 @@ pub trait Object: hecs::DynamicBundle + Sized {
 }
 
 /// Common access to the entity represented by a typed object handler.
-pub trait ObjectHandler {
+pub trait ObjectHandler: Clone {
     /// Object type represented by this handler.
     type Object: Object;
 
     #[doc(hidden)]
     fn object_world(&self) -> SceneWorld;
+
+    #[doc(hidden)]
+    fn object_animator(&self) -> AnimatorHandle;
 
     /// Returns the ECS entity represented by this handler.
     fn get_id(&self) -> hecs::Entity;
@@ -77,6 +80,19 @@ pub trait ObjectHandler {
 
     /// Ends this object's lifetime at the current scheduling time.
     fn remove(&self);
+
+    /// Runs a callback after animation tracks while this object is active.
+    ///
+    /// The callback receives a fresh typed clone of this handler on every evaluation.
+    fn signal(&self, callback: impl FnMut(Self) + 'static) -> SignalHandle
+    where
+        Self: Sized + 'static,
+    {
+        let handler = self.clone();
+        let mut callback = callback;
+        self.object_animator()
+            .signal(self.get_id(), move || callback(handler.clone()))
+    }
 
     /// Reads a typed trackable property from the object.
     fn get<T: TrackValueType>(&self, property: TrackProperty<T>) -> T;

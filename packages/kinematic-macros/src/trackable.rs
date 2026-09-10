@@ -73,6 +73,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let mut handle_fields = Vec::with_capacity(count);
     let mut handle_initializers = Vec::with_capacity(count);
     let mut tween_fns = Vec::with_capacity(count);
+    let mut direct_fns = Vec::with_capacity(count * 2);
     let mut tween_trait_fns = Vec::with_capacity(count);
     let mut tween_impl_fns = Vec::with_capacity(count);
     let mut property_constants = Vec::with_capacity(count);
@@ -164,6 +165,8 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         let field_name = field_ident.to_string();
         let property_name = format_ident!("{}_property", field_ident);
         let from_method_name = format_ident!("{}_from", field_ident);
+        let get_method_name = format_ident!("get_{}", field_ident);
+        let set_method_name = format_ident!("set_{}", field_ident);
 
         type_assertions.push(quote! {
             const _: fn() = {
@@ -216,6 +219,16 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 },
                 animator.clone(),
             ),
+        });
+
+        direct_fns.push(quote! {
+            pub fn #get_method_name(&self) -> #field_ty {
+                self.#field_ident.get()
+            }
+
+            pub fn #set_method_name<Value: Into<#field_ty>>(&self, value: Value) {
+                self.#field_ident.set_direct(value.into());
+            }
         });
 
         let (value_generic, value_type, from_generic, from_type, to_type) =
@@ -541,6 +554,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         }
 
         impl<Next: #handler_context_trait> #handler_fields_name<Next> {
+            #(#direct_fns)*
             #(#tween_fns)*
         }
 

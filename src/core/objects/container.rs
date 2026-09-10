@@ -40,6 +40,16 @@ pub struct RootHandler {
     pub(crate) animator: AnimatorHandle,
 }
 
+impl Clone for RootHandler {
+    fn clone(&self) -> Self {
+        Self {
+            world: std::rc::Rc::clone(&self.world),
+            entity: self.entity,
+            animator: self.animator.clone(),
+        }
+    }
+}
+
 impl RootHandler {
     /// Returns the ECS entity represented by the root.
     pub fn get_id(&self) -> hecs::Entity {

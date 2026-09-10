@@ -460,6 +460,21 @@ impl<T: TrackValueType> TrackHandle<T> {
         (self.get)(&world, self.entity)
     }
 
+    /// Writes the current component field value without creating a tween.
+    #[doc(hidden)]
+    pub fn set_direct(&self, value: T) {
+        let old_value = {
+            let mut world = self.world.borrow_mut();
+            (self.replace)(&mut world, self.entity, value)
+        };
+        self.animator.record_signal_override(
+            self.entity,
+            self.type_id,
+            self.info,
+            old_value.into_track_value(),
+        );
+    }
+
     /// Sets the field target and returns the corresponding tween.
     pub fn set(&self, value: T) -> Tween {
         self.set_for(value)
@@ -468,6 +483,7 @@ impl<T: TrackValueType> TrackHandle<T> {
     /// Sets the field target for a generated object-specific tween.
     #[doc(hidden)]
     pub fn set_for<Object>(&self, value: T) -> Tween<Object> {
+        self.animator.assert_timeline_mutation();
         let old_value = {
             let mut world = self.world.borrow_mut();
             (self.replace)(&mut world, self.entity, value.clone())
@@ -484,6 +500,7 @@ impl<T: TrackValueType> TrackHandle<T> {
     /// Updates the field target for a generated object-specific tween.
     #[doc(hidden)]
     pub fn update_for<Object>(&self, update: impl FnOnce(T) -> T) -> Tween<Object> {
+        self.animator.assert_timeline_mutation();
         let (old_value, new_value) = {
             let world = self.world.borrow();
             let old_value = (self.get)(&world, self.entity);
@@ -499,6 +516,7 @@ impl<T: TrackValueType> TrackHandle<T> {
 
     /// Creates a tween from an explicit starting value to a target value.
     pub fn animate_from<Object>(&self, from: T, to: T) -> Tween<Object> {
+        self.animator.assert_timeline_mutation();
         let mut world = self.world.borrow_mut();
         (self.replace)(&mut world, self.entity, to.clone());
         drop(world);
@@ -508,6 +526,7 @@ impl<T: TrackValueType> TrackHandle<T> {
 
     /// Creates a tween from the field's current value to a target value.
     pub fn animate<Object>(&self, to: T) -> Tween<Object> {
+        self.animator.assert_timeline_mutation();
         let from = self.get();
         let mut world = self.world.borrow_mut();
         (self.replace)(&mut world, self.entity, to.clone());
@@ -533,6 +552,7 @@ impl TrackHandle<Quaternion> {
     /// Creates a local axis-angle rotation that preserves direction and winding.
     #[doc(hidden)]
     pub fn rotate_for<Object>(&self, axis: Vector3, angle: f32) -> Tween<Object> {
+        self.animator.assert_timeline_mutation();
         let from = normalized_quaternion(self.get());
         assert!(
             axis.is_finite() && axis.length_squared() > f32::EPSILON,
