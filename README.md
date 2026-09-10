@@ -61,17 +61,14 @@ fn example(s: &mut Scene) {
 }
 
 fn main() {
-    App::new().run(Project {
-        name: "Example!",
-        resolution: (1280, 720),
-        fps: 60,
-        scenes: vec![example],
-    });
+    App::new().project("Example", vec![example]).run();
 }
 ```
 
-Scene factories in `Project::scenes` run in vector order. Each scene starts as
-soon as the previous scene reaches the end of its timeline.
+Scene factories run in vector order. Each scene starts as soon as the previous
+scene reaches the end of its timeline. Resolution and frame rate default to
+1280 x 720 and 60 FPS. Change them in the editor's Configuration panel;
+Kinematic stores them in `.kinematic/project.ron`.
 
 ## Timed events
 

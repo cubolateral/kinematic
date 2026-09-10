@@ -1,6 +1,10 @@
 use glow::HasContext;
 
-use crate::{core::Project, editor::Editor, ui::Ui};
+use crate::{
+    core::{Project, SceneFactory},
+    editor::Editor,
+    ui::Ui,
+};
 
 pub struct App {
     ui: Ui,
@@ -12,6 +16,7 @@ pub struct App {
     _gl_context: sdl3::video::GLContext,
     window: sdl3::video::Window,
     sdl: sdl3::Sdl,
+    project: Option<Project>,
 }
 
 impl App {
@@ -83,10 +88,22 @@ impl App {
             _gl_context: gl_context,
             gl,
             skia_context,
+            project: None,
         }
     }
 
-    pub fn run(&mut self, project: Project) {
+    /// Selects the project name and ordered scene factories to run.
+    pub fn project(mut self, name: &'static str, scenes: Vec<SceneFactory>) -> Self {
+        self.project = Some(Project::new(name, scenes));
+        self
+    }
+
+    /// Runs the configured project editor.
+    pub fn run(&mut self) {
+        let project = self
+            .project
+            .take()
+            .expect("Call App::project before App::run.");
         // Load another function table for the same SDL context; no additional GL context is created.
         let video = self.sdl.video().unwrap();
         let three_gl = unsafe {
@@ -132,6 +149,15 @@ impl App {
 
                     _ => {}
                 }
+            }
+
+            if let Some(settings) = editor.take_pending_project_settings() {
+                editor.apply_project_settings(
+                    settings,
+                    &mut self.imgui_renderer,
+                    &mut self.skia_context,
+                    &self.gl,
+                );
             }
 
             let is_fullscreen = self.ui.is_fullscreen();

@@ -1,5 +1,5 @@
 use crate::{
-    core::{Project, Scene, types::Vector2},
+    core::{Project, ProjectSettings, Scene, types::Vector2},
     editor::{Canvas, Selection, Timeline},
     renderer::{FrameResult, Renderer},
     utilities::FrameTimer,
@@ -27,6 +27,7 @@ pub(crate) struct Editor {
     window_timer: FrameTimer,
     canvas_timer: FrameTimer,
     preview_scale: f32,
+    pending_project_settings: Option<ProjectSettings>,
 }
 
 impl Editor {
@@ -40,12 +41,17 @@ impl Editor {
         println!("Project initialized: {}", project.name);
         project.validate();
 
-        let scenes = create_scenes(&project.scenes, project.resolution);
+        let scenes = create_scenes(&project.scenes, project.settings.resolution);
         let duration = scenes.last().map_or(0.0, |scene| scene.end);
-        let timeline = Timeline::new(duration, project.fps);
+        let timeline = Timeline::new(duration, project.settings.fps);
 
-        let preview = Canvas::new(project.resolution, imgui_renderer, skia_context, gl);
-        let renderer = Renderer::new(project.resolution);
+        let preview = Canvas::new(
+            project.settings.resolution,
+            imgui_renderer,
+            skia_context,
+            gl,
+        );
+        let renderer = Renderer::new(project.settings.resolution);
 
         let mut editor = Self {
             project,
@@ -63,6 +69,7 @@ impl Editor {
             window_timer: FrameTimer::new(),
             canvas_timer: FrameTimer::new(),
             preview_scale: 1.0,
+            pending_project_settings: None,
         };
         editor.update_active_scene(0.0);
         editor
@@ -84,7 +91,7 @@ impl Editor {
 
         self.accumulator += self.window_timer.get_delta_time();
 
-        let delta = 1.0 / self.project.fps.max(1) as f32;
+        let delta = 1.0 / self.project.settings.fps.max(1) as f32;
         let mut update_canvas = false;
 
         while self.accumulator >= delta {
@@ -181,8 +188,8 @@ impl Editor {
 
         let started = self.renderer.start(
             self.project.name,
-            self.project.resolution,
-            self.project.fps,
+            self.project.settings.resolution,
+            self.project.settings.fps,
             self.timeline.get_duration(),
             silent,
         );
@@ -220,8 +227,48 @@ impl Editor {
         self.renderer.shutdown(gl);
     }
 
-    pub fn get_project(&mut self) -> &mut Project {
-        &mut self.project
+    pub(crate) fn get_project_info(&self) -> (&'static str, ProjectSettings) {
+        (self.project.name, self.project.settings)
+    }
+
+    pub(crate) fn request_project_settings(&mut self, settings: ProjectSettings) {
+        settings.save();
+        self.pending_project_settings = Some(settings);
+    }
+
+    pub(crate) fn take_pending_project_settings(&mut self) -> Option<ProjectSettings> {
+        self.pending_project_settings.take()
+    }
+
+    pub(crate) fn apply_project_settings(
+        &mut self,
+        settings: ProjectSettings,
+        imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
+        skia_context: &mut skia_safe::gpu::DirectContext,
+        gl: &std::rc::Rc<glow::Context>,
+    ) {
+        if settings == self.project.settings {
+            return;
+        }
+
+        self.renderer.shutdown(gl);
+        let preview = Canvas::new(settings.resolution, imgui_renderer, skia_context, gl);
+        imgui_renderer
+            .texture_map_mut()
+            .remove(self.preview.get_imgui_texture_id());
+        self.preview = preview;
+        self.renderer = Renderer::new(settings.resolution);
+        self.scenes = create_scenes(&self.project.scenes, settings.resolution);
+        let duration = self.scenes.last().map_or(0.0, |scene| scene.end);
+        self.timeline = Timeline::new(duration, settings.fps);
+        self.project.settings = settings;
+        self.active_scene = 0;
+        self.selection.clear();
+        self.render_error = None;
+        self.pending_export_time = None;
+        self.is_exporting = false;
+        self.accumulator = 0.0;
+        self.update_active_scene(0.0);
     }
 
     pub fn get_scene(&mut self) -> &mut Scene {
@@ -262,7 +309,7 @@ impl Editor {
             .set_event_duration(event_index, duration);
 
         let factory = self.project.scenes[scene_index];
-        let replacement = factory(self.project.resolution);
+        let replacement = factory(self.project.settings.resolution);
         self.scenes[scene_index].scene = replacement;
 
         let duration = recalculate_scene_ranges(&mut self.scenes);
@@ -293,7 +340,7 @@ impl Editor {
     }
 
     pub fn select_at(&mut self, point: Vector2) {
-        let project_size = self.project.resolution;
+        let project_size = self.project.settings.resolution;
         let output = self.get_scene().get_view();
         let source_size = self
             .get_scene()
@@ -328,7 +375,7 @@ impl Editor {
         let result = self.renderer.process_frame(
             gl,
             self.preview.get_framebuffer(),
-            self.project.resolution,
+            self.project.settings.resolution,
         );
 
         match result {

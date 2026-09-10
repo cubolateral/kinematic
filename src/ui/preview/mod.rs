@@ -13,10 +13,9 @@ pub(super) use state::State;
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
     let is_exporting = editor.is_exporting();
     let mut clicked = None;
-    let (name, resolution, fps) = {
-        let project = editor.get_project();
-        (project.name, project.resolution, project.fps)
-    };
+    let (name, settings) = editor.get_project_info();
+    let resolution = settings.resolution;
+    let fps = settings.fps;
     let preview = image::preview(editor);
 
     hide_single_window_tab(ui);

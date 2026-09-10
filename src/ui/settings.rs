@@ -1,9 +1,18 @@
 use std::{fs, path::Path};
 
+use crate::{core::ProjectSettings, editor::Editor};
+
 use super::theme::Appearance;
 
 pub(super) const WINDOW_NAME: &str = "Configuration";
 const SETTINGS_PATH: &str = ".kinematic/settings.ron";
+
+#[derive(Default)]
+pub(super) struct State {
+    initialized: bool,
+    resolution: [i32; 2],
+    fps: i32,
+}
 
 pub(super) fn load() -> Appearance {
     let path = Path::new(SETTINGS_PATH);
@@ -46,10 +55,52 @@ fn write(appearance: &Appearance, path: &Path) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-pub(super) fn draw(appearance: &mut Appearance, ui: &dear_imgui_rs::Ui) -> bool {
+pub(super) fn draw(
+    appearance: &mut Appearance,
+    state: &mut State,
+    editor: &mut Editor,
+    ui: &dear_imgui_rs::Ui,
+) -> bool {
     let mut changed = false;
 
     ui.window(WINDOW_NAME).build(|| {
+        if !state.initialized {
+            let (_, settings) = editor.get_project_info();
+            state.resolution = [settings.resolution.0 as i32, settings.resolution.1 as i32];
+            state.fps = settings.fps as i32;
+            state.initialized = true;
+        }
+
+        ui.separator_with_text("Project");
+        let project_changed = {
+            let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
+            let resolution_changed = ui.input_int2("Resolution", &mut state.resolution).build();
+            let fps_changed = ui.input_int("FPS", &mut state.fps);
+            resolution_changed || fps_changed
+        };
+        let valid_resolution = state
+            .resolution
+            .iter()
+            .all(|value| *value > 0 && value % 2 == 0);
+        let valid_fps = state.fps > 0;
+
+        if !valid_resolution {
+            ui.text_wrapped("Resolution dimensions must be positive, even numbers.");
+        }
+        if !valid_fps {
+            ui.text_wrapped("FPS must be greater than zero.");
+        }
+        if project_changed && valid_resolution && valid_fps {
+            let settings = ProjectSettings {
+                resolution: (state.resolution[0] as u32, state.resolution[1] as u32),
+                fps: state.fps as u32,
+            };
+            if editor.get_project_info().1 != settings {
+                editor.request_project_settings(settings);
+            }
+        }
+
+        ui.spacing();
         ui.separator_with_text("Appearance");
 
         changed |= ui.color_edit4("Background", &mut appearance.background);
@@ -61,7 +112,7 @@ pub(super) fn draw(appearance: &mut Appearance, ui: &dear_imgui_rs::Ui) -> bool 
         ui.separator();
         ui.spacing();
 
-        if ui.button_with_size("Reset", [ui.content_region_avail_width(), 0.0]) {
+        if ui.button_with_size("Reset Appearance", [ui.content_region_avail_width(), 0.0]) {
             let defaults = Appearance::default();
             appearance.background = defaults.background;
             appearance.accent = defaults.accent;
