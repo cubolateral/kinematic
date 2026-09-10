@@ -33,7 +33,7 @@ impl Ui {
         Self {
             needs_initial_layout: true,
             font: theme::initialize(context),
-            appearance: theme::Appearance::default(),
+            appearance: settings::load(),
             export: export::State::default(),
             is_fullscreen: false,
             preview: preview::State::default(),
@@ -76,7 +76,9 @@ impl Ui {
         export::draw(editor, ui, &mut self.export);
         preview::draw(editor, ui, &mut self.preview);
         inspector::draw(editor, ui);
-        settings::draw(&mut self.appearance, ui);
+        if settings::draw(&mut self.appearance, ui) {
+            settings::save(&self.appearance);
+        }
         let fullscreen_button = timeline::draw(editor, ui, &mut self.timeline);
 
         if fullscreen_shortcut || fullscreen_button {

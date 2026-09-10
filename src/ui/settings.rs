@@ -1,12 +1,105 @@
+use std::{fs, path::Path};
+
 use super::theme::Appearance;
 
 pub(super) const WINDOW_NAME: &str = "Configuration";
+const SETTINGS_PATH: &str = ".kinematic/settings.ron";
 
-pub(super) fn draw(appearance: &mut Appearance, ui: &dear_imgui_rs::Ui) {
+pub(super) fn load() -> Appearance {
+    let path = Path::new(SETTINGS_PATH);
+
+    match fs::read_to_string(path) {
+        Ok(contents) => match ron::from_str(&contents) {
+            Ok(appearance) => appearance,
+            Err(error) => {
+                eprintln!("Could not parse {SETTINGS_PATH}: {error}.");
+                let appearance = Appearance::default();
+                save(&appearance);
+                appearance
+            }
+        },
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let appearance = Appearance::default();
+            save(&appearance);
+            appearance
+        }
+        Err(error) => {
+            eprintln!("Could not read {SETTINGS_PATH}: {error}.");
+            Appearance::default()
+        }
+    }
+}
+
+pub(super) fn save(appearance: &Appearance) {
+    if let Err(error) = write(appearance, Path::new(SETTINGS_PATH)) {
+        eprintln!("Could not write {SETTINGS_PATH}: {error}.");
+    }
+}
+
+fn write(appearance: &Appearance, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(directory) = path.parent() {
+        fs::create_dir_all(directory)?;
+    }
+
+    let contents = ron::ser::to_string_pretty(appearance, ron::ser::PrettyConfig::default())?;
+    fs::write(path, format!("{contents}\n"))?;
+    Ok(())
+}
+
+pub(super) fn draw(appearance: &mut Appearance, ui: &dear_imgui_rs::Ui) -> bool {
+    let mut changed = false;
+
     ui.window(WINDOW_NAME).build(|| {
-        ui.color_edit4("Background", &mut appearance.background);
-        ui.color_edit4("Accent", &mut appearance.accent);
-        ui.slider_f32("Contrast", &mut appearance.contrast, 0.25, 1.0);
-        ui.slider_f32("UI Scale", &mut appearance.scale, 0.75, 1.25);
+        ui.separator_with_text("Appearance");
+
+        changed |= ui.color_edit4("Background", &mut appearance.background);
+        changed |= ui.color_edit4("Accent", &mut appearance.accent);
+        changed |= ui.slider_f32("Contrast", &mut appearance.contrast, 0.25, 1.0);
+        changed |= ui.slider_f32("UI Scale", &mut appearance.scale, 0.75, 1.25);
+
+        ui.spacing();
+        ui.separator();
+        ui.spacing();
+
+        if ui.button_with_size("Reset", [ui.content_region_avail_width(), 0.0]) {
+            let defaults = Appearance::default();
+            appearance.background = defaults.background;
+            appearance.accent = defaults.accent;
+            appearance.contrast = defaults.contrast;
+            appearance.scale = defaults.scale;
+
+            changed = true;
+        }
     });
+
+    changed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_are_written_as_readable_ron() {
+        let directory =
+            std::env::temp_dir().join(format!("kinematic-settings-test-{}", std::process::id()));
+        let path = directory.join("settings.ron");
+        let appearance = Appearance {
+            background: [0.1, 0.2, 0.3, 1.0],
+            accent: [0.4, 0.5, 0.6, 1.0],
+            contrast: 0.75,
+            scale: 1.25,
+        };
+
+        write(&appearance, &path).unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        let loaded: Appearance = ron::from_str(&contents).unwrap();
+        assert_eq!(loaded.background, appearance.background);
+        assert_eq!(loaded.accent, appearance.accent);
+        assert_eq!(loaded.contrast, appearance.contrast);
+        assert_eq!(loaded.scale, appearance.scale);
+
+        fs::remove_dir_all(directory).unwrap();
+    }
 }

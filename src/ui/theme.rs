@@ -1,5 +1,8 @@
 use dear_imgui_rs::{ColorStackToken, Context, FontId, StyleColor, Ui};
+use serde::{Deserialize, Serialize};
 
+#[derive(Deserialize, Serialize)]
+#[serde(default)]
 pub(super) struct Appearance {
     pub background: [f32; 4],
     pub accent: [f32; 4],
