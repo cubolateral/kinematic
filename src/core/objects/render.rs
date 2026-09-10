@@ -1,55 +1,12 @@
 use crate::core::{
-    components::{Draw2D, Node, Transform2D},
+    components::{Camera2D, Draw2D, Node, Transform2D},
     objects::{
-        CameraTransform2D, CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource,
-        children, draw_projection_2d, local_transform,
+        CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, children,
+        draw_projection_2d, local_transform,
     },
     types::Vector2,
 };
 use std::collections::HashMap;
-
-pub(crate) fn active_camera_matrix(
-    world: &hecs::World,
-    root: hecs::Entity,
-) -> Option<skia_safe::Matrix> {
-    let mut camera = None;
-    if world.get::<&CanvasSettings>(root).is_ok() {
-        for child in children(world, root) {
-            find_active_camera(world, child, GlobalTransform::default(), &mut camera);
-        }
-    } else {
-        find_active_camera(world, root, GlobalTransform::default(), &mut camera);
-    }
-    camera
-}
-
-fn find_active_camera(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    parent: GlobalTransform,
-    camera: &mut Option<skia_safe::Matrix>,
-) {
-    if world.get::<&CanvasSettings>(entity).is_ok() {
-        return;
-    }
-    let node = world
-        .get::<&Node>(entity)
-        .expect("Camera traversal object must contain a Node component.");
-    if !node.is_activated {
-        return;
-    }
-
-    let global = parent.append(local_transform(world, entity));
-    let matrix = transform_matrix(global);
-
-    if world.get::<&CameraTransform2D>(entity).is_ok() && matrix.invert().is_some() {
-        *camera = Some(matrix);
-    }
-
-    for child in children(world, entity) {
-        find_active_camera(world, child, global, camera);
-    }
-}
 
 pub(crate) fn draw_entity(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
     draw_entity_with_parent(world, entity, GlobalTransform::default(), canvas, None);
@@ -416,11 +373,7 @@ fn draw_canvas2d_inner(
         settings.resolution.0 as f32 * 0.5,
         settings.resolution.1 as f32 * 0.5,
     ));
-    if let Some(camera) = settings
-        .camera
-        .and_then(|camera| camera_view_matrix(world, camera))
-        .or_else(|| active_camera_matrix(world, entity))
-    {
+    if let Some(camera) = camera_matrix2d(world, entity) {
         if let Some(view) = camera.invert() {
             canvas.concat(&view);
         }
@@ -476,16 +429,14 @@ pub(crate) fn pick_canvas2d(
 }
 
 fn canvas_camera_matrix(world: &hecs::World, scope: hecs::Entity) -> Option<skia_safe::Matrix> {
-    let settings = world.get::<&CanvasSettings>(scope).ok()?;
-    settings
-        .camera
-        .and_then(|camera| camera_view_matrix(world, camera))
-        .or_else(|| active_camera_matrix(world, scope))
+    world.get::<&CanvasSettings>(scope).ok()?;
+    camera_matrix2d(world, scope)
 }
 
-fn camera_view_matrix(world: &hecs::World, camera: hecs::Entity) -> Option<skia_safe::Matrix> {
-    world.get::<&CameraTransform2D>(camera).ok()?;
-    Some(transform_matrix(crate::core::objects::global_transform(
-        world, camera,
-    )))
+pub(crate) fn camera_matrix2d(
+    world: &hecs::World,
+    canvas: hecs::Entity,
+) -> Option<skia_safe::Matrix> {
+    let camera = world.get::<&Camera2D>(canvas).ok()?;
+    Some(transform_matrix(camera.transform()))
 }

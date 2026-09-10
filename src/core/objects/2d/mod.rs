@@ -1,4 +1,3 @@
-mod camera_2d;
 mod canvas_2d;
 mod circle;
 mod ellipse;
@@ -11,7 +10,6 @@ mod rect;
 mod regular_polygon_2d;
 mod text;
 
-pub use camera_2d::*;
 pub use canvas_2d::*;
 pub use circle::*;
 pub use ellipse::*;

@@ -56,12 +56,10 @@ fn graphics_canvas_projection_alpha_orientation() {
     overlay.add(&top);
     overlay.add(&bottom);
     let world = scene.get_world_3d();
-    let camera = camera_3d()
-        .position(vec3(0.0, 0.0, 2.0))
-        .fov(std::f32::consts::FRAC_PI_2)
-        .build(&mut scene);
-    world.add(&camera);
-    world.set_camera(&camera);
+    world
+        .camera_position(vec3(0.0, 0.0, 2.0))
+        .camera_fov(std::f32::consts::FRAC_PI_2)
+        .immediate();
     let screen = projection_3d()
         .source(&overlay)
         .size(vec2(4.0, 4.0))

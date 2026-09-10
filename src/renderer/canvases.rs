@@ -4,10 +4,9 @@ use super::{
 };
 use crate::core::{
     Scene, SceneIdentity,
-    components::{Draw3D, GeometryKey, RenderContext3D},
+    components::{Camera3D, Draw3D, GeometryKey, RenderContext3D},
     objects::{
-        CanvasDimension, CanvasSettings, CanvasTexture, Perspective, ProjectionSource,
-        draw_canvas2d_with_images, global_matrix3d, global_rotation3d,
+        CanvasDimension, CanvasSettings, CanvasTexture, ProjectionSource, draw_canvas2d_with_images,
     },
 };
 use glow::HasContext;
@@ -111,8 +110,7 @@ impl Canvases {
                 }
                 CanvasDimension::Three => {
                     reset_gl(&self.gl, settings.resolution);
-                    let camera_entity = settings.camera.ok_or("Canvas3D requires a camera.")?;
-                    let camera = camera(&world, camera_entity, settings.resolution)?;
+                    let camera = camera(&world, *entity, settings.resolution)?;
                     let target = &self.targets[&key];
                     unsafe {
                         self.gl
@@ -194,15 +192,12 @@ fn camera(
     entity: hecs::Entity,
     size: (u32, u32),
 ) -> Result<three_d::Camera, String> {
-    let lens = world
-        .get::<&Perspective>(entity)
+    let camera_component = world
+        .get::<&Camera3D>(entity)
         .map_err(|_| "Camera3D lens is missing.")?;
-    lens.validate()?;
-    let matrix = global_matrix3d(world, entity);
-    if !matrix.is_finite() {
-        return Err("Camera transform must be finite.".into());
-    }
-    let rotation = global_rotation3d(world, entity);
+    camera_component.validate()?;
+    let matrix = camera_component.matrix();
+    let rotation = crate::core::normalized_quaternion(camera_component.camera_rotation);
     let position = matrix.transform_point3(glam::Vec3::ZERO);
     let target = position + rotation * -glam::Vec3::Z;
     let up = rotation * glam::Vec3::Y;
@@ -212,9 +207,9 @@ fn camera(
         convert(position),
         convert(target),
         convert(up),
-        three_d::radians(lens.fov),
-        lens.near,
-        lens.far,
+        three_d::radians(camera_component.camera_fov),
+        camera_component.camera_near,
+        camera_component.camera_far,
     );
     camera.tone_mapping = three_d::ToneMapping::None;
     Ok(camera)
@@ -258,8 +253,8 @@ mod tests {
 
     #[test]
     fn perspective_aspect_follows_canvas_resolution() {
-        let mut scene = Scene::new();
-        let handler = camera_3d().build(&mut scene);
+        let scene = Scene::new();
+        let handler = scene.get_world_3d();
         for resolution in [(1920, 1080), (512, 1024)] {
             let view = camera(&scene.get_world(), handler.get_id(), resolution).unwrap();
             let projection = view.projection();

@@ -79,7 +79,7 @@ fn dimensional_containers_reject_mixing_and_foreign_scenes() {
 }
 
 #[test]
-fn canvases_require_explicit_resolution_and_camera_scope() {
+fn canvases_require_explicit_resolution_and_own_their_cameras() {
     let mut scene = Scene::new();
     let missing = canvas_2d().build(&mut scene);
     let invalid = canvas_2d().resolution((0, 20)).build(&mut scene);
@@ -88,32 +88,20 @@ fn canvases_require_explicit_resolution_and_camera_scope() {
     assert!(missing.validate().is_err());
     assert!(invalid.validate().is_err());
     assert!(two.validate().is_ok());
-    assert!(three.validate().unwrap_err().contains("explicitly"));
-    let camera = camera_3d().position(vec3(0.0, 0.0, 5.0)).build(&mut scene);
-    three.set_camera(&camera);
-    assert!(three.validate().unwrap_err().contains("subtree"));
-    three.add(&camera);
+    assert!(three.validate().is_ok());
     scene.add_canvas_3d(&three);
     assert!(three.validate().is_ok());
-    let second = camera_3d().build(&mut scene);
-    three.add(&second);
+    let world = scene.get_world();
+    let camera = world.get::<&Camera3D>(three.get_id()).unwrap();
+    assert_eq!(camera.camera_position, vec3(0.0, 0.0, 3.0));
+    assert!(world.get::<&Camera2D>(two.get_id()).is_ok());
     assert_eq!(
-        scene
-            .get_world()
-            .get::<&CanvasSettings>(three.get_id())
-            .unwrap()
-            .camera,
-        Some(camera.get_id())
-    );
-    assert_eq!(
-        scene
-            .get_world()
+        world
             .get::<&CanvasSettings>(two.get_id())
             .unwrap()
             .resolution,
         (1024, 512)
     );
-    let world = scene.get_world();
     let settings = world.get::<&CanvasSettings>(three.get_id()).unwrap();
     assert_eq!(settings.aspect_ratio().unwrap(), 1920.0 / 1080.0);
 }
@@ -180,25 +168,25 @@ fn projection_2d_builder_sizes_the_rect_from_canvas_resolution() {
 #[test]
 fn camera_lens_rejects_invalid_ranges() {
     for lens in [
-        Perspective {
-            fov: 0.0,
+        Camera3D {
+            camera_fov: 0.0,
             ..Default::default()
         },
-        Perspective {
-            fov: std::f32::consts::PI,
+        Camera3D {
+            camera_fov: std::f32::consts::PI,
             ..Default::default()
         },
-        Perspective {
-            near: 0.0,
+        Camera3D {
+            camera_near: 0.0,
             ..Default::default()
         },
-        Perspective {
-            near: 10.0,
-            far: 1.0,
+        Camera3D {
+            camera_near: 10.0,
+            camera_far: 1.0,
             ..Default::default()
         },
-        Perspective {
-            far: f32::NAN,
+        Camera3D {
+            camera_far: f32::NAN,
             ..Default::default()
         },
     ] {
@@ -266,9 +254,6 @@ fn projections_order_dependencies_and_reject_cycles_and_inactive_sources() {
     let mut scene = Scene::new_with_resolution((64, 64));
     let world = scene.get_world_3d();
     let source = canvas_2d().resolution((32, 16)).build(&mut scene);
-    let camera = camera_3d().build(&mut scene);
-    world.add(&camera);
-    world.set_camera(&camera);
     let projection = projection_3d().source(&source).build(&mut scene);
     world.add(&projection);
     scene.add_canvas_2d(&source);
@@ -293,9 +278,6 @@ fn projection_2d_orders_its_canvas_3d_dependency() {
     let mut scene = Scene::new_with_resolution((64, 64));
     let world_2d = scene.get_world_2d();
     let world_3d = scene.get_world_3d();
-    let camera = camera_3d().build(&mut scene);
-    world_3d.add(&camera);
-    world_3d.set_camera(&camera);
     let projection = projection_2d().source(&world_3d).build(&mut scene);
     world_2d.add(&projection);
     scene.update(0.0);
@@ -322,13 +304,7 @@ fn projections_accept_sources_with_the_same_dimension() {
 
     let mut scene_3d = Scene::new_with_resolution((64, 64));
     let output_3d = scene_3d.get_world_3d();
-    let output_camera = camera_3d().build(&mut scene_3d);
-    output_3d.add(&output_camera);
-    output_3d.set_camera(&output_camera);
     let source_3d = canvas_3d().resolution((32, 32)).build(&mut scene_3d);
-    let source_camera = camera_3d().build(&mut scene_3d);
-    source_3d.add(&source_camera);
-    source_3d.set_camera(&source_camera);
     scene_3d.add_canvas_3d(&source_3d);
     let projection_3d = projection_3d().source(&source_3d).build(&mut scene_3d);
     output_3d.add(&projection_3d);
@@ -341,23 +317,69 @@ fn projections_accept_sources_with_the_same_dimension() {
 }
 
 #[test]
-fn canvas2d_camera_is_scoped_and_identity_is_available() {
+fn canvas2d_camera_is_scoped_to_its_canvas() {
     let mut scene = Scene::new_with_resolution((32, 32));
     let source = scene.get_world_2d();
     let shape = rect()
         .size(vec2(4.0, 4.0))
+        .position(vec2(10.0, 0.0))
         .fill(Color::RED)
         .build(&mut scene);
     source.add(&shape);
-    let unrelated = camera_2d().position(vec2(200.0, 0.0)).build(&mut scene);
-    let other = canvas_2d().resolution((32, 32)).build(&mut scene);
-    other.add(&unrelated);
+    source.camera_position(vec2(10.0, 0.0)).immediate();
+    let other = canvas_2d()
+        .resolution((32, 32))
+        .camera_position(vec2(200.0, 0.0))
+        .build(&mut scene);
     scene.add_canvas_2d(&other);
     let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
     draw_canvas2d(&scene.get_world(), source.get_id(), surface.canvas());
     assert_eq!(surface.peek_pixels().unwrap().get_color((16, 16)).r(), 255);
     assert_eq!(scene.pick(Vector2::ZERO), Some(shape.get_id()));
     assert!(scene.pick(vec2(10.0, 10.0)).is_none());
+}
+
+#[test]
+fn canvas_camera_tracks_use_the_camera_prefix() {
+    let mut scene = Scene::new();
+    let two = canvas_2d()
+        .resolution((32, 32))
+        .camera_position(vec2(1.0, 2.0))
+        .camera_zoom(2.0)
+        .camera_rotation(0.5)
+        .build(&mut scene);
+    let three = canvas_3d()
+        .resolution((32, 32))
+        .camera_position(vec3(1.0, 2.0, 4.0))
+        .camera_fov(1.0)
+        .camera_near(0.2)
+        .camera_far(200.0)
+        .build(&mut scene);
+    let world = scene.get_world();
+
+    let camera_2d = world.get::<&Camera2D>(two.get_id()).unwrap();
+    assert_eq!(camera_2d.camera_position, vec2(1.0, 2.0));
+    assert_eq!(camera_2d.camera_zoom, 2.0);
+    assert_eq!(camera_2d.camera_rotation, 0.5);
+
+    let camera_3d = world.get::<&Camera3D>(three.get_id()).unwrap();
+    assert_eq!(camera_3d.camera_position, vec3(1.0, 2.0, 4.0));
+    assert_eq!(camera_3d.camera_fov, 1.0);
+    assert_eq!(camera_3d.camera_near, 0.2);
+    assert_eq!(camera_3d.camera_far, 200.0);
+
+    for entity in [two.get_id(), three.get_id()] {
+        let inspection = world.get::<&Inspection>(entity).unwrap();
+        let camera = (inspection.get)(&world, entity)
+            .into_iter()
+            .find(|component| component.name == "Camera2D" || component.name == "Camera3D")
+            .unwrap();
+        assert!(
+            (camera.get)()
+                .iter()
+                .all(|track| track.name.starts_with("camera_"))
+        );
+    }
 }
 
 #[test]

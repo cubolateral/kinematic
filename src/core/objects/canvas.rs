@@ -1,10 +1,7 @@
 use crate::core::{
     SceneWorld,
-    components::Node,
-    objects::{
-        CameraTransform2D, Canvas2DHandler, Canvas3DHandler, ObjectHandler, Perspective,
-        contains_entity,
-    },
+    components::{Camera2D, Camera3D},
+    objects::{Canvas2DHandler, Canvas3DHandler, ObjectHandler},
     types::Color,
 };
 use kinematic_macros::Trackable;
@@ -29,7 +26,6 @@ pub struct CanvasSettings {
     pub clear: Color,
 
     pub(crate) resolution: (u32, u32),
-    pub(crate) camera: Option<hecs::Entity>,
     pub(crate) dimension: CanvasDimension,
 }
 
@@ -38,7 +34,6 @@ impl CanvasSettings {
         Self {
             clear: Color::TRANSPARENT,
             resolution: (0, 0),
-            camera: None,
             dimension,
         }
     }
@@ -111,48 +106,15 @@ pub(crate) fn validate_canvas(world: &hecs::World, entity: hecs::Entity) -> Resu
         .get::<&CanvasSettings>(entity)
         .map_err(|_| "Canvas is unavailable.")?;
     settings.validate()?;
-    let Some(camera) = settings.camera else {
-        return if settings.dimension == CanvasDimension::Two {
-            Ok(())
-        } else {
-            Err("Canvas3D requires an explicitly assigned Camera3D.".into())
-        };
-    };
-    if !contains_entity(world, entity, camera) {
-        return Err("Assigned camera must belong to its canvas subtree.".into());
-    }
-    let mut ancestor = Some(camera);
-    while let Some(current) = ancestor {
-        if !world
-            .get::<&Node>(current)
-            .is_ok_and(|node| node.is_activated)
-        {
-            return Err("Assigned camera is inactive.".into());
-        }
-        if current == entity {
-            break;
-        }
-        ancestor = world.get::<&Node>(current).ok().and_then(|n| n.parent);
-    }
     match settings.dimension {
-        CanvasDimension::Two => {
-            let camera = world
-                .get::<&CameraTransform2D>(camera)
-                .map_err(|_| "Canvas2D requires a Camera.")?;
-            if !camera.position.is_finite()
-                || !camera.rotation.is_finite()
-                || !camera.zoom.is_finite()
-                || camera.zoom <= 0.0
-            {
-                return Err("Canvas2D camera requires finite values and positive zoom.".into());
-            }
-        }
-        CanvasDimension::Three => {
-            world
-                .get::<&Perspective>(camera)
-                .map_err(|_| "Canvas3D requires a Camera3D.")?
-                .validate()?;
-        }
+        CanvasDimension::Two => world
+            .get::<&Camera2D>(entity)
+            .map_err(|_| "Canvas2D camera is missing.")?
+            .validate()?,
+        CanvasDimension::Three => world
+            .get::<&Camera3D>(entity)
+            .map_err(|_| "Canvas3D camera is missing.")?
+            .validate()?,
     }
     Ok(())
 }

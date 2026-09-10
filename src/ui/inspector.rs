@@ -1,10 +1,10 @@
 use crate::{
     core::{
         TrackValue,
-        components::{Inspection, Name, Node, Transform3D},
+        components::{Inspection, Name, Node},
         normalized_quaternion,
         objects::{
-            CameraTransform3D, CanvasSettings, ProjectionSource, SphereShape,
+            CanvasSettings, ProjectionSource, SphereShape,
             appearance::{AppearanceEdit, refresh_appearance},
         },
     },
@@ -52,11 +52,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
             ui.text_disabled("Inactive objects cannot be edited.");
             return;
         }
-        if world.get::<&Transform3D>(entity).is_ok()
-            || world.get::<&CameraTransform3D>(entity).is_ok()
-        {
-            ui.text_wrapped("3D selection uses the Scene Tree and Timeline. Preview picking and outlines are unavailable.");
-        }
+
         let _disabled = ui.begin_disabled_with_cond(editing_disabled);
         if let Ok(settings) = world.get::<&CanvasSettings>(entity) {
             property(
@@ -64,18 +60,31 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
                 "Resolution",
                 &format!("{} x {}.", settings.resolution.0, settings.resolution.1),
             );
-            property(ui, "Camera", &settings.camera.map_or_else(|| "Unassigned.".into(), |id| format!("{}.", id.to_bits())));
         }
         if let Ok(mut sphere) = world.get::<&mut SphereShape>(entity) {
             let mut segments = sphere.segments;
-            if vertical_drag(ui, "Segments", &mut segments, 1.0, "%u", dear_imgui_rs::sys::ImGuiDataType_U32) {
+            if vertical_drag(
+                ui,
+                "Segments",
+                &mut segments,
+                1.0,
+                "%u",
+                dear_imgui_rs::sys::ImGuiDataType_U32,
+            ) {
                 sphere.segments = segments.clamp(3, 256);
             }
         }
         if let Ok(source) = world.get::<&ProjectionSource>(entity) {
-            property(ui, "Source canvas", &source.0.map_or_else(|| "Unassigned.".into(), |texture| format!("{}.", texture.entity.to_bits())));
+            property(
+                ui,
+                "Source canvas",
+                &source.0.map_or_else(
+                    || "Unassigned.".into(),
+                    |texture| format!("{}.", texture.entity.to_bits()),
+                ),
+            );
         }
-        ui.text_wrapped("Text edits update matching timeline values. Other edits affect current values; seeking reevaluates animated tracks.");
+
         let mut edits = Vec::new();
         for trackable in (inspection.get)(&world, entity) {
             ui.separator_with_text(trackable.name);
@@ -86,7 +95,13 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
                 let before = value.clone();
                 if edit_value(ui, track.name, &mut value) {
                     (track.set)(&world, entity, value.clone());
-                    edits.push(AppearanceEdit { entity, component: (trackable.type_id)(), track, before, value });
+                    edits.push(AppearanceEdit {
+                        entity,
+                        component: (trackable.type_id)(),
+                        track,
+                        before,
+                        value,
+                    });
                 }
             }
 

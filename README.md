@@ -125,17 +125,15 @@ Both dimensions use the same scene tree, typed tracks, timeline, seeking, and
 MP4 export workflow.
 
 Every scene includes `World 2D` and `World 3D` canvases at the project
-resolution. The 2D world is selected by default. A 3D scene needs a camera,
-objects, and a change to the root's `view_2d` track:
+resolution. Each canvas owns exactly one camera component, created with the
+canvas and unavailable for removal. The 2D world is selected by default. A 3D
+scene only needs objects and a change to the root's `view_2d` track; its camera
+starts at `(0, 0, 3)`:
 
 ```rust
 #[scene]
 fn scene_3d(s: &mut Scene) {
-     s.get_root().view_2d(false).immediate();
-
-    let camera = camera_3d().position(vec3(0.0, 0.0, 3.0)).build(s);
-    s.get_world_3d().add(&camera);
-    s.get_world_3d().set_camera(&camera);
+    s.get_root().view_2d(false).immediate();
 
     let group = group_3d().build(s);
     s.get_world_3d().add(&group);
@@ -228,7 +226,10 @@ canvas with its own resolution and register it with `Scene::add_canvas_2d` or
 displays it as an unlit plane in the 3D world.
 
 ```rust
-let canvas = canvas_3d().resolution((640, 360)).build(s);
+let canvas = canvas_3d()
+    .resolution((640, 360))
+    .camera_position(vec3(0.0, 1.0, 4.0))
+    .build(s);
 s.add_canvas_3d(&canvas);
 
 let projection = projection_2d()
@@ -322,24 +323,38 @@ not coupled to that concrete type. Container transforms are inherited through
 the tree, and container opacity is composited once over its complete subtree at
 the destination canvas resolution.
 
-## Camera2D
+## Canvas cameras
 
-Add a camera to any container to control the rendered view:
+Camera tracks are exposed directly by the canvas handler. Their names use the
+`camera_` prefix so they do not conflict with object transform tracks:
 
 ```rust
-let camera = camera_2d()
-    .position(vec2(200.0, 0.0))
-    .zoom(2.0)
-    .rotation(0.25)
-    .build(&mut scene);
-
-scene.get_world_2d().add(&camera);
+let world = scene.get_world_2d();
+world
+    .camera_position(vec2(200.0, 0.0))
+    .camera_zoom(2.0)
+    .camera_rotation(0.25)
+    .duration(1.0)
+    .play();
 ```
 
-Camera properties belong to `CameraTransform`, separately from the `Transform`
-used by drawable objects. A camera can inherit the transform of an ancestor
-container. If multiple cameras are active, the last camera in tree order
-controls the view. Without an active camera, rendering keeps the identity view.
+`Camera2D` provides `camera_position`, `camera_zoom`, and `camera_rotation`.
+`Camera3D` provides `camera_position`, `camera_rotation`, `camera_fov`,
+`camera_near`, and `camera_far`. The same methods are available on
+`canvas_2d()` and `canvas_3d()` builders for initial values:
+
+```rust
+let inset = canvas_2d()
+    .resolution((640, 360))
+    .camera_position(vec2(100.0, 0.0))
+    .camera_zoom(1.5)
+    .build(&mut scene);
+scene.add_canvas_2d(&inset);
+```
+
+Camera components belong to their canvas rather than the scene tree. They do
+not have builders or handlers of their own, cannot be added or removed, and one
+canvas camera never affects another canvas.
 
 `ObjectHandler::remove()` ends the object's lifetime and the lifetimes of all
 its descendants. The stored tree remains intact so seeking to an earlier time

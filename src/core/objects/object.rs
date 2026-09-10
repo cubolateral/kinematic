@@ -2,7 +2,7 @@ use crate::core::{
     AnimatorHandle, SceneWorld, TrackInfo, TrackProperty, TrackValue, TrackValueType, Trackable,
     Tween,
     components::{Animation, Draw2D, Draw3D, Inspection, Morph, Name, Node, Transform2D},
-    objects::{CameraTransform2D, deactivate_subtree, is_attached},
+    objects::{deactivate_subtree, is_attached},
     types::Vector2,
 };
 
@@ -245,20 +245,6 @@ pub(crate) fn local_transform(world: &hecs::World, entity: hecs::Entity) -> Glob
         };
     }
 
-    if let Ok(transform) = world.get::<&CameraTransform2D>(entity) {
-        let inverse_zoom = if transform.zoom.abs() <= f32::EPSILON {
-            0.0
-        } else {
-            transform.zoom.recip()
-        };
-
-        return GlobalTransform {
-            position: transform.position,
-            rotation: transform.rotation,
-            scale: Vector2::splat(inverse_zoom),
-        };
-    }
-
     GlobalTransform::default()
 }
 
@@ -384,17 +370,9 @@ pub trait Object3DHandler: ObjectHandler {
 /// Returns an object's complete three-dimensional scene transform.
 #[doc(hidden)]
 pub fn global_matrix3d(world: &hecs::World, entity: hecs::Entity) -> glam::Mat4 {
-    let local = if let Ok(transform) = world.get::<&crate::core::objects::CameraTransform3D>(entity)
-    {
-        glam::Mat4::from_rotation_translation(
-            crate::core::normalized_quaternion(transform.rotation),
-            transform.position,
-        )
-    } else {
-        world
-            .get::<&crate::core::components::Transform3D>(entity)
-            .map_or(glam::Mat4::IDENTITY, |transform| transform.matrix())
-    };
+    let local = world
+        .get::<&crate::core::components::Transform3D>(entity)
+        .map_or(glam::Mat4::IDENTITY, |transform| transform.matrix());
     match world.get::<&Node>(entity).ok().and_then(|node| node.parent) {
         Some(parent) => global_matrix3d(world, parent) * local,
         None => local,
@@ -402,16 +380,11 @@ pub fn global_matrix3d(world: &hecs::World, entity: hecs::Entity) -> glam::Mat4 
 }
 
 pub(crate) fn global_rotation3d(world: &hecs::World, entity: hecs::Entity) -> glam::Quat {
-    let local = if let Ok(transform) = world.get::<&crate::core::objects::CameraTransform3D>(entity)
-    {
-        crate::core::normalized_quaternion(transform.rotation)
-    } else {
-        world
-            .get::<&crate::core::components::Transform3D>(entity)
-            .map_or(glam::Quat::IDENTITY, |transform| {
-                crate::core::normalized_quaternion(transform.rotation)
-            })
-    };
+    let local = world
+        .get::<&crate::core::components::Transform3D>(entity)
+        .map_or(glam::Quat::IDENTITY, |transform| {
+            crate::core::normalized_quaternion(transform.rotation)
+        });
     match world.get::<&Node>(entity).ok().and_then(|node| node.parent) {
         Some(parent) => (global_rotation3d(world, parent) * local).normalize(),
         None => local,

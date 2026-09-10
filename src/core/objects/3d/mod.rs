@@ -1,4 +1,3 @@
-mod camera_3d;
 mod canvas_3d;
 mod group_3d;
 mod image_3d;
@@ -10,7 +9,6 @@ mod pyramid;
 mod regular_polygon_3d;
 mod sphere;
 
-pub use camera_3d::*;
 pub use canvas_3d::*;
 pub use group_3d::*;
 pub use image_3d::*;

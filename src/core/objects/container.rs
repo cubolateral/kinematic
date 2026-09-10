@@ -130,7 +130,7 @@ pub(crate) fn attach_child(
 
     use crate::core::{
         components::Transform3D,
-        objects::{CameraTransform3D, CanvasDimension, CanvasSettings},
+        objects::{CanvasDimension, CanvasSettings},
     };
     let parent_is_root = world.get::<&Node>(parent).unwrap().is_root;
     if !parent_is_root {
@@ -143,7 +143,6 @@ pub(crate) fn attach_child(
                 .get::<&CanvasSettings>(parent)
                 .is_ok_and(|s| s.dimension == CanvasDimension::Three);
         let child_3d = world.get::<&Transform3D>(child).is_ok();
-        let child_3d = child_3d || world.get::<&CameraTransform3D>(child).is_ok();
         assert_eq!(
             parent_3d, child_3d,
             "Cannot mix 2D and 3D objects in a spatial container."

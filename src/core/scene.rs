@@ -3,7 +3,7 @@ use crate::core::{
     components::{Animation, Draw2D, Inspection, Name, Node, View},
     objects::{
         Canvas2D, Canvas2DHandler, Canvas3D, Canvas3DHandler, Object, ObjectHandler, RootHandler,
-        active_camera_matrix, canvas_2d, canvas_3d, children, draw_entity,
+        camera_matrix2d, canvas_2d, canvas_3d, children, draw_entity,
     },
     types::Vector2,
 };
@@ -140,7 +140,7 @@ impl Scene {
         let save_count = canvas.save();
 
         if let Some(view) =
-            active_camera_matrix(&world, self.world_2d).and_then(|camera| camera.invert())
+            camera_matrix2d(&world, self.world_2d).and_then(|camera| camera.invert())
         {
             canvas.concat(&view);
         }
@@ -963,11 +963,10 @@ mod tests {
 
         impl SceneBuilder for ImmediateRestoreScene {
             fn build(&mut self, scene: &mut Scene) {
-                let camera = camera_2d().build(scene);
-                scene.get_world_2d().add(&camera);
+                let camera = scene.get_world_2d();
 
                 camera.save();
-                camera.rotation(1.0).play();
+                camera.camera_rotation(1.0).play();
                 camera.restore().immediate();
             }
         }
@@ -978,18 +977,18 @@ mod tests {
         scene.update(0.5);
         {
             let world = scene.get_world();
-            let mut query = world.query::<&CameraTransform2D>();
+            let mut query = world.query::<&Camera2D>();
             let camera = query.iter().next().unwrap();
 
-            assert_eq!(camera.rotation, 0.5);
+            assert_eq!(camera.camera_rotation, 0.5);
         }
 
         scene.update(1.0);
         let world = scene.get_world();
-        let mut query = world.query::<&CameraTransform2D>();
+        let mut query = world.query::<&Camera2D>();
         let camera = query.iter().next().unwrap();
 
-        assert_eq!(camera.rotation, 0.0);
+        assert_eq!(camera.camera_rotation, 0.0);
     }
 
     #[test]
