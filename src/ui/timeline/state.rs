@@ -8,6 +8,16 @@ pub(super) enum Interaction {
     Tracks,
     Zoom,
     Pan,
+    Event,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct EventDrag {
+    pub scene: usize,
+    pub event: usize,
+    pub file_event: usize,
+    pub duration: f32,
+    grab_offset: f32,
 }
 
 #[derive(Default)]
@@ -19,6 +29,7 @@ pub(in crate::ui) struct State {
     pressed_entity: Option<Option<hecs::Entity>>,
     pressed_toggle: bool,
     expanded_objects: std::collections::HashSet<hecs::Entity>,
+    event_drag: Option<EventDrag>,
 }
 
 impl State {
@@ -128,6 +139,39 @@ impl State {
         self.expanded_objects.contains(&entity)
     }
 
+    pub(super) fn begin_event_drag(
+        &mut self,
+        scene: usize,
+        event: usize,
+        file_event: usize,
+        duration: f32,
+        mouse_duration: f32,
+    ) {
+        self.event_drag = Some(EventDrag {
+            scene,
+            event,
+            file_event,
+            duration,
+            grab_offset: mouse_duration - duration,
+        });
+        self.interaction = Interaction::Event;
+    }
+
+    pub(super) fn drag_event(&mut self, mouse_duration: f32) {
+        if let Some(drag) = &mut self.event_drag {
+            drag.duration = (mouse_duration - drag.grab_offset).max(0.0);
+        }
+    }
+
+    pub(super) fn event_drag(&self) -> Option<EventDrag> {
+        self.event_drag
+    }
+
+    pub(super) fn finish_event_drag(&mut self) -> Option<EventDrag> {
+        self.interaction = Interaction::None;
+        self.event_drag.take()
+    }
+
     fn set_view(&mut self, start: f32, end: f32) {
         let span = (end - start).clamp(0.0, self.duration);
         self.view_start = start.clamp(0.0, self.duration - span);
@@ -162,5 +206,22 @@ mod tests {
         let (panned_start, panned_end) = state.view_range();
         assert!(panned_start >= 0.0);
         assert!(panned_end <= 10.0);
+    }
+
+    #[test]
+    fn event_drag_changes_only_duration_and_clamps_it_to_zero() {
+        let mut state = State::default();
+        state.begin_event_drag(2, 3, 4, 5.0, 7.0);
+
+        state.drag_event(8.0);
+        assert_eq!(state.event_drag().unwrap().duration, 6.0);
+
+        state.drag_event(-2.0);
+
+        let drag = state.finish_event_drag().unwrap();
+        assert_eq!(drag.scene, 2);
+        assert_eq!(drag.event, 3);
+        assert_eq!(drag.file_event, 4);
+        assert_eq!(drag.duration, 0.0);
     }
 }

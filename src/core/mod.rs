@@ -7,6 +7,7 @@ mod animator;
 mod easing;
 mod project;
 mod scene;
+pub(crate) mod scene_file;
 mod signal;
 mod task;
 mod track;

@@ -1,3 +1,4 @@
+use crate::core::scene_file::{SceneFile, ScheduledEvent, TimeEvent};
 use crate::core::{
     Animator, Scheduling, Task, TrackableInfo, Tween,
     components::{Animation, Draw2D, Inspection, Name, Node, View},
@@ -32,6 +33,9 @@ pub struct Scene {
     world_3d: hecs::Entity,
     animator_time: std::rc::Rc<std::cell::Cell<f32>>,
     animator: Animator,
+    scene_file: SceneFile,
+    scheduled_events: Vec<ScheduledEvent>,
+    persist_events: bool,
 }
 
 impl Scene {
@@ -42,11 +46,15 @@ impl Scene {
 
     /// Creates a scene whose built-in worlds use `resolution`.
     pub fn new_with_resolution(resolution: (u32, u32)) -> Self {
-        Self::new_named("Scene", resolution)
+        Self::new_inner("Scene", resolution, false)
     }
 
     #[doc(hidden)]
     pub fn new_named(name: &'static str, resolution: (u32, u32)) -> Self {
+        Self::new_inner(name, resolution, true)
+    }
+
+    fn new_inner(name: &'static str, resolution: (u32, u32), persist_events: bool) -> Self {
         let animator_time = std::rc::Rc::new(std::cell::Cell::new(0.0));
         let animator = Animator::with_scene_time(std::rc::Rc::clone(&animator_time));
         let world = std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new()));
@@ -85,6 +93,13 @@ impl Scene {
             world_3d: root,
             animator_time: std::rc::Rc::clone(&animator_time),
             animator,
+            scene_file: if persist_events {
+                SceneFile::load(name)
+            } else {
+                SceneFile::default()
+            },
+            scheduled_events: Vec::new(),
+            persist_events,
         };
 
         let world_2d = canvas_2d()
@@ -198,6 +213,7 @@ impl Scene {
     /// Returns the duration of the resulting timeline.
     pub fn build(&mut self, builder: &mut dyn SceneBuilder) -> f32 {
         self.animator = Animator::with_scene_time(std::rc::Rc::clone(&self.animator_time));
+        self.scheduled_events.clear();
 
         builder.build(self);
 
@@ -225,6 +241,47 @@ impl Scene {
     /// Waits for the specified duration on the current scene timeline.
     pub fn wait(&mut self, duration: f32) {
         self.play(Task::Wait(duration));
+    }
+
+    /// Waits for the duration stored for a named scene event.
+    ///
+    /// The duration is relative to the active scheduling position, like
+    /// [`Self::wait`]. Named scenes persist durations in
+    /// `.kinematic/scenes/<scene_name>.ron`. Missing events are created with
+    /// zero duration. The Timeline displays the wait as a draggable event span;
+    /// committing a drag rebuilds that scene through its factory.
+    ///
+    /// Events cannot be used inside [`Self::repeat`].
+    ///
+    /// ```ignore
+    /// s.event("intro");
+    /// ```
+    pub fn event(&mut self, name: &str) {
+        self.animator.handle().assert_event_scope();
+        let (file_index, duration) = match self
+            .scene_file
+            .events
+            .iter()
+            .enumerate()
+            .find(|(_, event)| event.name == name)
+        {
+            Some((index, event)) => (index, event.duration.max(0.0)),
+            None => {
+                self.scene_file.events.push(TimeEvent {
+                    name: name.to_owned(),
+                    duration: 0.0,
+                });
+                self.save_events();
+                (self.scene_file.events.len() - 1, 0.0)
+            }
+        };
+        self.scheduled_events.push(ScheduledEvent {
+            file_index,
+            name: name.to_owned(),
+            creation_time: self.animator.handle().time(),
+            duration,
+        });
+        self.wait(duration.max(0.0));
     }
 
     /// Delays a sequential group by the specified number of timeline seconds.
@@ -356,6 +413,26 @@ impl Scene {
     pub fn get_world_mut(&self) -> std::cell::RefMut<'_, hecs::World> {
         self.world.borrow_mut()
     }
+
+    pub(crate) fn get_events(&self) -> &[ScheduledEvent] {
+        &self.scheduled_events
+    }
+
+    pub(crate) fn set_event_duration(&mut self, index: usize, duration: f32) {
+        let event = self
+            .scene_file
+            .events
+            .get_mut(index)
+            .expect("Event index must belong to this scene.");
+        event.duration = duration.max(0.0);
+        self.save_events();
+    }
+
+    fn save_events(&self) {
+        if self.persist_events {
+            self.scene_file.save(self.name);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -369,6 +446,57 @@ mod tests {
     };
 
     use super::*;
+
+    fn scene_with_event(name: &'static str, event_name: &str, duration: f32) -> Scene {
+        let mut scene = Scene::new_named(name, (1920, 1080));
+        scene.event(event_name);
+        let index = scene
+            .scene_file
+            .events
+            .iter()
+            .position(|event| event.name == event_name)
+            .unwrap();
+        scene.set_event_duration(index, duration);
+        Scene::new_named(name, (1920, 1080))
+    }
+
+    #[test]
+    fn event_waits_for_its_duration() {
+        let mut scene = scene_with_event("event_duration", "intro", 5.0);
+
+        scene.wait(2.0);
+        scene.event("intro");
+        assert_eq!(scene.get_events()[0].creation_time, 2.0);
+        assert_eq!(scene.get_events()[0].duration, 5.0);
+        scene.wait(1.0);
+        scene.event("intro");
+
+        assert_eq!(scene.get_duration(), 13.0);
+    }
+
+    #[test]
+    fn event_uses_the_active_chain_and_parallel_times() {
+        let mut scene = scene_with_event("event_groups", "intro", 5.0);
+
+        scene.wait(1.0);
+        scene.all(|scene| {
+            scene.chain(|scene| {
+                scene.wait(2.0);
+                scene.event("intro");
+            });
+            scene.wait(3.0);
+        });
+
+        assert_eq!(scene.get_duration(), 8.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "Events cannot be used inside repeat cycles.")]
+    fn event_is_rejected_inside_repeat() {
+        let mut scene = Scene::new_named("event_repeat", (1920, 1080));
+
+        scene.repeat(|scene| scene.event("intro"));
+    }
 
     #[test]
     fn signal_overrides_a_tween_after_tracks_are_evaluated() {

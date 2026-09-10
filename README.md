@@ -20,6 +20,7 @@ Kinematic is in early development, so its API may change.
 - Built-in and custom `Draw3D` meshes with reusable geometry caches, materials, and lighting.
 - Bidirectional projection of 2D and 3D canvases.
 - Sequential and parallel animation tasks.
+- Named, editable event waits persisted per scene.
 - Reactive signals that run after tracks and can temporarily override properties.
 - Sequential multi-scene projects.
 - Built-in easing functions.
@@ -71,6 +72,37 @@ fn main() {
 
 Scene factories in `Project::scenes` run in vector order. Each scene starts as
 soon as the previous scene reaches the end of its timeline.
+
+## Timed events
+
+Use `event` for a named wait whose duration can be edited directly in the
+Timeline:
+
+```rust
+#[scene]
+fn introduction(s: &mut Scene) {
+    s.event("intro");
+    // Objects, animations, signals, creation, and removal scheduled here start
+    // after the editable intro duration.
+}
+```
+
+Kinematic stores the durations for this scene in
+`.kinematic/scenes/introduction.ron`:
+
+```ron
+(
+    events: [
+        (name: "intro", duration: 2.0),
+    ],
+)
+```
+
+An event behaves like `wait(duration)` at the point where it appears. Its
+Timeline span starts at that scheduling position. Drag the labeled handle at
+the end of the span to change its duration; releasing it saves the RON file and
+rebuilds only that scene. Events can be used with `chain`, `all`, signals, and
+object lifetime changes, but not inside `repeat`.
 
 ## Animation groups and loops
 

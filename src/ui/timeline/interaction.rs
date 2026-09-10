@@ -22,6 +22,11 @@ pub(super) fn update(
     let left_pressed = ui.is_mouse_clicked(left);
     let right_pressed = ui.is_mouse_clicked(right);
 
+    if state.interaction == Interaction::Event {
+        timeline.is_controlling = false;
+        return;
+    }
+
     if !left_down && !right_down {
         state.interaction = Interaction::None;
     } else if left_pressed || right_pressed {

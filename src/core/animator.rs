@@ -376,6 +376,14 @@ impl AnimatorHandle {
         );
     }
 
+    pub(crate) fn assert_event_scope(&self) {
+        self.assert_timeline_mutation();
+        assert!(
+            !self.active().state.borrow().repeating,
+            "Events cannot be used inside repeat cycles."
+        );
+    }
+
     pub(crate) fn signal(
         &self,
         target: hecs::Entity,

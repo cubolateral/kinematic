@@ -93,4 +93,10 @@ impl Timeline {
     pub fn get_duration(&self) -> f32 {
         self.max_time
     }
+
+    pub(crate) fn set_duration(&mut self, duration: f32) {
+        self.max_time = duration.max(0.0);
+        self.go_to(self.current_time);
+        self.previous_time = -1.0;
+    }
 }

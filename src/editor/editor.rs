@@ -233,10 +233,43 @@ impl Editor {
         [scene.start, scene.end]
     }
 
-    pub fn get_scenes(&self) -> impl Iterator<Item = (&'static str, [f32; 2])> + '_ {
-        self.scenes
-            .iter()
-            .map(|scene| (scene.scene.get_name(), [scene.start, scene.end]))
+    pub(crate) fn get_scenes(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &'static str,
+            [f32; 2],
+            &[crate::core::scene_file::ScheduledEvent],
+        ),
+    > + '_ {
+        self.scenes.iter().map(|scene| {
+            (
+                scene.scene.get_name(),
+                [scene.start, scene.end],
+                scene.scene.get_events(),
+            )
+        })
+    }
+
+    pub(crate) fn set_event_duration(
+        &mut self,
+        scene_index: usize,
+        event_index: usize,
+        duration: f32,
+    ) {
+        self.scenes[scene_index]
+            .scene
+            .set_event_duration(event_index, duration);
+
+        let factory = self.project.scenes[scene_index];
+        let replacement = factory(self.project.resolution);
+        self.scenes[scene_index].scene = replacement;
+
+        let duration = recalculate_scene_ranges(&mut self.scenes);
+
+        self.selection.clear();
+        self.timeline.set_duration(duration);
+        self.update_active_scene(self.timeline.get_time());
     }
 
     pub fn get_active_scene_index(&self) -> usize {
@@ -353,6 +386,16 @@ fn create_scenes(
         .collect()
 }
 
+fn recalculate_scene_ranges(scenes: &mut [EditorScene]) -> f32 {
+    let mut start = 0.0;
+    for scene in scenes {
+        scene.start = start;
+        scene.end = start + scene.scene.get_duration();
+        start = scene.end;
+    }
+    start
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -409,5 +452,29 @@ mod tests {
         assert_eq!(active_scene_at(&scenes, 1.999), 0);
         assert_eq!(active_scene_at(&scenes, 2.0), 1);
         assert_eq!(active_scene_at(&scenes, 5.0), 1);
+    }
+
+    #[test]
+    fn recalculating_ranges_uses_rebuilt_scene_durations() {
+        let mut scenes = vec![
+            EditorScene {
+                scene: Scene::new(),
+                start: 10.0,
+                end: 12.0,
+            },
+            EditorScene {
+                scene: Scene::new(),
+                start: 12.0,
+                end: 15.0,
+            },
+        ];
+        scenes[0].scene.wait(4.0);
+        scenes[1].scene.wait(2.0);
+
+        let duration = recalculate_scene_ranges(&mut scenes);
+
+        assert_eq!([scenes[0].start, scenes[0].end], [0.0, 4.0]);
+        assert_eq!([scenes[1].start, scenes[1].end], [4.0, 6.0]);
+        assert_eq!(duration, 6.0);
     }
 }
