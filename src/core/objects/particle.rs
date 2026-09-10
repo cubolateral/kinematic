@@ -199,7 +199,17 @@ impl ParticleTransform {
     }
 
     fn with_count(from: Silhouette, to: Silhouette, easing: Easing, count: usize) -> Self {
-        let routes = (0..count)
+        let routes = Self::routes(&from, &to, count);
+        Self {
+            from,
+            to,
+            easing,
+            routes,
+        }
+    }
+
+    fn routes(from: &Silhouette, to: &Silhouette, count: usize) -> Vec<MorphParticleRoute> {
+        (0..count)
             .map(|index| {
                 MorphParticleRoute::new(
                     from.samples[index * from.samples.len() / count].point,
@@ -207,13 +217,16 @@ impl ParticleTransform {
                     to.bounds,
                 )
             })
-            .collect();
-        Self {
-            from,
-            to,
-            easing,
-            routes,
-        }
+            .collect()
+    }
+
+    pub(crate) fn rebuild_routes(&mut self) {
+        let count = if self.from.is_empty() || self.to.is_empty() {
+            0
+        } else {
+            PARTICLE_COUNT as usize
+        };
+        self.routes = Self::routes(&self.from, &self.to, count);
     }
 
     pub(crate) fn draw(&self, canvas: &skia_safe::Canvas, progress: f32, opacity: f32) {

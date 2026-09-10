@@ -3,7 +3,10 @@ use crate::{
         TrackValue,
         components::{Inspection, Name, Node, Transform3D},
         normalized_quaternion,
-        objects::{CameraTransform3D, CanvasSettings, ProjectionSource, SphereShape},
+        objects::{
+            CameraTransform3D, CanvasSettings, ProjectionSource, SphereShape,
+            appearance::{AppearanceEdit, refresh_appearance},
+        },
     },
     editor::Editor,
 };
@@ -72,18 +75,24 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         if let Ok(source) = world.get::<&ProjectionSource>(entity) {
             property(ui, "Source canvas", &source.0.map_or_else(|| "Unassigned.".into(), |texture| format!("{}.", texture.entity.to_bits())));
         }
-        ui.text_disabled("Edits affect current values; seeking reevaluates animated tracks.");
+        ui.text_wrapped("Text edits update matching timeline values. Other edits affect current values; seeking reevaluates animated tracks.");
+        let mut edits = Vec::new();
         for trackable in (inspection.get)(&world, entity) {
             ui.separator_with_text(trackable.name);
 
             for track in (trackable.get)() {
                 let _id = ui.push_id(&format!("{}:{}", trackable.name, track.id));
                 let mut value = (track.get)(&world, entity);
-                if edit_value(ui, track.name, &mut value) { (track.set)(&world, entity, value); }
+                let before = value.clone();
+                if edit_value(ui, track.name, &mut value) {
+                    (track.set)(&world, entity, value.clone());
+                    edits.push(AppearanceEdit { entity, component: (trackable.type_id)(), track, before, value });
+                }
             }
 
             ui.spacing();
         }
+        refresh_appearance(&world, &edits);
     });
 }
 

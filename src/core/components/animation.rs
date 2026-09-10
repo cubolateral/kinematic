@@ -1,4 +1,4 @@
-use crate::core::{Track, TrackInfo};
+use crate::core::{Track, TrackInfo, TrackValue};
 
 /// Associates a track with the component field it animates.
 ///
@@ -15,6 +15,24 @@ pub(crate) struct Animation {
 }
 
 impl Animation {
+    pub(crate) fn replace_values(
+        &mut self,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        before: &TrackValue,
+        value: &TrackValue,
+    ) {
+        for track in &mut self.tracks {
+            if track.type_id == type_id && track.track.info.id == track_info.id {
+                for keyframe in &mut track.track.keyframes {
+                    if keyframe.value == *before {
+                        keyframe.value = value.clone();
+                    }
+                }
+            }
+        }
+    }
+
     pub(crate) fn track_mut(
         &mut self,
         type_id: std::any::TypeId,

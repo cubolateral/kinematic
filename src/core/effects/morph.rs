@@ -5,8 +5,9 @@ use crate::core::{
         stroke_width_for_scale,
     },
     objects::{
-        GlobalTransform, Morphable, Object, ObjectHandler, ObjectTrackable, Rect, attach_child,
-        children, deactivate_subtree, global_transform, local_transform,
+        GlobalTransform, Morphable, Object, ObjectHandler, ObjectTrackable, Rect,
+        appearance::{AppearanceEdit, AppearanceSnapshot},
+        attach_child, children, deactivate_subtree, global_transform, local_transform,
         particle::{ParticleTransform, Silhouette},
     },
     types::Vector2,
@@ -133,9 +134,22 @@ impl MorphEffect {
             object,
             crate::core::components::Name::new("Morph"),
         );
+        let endpoints = {
+            let world = world.borrow();
+            MorphEndpoints {
+                from: from.get_id(),
+                to: to.get_id(),
+                parent,
+                time: start,
+                from_opacity: source_opacity,
+                to_opacity: target_opacity,
+                from_values: AppearanceSnapshot::capture(&world, from.get_id()),
+                to_values: AppearanceSnapshot::capture(&world, to.get_id()),
+            }
+        };
         world
             .borrow_mut()
-            .insert_one(carrier.get_id(), data)
+            .insert(carrier.get_id(), (data, endpoints))
             .unwrap();
         attach_child(&world, parent, carrier.get_id(), start);
         if world
@@ -185,6 +199,71 @@ impl MorphEffect {
             );
         }
         animator.play(Task::All(tasks));
+    }
+}
+
+struct MorphEndpoints {
+    from: hecs::Entity,
+    to: hecs::Entity,
+    parent: hecs::Entity,
+    time: f32,
+    from_opacity: f32,
+    to_opacity: f32,
+    from_values: AppearanceSnapshot,
+    to_values: AppearanceSnapshot,
+}
+
+pub(crate) fn refresh_morphs(world: &hecs::World, edits: &[AppearanceEdit]) {
+    for (entity, endpoints) in world.query::<(hecs::Entity, &mut MorphEndpoints)>().iter() {
+        let from_changed = endpoints.from_values.edit(edits);
+        let to_changed = endpoints.to_values.edit(edits);
+        if !from_changed && !to_changed {
+            continue;
+        }
+        for edit in edits {
+            if edit.component == std::any::TypeId::of::<Draw2D>() && edit.track.name == "opacity" {
+                if let crate::core::TrackValue::F32(opacity) = edit.value {
+                    if edit.entity == endpoints.from {
+                        endpoints.from_opacity = opacity;
+                    }
+                    if edit.entity == endpoints.to {
+                        endpoints.to_opacity = opacity;
+                    }
+                }
+            }
+        }
+        let from = from_changed.then(|| {
+            endpoints.from_values.with_values(world, || {
+                capture(
+                    world,
+                    endpoints.from,
+                    endpoints.parent,
+                    PARTICLE_COUNT as usize,
+                    endpoints.time,
+                    endpoints.from_opacity,
+                )
+            })
+        });
+        let to = to_changed.then(|| {
+            endpoints.to_values.with_values(world, || {
+                capture(
+                    world,
+                    endpoints.to,
+                    endpoints.parent,
+                    PARTICLE_COUNT as usize,
+                    endpoints.time,
+                    endpoints.to_opacity,
+                )
+            })
+        });
+        let mut data = world.get::<&mut ParticleTransform>(entity).unwrap();
+        if let Some(from) = from {
+            data.from = from;
+        }
+        if let Some(to) = to {
+            data.to = to;
+        }
+        data.rebuild_routes();
     }
 }
 
@@ -267,7 +346,9 @@ fn record(
     let layer = canvas.save_layer_alpha_f(None, draw_opacity.clamp(0.0, 1.0));
     let saved = canvas.save();
     canvas.concat(&relative);
-    (draw.on_draw)(world, entity, canvas, 1.0);
+    crate::core::objects::without_write(world, entity, || {
+        (draw.on_draw)(world, entity, canvas, 1.0);
+    });
     canvas.restore_to_count(saved);
     for child in children(world, entity) {
         let node = world.get::<&Node>(child).unwrap();
@@ -310,15 +391,11 @@ fn capture(
     let mut recorder = skia_safe::PictureRecorder::new();
     let canvas = recorder.begin_recording(skia_safe::Rect::from_xywh(-1e9, -1e9, 2e9, 2e9), false);
     let bounds = record(world, entity, entity, opacity, parent, canvas, &basis, time)
-        .expect("Morph object must have drawable bounds.");
+        .unwrap_or_else(|| skia_safe::Rect::from_xywh(0.0, 0.0, 1.0, 1.0));
     let picture = recorder.finish_recording_as_picture(None).unwrap();
     let silhouette = Silhouette::capture(bounds, count, |canvas| {
         canvas.draw_picture(&picture, None, None);
     });
-    assert!(
-        !silhouette.is_empty(),
-        "Morph object must have a visible silhouette."
-    );
     silhouette
 }
 

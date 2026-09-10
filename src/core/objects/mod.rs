@@ -1,3 +1,4 @@
+pub(crate) mod appearance;
 mod canvas;
 mod container;
 mod creation;

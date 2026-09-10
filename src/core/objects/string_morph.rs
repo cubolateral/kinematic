@@ -5,12 +5,16 @@ use crate::core::{
     components::{Style, Transform2D},
     objects::{
         Object,
+        appearance::AppearanceEdit,
         particle::{ParticleTransform, Silhouette, morph_opacities},
     },
 };
 
+type RefreshContentMorph = dyn Fn(&[AppearanceEdit]) -> Option<PreparedContentMorph> + Send + Sync;
+
 pub(super) struct ContentMorphTransition {
     prepared: Option<PreparedContentMorph>,
+    refresh: Option<Box<RefreshContentMorph>>,
     pub(super) from_text: String,
     pub(super) to_text: String,
 }
@@ -143,7 +147,10 @@ fn morph_string_with<T: Object, S: hecs::Component + Clone>(
     entity: hecs::Entity,
     from_text: String,
     text: String,
-    prepare: impl FnOnce(S, Style, Transform2D, S, Style, Transform2D) -> PreparedContentMorph + 'static,
+    prepare: impl Fn(S, Style, Transform2D, S, Style, Transform2D) -> PreparedContentMorph
+    + Send
+    + Sync
+    + 'static,
 ) -> Tween<T> {
     let (world, _) = tween.context();
     let (shape, style, transform) = {
@@ -166,6 +173,7 @@ fn morph_string_with<T: Object, S: hecs::Component + Clone>(
         let transition_index = morph.transitions.len();
         morph.transitions.push(ContentMorphTransition {
             prepared: None,
+            refresh: None,
             from_text,
             to_text: text,
         });
@@ -180,21 +188,88 @@ fn morph_string_with<T: Object, S: hecs::Component + Clone>(
         .animate_from(ContentMorph::active_property(), true, false)
         .animate_from(ContentMorph::progress_property(), 0.0, 1.0)
         .prepare(move |tween| {
-            let prepared = prepare(
+            let mut endpoints = hecs::World::new();
+            let from = endpoints.spawn((
                 tween.endpoint(&shape, false),
                 tween.endpoint(&style, false),
                 tween.endpoint(&transform, false),
+            ));
+            let to = endpoints.spawn((
                 tween.endpoint(&shape, true),
                 tween.endpoint(&style, true),
                 tween.endpoint(&transform, true),
-            );
-            world
-                .borrow()
-                .get::<&mut ContentMorph>(entity)
-                .unwrap()
-                .transitions[transition_index]
-                .prepared = Some(prepared);
+            ));
+            let build = move |endpoints: &hecs::World| {
+                let read = |id| {
+                    (
+                        (*endpoints.get::<&S>(id).unwrap()).clone(),
+                        (*endpoints.get::<&Style>(id).unwrap()).clone(),
+                        (*endpoints.get::<&Transform2D>(id).unwrap()).clone(),
+                    )
+                };
+                let (a, b, c) = read(from);
+                let (d, e, f) = read(to);
+                prepare(a, b, c, d, e, f)
+            };
+            let prepared = build(&endpoints);
+            let refresh = move |edits: &[AppearanceEdit]| {
+                let mut changed = false;
+                for edit in edits.iter().filter(|edit| edit.entity == entity) {
+                    if [
+                        std::any::TypeId::of::<S>(),
+                        std::any::TypeId::of::<Style>(),
+                        std::any::TypeId::of::<Transform2D>(),
+                    ]
+                    .contains(&edit.component)
+                    {
+                        if edit.component == std::any::TypeId::of::<Transform2D>()
+                            && edit.track.name != "scale"
+                        {
+                            continue;
+                        }
+                        changed |= edit.apply(&endpoints, from);
+                        changed |= edit.apply(&endpoints, to);
+                    }
+                }
+                changed.then(|| build(&endpoints))
+            };
+            let world = world.borrow();
+            let mut morph = world.get::<&mut ContentMorph>(entity).unwrap();
+            let transition = &mut morph.transitions[transition_index];
+            transition.prepared = Some(prepared);
+            transition.refresh = Some(Box::new(refresh));
         })
+}
+
+pub(super) fn refresh_appearance(world: &hecs::World, edits: &[AppearanceEdit]) {
+    for (entity, morph) in world.query::<(hecs::Entity, &mut ContentMorph)>().iter() {
+        for transition in &mut morph.transitions {
+            if let Some(prepared) = transition
+                .refresh
+                .as_ref()
+                .and_then(|refresh| refresh(edits))
+            {
+                transition.prepared = Some(prepared);
+                for edit in edits
+                    .iter()
+                    .filter(|edit| edit.entity == entity && edit.track.name == "text")
+                {
+                    if let (
+                        crate::core::TrackValue::String(before),
+                        crate::core::TrackValue::String(value),
+                    ) = (&edit.before, &edit.value)
+                    {
+                        if transition.from_text == *before {
+                            transition.from_text = value.clone();
+                        }
+                        if transition.to_text == *before {
+                            transition.to_text = value.clone();
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

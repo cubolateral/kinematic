@@ -7,6 +7,7 @@ use crate::core::{
     components::{Draw2D, Morph, Style, Transform2D, stroke_width_for_scale},
     objects::{
         CreationDraw, ObjectHandler,
+        appearance::AppearanceEdit,
         particle::{ParticleTransform, Silhouette, morph_opacities},
         particle_visual_key,
         string_morph::{
@@ -596,6 +597,10 @@ struct WriteStep {
 }
 
 struct WritePlan {
+    shape: TextShape,
+    style: Style,
+    transform: Transform2D,
+    duration: f32,
     steps: Vec<WriteStep>,
     character_duration: f32,
     interval: f32,
@@ -650,11 +655,12 @@ fn prepare_write_plan(
             &[
                 shape.size,
                 shape.thickness,
+                shape.align,
                 transform.scale.x,
                 transform.scale.y,
                 index as f32,
             ],
-            &[&cluster.text, &font_path],
+            &[&shape.text, &cluster.text, &font_path],
         );
         steps.push(WriteStep {
             target,
@@ -664,6 +670,10 @@ fn prepare_write_plan(
     }
 
     WritePlan {
+        shape: shape.clone(),
+        style: style.clone(),
+        transform: transform.clone(),
+        duration,
         steps,
         character_duration,
         interval,
@@ -671,6 +681,79 @@ fn prepare_write_plan(
         easing,
         reverse,
     }
+}
+
+pub(crate) fn refresh_write_plans(world: &hecs::World, edits: &[AppearanceEdit]) {
+    for (entity, state) in world.query::<(hecs::Entity, &mut WriteState)>().iter() {
+        let relevant: Vec<_> = edits
+            .iter()
+            .filter(|edit| {
+                edit.entity == entity
+                    && (edit.component == std::any::TypeId::of::<TextShape>()
+                        || edit.component == std::any::TypeId::of::<Style>()
+                        || (edit.component == std::any::TypeId::of::<Transform2D>()
+                            && edit.track.name == "scale"))
+            })
+            .collect();
+        if relevant.is_empty() {
+            continue;
+        }
+        for plan in &mut state.plans {
+            let mut snapshot = hecs::World::new();
+            let endpoint = snapshot.spawn((
+                plan.shape.clone(),
+                plan.style.clone(),
+                plan.transform.clone(),
+            ));
+            let mut changed = false;
+            for edit in &relevant {
+                changed |= edit.apply(&snapshot, endpoint);
+            }
+            if changed {
+                *plan = prepare_write_plan(
+                    &snapshot.get::<&TextShape>(endpoint).unwrap(),
+                    &snapshot.get::<&Style>(endpoint).unwrap(),
+                    &snapshot.get::<&Transform2D>(endpoint).unwrap(),
+                    plan.duration,
+                    plan.easing,
+                    plan.reverse,
+                );
+            }
+        }
+    }
+}
+
+// Capture complete text even when an unrelated write effect is currently active.
+pub(crate) fn without_write<R>(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    capture: impl FnOnce() -> R,
+) -> R {
+    let active = world
+        .get::<&mut WriteState>(entity)
+        .ok()
+        .map(|mut state| std::mem::replace(&mut state.active, false));
+    struct Restore<'a> {
+        world: &'a hecs::World,
+        entity: hecs::Entity,
+        active: Option<bool>,
+    }
+    impl Drop for Restore<'_> {
+        fn drop(&mut self) {
+            if let Some(active) = self.active {
+                self.world
+                    .get::<&mut WriteState>(self.entity)
+                    .unwrap()
+                    .active = active;
+            }
+        }
+    }
+    let _restore = Restore {
+        world,
+        entity,
+        active,
+    };
+    capture()
 }
 
 fn glyph_layer_bounds(
