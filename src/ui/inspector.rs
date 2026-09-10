@@ -151,6 +151,14 @@ fn edit_value(ui: &dear_imgui_rs::Ui, name: &str, value: &mut TrackValue) -> boo
             "%u",
             dear_imgui_rs::sys::ImGuiDataType_U32,
         ),
+        TrackValue::I32(v) => vertical_drag(
+            ui,
+            name,
+            v,
+            1.0,
+            "%d",
+            dear_imgui_rs::sys::ImGuiDataType_S32,
+        ),
         TrackValue::Vector2(v) => {
             let mut values = v.to_array();
             if edit_float_components(ui, name, &mut values, ["x", "y"]) {

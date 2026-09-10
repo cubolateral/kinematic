@@ -3,7 +3,7 @@ use crate::core::{
     components::{Animation, Draw2D, Inspection, Name, Node, View},
     objects::{
         Canvas2D, Canvas2DHandler, Canvas3D, Canvas3DHandler, Object, ObjectHandler, RootHandler,
-        camera_matrix2d, canvas_2d, canvas_3d, children, draw_entity,
+        camera_matrix2d, canvas_2d, canvas_3d, children_by_z_index, draw_entity,
     },
     types::Vector2,
 };
@@ -151,7 +151,7 @@ impl Scene {
             canvas.concat(&view);
         }
 
-        for child in children(&world, self.world_2d) {
+        for child in children_by_z_index(&world, self.world_2d) {
             draw_entity(&world, child, canvas);
         }
         canvas.restore_to_count(save_count);
@@ -911,6 +911,7 @@ mod tests {
         let mut scene = Scene::new();
         let handler = text()
             .opacity(0.5)
+            .z_index(-7)
             .position(vec2(10.0, 20.0))
             .text("Kinematic!")
             .build(&mut scene);
@@ -920,6 +921,7 @@ mod tests {
         let shape = world.get::<&TextShape>(handler.get_id()).unwrap();
 
         assert_eq!(draw.opacity, 0.5);
+        assert_eq!(draw.z_index, -7);
         assert_eq!(transform.position, vec2(10.0, 20.0));
         assert_eq!(shape.text, "Kinematic!");
         assert!(std::ptr::fn_addr_eq(draw.on_draw, default.draw.on_draw,));
@@ -1015,6 +1017,35 @@ mod tests {
         let transform = world.get::<&Transform2D>(circle.get_id()).unwrap();
 
         assert_eq!(transform.position, vec2(5.0, 10.0));
+    }
+
+    #[test]
+    fn integer_tracks_interpolate_during_tweens() {
+        let mut scene = Scene::new();
+        let object = rect().z_index(-10).build(&mut scene);
+        let polygon = regular_polygon_2d().sides(4).build(&mut scene);
+        scene.get_world_2d().add(&object);
+        scene.get_world_2d().add(&polygon);
+
+        scene.all(|_| {
+            object
+                .z_index(10)
+                .duration(2.0)
+                .easing(Easing::Linear)
+                .play();
+            polygon.sides(8).duration(2.0).easing(Easing::Linear).play();
+        });
+
+        scene.animator.take_schedule().compile(&scene);
+        scene.update(0.5);
+        assert_eq!(object.get(Draw2D::z_index_property()), -5);
+        assert_eq!(polygon.get(RegularPolygon2DShape::sides_property()), 5);
+        scene.update(1.0);
+        assert_eq!(object.get(Draw2D::z_index_property()), 0);
+        assert_eq!(polygon.get(RegularPolygon2DShape::sides_property()), 6);
+        scene.update(2.0);
+        assert_eq!(object.get(Draw2D::z_index_property()), 10);
+        assert_eq!(polygon.get(RegularPolygon2DShape::sides_property()), 8);
     }
 
     #[test]

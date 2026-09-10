@@ -37,7 +37,7 @@ fn draw_entity_with_parent(
         return;
     }
 
-    let children = node.children.clone().unwrap_or_default();
+    let children = children_by_z_index(world, entity);
     let global = parent.append(local_transform(world, entity));
     let save_count = canvas.save();
     apply_global_transform(parent, global, canvas);
@@ -171,13 +171,9 @@ fn pick_entity_with_parent(
     let global = parent.append(local_transform(world, entity));
     let local_point = inverse_transform_point(global, point)?;
 
-    if let Some(child) = node
-        .children
-        .as_ref()
+    if let Some(child) = children_by_z_index(world, entity)
         .into_iter()
-        .flatten()
         .rev()
-        .copied()
         .find_map(|child| pick_entity_with_parent(world, child, point, global))
     {
         return Some(child);
@@ -190,6 +186,12 @@ fn pick_entity_with_parent(
         && local_point.y >= bounds.top
         && local_point.y <= bounds.bottom)
         .then_some(entity)
+}
+
+pub(crate) fn children_by_z_index(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity> {
+    let mut children = children(world, entity);
+    children.sort_by_key(|entity| world.get::<&Draw2D>(*entity).map_or(0, |draw| draw.z_index));
+    children
 }
 
 #[doc(hidden)]
@@ -378,7 +380,7 @@ fn draw_canvas2d_inner(
             canvas.concat(&view);
         }
     }
-    for child in children(world, entity) {
+    for child in children_by_z_index(world, entity) {
         draw_entity_with_parent(world, child, GlobalTransform::default(), canvas, images);
     }
     canvas.restore_to_count(saved);
@@ -422,7 +424,7 @@ pub(crate) fn pick_canvas2d(
         let point = matrix.map_point((point.x, point.y));
         Vector2::new(point.x, point.y)
     });
-    children(world, scope)
+    children_by_z_index(world, scope)
         .into_iter()
         .rev()
         .find_map(|child| pick_entity(world, child, point))

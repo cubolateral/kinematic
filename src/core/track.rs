@@ -79,7 +79,6 @@ impl Track {
                 if matches!(
                     (&left.value, &right.value),
                     (TrackValue::Bool(_), TrackValue::Bool(_))
-                        | (TrackValue::U32(_), TrackValue::U32(_))
                         | (TrackValue::String(_), TrackValue::String(_))
                 ) {
                     let value = if time < right.time {
@@ -297,6 +296,7 @@ impl Track {
 pub enum TrackValue {
     Bool(bool),
     U32(u32),
+    I32(i32),
     F32(f32),
     Quad(Quad),
     Vector2(Vector2),
@@ -316,13 +316,12 @@ impl TrackValue {
                     Self::Bool(*b)
                 }
             }
-            (Self::U32(a), Self::U32(b)) => {
-                if t < 1.0 {
-                    Self::U32(*a)
-                } else {
-                    Self::U32(*b)
-                }
-            }
+            (Self::U32(a), Self::U32(b)) => Self::U32(
+                (f64::from(*a) + (f64::from(*b) - f64::from(*a)) * f64::from(t)).round() as u32,
+            ),
+            (Self::I32(a), Self::I32(b)) => Self::I32(
+                (f64::from(*a) + (f64::from(*b) - f64::from(*a)) * f64::from(t)).round() as i32,
+            ),
             (Self::F32(a), Self::F32(b)) => Self::F32(a + (b - a) * t),
             (Self::Quad(a), Self::Quad(b)) => Self::Quad(a.lerp(*b, t)),
             (Self::Vector2(a), Self::Vector2(b)) => Self::Vector2(a + (b - a) * t),
@@ -360,6 +359,7 @@ impl std::fmt::Display for TrackValue {
         match self {
             Self::Bool(value) => write!(f, "{value}"),
             Self::U32(value) => write!(f, "{value}"),
+            Self::I32(value) => write!(f, "{value}"),
             Self::F32(value) => write!(f, "{value:.2}"),
             Self::Quad(value) => write!(
                 f,
@@ -413,6 +413,7 @@ macro_rules! impl_track_value_type {
 
 impl_track_value_type!(bool, Bool);
 impl_track_value_type!(u32, U32);
+impl_track_value_type!(i32, I32);
 impl_track_value_type!(f32, F32);
 impl_track_value_type!(Quad, Quad);
 impl_track_value_type!(Vector2, Vector2);
@@ -826,11 +827,11 @@ mod tests {
     }
 
     #[test]
-    fn interpolates_u32_values_at_the_segment_end() {
-        let from = TrackValue::U32(42);
-        let to = TrackValue::U32(7);
+    fn interpolates_u32_values_to_the_nearest_integer() {
+        let from = TrackValue::U32(10);
+        let to = TrackValue::U32(20);
 
-        assert_eq!(from.lerp(&to, 0.999), from);
+        assert_eq!(from.lerp(&to, 0.55), TrackValue::U32(16));
         assert_eq!(from.lerp(&to, 1.0), to);
     }
 
@@ -839,6 +840,23 @@ mod tests {
         let track_value = 42_u32.into_track_value();
 
         assert_eq!(u32::from_track_value(track_value), Some(42));
+    }
+
+    #[test]
+    fn interpolates_i32_values_to_the_nearest_integer() {
+        let from = TrackValue::I32(-10);
+        let to = TrackValue::I32(10);
+
+        assert_eq!(from.lerp(&to, 0.25), TrackValue::I32(-5));
+        assert_eq!(from.lerp(&to, 0.53), TrackValue::I32(1));
+        assert_eq!(from.lerp(&to, 1.0), to);
+    }
+
+    #[test]
+    fn converts_i32_track_values() {
+        let track_value = (-42_i32).into_track_value();
+
+        assert_eq!(i32::from_track_value(track_value), Some(-42));
     }
 
     fn tween_track() -> Track {

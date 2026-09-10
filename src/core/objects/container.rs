@@ -427,6 +427,40 @@ mod tests {
     }
 
     #[test]
+    fn higher_z_index_draws_and_picks_in_front() {
+        let mut scene = Scene::new();
+        let front = rect()
+            .size(vec2(8.0, 8.0))
+            .fill(Color::RED)
+            .z_index(1)
+            .build(&mut scene);
+        let back = rect()
+            .size(vec2(8.0, 8.0))
+            .fill(Color::BLUE)
+            .z_index(-1)
+            .build(&mut scene);
+
+        scene.get_world_2d().add(&front);
+        scene.get_world_2d().add(&back);
+
+        let image_info = skia_safe::ImageInfo::new(
+            (16, 16),
+            skia_safe::ColorType::RGBA8888,
+            skia_safe::AlphaType::Premul,
+            None,
+        );
+        let mut surface = skia_safe::surfaces::raster(&image_info, None, None).unwrap();
+        surface.canvas().translate((8.0, 8.0));
+
+        scene.draw(surface.canvas());
+
+        let center = surface.peek_pixels().unwrap().get_color((8, 8));
+        assert_eq!(center.r(), 255);
+        assert_eq!(center.b(), 0);
+        assert_eq!(scene.pick(vec2(0.0, 0.0)), Some(front.get_id()));
+    }
+
+    #[test]
     fn handlers_compose_global_values_without_skew() {
         let mut scene = Scene::new();
         let outer = group_2d()
