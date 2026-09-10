@@ -79,6 +79,7 @@ impl Default for Ellipse {
                             visual_key,
                             particle_count: PARTICLE_COUNT as usize,
                             style: &style,
+                            pixel_color: None,
                             morph: &morph,
                             opacity,
                             canvas,

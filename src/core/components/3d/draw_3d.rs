@@ -133,6 +133,63 @@ impl<'a> RenderContext3D<'a> {
         }
         Ok(())
     }
+
+    /// Draws cached geometry with an albedo texture and the configured material response.
+    pub(crate) fn render_textured_material(
+        &mut self,
+        key: GeometryKey,
+        create: impl FnOnce() -> three_d::CpuMesh,
+        transformation: glam::Mat4,
+        texture: three_d::Texture2DRef,
+        data: &Material,
+    ) -> Result<(), String> {
+        validate_transformation(transformation)?;
+        if transformation.determinant().abs() <= f32::EPSILON {
+            return Ok(());
+        }
+
+        let [r, g, b, a] = data.albedo.rgba();
+        let color = three_d::Srgba::new(
+            channel(r),
+            channel(g),
+            channel(b),
+            channel(a * data.opacity),
+        );
+        let states = render_states(true, false);
+        let camera = self.camera;
+
+        if data.unlit {
+            let mesh = self.geometry(key, create);
+            mesh.set_transformation(transformation.to_cols_array_2d().into());
+            mesh.render_with_material(
+                &three_d::ColorMaterial {
+                    color,
+                    texture: Some(texture),
+                    render_states: states,
+                    is_transparent: true,
+                },
+                camera,
+                &[],
+            );
+        } else {
+            let mut material = self.physical.clone();
+            material.albedo = color;
+            material.albedo_texture = Some(texture);
+            material.metallic = data.metallic.clamp(0.0, 1.0);
+            material.roughness = data.roughness.clamp(0.04, 1.0);
+            material.is_transparent = true;
+            material.render_states = states;
+            let lights: [&dyn three_d::Light; 2] = [self.ambient, self.sun];
+            self.used_geometries.insert(key);
+            let mesh = self
+                .geometries
+                .entry(key)
+                .or_insert_with(|| three_d::Mesh::new(self.three_d, &create()));
+            mesh.set_transformation(transformation.to_cols_array_2d().into());
+            mesh.render_with_material(&material, camera, &lights);
+        }
+        Ok(())
+    }
 }
 
 /// Local three-dimensional rendering callback and bounds for an entity.

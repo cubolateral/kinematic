@@ -72,6 +72,7 @@ pub(crate) struct CreationDraw<'a> {
     pub visual_key: u64,
     pub particle_count: usize,
     pub style: &'a Style,
+    pub pixel_color: Option<&'a dyn Fn(Vector2) -> Color>,
     pub morph: &'a Morph,
     pub opacity: f32,
     pub canvas: &'a skia_safe::Canvas,
@@ -87,6 +88,7 @@ impl CreationDraw<'_> {
             visual_key,
             particle_count,
             style,
+            pixel_color,
             morph,
             opacity,
             canvas,
@@ -130,7 +132,7 @@ impl CreationDraw<'_> {
             }
 
             let cached = cache.get_mut(&entity_key).unwrap();
-            draw_particles(cached, progress, style, opacity, canvas);
+            draw_particles(cached, progress, style, pixel_color, opacity, canvas);
             true
         });
 
@@ -324,6 +326,7 @@ fn draw_particles(
     cached: &mut CachedParticles,
     progress: f32,
     style: &Style,
+    pixel_color: Option<&dyn Fn(Vector2) -> Color>,
     opacity: f32,
     canvas: &skia_safe::Canvas,
 ) {
@@ -364,7 +367,12 @@ fn draw_particles(
                 PARTICLE_SPRITE_SIZE as f32 * 0.5,
             ),
         );
-        cached.colors[index] = skia_color(particle_color, fade);
+        cached.colors[index] = skia_color(
+            pixel_color
+                .map(|get_pixel_color| get_pixel_color(particle.target))
+                .unwrap_or(particle_color),
+            fade,
+        );
     }
 
     let mut paint = skia_safe::Paint::default();
