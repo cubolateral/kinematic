@@ -1,2 +1,6 @@
 /target
+
+# Ignore examples output.
 /output
+/imgui.ini
+/.kinematic
