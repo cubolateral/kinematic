@@ -8,6 +8,7 @@ mod object;
 pub(crate) mod particle;
 mod regular_polygon;
 mod render;
+mod simulation;
 mod string_morph;
 #[path = "3d/mod.rs"]
 mod three_d;
@@ -22,6 +23,7 @@ pub(crate) use image::ImageSource;
 pub use object::*;
 pub(crate) use regular_polygon::regular_polygon_vertices;
 pub use render::object_box;
+pub use simulation::*;
 pub use three_d::*;
 pub use two_d::*;
 

@@ -15,6 +15,18 @@ pub(crate) struct Animation {
 }
 
 impl Animation {
+    pub(crate) fn sample(
+        &self,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        time: f32,
+    ) -> Option<TrackValue> {
+        self.tracks
+            .iter()
+            .find(|track| track.type_id == type_id && track.track.info.id == track_info.id)
+            .and_then(|track| track.track.sample(time))
+    }
+
     pub(crate) fn replace_values(
         &mut self,
         type_id: std::any::TypeId,

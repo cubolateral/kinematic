@@ -38,6 +38,7 @@ pub struct RenderContext3D<'a> {
     ambient: &'a three_d::AmbientLight,
     sun: &'a three_d::DirectionalLight,
     texture: &'a dyn Fn(CanvasTexture) -> Option<glow::NativeTexture>,
+    current_transform: glam::Mat4,
 }
 
 impl<'a> RenderContext3D<'a> {
@@ -63,7 +64,17 @@ impl<'a> RenderContext3D<'a> {
             ambient,
             sun,
             texture,
+            current_transform: glam::Mat4::IDENTITY,
         }
+    }
+
+    /// Returns the transform applied before local callback geometry transforms.
+    pub fn current_transform(&self) -> glam::Mat4 {
+        self.current_transform
+    }
+
+    pub(crate) fn set_current_transform(&mut self, transform: glam::Mat4) -> glam::Mat4 {
+        std::mem::replace(&mut self.current_transform, transform)
     }
 
     /// Returns a shared mesh, creating it the first time its key is used.
@@ -84,6 +95,10 @@ impl<'a> RenderContext3D<'a> {
     }
 
     /// Draws cached geometry with the standard Kinematic material and lights.
+    ///
+    /// `transformation` is relative to [`Self::current_transform`]. Regular
+    /// object callbacks use an identity current transform; simulation callbacks
+    /// use their object's inherited global transform.
     pub fn render_material(
         &mut self,
         key: GeometryKey,
@@ -91,6 +106,7 @@ impl<'a> RenderContext3D<'a> {
         transformation: glam::Mat4,
         data: &Material,
     ) -> Result<(), String> {
+        let transformation = combine_transforms(self.current_transform, transformation);
         validate_transformation(transformation)?;
         if transformation.determinant().abs() <= f32::EPSILON {
             return Ok(());
@@ -143,6 +159,7 @@ impl<'a> RenderContext3D<'a> {
         texture: three_d::Texture2DRef,
         data: &Material,
     ) -> Result<(), String> {
+        let transformation = combine_transforms(self.current_transform, transformation);
         validate_transformation(transformation)?;
         if transformation.determinant().abs() <= f32::EPSILON {
             return Ok(());
@@ -259,6 +276,10 @@ fn channel(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
+fn combine_transforms(base: glam::Mat4, local: glam::Mat4) -> glam::Mat4 {
+    base * local
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -273,6 +294,17 @@ mod tests {
         assert_ne!(
             GeometryKey::new::<Shape>(3),
             GeometryKey::new::<OtherShape>(3)
+        );
+    }
+
+    #[test]
+    fn current_transform_is_applied_before_callback_local_transform() {
+        let base = glam::Mat4::from_translation(glam::vec3(4.0, 0.0, 0.0));
+        let local = glam::Mat4::from_translation(glam::vec3(0.0, 3.0, 0.0));
+
+        assert_eq!(
+            combine_transforms(base, local).transform_point3(glam::Vec3::ZERO),
+            glam::vec3(4.0, 3.0, 0.0)
         );
     }
 }

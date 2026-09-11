@@ -51,7 +51,11 @@ impl Editor {
         println!("Project initialized: {}", project.name);
         project.validate();
 
-        let scenes = create_scenes(&project.scenes, project.settings.resolution);
+        let scenes = create_scenes(
+            &project.scenes,
+            project.settings.resolution,
+            project.settings.fps,
+        );
         let duration = scenes.last().map_or(0.0, |scene| scene.end);
         let timeline = Timeline::new(duration, project.settings.fps);
 
@@ -243,7 +247,7 @@ impl Editor {
             .remove(self.preview.get_imgui_texture_id());
         self.preview = preview;
         self.renderer = Renderer::new(settings.resolution);
-        self.scenes = create_scenes(&self.project.scenes, settings.resolution);
+        self.scenes = create_scenes(&self.project.scenes, settings.resolution, settings.fps);
         let duration = self.scenes.last().map_or(0.0, |scene| scene.end);
         self.timeline = Timeline::new(duration, settings.fps);
         self.project.settings = settings;
@@ -294,7 +298,8 @@ impl Editor {
             .set_event_duration(event_index, duration);
 
         let factory = self.project.scenes[scene_index];
-        let replacement = factory(self.project.settings.resolution);
+        let mut replacement = factory(self.project.settings.resolution);
+        replacement.set_fps(self.project.settings.fps);
         self.scenes[scene_index].scene = replacement;
 
         let duration = recalculate_scene_ranges(&mut self.scenes);
@@ -409,13 +414,15 @@ fn active_scene_at(scenes: &[EditorScene], time: f32) -> usize {
 fn create_scenes(
     factories: &[crate::core::SceneFactory],
     resolution: (u32, u32),
+    fps: u32,
 ) -> Vec<EditorScene> {
     let mut start = 0.0;
 
     factories
         .iter()
         .map(|create_scene| {
-            let scene = create_scene(resolution);
+            let mut scene = create_scene(resolution);
+            scene.set_fps(fps);
             let end = start + scene.get_duration();
             let editor_scene = EditorScene { scene, start, end };
             start = end;
@@ -452,7 +459,7 @@ mod tests {
     #[test]
     fn scene_factories_create_ordered_project_ranges() {
         let factories: [crate::core::SceneFactory; 2] = [opening, ending];
-        let scenes = create_scenes(&factories, (1280, 720));
+        let scenes = create_scenes(&factories, (1280, 720), 60);
 
         assert_eq!(scenes[0].scene.get_name(), "opening");
         assert_eq!([scenes[0].start, scenes[0].end], [0.0, 2.0]);

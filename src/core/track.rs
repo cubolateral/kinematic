@@ -66,13 +66,33 @@ impl Track {
     pub fn update(&mut self, world: &hecs::World, entity: hecs::Entity, time: f32) {
         let set = self.info.set;
         let time = self.repeat.map_or(time, |repeat| repeat.local_time(time));
+        let (left, right) = self.find_keyframes(time);
+        if let Some(value) = Self::sample_keyframes(left, right, time) {
+            set(world, entity, value);
+        }
+    }
 
-        match self.find_keyframes(time) {
+    /// Evaluates this track at `time` without writing the result to the ECS world.
+    pub fn sample(&self, time: f32) -> Option<TrackValue> {
+        let time = self.repeat.map_or(time, |repeat| repeat.local_time(time));
+        let right = self
+            .keyframes
+            .partition_point(|keyframe| keyframe.time <= time);
+        let left = right.checked_sub(1).map(|index| &self.keyframes[index]);
+        let right = self.keyframes.get(right);
+        Self::sample_keyframes(left, right, time)
+    }
+
+    fn sample_keyframes(
+        left: Option<&Keyframe>,
+        right: Option<&Keyframe>,
+        time: f32,
+    ) -> Option<TrackValue> {
+        match (left, right) {
             (Some(left), Some(right)) => {
                 // Prevents division by zero.
                 if left.time == right.time {
-                    set(world, entity, left.value.clone());
-                    return;
+                    return Some(left.value.clone());
                 }
 
                 // Discrete tracks hold their starting value until the segment ends.
@@ -87,16 +107,12 @@ impl Track {
                         right.value.clone()
                     };
 
-                    set(world, entity, value);
-                    return;
+                    return Some(value);
                 }
 
                 let t = match left.easing {
                     Some(easing) => easing.evaluate((time - left.time) / (right.time - left.time)),
-                    None => {
-                        set(world, entity, left.value.clone());
-                        return;
-                    }
+                    None => return Some(left.value.clone()),
                 };
 
                 let value = match left.interpolation {
@@ -112,11 +128,11 @@ impl Track {
                     }
                 };
 
-                set(world, entity, value);
+                Some(value)
             }
-            (Some(left), None) => set(world, entity, left.value.clone()),
-            (None, Some(right)) => set(world, entity, right.value.clone()),
-            (None, None) => {}
+            (Some(left), None) => Some(left.value.clone()),
+            (None, Some(right)) => Some(right.value.clone()),
+            (None, None) => None,
         }
     }
 
@@ -872,6 +888,16 @@ mod tests {
         track.set_keyframe(3.0, TrackValue::F32(3.0), Some(Easing::Linear));
         track.set_keyframe(10.0, TrackValue::F32(10.0), None);
         track
+    }
+
+    #[test]
+    fn sample_evaluates_without_writing_to_the_world() {
+        let track = tween_track();
+        let mut world = hecs::World::new();
+        let entity = world.spawn((0.0_f32,));
+
+        assert_eq!(track.sample(5.0), Some(TrackValue::F32(5.0)));
+        assert_eq!(*world.get::<&f32>(entity).unwrap(), 0.0);
     }
 }
 

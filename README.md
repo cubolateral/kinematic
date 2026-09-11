@@ -22,6 +22,7 @@ Kinematic is in early development, so its API may change.
 - Sequential and parallel animation tasks.
 - Named, editable event waits persisted per scene.
 - Reactive signals that run after tracks and can temporarily override properties.
+- Deterministic frame-dependent simulations with seekable runtime checkpoints.
 - Sequential multi-scene projects.
 - Built-in easing functions.
 - Hierarchical timeline and selection from the Scene Tree, Timeline, or Preview.
@@ -145,6 +146,125 @@ For continuous 3D spinning, repeat `object.rotate_y(TAU)` with linear easing.
 The axis-angle path preserves direction and full turns; `object.rotation(q)`
 interpolates orientations along the shortest quaternion path. Match the cycle's
 end and start for a seamless loop; repetition does not automatically close it.
+
+## Simulations
+
+Use `Simulation2D` or `Simulation3D` when the next state depends on the previous
+frame, as in physics, particle systems, cellular automata, and procedural
+processes. Unlike a tween, a simulation owns mutable state and advances it in
+fixed steps with `dt = 1.0 / fps`.
+
+The state implements `SimulationState` for updates and the dimension-specific
+trait for read-only drawing. It must be `Clone + Send + Sync + 'static` because
+complete state clones are used as runtime checkpoints and stored in the ECS.
+The example below is Conway's Game of Life: a generation cannot be sampled from
+an isolated keyframe because every cell depends on the preceding generation.
+
+```rust
+#[derive(Clone)]
+struct Life {
+    cells: [[bool; 8]; 8],
+}
+
+impl SimulationState for Life {
+    fn on_update(&mut self, _dt: f32) {
+        let previous = self.cells;
+        for y in 0..8 {
+            for x in 0..8 {
+                let mut neighbors = 0;
+                for dy in [-1, 0, 1] {
+                    for dx in [-1, 0, 1] {
+                        if (dx, dy) != (0, 0) {
+                            let nx = (x as i32 + dx).rem_euclid(8) as usize;
+                            let ny = (y as i32 + dy).rem_euclid(8) as usize;
+                            neighbors += previous[ny][nx] as u8;
+                        }
+                    }
+                }
+                self.cells[y][x] = neighbors == 3 || (previous[y][x] && neighbors == 2);
+            }
+        }
+    }
+}
+
+impl SimulationState2D for Life {
+    fn on_draw(&self, canvas: &skia_safe::Canvas) {
+        let paint = skia_safe::Paint::new(
+            skia_safe::Color4f::new(1.0, 1.0, 1.0, 1.0),
+            None,
+        );
+        for (y, row) in self.cells.iter().enumerate() {
+            for (x, alive) in row.iter().enumerate() {
+                if *alive {
+                    canvas.draw_rect(
+                        skia_safe::Rect::from_xywh(
+                            x as f32 * 20.0 - 80.0,
+                            y as f32 * 20.0 - 80.0,
+                            18.0,
+                            18.0,
+                        ),
+                        &paint,
+                    );
+                }
+            }
+        }
+    }
+
+    fn get_box(&self) -> Vector2 {
+        vec2(160.0, 160.0)
+    }
+}
+
+let mut cells = [[false; 8]; 8];
+cells[3][2..5].fill(true);
+let simulation = simulation_2d()
+    .state(Life { cells })
+    .position(vec2(100.0, 0.0))
+    .build(s);
+s.get_world_2d().add(&simulation);
+```
+
+`auto_update` is a discrete boolean track. Setting it to `false` disables the
+automatic step; drawing continues with the last state. Call `simulation.update()`
+to schedule an explicit step at the current scene time. Repeated calls schedule
+multiple steps in that frame, which makes ordinary Rust loops useful:
+
+```rust
+simulation.auto_update(false).immediate();
+for _ in 0..4 {
+    simulation.update();
+}
+```
+
+Automatic and explicit updates do not accidentally double the first step. The
+number of steps in one frame is `max(auto_update as u32, explicit_updates)`:
+
+| `auto_update` | Explicit `update()` calls | Steps |
+| --- | ---: | ---: |
+| `false` | 0 | 0 |
+| `false` | 1 | 1 |
+| `true` | 0 | 1 |
+| `true` | 1 | 1 |
+| Either | N, where N > 1 | N |
+
+On a backward seek or a jump, Kinematic restores the nearest cached checkpoint
+and replays each project frame, sampling the historical `auto_update` value and
+the explicit updates without reevaluating the whole scene. Checkpoints are
+runtime-only and are not written to the project.
+
+Simulation drawing is local, like drawing inside a group. `Simulation2D`
+applies its inherited `Transform2D` and composites inherited opacity outside
+`on_draw`. `Simulation3D` installs its inherited `Transform3D` as the base of
+`RenderContext3D`; each transform passed to `render_material` is relative to
+that base.
+
+A complete runnable version contains equivalent 2D and 3D scenes, including a
+glider with automatic advancement disabled and a burst of explicit steps. It is in
+[`examples/game_of_life.rs`](examples/game_of_life.rs). Run it with:
+
+```sh
+cargo run --example game_of_life
+```
 
 ## Signals
 

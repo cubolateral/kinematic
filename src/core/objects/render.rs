@@ -1,5 +1,5 @@
 use crate::core::{
-    components::{Camera2D, Draw2D, Node, Transform2D},
+    components::{Camera2D, Draw2D, Node, Simulation, Transform2D},
     objects::{
         CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, draw_projection_2d,
         local_transform,
@@ -53,7 +53,8 @@ fn draw_entity_with_parent(
         return;
     }
 
-    if children.len() == 0 || opacity >= 1.0 {
+    let composites_opacity = children.len() != 0 || world.get::<&Simulation>(entity).is_ok();
+    if !composites_opacity || opacity >= 1.0 {
         (draw.on_draw)(world, entity, canvas, opacity);
         draw_projection_2d_entity(world, entity, canvas, opacity, images);
 

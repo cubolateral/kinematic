@@ -3,6 +3,7 @@ mod inspection;
 mod name;
 mod node;
 mod particle;
+mod simulation;
 #[path = "3d/mod.rs"]
 mod three_d;
 #[path = "2d/mod.rs"]
@@ -15,6 +16,7 @@ pub use inspection::*;
 pub use name::*;
 pub use node::*;
 pub use particle::*;
+pub use simulation::*;
 pub use three_d::*;
 pub use two_d::*;
 pub use view::*;

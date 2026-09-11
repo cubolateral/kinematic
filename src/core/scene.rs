@@ -1,7 +1,7 @@
 use crate::core::scene_file::{SceneFile, ScheduledEvent, TimeEvent};
 use crate::core::{
-    Animator, Scheduling, Task, TrackableInfo, Tween,
-    components::{Animation, Draw2D, Inspection, Name, Node, View},
+    Animator, Scheduling, Task, TrackValueType, TrackableInfo, Tween,
+    components::{Animation, Draw2D, Inspection, Name, Node, Simulation, View},
     objects::{
         Canvas2D, Canvas2DHandler, Canvas3D, Canvas3DHandler, Object, ObjectHandler, RootHandler,
         camera_matrix2d, canvas_2d, canvas_3d, children_by_z_index, draw_entity,
@@ -47,11 +47,13 @@ pub struct Scene {
     revision: std::cell::Cell<u64>,
     plan_revision: std::cell::Cell<u64>,
     runtime: std::cell::RefCell<Option<Runtime>>,
+    fps: u32,
 }
 
 #[derive(Default)]
 struct Runtime {
     animated: Vec<hecs::Entity>,
+    simulations: Vec<hecs::Entity>,
     boundaries: Vec<(f32, hecs::Entity)>,
     cursor: usize,
     initialized: bool,
@@ -123,6 +125,7 @@ impl Scene {
             revision: std::cell::Cell::new(0),
             plan_revision: std::cell::Cell::new(0),
             runtime: std::cell::RefCell::new(None),
+            fps: 60,
         };
 
         let world_2d = canvas_2d()
@@ -148,7 +151,7 @@ impl Scene {
         }
     }
 
-    /// Restores signal overrides, updates nodes and tracks, then evaluates active signals.
+    /// Updates nodes, tracks and simulations, then evaluates active signals.
     ///
     /// This updates scene state only; rendering remains in [`Self::draw`].
     pub fn update(&self, time: f32) {
@@ -199,6 +202,41 @@ impl Scene {
                     for track in &mut animation.tracks {
                         track.track.update(&world, *entity, time);
                     }
+                }
+            }
+
+            for entity in &runtime.simulations {
+                let Ok(node) = world.get::<&Node>(*entity) else {
+                    continue;
+                };
+                if !node.is_activated {
+                    continue;
+                }
+                let start_time = node.lifetime[0];
+                drop(node);
+
+                let local_time = (time - start_time).max(0.0);
+                let frames = local_time * self.fps.max(1) as f32;
+                let target_frame = (frames + f32::EPSILON * frames.abs() * 4.0).floor() as u64;
+                let animation = world.get::<&Animation>(*entity).ok();
+                let fallback = world
+                    .get::<&Simulation>(*entity)
+                    .map_or(true, |simulation| simulation.auto_update);
+                let track_info = <Simulation as crate::core::Trackable>::track(0);
+                if let Ok(mut simulation) = world.get::<&mut Simulation>(*entity) {
+                    simulation.seek(target_frame, self.fps, start_time, |sample_time| {
+                        animation
+                            .as_ref()
+                            .and_then(|animation| {
+                                animation.sample(
+                                    std::any::TypeId::of::<Simulation>(),
+                                    track_info,
+                                    sample_time,
+                                )
+                            })
+                            .and_then(bool::from_track_value)
+                            .unwrap_or(fallback)
+                    });
                 }
             }
         }
@@ -266,8 +304,18 @@ impl Scene {
                 .filter(|(_, animation)| !animation.tracks.is_empty())
                 .map(|(entity, _)| entity),
         );
+        runtime.simulations.extend(
+            world
+                .query::<(hecs::Entity, &Simulation)>()
+                .iter()
+                .map(|(entity, _)| entity),
+        );
         *self.runtime.borrow_mut() = Some(runtime);
         self.invalidate();
+    }
+
+    pub(crate) fn set_fps(&mut self, fps: u32) {
+        self.fps = fps.max(1);
     }
 
     /// Draws the built-in 2D world without applying its output-size translation.
