@@ -10,7 +10,7 @@ use crate::core::{
         latex_geometry::geometry,
         particle::Silhouette,
         particle_visual_key,
-        string_morph::{ContentMorph, ContentMorphTransition, morph_string},
+        string_morph::{ContentMorph, ContentMorphTransition, fade_string, morph_string},
     },
     types::Vector2,
 };
@@ -205,6 +205,14 @@ impl Default for Latex {
 }
 
 impl LatexHandler {
+    /// Cross-fades the current formula source into `text` on the same object.
+    pub fn fade(&self, text: impl Into<String>) -> Tween<Latex> {
+        let from = self.get(LatexShape::text_property());
+        let to = text.into();
+        let tween = self.text(to.clone());
+        fade_string(tween, self.get_id(), from, to)
+    }
+
     /// Morphs this formula into `text` through particle silhouettes.
     ///
     /// Unlike [`crate::core::effects::morph`], this keeps the same formula object and
@@ -238,6 +246,43 @@ mod tests {
             .flat_map(|y| (0..640).map(move |x| (x, y)))
             .map(|point| pixels.get_color(point))
             .collect()
+    }
+
+    #[test]
+    fn fade_swaps_formula_halfway_without_creating_another_object() {
+        struct FadingFormula;
+
+        impl SceneBuilder for FadingFormula {
+            fn build(&mut self, scene: &mut Scene) {
+                let formula = latex().text("x").build(scene);
+                scene.get_world_2d().add(&formula);
+                formula
+                    .fade(r"\frac{1}{2}")
+                    .duration(2.0)
+                    .easing(Easing::Linear)
+                    .play();
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut FadingFormula), 2.0);
+        assert_eq!(scene.get_world().query::<&LatexShape>().iter().count(), 1);
+
+        let state = |scene: &Scene| {
+            let world = scene.get_world();
+            let mut query = world.query::<(&LatexShape, &Draw2D)>();
+            let (shape, draw) = query.iter().next().unwrap();
+            (shape.text.clone(), draw.opacity)
+        };
+
+        scene.update(0.5);
+        assert_eq!(state(&scene).0, "x");
+        scene.update(1.0);
+        assert_eq!(state(&scene).0, "x");
+        scene.update(1.5);
+        assert_eq!(state(&scene).0, "x");
+        scene.update(2.0);
+        assert_eq!(state(&scene).0, r"\frac{1}{2}");
     }
 
     #[test]

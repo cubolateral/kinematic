@@ -11,7 +11,7 @@ use crate::core::{
         particle_visual_key,
         string_morph::{
             ContentMorph, ContentMorphTransition, GlyphLayer, MovingGlyphLayer, TextMorphPlan,
-            morph_text,
+            fade_string, morph_text,
         },
     },
     types::{Color, Vector2},
@@ -510,6 +510,21 @@ fn draw_text_morph(
     opacity: f32,
     canvas: &skia_safe::Canvas,
 ) {
+    if transition.is_fade() {
+        let mut source = shape.clone();
+        source.text = transition.from_text.clone();
+        let mut target = shape.clone();
+        target.text = transition.to_text.clone();
+        draw_complete_text(
+            &source,
+            style,
+            opacity * (1.0 - progress),
+            transform.scale,
+            canvas,
+        );
+        draw_complete_text(&target, style, opacity * progress, transform.scale, canvas);
+        return;
+    }
     let plan = transition.text_plan();
     let font = shape.font.skia_font(shape.size);
     let (source_opacity, target_opacity) = morph_opacities(progress);
@@ -946,6 +961,14 @@ impl Default for Text {
 }
 
 impl TextHandler {
+    /// Cross-fades the current string into `text` on the same object.
+    pub fn fade(&self, text: impl Into<String>) -> Tween<Text> {
+        let from = self.get(TextShape::text_property());
+        let to = text.into();
+        let tween = self.text(to.clone());
+        fade_string(tween, self.get_id(), from, to)
+    }
+
     /// Morphs this text into `text` through particle silhouettes.
     ///
     /// Unlike [`crate::core::effects::morph`], this keeps the same text object and
@@ -1075,6 +1098,41 @@ mod tests {
             3.0
         );
         assert_eq!(TextShape::thickness_property().get_info().name, "thickness");
+    }
+
+    #[test]
+    fn fade_swaps_text_halfway_without_creating_another_object() {
+        struct FadingText;
+
+        impl SceneBuilder for FadingText {
+            fn build(&mut self, scene: &mut Scene) {
+                let label = text().text("From").build(scene);
+                scene.get_world_2d().add(&label);
+                label.fade("To").duration(2.0).easing(Easing::Linear).play();
+            }
+        }
+
+        let mut scene = Scene::new();
+        assert_eq!(scene.build(&mut FadingText), 2.0);
+        assert_eq!(scene.get_world().query::<&TextShape>().iter().count(), 1);
+
+        let state = |scene: &Scene| {
+            let world = scene.get_world();
+            let mut query = world.query::<(&TextShape, &Draw2D)>();
+            let (shape, draw) = query.iter().next().unwrap();
+            (shape.text.clone(), draw.opacity)
+        };
+
+        scene.update(0.5);
+        assert_eq!(state(&scene).0, "From");
+        scene.update(1.0);
+        assert_eq!(state(&scene).0, "From");
+        scene.update(1.5);
+        assert_eq!(state(&scene).0, "From");
+        scene.update(2.0);
+        assert_eq!(state(&scene).0, "To");
+        scene.update(0.5);
+        assert_eq!(state(&scene).0, "From");
     }
 
     #[test]

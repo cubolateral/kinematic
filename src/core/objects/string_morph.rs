@@ -22,6 +22,7 @@ pub(super) struct ContentMorphTransition {
 pub(super) enum PreparedContentMorph {
     Particles(ParticleTransform),
     Text(TextMorphPlan),
+    Fade,
 }
 
 pub(super) struct GlyphLayer {
@@ -50,7 +51,12 @@ impl ContentMorphTransition {
         opacity: f32,
         draw: impl Fn(&str, f32),
     ) {
-        let (source_opacity, target_opacity) = morph_opacities(progress);
+        let (source_opacity, target_opacity) =
+            if matches!(self.prepared, Some(PreparedContentMorph::Fade)) {
+                (1.0 - progress, progress)
+            } else {
+                morph_opacities(progress)
+            };
         for (text, fade) in [
             (&self.from_text, source_opacity),
             (&self.to_text, target_opacity),
@@ -59,14 +65,14 @@ impl ContentMorphTransition {
                 draw(text, opacity * fade);
             }
         }
-        let PreparedContentMorph::Particles(particles) = self
-            .prepared
-            .as_ref()
-            .expect("Morph must be prepared before drawing.")
-        else {
-            panic!("Text morph must use its glyph renderer.");
+        let Some(PreparedContentMorph::Particles(particles)) = self.prepared.as_ref() else {
+            return;
         };
         particles.draw(canvas, progress, opacity);
+    }
+
+    pub(super) fn is_fade(&self) -> bool {
+        matches!(self.prepared, Some(PreparedContentMorph::Fade))
     }
 
     pub(super) fn text_plan(&self) -> &TextMorphPlan {
@@ -140,6 +146,38 @@ pub(super) fn morph_text<T: Object, S: hecs::Component + Clone>(
             ))
         },
     )
+}
+
+pub(super) fn fade_string<T: Object>(
+    tween: Tween<T>,
+    entity: hecs::Entity,
+    from_text: String,
+    text: String,
+) -> Tween<T> {
+    let (world, _) = tween.context();
+    let transition_index = {
+        let mut world = world.borrow_mut();
+        if world.get::<&ContentMorph>(entity).is_err() {
+            world.insert_one(entity, ContentMorph::default()).unwrap();
+        }
+        let mut morph = world.get::<&mut ContentMorph>(entity).unwrap();
+        let index = morph.transitions.len();
+        morph.transitions.push(ContentMorphTransition {
+            prepared: Some(PreparedContentMorph::Fade),
+            refresh: None,
+            from_text,
+            to_text: text,
+        });
+        index
+    };
+    tween
+        .animate_from(
+            ContentMorph::transition_property(),
+            transition_index as u32,
+            transition_index as u32,
+        )
+        .animate_from(ContentMorph::active_property(), true, false)
+        .animate_from(ContentMorph::progress_property(), 0.0, 1.0)
 }
 
 fn morph_string_with<T: Object, S: hecs::Component + Clone>(
