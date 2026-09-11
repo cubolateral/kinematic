@@ -1301,6 +1301,40 @@ mod tests {
     }
 
     #[test]
+    fn object_state_tweens_every_track_on_another_instance() {
+        let mut scene = Scene::new();
+        let source = circle()
+            .position(vec2(100.0, 40.0))
+            .radius(64.0)
+            .fill(Color::BLUE)
+            .opacity(0.4)
+            .build(&mut scene);
+        let target = circle()
+            .position(vec2(-100.0, -40.0))
+            .radius(32.0)
+            .fill(Color::RED)
+            .opacity(1.0)
+            .build(&mut scene);
+        scene.get_world_2d().add(&source);
+        scene.get_world_2d().add(&target);
+
+        target.set_state(source.get_state()).play();
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.5);
+        assert_eq!(target.get_position(), Vector2::ZERO);
+        assert_eq!(target.get_radius(), 48.0);
+        assert_eq!(target.get_fill(), Color::new(0.5, 0.0, 0.5, 1.0));
+        assert_eq!(target.get_opacity(), 0.7);
+
+        scene.update(1.0);
+        assert_eq!(target.get_position(), source.get_position());
+        assert_eq!(target.get_radius(), source.get_radius());
+        assert_eq!(target.get_fill(), source.get_fill());
+        assert_eq!(target.get_opacity(), source.get_opacity());
+    }
+
+    #[test]
     #[should_panic(expected = "Cannot restore an object without a saved snapshot.")]
     fn object_handler_rejects_restore_without_a_snapshot() {
         let mut scene = Scene::new();

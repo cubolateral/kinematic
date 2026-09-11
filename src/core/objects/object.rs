@@ -6,10 +6,18 @@ use crate::core::{
     types::Vector2,
 };
 
+#[derive(Clone)]
 struct SnapshotValue {
     type_id: std::any::TypeId,
     track_info: &'static TrackInfo,
     value: TrackValue,
+}
+
+/// Captures every tracked value from one typed object handler.
+#[derive(Clone)]
+pub struct Snapshot<Handler> {
+    values: Vec<SnapshotValue>,
+    handler: std::marker::PhantomData<Handler>,
 }
 
 #[derive(Default)]
@@ -108,6 +116,28 @@ pub trait ObjectHandler: Clone {
         to: T,
     ) -> Tween<Self::Object>;
 
+    /// Captures the current values of every tracked property.
+    fn get_state(&self) -> Snapshot<Self>
+    where
+        Self: Sized,
+    {
+        Snapshot {
+            values: snapshot_values(&self.object_world(), self.get_id()),
+            handler: std::marker::PhantomData,
+        }
+    }
+
+    /// Creates a tween from the current values to a compatible snapshot.
+    fn set_state(&self, state: Snapshot<Self>) -> Tween<Self::Object>
+    where
+        Self: Sized,
+    {
+        let world = self.object_world();
+        let animator = self.object_animator();
+        animator.assert_timeline_mutation();
+        tween_to_values(&world, self.get_id(), state.values, animator)
+    }
+
     /// Saves all tracked property values on this object's snapshot stack.
     fn save(&self);
 
@@ -136,28 +166,7 @@ pub trait Object2DHandler: ObjectHandler {
 /// Pushes the current tracked values onto an object's snapshot stack.
 #[doc(hidden)]
 pub fn save_object(world: &SceneWorld, entity: hecs::Entity) {
-    let values = {
-        let world = world.borrow();
-        let inspection = *world
-            .get::<&Inspection>(entity)
-            .expect("Object handler must contain Inspection metadata.");
-
-        let mut values = Vec::new();
-
-        for trackable in (inspection.get)(&world, entity) {
-            let type_id = (trackable.type_id)();
-
-            for track_info in (trackable.get)() {
-                values.push(SnapshotValue {
-                    type_id,
-                    track_info,
-                    value: (track_info.get)(&world, entity),
-                });
-            }
-        }
-
-        values
-    };
+    let values = snapshot_values(world, entity);
 
     world
         .borrow()
@@ -165,6 +174,29 @@ pub fn save_object(world: &SceneWorld, entity: hecs::Entity) {
         .expect("Object handler must contain a snapshot stack.")
         .0
         .push(values);
+}
+
+fn snapshot_values(world: &SceneWorld, entity: hecs::Entity) -> Vec<SnapshotValue> {
+    let world = world.borrow();
+    let inspection = *world
+        .get::<&Inspection>(entity)
+        .expect("Object handler must contain Inspection metadata.");
+
+    let mut values = Vec::new();
+
+    for trackable in (inspection.get)(&world, entity) {
+        let type_id = (trackable.type_id)();
+
+        for track_info in (trackable.get)() {
+            values.push(SnapshotValue {
+                type_id,
+                track_info,
+                value: (track_info.get)(&world, entity),
+            });
+        }
+    }
+
+    values
 }
 
 /// Pops an object's latest snapshot and builds a tween back to it.
@@ -182,10 +214,19 @@ pub fn restore_object<Object>(
         .pop()
         .expect("Cannot restore an object without a saved snapshot.");
 
+    tween_to_values(world, entity, snapshot, animator)
+}
+
+fn tween_to_values<Object>(
+    world: &SceneWorld,
+    entity: hecs::Entity,
+    values: Vec<SnapshotValue>,
+    animator: AnimatorHandle,
+) -> Tween<Object> {
     let targets = {
         let world_ref = world.borrow();
 
-        snapshot
+        values
             .into_iter()
             .map(|saved| {
                 let from = (saved.track_info.get)(&world_ref, entity);
