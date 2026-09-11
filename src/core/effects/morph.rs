@@ -6,7 +6,7 @@ use crate::core::{
     objects::{
         GlobalTransform, Morphable, Object, ObjectHandler, ObjectTrackable, Rect,
         appearance::{AppearanceEdit, AppearanceSnapshot},
-        attach_child, children, deactivate_subtree, global_transform, local_transform,
+        attach_child, deactivate_subtree, global_transform, local_transform,
         particle::{ParticleTransform, Silhouette},
     },
     types::Vector2,
@@ -345,7 +345,7 @@ fn record(
         (draw.on_draw)(world, entity, canvas, 1.0);
     });
     canvas.restore_to_count(saved);
-    for child in children(world, entity) {
+    for child in crate::core::objects::child_iter(world, entity) {
         let node = world.get::<&Node>(child).unwrap();
         if node.lifetime[1] <= time || (node.lifetime[0].is_finite() && node.lifetime[0] > time) {
             continue;

@@ -464,7 +464,7 @@ fn bounds3d(world: &hecs::World, entity: hecs::Entity) -> Option<(glam::Vec3, gl
         ),
         |size| (-size * 0.5, size * 0.5),
     );
-    for child in crate::core::objects::children(world, entity) {
+    for child in crate::core::objects::child_iter(world, entity) {
         if !world.get::<&Node>(child).is_ok_and(|n| n.is_activated) {
             continue;
         }

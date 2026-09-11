@@ -127,6 +127,28 @@ fn graphics_canvas_projection_alpha_orientation() {
     renderer.render(&scene, &mut output, &mut skia).unwrap();
     assert_eq!(read(&gl, &output), pixels);
 
+    let target_texture = renderer.targets[&overlay.get_texture()].texture();
+    let geometries: Vec<_> = renderer.geometries.keys().copied().collect();
+    assert!(!geometries.is_empty());
+    let second = Scene::new_with_resolution((64, 64));
+    second.update(0.0);
+    renderer.render(&second, &mut output, &mut skia).unwrap();
+    assert_eq!(
+        renderer.targets[&overlay.get_texture()].texture(),
+        target_texture
+    );
+    assert!(
+        geometries
+            .iter()
+            .all(|key| renderer.geometries.contains_key(key))
+    );
+    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    assert_eq!(
+        renderer.targets[&overlay.get_texture()].texture(),
+        target_texture
+    );
+    assert_eq!(read(&gl, &output), pixels);
+
     reset_gl(&gl, (64, 64));
     assert_eq!(unsafe { gl.get_error() }, glow::NO_ERROR);
     let allocations: Vec<_> = renderer

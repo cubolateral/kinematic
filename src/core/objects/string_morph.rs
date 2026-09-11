@@ -280,7 +280,17 @@ fn morph_string_with<T: Object, S: hecs::Component + Clone>(
 }
 
 pub(super) fn refresh_appearance(world: &hecs::World, edits: &[AppearanceEdit]) {
-    for (entity, morph) in world.query::<(hecs::Entity, &mut ContentMorph)>().iter() {
+    for (index, edit) in edits.iter().enumerate() {
+        let entity = edit.entity;
+        if edits[..index]
+            .iter()
+            .any(|previous| previous.entity == entity)
+        {
+            continue;
+        }
+        let Ok(mut morph) = world.get::<&mut ContentMorph>(entity) else {
+            continue;
+        };
         for transition in &mut morph.transitions {
             if let Some(prepared) = transition
                 .refresh

@@ -18,7 +18,15 @@ pub trait SceneBuilder {
 }
 
 /// Runtime ECS scene containing render nodes and compiled animation tracks.
-pub(crate) struct SceneIdentity(pub(crate) u64);
+pub(crate) struct SceneIdentity(pub(crate) u64, std::sync::atomic::AtomicU64);
+
+pub(crate) fn invalidate_lifetimes(world: &hecs::World) {
+    if let Some(identity) = world.query::<&SceneIdentity>().iter().next() {
+        identity
+            .1
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
 
 fn root_trackables(_: &hecs::World, _: hecs::Entity) -> &'static [TrackableInfo] {
     static TRACKABLES: [TrackableInfo; 1] = [View::INFO];
@@ -36,6 +44,18 @@ pub struct Scene {
     scene_file: SceneFile,
     scheduled_events: Vec<ScheduledEvent>,
     persist_events: bool,
+    revision: std::cell::Cell<u64>,
+    plan_revision: std::cell::Cell<u64>,
+    runtime: std::cell::RefCell<Option<Runtime>>,
+}
+
+#[derive(Default)]
+struct Runtime {
+    animated: Vec<hecs::Entity>,
+    boundaries: Vec<(f32, hecs::Entity)>,
+    cursor: usize,
+    initialized: bool,
+    generation: u64,
 }
 
 impl Scene {
@@ -62,7 +82,7 @@ impl Scene {
         let id = NEXT_SCENE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let root = world.borrow_mut().spawn(
             hecs::EntityBuilder::new()
-                .add(SceneIdentity(id))
+                .add(SceneIdentity(id, std::sync::atomic::AtomicU64::new(0)))
                 .add(Animation::default())
                 .add(Draw2D::default())
                 .add(Inspection {
@@ -100,6 +120,9 @@ impl Scene {
             },
             scheduled_events: Vec::new(),
             persist_events,
+            revision: std::cell::Cell::new(0),
+            plan_revision: std::cell::Cell::new(0),
+            runtime: std::cell::RefCell::new(None),
         };
 
         let world_2d = canvas_2d()
@@ -129,30 +152,122 @@ impl Scene {
     ///
     /// This updates scene state only; rendering remains in [`Self::draw`].
     pub fn update(&self, time: f32) {
+        let generation = self.structure_revision();
+        if self
+            .runtime
+            .borrow()
+            .as_ref()
+            .is_none_or(|runtime| runtime.generation != generation)
+        {
+            self.compile_runtime();
+        }
         let signals = self.animator.handle().signals();
         let world = self.world.borrow_mut();
 
         signals.restore_overrides(&world);
 
-        for node in world.query::<&mut Node>().iter() {
-            node.update(time);
-        }
-
-        for (entity, node, animation) in world
-            .query::<(hecs::Entity, &Node, &mut Animation)>()
-            .iter()
-        {
-            if !node.is_activated {
-                continue;
+        let mut runtime = self.runtime.borrow_mut();
+        if let Some(runtime) = runtime.as_mut() {
+            let cursor = runtime.boundaries.partition_point(|(at, _)| *at <= time);
+            if !runtime.initialized {
+                for (_, entity) in &runtime.boundaries {
+                    if let Ok(mut node) = world.get::<&mut Node>(*entity) {
+                        node.update(time);
+                    }
+                }
+            } else {
+                for (_, entity) in
+                    &runtime.boundaries[runtime.cursor.min(cursor)..runtime.cursor.max(cursor)]
+                {
+                    if let Ok(mut node) = world.get::<&mut Node>(*entity) {
+                        node.update(time);
+                    }
+                }
             }
-
-            for track in &mut animation.tracks {
-                track.track.update(&world, entity, time);
+            if !runtime.initialized || cursor != runtime.cursor {
+                self.plan_revision
+                    .set(self.plan_revision.get().wrapping_add(1));
+            }
+            runtime.cursor = cursor;
+            runtime.initialized = true;
+            for entity in &runtime.animated {
+                if world
+                    .get::<&Node>(*entity)
+                    .is_ok_and(|node| node.is_activated)
+                    && let Ok(mut animation) = world.get::<&mut Animation>(*entity)
+                {
+                    for track in &mut animation.tracks {
+                        track.track.update(&world, *entity, time);
+                    }
+                }
             }
         }
+        drop(runtime);
         drop(world);
 
         signals.evaluate(&self.world, time);
+        self.revision.set(self.revision.get().wrapping_add(1));
+    }
+
+    pub(crate) fn invalidate(&self) {
+        self.revision.set(self.revision.get().wrapping_add(1));
+        self.plan_revision
+            .set(self.plan_revision.get().wrapping_add(1));
+    }
+
+    fn structure_revision(&self) -> u64 {
+        self.world
+            .borrow()
+            .get::<&SceneIdentity>(self.root)
+            .unwrap()
+            .1
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub(crate) fn render_key(&self) -> (u64, u64) {
+        (
+            self.world
+                .borrow()
+                .get::<&SceneIdentity>(self.root)
+                .unwrap()
+                .0,
+            self.revision.get().wrapping_add(self.structure_revision()),
+        )
+    }
+
+    pub(crate) fn plan_revision(&self) -> u64 {
+        self.plan_revision
+            .get()
+            .wrapping_add(self.structure_revision())
+    }
+
+    pub(crate) fn compile_runtime(&self) {
+        let world = self.world.borrow();
+        let mut runtime = Runtime {
+            generation: world
+                .get::<&SceneIdentity>(self.root)
+                .unwrap()
+                .1
+                .load(std::sync::atomic::Ordering::Relaxed),
+            ..Runtime::default()
+        };
+        for (entity, node) in world.query::<(hecs::Entity, &Node)>().iter() {
+            for at in node.lifetime {
+                if at.is_finite() {
+                    runtime.boundaries.push((at, entity));
+                }
+            }
+        }
+        runtime.boundaries.sort_by(|a, b| a.0.total_cmp(&b.0));
+        runtime.animated.extend(
+            world
+                .query::<(hecs::Entity, &Animation)>()
+                .iter()
+                .filter(|(_, animation)| !animation.tracks.is_empty())
+                .map(|(entity, _)| entity),
+        );
+        *self.runtime.borrow_mut() = Some(runtime);
+        self.invalidate();
     }
 
     /// Draws the built-in 2D world without applying its output-size translation.
@@ -172,23 +287,23 @@ impl Scene {
         canvas.restore_to_count(save_count);
     }
 
-    pub(crate) fn draw_outline(
-        &self,
-        entity: hecs::Entity,
-        canvas: &skia_safe::Canvas,
-        thickness: f32,
-    ) {
+    pub(crate) fn selection_outline(&self, entity: hecs::Entity) -> Option<[[f32; 2]; 4]> {
         let output = self.get_view();
         let world = self.world.borrow();
-        if self.output_is_active_2d(&world, output.entity) {
-            crate::core::objects::draw_canvas_outline2d(
-                &world,
-                output.entity,
-                entity,
-                thickness,
-                canvas,
-            );
+        if !self.output_is_active_2d(&world, output.entity) {
+            return None;
         }
+        let points = crate::core::objects::outline_points(&world, output.entity, entity)?;
+        let size = world
+            .get::<&crate::core::objects::CanvasSettings>(output.entity)
+            .ok()?
+            .resolution;
+        Some(points.map(|p| {
+            [
+                p.x / size.0.max(1) as f32 + 0.5,
+                p.y / size.1.max(1) as f32 + 0.5,
+            ]
+        }))
     }
 
     pub(crate) fn pick(&self, point: Vector2) -> Option<hecs::Entity> {
@@ -411,6 +526,8 @@ impl Scene {
 
     /// Mutable access to the underlying ECS world.
     pub fn get_world_mut(&self) -> std::cell::RefMut<'_, hecs::World> {
+        self.invalidate();
+        *self.runtime.borrow_mut() = None;
         self.world.borrow_mut()
     }
 
@@ -446,6 +563,68 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn revision_changes_for_updates_edits_and_rebuilds_but_not_overlays() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        scene.update(0.0);
+        let rendered = scene.render_key();
+        assert!(scene.selection_outline(object.get_id()).is_some());
+        assert_eq!(scene.pick(Vector2::ZERO), Some(object.get_id()));
+        let mut surface = skia_safe::surfaces::raster_n32_premul((16, 16)).unwrap();
+        scene.draw(surface.canvas());
+        assert_eq!(scene.render_key(), rendered);
+        scene.invalidate();
+        let edited = scene.render_key();
+        assert_ne!(edited, rendered);
+        scene.update(0.5);
+        assert_ne!(scene.render_key(), edited);
+        assert_ne!(Scene::new().render_key().0, rendered.0);
+    }
+
+    #[test]
+    fn compiled_runtime_visits_tracks_and_crossed_lifetimes_and_handles_later_removal() {
+        let mut scene = Scene::new();
+        let static_object = circle().build(&mut scene);
+        scene.get_world_2d().add(&static_object);
+        let animated = circle().build(&mut scene);
+        scene.get_world_2d().add(&animated);
+        animated
+            .position_x(10.0)
+            .duration(2.0)
+            .easing(Easing::Linear)
+            .play();
+        scene.animator.take_schedule().compile(&scene);
+        assert_eq!(
+            scene.runtime.borrow().as_ref().unwrap().animated,
+            vec![animated.get_id()]
+        );
+        scene.update(0.5);
+        let plan_revision = scene.plan_revision();
+        scene.update(1.0);
+        assert_eq!(scene.plan_revision(), plan_revision);
+        assert_eq!(animated.get_position().x, 5.0);
+        static_object.remove();
+        scene.update(2.0);
+        assert!(
+            !scene
+                .get_world()
+                .get::<&Node>(static_object.get_id())
+                .unwrap()
+                .is_activated
+        );
+        scene.update(0.5);
+        assert!(
+            scene
+                .get_world()
+                .get::<&Node>(static_object.get_id())
+                .unwrap()
+                .is_activated
+        );
+        assert_eq!(animated.get_position().x, 2.5);
+    }
 
     fn scene_with_event(name: &'static str, event_name: &str, duration: f32) -> Scene {
         let mut scene = Scene::new_named(name, (1920, 1080));

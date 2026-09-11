@@ -1,14 +1,12 @@
-#[cfg(test)]
 thread_local! {
+    pub(crate) static DRAW_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     pub(crate) static CAPTURE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 use crate::core::{
     Easing,
     components::{PARTICLE_FADE_START, PARTICLE_RADIUS},
-    objects::{
-        MorphParticleRoute, draw_particle_batch, particle_count_for_bounds, silhouette_grid,
-    },
+    objects::{MorphParticleRoute, ParticleBatch, particle_count_for_bounds, silhouette_grid},
     types::Vector2,
 };
 
@@ -27,6 +25,8 @@ pub(crate) struct ParticleTransform {
     pub(crate) to: Silhouette,
     easing: Easing,
     routes: Vec<MorphParticleRoute>,
+    colors: Vec<([f32; 4], [f32; 4])>,
+    batch: std::sync::Mutex<ParticleBatch>,
 }
 
 impl Silhouette {
@@ -68,7 +68,6 @@ impl Silhouette {
 
     /// Samples colors and positions from a drawing in local coordinates.
     pub(crate) fn capture(bounds: skia_safe::Rect, draw: impl FnOnce(&skia_safe::Canvas)) -> Self {
-        #[cfg(test)]
         CAPTURE_COUNT.set(CAPTURE_COUNT.get() + 1);
         assert!(
             bounds.left.is_finite()
@@ -188,12 +187,25 @@ impl ParticleTransform {
 
     fn with_count(from: Silhouette, to: Silhouette, easing: Easing, count: usize) -> Self {
         let routes = Self::routes(&from, &to, count);
+        let colors = Self::colors(&from, &to, count);
         Self {
             from,
             to,
             easing,
             routes,
+            colors,
+            batch: std::sync::Mutex::new(ParticleBatch::new(count)),
         }
+    }
+
+    fn colors(from: &Silhouette, to: &Silhouette, count: usize) -> Vec<([f32; 4], [f32; 4])> {
+        (0..count)
+            .map(|index| {
+                let from = from.samples[index * from.samples.len() / count].color;
+                let to = to.samples[index * to.samples.len() / count].color;
+                (from, std::array::from_fn(|i| to[i] - from[i]))
+            })
+            .collect()
     }
 
     fn routes(from: &Silhouette, to: &Silhouette, count: usize) -> Vec<MorphParticleRoute> {
@@ -215,6 +227,8 @@ impl ParticleTransform {
             self.from.samples.len().max(self.to.samples.len())
         };
         self.routes = Self::routes(&self.from, &self.to, count);
+        self.colors = Self::colors(&self.from, &self.to, count);
+        *self.batch.get_mut().unwrap() = ParticleBatch::new(count);
     }
 
     pub(crate) fn draw(&self, canvas: &skia_safe::Canvas, progress: f32, opacity: f32) {
@@ -223,27 +237,32 @@ impl ParticleTransform {
             return;
         }
         let particle_opacity = particle_opacity(progress);
-        let count = data.routes.len();
-        let mut positions = Vec::with_capacity(count);
-        let mut colors = Vec::with_capacity(count);
-        for (index, route) in data.routes.iter().enumerate() {
-            let from = &data.from.samples[index * data.from.samples.len() / count];
-            let to = &data.to.samples[index * data.to.samples.len() / count];
-            let local = route.progress(progress);
-            let t = data.easing.evaluate(local).clamp(0.0, 1.0);
-            let point = route.position(t);
-            let color: [f32; 4] =
-                std::array::from_fn(|i| from.color[i] + (to.color[i] - from.color[i]) * t);
-            positions.push(point);
-            let channel = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
-            colors.push(skia_safe::Color::from_argb(
-                channel(color[3] * particle_opacity * opacity),
-                channel(color[0]),
-                channel(color[1]),
-                channel(color[2]),
-            ));
+        if particle_opacity * opacity <= 0.0 {
+            return;
         }
-        draw_particle_batch(canvas, &positions, &colors, PARTICLE_RADIUS);
+        self.batch
+            .lock()
+            .unwrap()
+            .draw(canvas, PARTICLE_RADIUS, |index| {
+                let route = &data.routes[index];
+                let t = data
+                    .easing
+                    .evaluate(route.progress(progress))
+                    .clamp(0.0, 1.0);
+                let point = route.position(t);
+                let (from, delta) = data.colors[index];
+                let color: [f32; 4] = std::array::from_fn(|i| from[i] + delta[i] * t);
+                let channel = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+                (
+                    point,
+                    skia_safe::Color::from_argb(
+                        channel(color[3] * particle_opacity * opacity),
+                        channel(color[0]),
+                        channel(color[1]),
+                        channel(color[2]),
+                    ),
+                )
+            });
     }
 }
 

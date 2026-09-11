@@ -256,6 +256,8 @@ impl Schedule {
                 tween.append(&mut animation, repeat.start);
             }
         }
+        drop(world);
+        scene.compile_runtime();
         self.duration
     }
 }

@@ -660,7 +660,17 @@ fn prepare_write_plan(
 }
 
 pub(crate) fn refresh_write_plans(world: &hecs::World, edits: &[AppearanceEdit]) {
-    for (entity, state) in world.query::<(hecs::Entity, &mut WriteState)>().iter() {
+    for (index, edit) in edits.iter().enumerate() {
+        let entity = edit.entity;
+        if edits[..index]
+            .iter()
+            .any(|previous| previous.entity == entity)
+        {
+            continue;
+        }
+        let Ok(mut state) = world.get::<&mut WriteState>(entity) else {
+            continue;
+        };
         let relevant: Vec<_> = edits
             .iter()
             .filter(|edit| {

@@ -38,7 +38,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             return;
         };
 
-        let world = editor.get_scene().get_world();
+        let scene = editor.get_scene();
+        let world = scene.get_world();
         let Ok(inspection) = world.get::<&Inspection>(entity) else {
             ui.text_disabled("The selected object is unavailable.");
             return;
@@ -85,6 +86,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 dear_imgui_rs::sys::ImGuiDataType_U32,
             ) {
                 sphere.segments = segments.clamp(3, 256);
+                scene.invalidate();
             }
         }
         if let Ok(source) = world.get::<&ProjectionSource>(entity) {
@@ -121,6 +123,9 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             ui.spacing();
         }
         refresh_appearance(&world, &edits);
+        if !edits.is_empty() {
+            scene.invalidate();
+        }
     });
 }
 

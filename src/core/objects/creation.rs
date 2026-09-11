@@ -240,20 +240,23 @@ pub(crate) fn silhouette_grid(
 ) -> Vec<Vector2> {
     let pixels = surface.peek_pixels().unwrap();
     let size = pixels.dimensions();
-    let occupied = (0..size.height)
-        .map(|y| {
-            (0..size.width)
-                .filter(|x| pixels.get_color((*x, y)).a() > 0)
-                .count()
-        })
-        .sum::<usize>();
-
-    if occupied == 0 {
-        return vec![];
+    if count == 0 {
+        return Vec::new();
     }
-
-    let pixel_count = size.width as usize * size.height as usize;
-    let coverage = occupied as f32 / pixel_count as f32;
+    // Coverage is only a density estimate; bound its cost independently of capture resolution.
+    let step_x = (size.width / 128).max(1) as usize;
+    let step_y = (size.height / 128).max(1) as usize;
+    let mut occupied = 0usize;
+    let mut sampled = 0usize;
+    for y in (0..size.height).step_by(step_y) {
+        for x in (0..size.width).step_by(step_x) {
+            occupied += usize::from(pixels.get_color((x, y)).a() > 0);
+            sampled += 1;
+        }
+    }
+    // A thin silhouette can fall between probes. Let the grid refinement find it.
+    let coverage =
+        (occupied as f32 / sampled.max(1) as f32).max(1.0 / MAX_GRID_OVERSAMPLING as f32);
     let maximum_cells = count.saturating_mul(MAX_GRID_OVERSAMPLING);
     let mut cell_count = ((count as f32 / coverage).ceil() as usize).clamp(count, maximum_cells);
     let mut samples = Vec::with_capacity(count);
@@ -282,10 +285,11 @@ pub(crate) fn silhouette_grid(
     }
 
     if samples.len() > count {
-        let all_samples = std::mem::take(&mut samples);
-        let total = all_samples.len();
-        samples.reserve(count);
-        samples.extend((0..count).map(|index| all_samples[index * total / count]));
+        let total = samples.len();
+        for index in 0..count {
+            samples[index] = samples[index * total / count];
+        }
+        samples.truncate(count);
     }
 
     samples
@@ -386,6 +390,7 @@ fn draw_particles(
         );
     }
 
+    super::particle::DRAW_COUNT.set(super::particle::DRAW_COUNT.get() + active_count);
     let mut paint = skia_safe::Paint::default();
     paint.set_anti_alias(true);
     paint.set_alpha_f(opacity.clamp(0.0, 1.0));
@@ -403,47 +408,58 @@ fn draw_particles(
     });
 }
 
-/// Draws a colored particle cloud using the shared circular sprite.
-pub(crate) fn draw_particle_batch(
-    canvas: &skia_safe::Canvas,
-    positions: &[Vector2],
-    colors: &[skia_safe::Color],
-    radius: f32,
-) {
-    if radius <= 0.0 || positions.is_empty() {
-        return;
+pub(crate) struct ParticleBatch {
+    transforms: Vec<skia_safe::RSXform>,
+    sources: Vec<skia_safe::Rect>,
+    colors: Vec<skia_safe::Color>,
+}
+
+impl ParticleBatch {
+    pub fn new(count: usize) -> Self {
+        Self {
+            transforms: vec![skia_safe::RSXform::new(1.0, 0.0, (0.0, 0.0)); count],
+            sources: vec![
+                skia_safe::Rect::from_wh(
+                    PARTICLE_SPRITE_SIZE as f32,
+                    PARTICLE_SPRITE_SIZE as f32
+                );
+                count
+            ],
+            colors: vec![skia_safe::Color::TRANSPARENT; count],
+        }
     }
-    let transforms: Vec<_> = positions
-        .iter()
-        .map(|position| {
-            skia_safe::RSXform::from_radians(
-                radius / PARTICLE_SPRITE_RADIUS,
-                0.0,
-                (position.x, position.y),
-                (
-                    PARTICLE_SPRITE_SIZE as f32 * 0.5,
-                    PARTICLE_SPRITE_SIZE as f32 * 0.5,
-                ),
-            )
-        })
-        .collect();
-    let sources =
-        vec![
-            skia_safe::Rect::from_wh(PARTICLE_SPRITE_SIZE as f32, PARTICLE_SPRITE_SIZE as f32);
-            positions.len()
-        ];
-    PARTICLE_SPRITE.with(|sprite| {
-        canvas.draw_atlas(
-            sprite,
-            &transforms,
-            &sources,
-            Some(colors),
-            skia_safe::BlendMode::Modulate,
-            skia_safe::FilterMode::Nearest,
-            None,
-            &skia_safe::Paint::default(),
-        );
-    });
+
+    pub fn draw(
+        &mut self,
+        canvas: &skia_safe::Canvas,
+        radius: f32,
+        mut particle: impl FnMut(usize) -> (Vector2, skia_safe::Color),
+    ) {
+        if radius <= 0.0 || self.transforms.is_empty() {
+            return;
+        }
+        super::particle::DRAW_COUNT.set(super::particle::DRAW_COUNT.get() + self.transforms.len());
+        let scale = radius / PARTICLE_SPRITE_RADIUS;
+        let offset = PARTICLE_SPRITE_SIZE as f32 * 0.5 * scale;
+        for index in 0..self.transforms.len() {
+            let (position, color) = particle(index);
+            self.transforms[index] =
+                skia_safe::RSXform::new(scale, 0.0, (position.x - offset, position.y - offset));
+            self.colors[index] = color;
+        }
+        PARTICLE_SPRITE.with(|sprite| {
+            canvas.draw_atlas(
+                sprite,
+                &self.transforms,
+                &self.sources,
+                Some(self.colors.as_slice()),
+                skia_safe::BlendMode::Modulate,
+                skia_safe::FilterMode::Nearest,
+                None,
+                &skia_safe::Paint::default(),
+            );
+        });
+    }
 }
 
 fn particle_route(target: Vector2, bounds: skia_safe::Rect) -> Particle {
@@ -498,37 +514,42 @@ fn particle_position(particle: &Particle, distance: f32, progress: f32) -> Vecto
 
 /// Precomputed path and delay for one particle between two silhouettes.
 pub(crate) struct MorphParticleRoute {
-    from: Vector2,
+    coefficients: [Vector2; 4],
     to: Vector2,
-    control_1: Vector2,
-    control_2: Vector2,
     start: f32,
+    inverse_duration: f32,
 }
 
 impl MorphParticleRoute {
     pub(crate) fn new(from: Vector2, to: Vector2, bounds: skia_safe::Rect) -> Self {
         let route = particle_route(to, bounds);
+        let c1 = from + route.control_1_offset * PARTICLE_DISTANCE;
+        let c2 = to + route.control_2_offset * PARTICLE_DISTANCE;
+        let start = route.start * PARTICLE_STAGGER;
         Self {
-            from,
+            coefficients: [
+                to - c2 * 3.0 + c1 * 3.0 - from,
+                (c2 - c1 * 2.0 + from) * 3.0,
+                (c1 - from) * 3.0,
+                from,
+            ],
             to,
-            control_1: from + route.control_1_offset * PARTICLE_DISTANCE,
-            control_2: to + route.control_2_offset * PARTICLE_DISTANCE,
-            start: route.start,
+            start,
+            inverse_duration: 1.0 / (1.0 - start),
         }
     }
 
     pub(crate) fn position(&self, progress: f32) -> Vector2 {
-        cubic_bezier(
-            self.from,
-            self.control_1,
-            self.control_2,
-            self.to,
-            smoothstep(progress),
-        )
+        if progress == 1.0 {
+            return self.to;
+        }
+        let t = smoothstep(progress);
+        let [a, b, c, d] = self.coefficients;
+        ((a * t + b) * t + c) * t + d
     }
 
     pub(crate) fn progress(&self, progress: f32) -> f32 {
-        local_particle_progress(progress, self.start, PARTICLE_STAGGER)
+        ((progress - self.start) * self.inverse_duration).clamp(0.0, 1.0)
     }
 }
 

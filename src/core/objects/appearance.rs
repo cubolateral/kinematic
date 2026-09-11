@@ -3,7 +3,6 @@ use std::any::TypeId;
 use crate::core::{
     TrackInfo, TrackValue,
     components::{Animation, Inspection, Morph},
-    objects::children,
 };
 
 pub(crate) struct AppearanceEdit {
@@ -68,7 +67,7 @@ impl AppearanceSnapshot {
                 }
             }
         }
-        for child in children(world, entity) {
+        for child in crate::core::objects::child_iter(world, entity) {
             Self::collect(world, child, values);
         }
     }

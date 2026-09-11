@@ -125,7 +125,6 @@ impl App {
         );
 
         let mut events = self.sdl.event_pump().unwrap();
-        let mut previous_fullscreen = self.ui.is_fullscreen();
 
         'running: loop {
             for event in events.poll_iter() {
@@ -160,23 +159,14 @@ impl App {
                 );
             }
 
-            let is_fullscreen = self.ui.is_fullscreen();
-            let fullscreen_changed = is_fullscreen != previous_fullscreen;
-            previous_fullscreen = is_fullscreen;
-            let update_canvas = editor.update() || fullscreen_changed;
+            editor.update();
 
             unsafe {
                 self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
                 self.gl.clear(glow::COLOR_BUFFER_BIT);
             }
 
-            editor.draw(
-                &mut self.skia_context,
-                &self.gl,
-                self.window.size(),
-                update_canvas,
-                !is_fullscreen,
-            );
+            editor.draw(&mut self.skia_context, &self.gl, self.window.size());
 
             self.ui.apply_scale(&mut self.imgui);
             self.imgui_sdl.new_frame(&mut self.imgui);

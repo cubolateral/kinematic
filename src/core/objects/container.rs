@@ -164,14 +164,7 @@ pub(crate) fn attach_child(
         );
     }
 
-    for (container, node) in world.query::<(hecs::Entity, &Node)>().iter() {
-        let Some(children) = &node.children else {
-            continue;
-        };
-        if !children.contains(&child) {
-            continue;
-        }
-
+    if let Some(container) = world.get::<&Node>(child).unwrap().parent {
         assert_eq!(
             container, parent,
             "An object must not belong to more than one container."
@@ -190,6 +183,7 @@ pub(crate) fn attach_child(
         .expect("Added object must contain a Node component.")
         .parent = Some(parent);
     activate_subtree(&world, child, time);
+    crate::core::invalidate_lifetimes(&world);
 }
 
 pub(crate) fn contains_entity(
@@ -201,18 +195,13 @@ pub(crate) fn contains_entity(
         return true;
     }
 
-    children(world, root)
-        .iter()
-        .copied()
-        .any(|child| contains_entity(world, child, target))
+    child_iter(world, root).any(|child| contains_entity(world, child, target))
 }
 
 pub(crate) fn is_attached(world: &hecs::World, entity: hecs::Entity) -> bool {
-    world.query::<&Node>().iter().any(|node| {
-        node.children
-            .as_ref()
-            .is_some_and(|children| children.contains(&entity))
-    })
+    world
+        .get::<&Node>(entity)
+        .is_ok_and(|node| node.parent.is_some())
 }
 
 pub(crate) fn activate_subtree(world: &hecs::World, entity: hecs::Entity, time: f32) {
@@ -227,6 +216,7 @@ pub(crate) fn activate_subtree(world: &hecs::World, entity: hecs::Entity, time: 
 }
 
 pub(crate) fn deactivate_subtree(world: &hecs::World, entity: hecs::Entity, time: f32) {
+    crate::core::invalidate_lifetimes(world);
     world
         .get::<&mut Node>(entity)
         .expect("Removed object must contain a Node component.")
@@ -235,6 +225,17 @@ pub(crate) fn deactivate_subtree(world: &hecs::World, entity: hecs::Entity, time
     for child in children(world, entity) {
         deactivate_subtree(world, child, time);
     }
+}
+
+pub(crate) fn child_iter(
+    world: &hecs::World,
+    entity: hecs::Entity,
+) -> impl Iterator<Item = hecs::Entity> + '_ {
+    let node = world
+        .get::<&Node>(entity)
+        .expect("Scene object must contain a Node component.");
+    let count = node.children.as_ref().map_or(0, Vec::len);
+    (0..count).map(move |index| node.children.as_ref().unwrap()[index])
 }
 
 pub(crate) fn children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity> {

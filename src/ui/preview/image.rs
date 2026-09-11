@@ -28,18 +28,10 @@ pub(super) fn preview(editor: &mut Editor) -> PreviewImage {
     }
 }
 
-pub(super) fn draw(
-    ui: &dear_imgui_rs::Ui,
-    preview: PreviewImage,
-    available: [f32; 2],
-    editor: Option<&mut Editor>,
-) {
+pub(super) fn draw(ui: &dear_imgui_rs::Ui, preview: PreviewImage, available: [f32; 2]) {
     let scale =
         (available[0].max(1.0) / preview.size[0]).min(available[1].max(1.0) / preview.size[1]);
     let size = [preview.size[0] * scale, preview.size[1] * scale];
-    if let Some(editor) = editor {
-        editor.set_preview_scale(scale);
-    }
     let origin = ui.cursor_screen_pos();
 
     ui.set_cursor_screen_pos([
@@ -101,9 +93,6 @@ pub(super) fn draw_interactive(
 
     let fit_scale = (available[0] / preview.size[0]).min(available[1] / preview.size[1]);
     let scale = fit_scale * state.zoom();
-    // The outline is rendered into the preview texture, so compensate for its display scale.
-    // This keeps its width constant in screen pixels.
-    editor.set_preview_scale(scale);
     let size = [preview.size[0] * scale, preview.size[1] * scale];
     let pan = state.pan();
     let image_min = [
@@ -123,6 +112,7 @@ pub(super) fn draw_interactive(
         [1.0, 1.0, 1.0, 1.0],
     );
     draw_outline(ui, &draw_list, image_min, image_max);
+    selection(editor, &draw_list, image_min, image_max);
 
     let over_image = hovered
         && (image_min[0]..=image_max[0]).contains(&mouse[0])
@@ -175,4 +165,36 @@ fn draw_outline(
         )
         .thickness(VIEWPORT_OUTLINE_THICKNESS)
         .build();
+}
+
+fn selection(
+    editor: &mut Editor,
+    draw_list: &dear_imgui_rs::DrawListMut<'_>,
+    min: [f32; 2],
+    max: [f32; 2],
+) {
+    if editor.is_exporting() {
+        return;
+    }
+    let Some(entity) = editor.get_selected_entity() else {
+        return;
+    };
+    let Some(points) = editor.get_scene().selection_outline(entity) else {
+        return;
+    };
+    let points = points.map(|p| {
+        [
+            min[0] + p[0] * (max[0] - min[0]),
+            min[1] + p[1] * (max[1] - min[1]),
+        ]
+    });
+    let _clip = draw_list.push_clip_rect(min, max, true);
+    for (color, width) in [([0.0, 0.0, 0.0, 0.8], 6.0), ([1.0, 1.0, 1.0, 0.9], 2.0)] {
+        for index in 0..4 {
+            draw_list
+                .add_line(points[index], points[(index + 1) % 4], color)
+                .thickness(width)
+                .build();
+        }
+    }
 }

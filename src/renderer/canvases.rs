@@ -1,13 +1,11 @@
 use super::{
-    plan::{active_subtree, canvas_order, visible_subtree_3d},
+    plan::{PlanCache, visible_subtree_3d},
     target::{Target, reset_gl},
 };
 use crate::core::{
     Scene, SceneIdentity,
     components::{Camera3D, Draw3D, GeometryKey, RenderContext3D},
-    objects::{
-        CanvasDimension, CanvasSettings, CanvasTexture, ProjectionSource, draw_canvas2d_with_images,
-    },
+    objects::{CanvasDimension, CanvasSettings, CanvasTexture, draw_canvas2d_with_images},
 };
 use glow::HasContext;
 use std::{
@@ -18,6 +16,13 @@ use std::{
 pub(crate) struct Canvases {
     targets: HashMap<CanvasTexture, Target>,
     geometries: HashMap<GeometryKey, three_d::Mesh>,
+    plans: PlanCache,
+    visible: Vec<hecs::Entity>,
+    images: HashMap<CanvasTexture, skia_safe::Image>,
+    used_geometries: HashSet<GeometryKey>,
+    frame: u64,
+    target_usage: HashMap<CanvasTexture, u64>,
+    geometry_usage: HashMap<GeometryKey, u64>,
     physical: three_d::PhysicalMaterial,
     ambient: three_d::AmbientLight,
     sun: three_d::DirectionalLight,
@@ -30,6 +35,13 @@ impl Canvases {
         Self {
             targets: HashMap::new(),
             geometries: HashMap::new(),
+            plans: PlanCache::default(),
+            visible: Vec::new(),
+            images: HashMap::new(),
+            used_geometries: HashSet::new(),
+            frame: 0,
+            target_usage: HashMap::new(),
+            geometry_usage: HashMap::new(),
             physical: three_d::PhysicalMaterial::default(),
             ambient: three_d::AmbientLight::new(&context, 0.4, three_d::Srgba::WHITE),
             sun: three_d::DirectionalLight::new(
@@ -49,17 +61,17 @@ impl Canvases {
         final_target: &mut Target,
         skia: &mut skia_safe::gpu::DirectContext,
     ) -> Result<(), String> {
-        let order = canvas_order(scene)?;
+        self.frame += 1;
+        let plan = self.plans.get(scene, self.frame)?;
+        let order = &plan.order;
         let world = scene.get_world();
         let scene_id = world
             .get::<&SceneIdentity>(scene.get_root().get_id())
             .unwrap()
             .0;
-        self.targets
-            .retain(|key, _| key.scene == scene_id && world.contains(key.entity));
-        let mut used_geometries = HashSet::new();
+        self.used_geometries.clear();
 
-        for entity in &order {
+        for entity in order {
             let settings = world.get::<&CanvasSettings>(*entity).unwrap();
             let key = CanvasTexture {
                 scene: scene_id,
@@ -79,33 +91,25 @@ impl Canvases {
                 self.targets.insert(key, target);
             }
 
+            self.target_usage.insert(key, self.frame);
+
             match settings.dimension {
                 CanvasDimension::Two => {
                     skia.reset(None);
-                    let sources: HashSet<_> = active_subtree(&world, *entity)
-                        .into_iter()
-                        .filter_map(|entity| {
-                            world
-                                .get::<&ProjectionSource>(entity)
-                                .ok()
-                                .and_then(|source| source.0)
-                        })
-                        .collect();
-                    let images: HashMap<_, _> = sources
-                        .into_iter()
-                        .map(|source| {
-                            self.targets
-                                .get(&source)
-                                .ok_or("Projection source texture is unavailable.")?
-                                .image(skia)
-                                .map(|image| (source, image))
-                        })
-                        .collect::<Result<_, _>>()?;
+                    self.images.clear();
+                    for source in &plan.sources[entity] {
+                        let image = self
+                            .targets
+                            .get(source)
+                            .ok_or("Projection source texture is unavailable.")?
+                            .image(skia)?;
+                        self.images.insert(*source, image);
+                    }
                     self.targets
                         .get_mut(&key)
                         .unwrap()
                         .draw_skia(skia, |canvas| {
-                            draw_canvas2d_with_images(&world, *entity, canvas, &images)
+                            draw_canvas2d_with_images(&world, *entity, canvas, &self.images)
                         });
                 }
                 CanvasDimension::Three => {
@@ -133,6 +137,7 @@ impl Canvases {
                     let physical = &mut self.physical;
                     let ambient = &self.ambient;
                     let sun = &self.sun;
+                    visible_subtree_3d(&world, *entity, &mut self.visible);
                     pass.target()
                         .write(|| {
                             let mut render = RenderContext3D::new(
@@ -140,15 +145,15 @@ impl Canvases {
                                 pass.target(),
                                 context,
                                 geometries,
-                                &mut used_geometries,
+                                &mut self.used_geometries,
                                 physical,
                                 ambient,
                                 sun,
                                 &resolve_texture,
                             );
-                            for child in visible_subtree_3d(&world, *entity) {
-                                if let Ok(draw) = world.get::<&Draw3D>(child) {
-                                    (draw.on_draw)(&world, child, &mut render)
+                            for child in &self.visible {
+                                if let Ok(draw) = world.get::<&Draw3D>(*child) {
+                                    (draw.on_draw)(&world, *child, &mut render)
                                         .map_err(std::io::Error::other)?;
                                 }
                             }
@@ -159,8 +164,29 @@ impl Canvases {
             }
         }
 
-        self.geometries
-            .retain(|key, _| used_geometries.contains(key));
+        self.images.clear();
+        for key in &self.used_geometries {
+            self.geometry_usage.insert(*key, self.frame);
+        }
+        // Retain recently used resources across scene switches; reclaim at most one of each per render.
+        let target_bytes: u64 = self
+            .targets
+            .values()
+            .map(|target| u64::from(target.size.0) * u64::from(target.size.1) * 8)
+            .sum();
+        evict_oldest(
+            &mut self.targets,
+            &mut self.target_usage,
+            self.frame,
+            target_bytes > 256 * 1024 * 1024,
+        );
+        let over_budget = self.geometries.len() > 256;
+        evict_oldest(
+            &mut self.geometries,
+            &mut self.geometry_usage,
+            self.frame,
+            over_budget,
+        );
         let output = scene.get_view();
         if order.contains(&output.entity) {
             self.targets
@@ -178,6 +204,7 @@ impl Canvases {
 
 impl Drop for Canvases {
     fn drop(&mut self) {
+        self.images.clear();
         self.targets.clear();
         self.geometries.clear();
         // Program objects retain Context clones; clear this cache to break that cycle.
@@ -252,6 +279,22 @@ mod tests {
     use three_d::Viewer;
 
     #[test]
+    fn eviction_retains_recent_resources_and_reclaims_one_old_resource() {
+        use super::evict_oldest;
+        use std::collections::HashMap;
+        let mut cache = HashMap::from([(1, "First"), (2, "Second"), (3, "Current")]);
+        let mut usage = HashMap::from([(1, 1), (2, 2), (3, 3)]);
+        evict_oldest(&mut cache, &mut usage, 3, false);
+        assert_eq!(cache.len(), 3);
+        evict_oldest(&mut cache, &mut usage, 3, true);
+        assert!(!cache.contains_key(&1));
+        assert!(cache.contains_key(&3));
+        evict_oldest(&mut cache, &mut usage, 604, false);
+        assert_eq!(cache.len(), 1);
+        assert!(cache.contains_key(&3));
+    }
+
+    #[test]
     fn perspective_aspect_follows_canvas_resolution() {
         let scene = Scene::new();
         let handler = scene.get_world_3d();
@@ -261,5 +304,22 @@ mod tests {
             let aspect = projection.y.y / projection.x.x;
             assert!((aspect - resolution.0 as f32 / resolution.1 as f32).abs() < 1e-5);
         }
+    }
+}
+
+fn evict_oldest<K: Copy + Eq + std::hash::Hash, V>(
+    cache: &mut HashMap<K, V>,
+    usage: &mut HashMap<K, u64>,
+    frame: u64,
+    over_budget: bool,
+) {
+    if let Some(key) = usage
+        .iter()
+        .filter(|(_, used)| **used < frame && (over_budget || frame.saturating_sub(**used) > 600))
+        .min_by_key(|(_, used)| **used)
+        .map(|(key, _)| *key)
+    {
+        cache.remove(&key);
+        usage.remove(&key);
     }
 }

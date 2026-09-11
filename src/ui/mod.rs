@@ -91,10 +91,6 @@ impl Ui {
         }
     }
 
-    pub fn is_fullscreen(&self) -> bool {
-        self.is_fullscreen
-    }
-
     pub fn apply_scale(&self, context: &mut dear_imgui_rs::Context) {
         self.appearance.apply_scale(context);
     }

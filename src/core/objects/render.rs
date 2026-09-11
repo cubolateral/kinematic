@@ -1,11 +1,12 @@
 use crate::core::{
     components::{Camera2D, Draw2D, Node, Transform2D},
     objects::{
-        CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, children,
-        draw_projection_2d, local_transform,
+        CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, draw_projection_2d,
+        local_transform,
     },
     types::Vector2,
 };
+use skia_safe::QuickReject;
 use std::collections::HashMap;
 
 pub(crate) fn draw_entity(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
@@ -42,7 +43,17 @@ fn draw_entity_with_parent(
     let save_count = canvas.save();
     apply_global_transform(parent, global, canvas);
 
-    if children.is_empty() || opacity >= 1.0 {
+    let bounds = if children.len() == 0 || opacity < 1.0 {
+        visual_bounds(world, entity, global, transform_matrix(global).invert())
+    } else {
+        None
+    };
+    if bounds.is_some_and(|bounds| canvas.quick_reject(&bounds)) {
+        canvas.restore_to_count(save_count);
+        return;
+    }
+
+    if children.len() == 0 || opacity >= 1.0 {
         (draw.on_draw)(world, entity, canvas, opacity);
         draw_projection_2d_entity(world, entity, canvas, opacity, images);
 
@@ -50,7 +61,7 @@ fn draw_entity_with_parent(
             draw_entity_with_parent(world, child, global, canvas, images);
         }
     } else {
-        let layer_count = canvas.save_layer_alpha_f(None, opacity);
+        let layer_count = canvas.save_layer_alpha_f(bounds, opacity);
         (draw.on_draw)(world, entity, canvas, 1.0);
         draw_projection_2d_entity(world, entity, canvas, 1.0, images);
 
@@ -62,6 +73,68 @@ fn draw_entity_with_parent(
     }
 
     canvas.restore_to_count(save_count);
+}
+
+// Effect and text bounds can extend beyond get_box; retain Skia's clip in those cases.
+fn visual_bounds(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    global: GlobalTransform,
+    inverse: Option<skia_safe::Matrix>,
+) -> Option<skia_safe::Rect> {
+    use crate::core::components::{Morph, Style, stroke_width_for_scale};
+    use crate::core::objects::{LatexShape, TextShape, particle::ParticleTransform};
+    let inverse = inverse?;
+    if world
+        .get::<&Morph>(entity)
+        .is_ok_and(|m| m.particles_enabled)
+        || world.get::<&ParticleTransform>(entity).is_ok()
+        || world.get::<&TextShape>(entity).is_ok()
+        || world.get::<&LatexShape>(entity).is_ok()
+    {
+        return None;
+    }
+    let draw = world.get::<&Draw2D>(entity).ok()?;
+    let size = (draw.get_box)(world, entity);
+    let mut bounds = if size.x > 0.0 && size.y > 0.0 {
+        let padding = world.get::<&Style>(entity).map_or(0.0, |style| {
+            let scale = world
+                .get::<&Transform2D>(entity)
+                .map_or(Vector2::ONE, |t| t.scale);
+            stroke_width_for_scale(style.stroke_width.max(0.0), scale) * 2.0
+        });
+        let local = skia_safe::Rect::from_xywh(
+            -size.x * 0.5 - padding,
+            -size.y * 0.5 - padding,
+            size.x + padding * 2.0,
+            size.y + padding * 2.0,
+        );
+        Some(
+            skia_safe::Matrix::concat(&inverse, &transform_matrix(global))
+                .map_rect(local)
+                .0,
+        )
+    } else {
+        None
+    };
+    for child in crate::core::objects::child_iter(world, entity) {
+        if world.get::<&CanvasSettings>(child).is_ok()
+            || !world.get::<&Node>(child).is_ok_and(|n| n.is_activated)
+            || !world
+                .get::<&Draw2D>(child)
+                .is_ok_and(|d| d.visibility && d.opacity > 0.0)
+        {
+            continue;
+        }
+        let child_bounds = visual_bounds(
+            world,
+            child,
+            global.append(local_transform(world, child)),
+            Some(inverse),
+        )?;
+        bounds = Some(bounds.map_or(child_bounds, |bounds| union_bounds(bounds, child_bounds)));
+    }
+    bounds
 }
 
 fn draw_projection_2d_entity(
@@ -83,63 +156,57 @@ fn draw_projection_2d_entity(
     draw_projection_2d(world, entity, image, canvas, opacity);
 }
 
-pub(crate) fn draw_entity_outline(
+pub(crate) fn outline_points(
     world: &hecs::World,
-    entity: hecs::Entity,
+    scope: hecs::Entity,
     target: hecs::Entity,
-    thickness: f32,
-    canvas: &skia_safe::Canvas,
-) -> bool {
-    draw_entity_outline_with_parent(
-        world,
-        entity,
-        target,
-        GlobalTransform::default(),
-        thickness,
-        canvas,
-    )
-}
-
-fn draw_entity_outline_with_parent(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    target: hecs::Entity,
-    parent: GlobalTransform,
-    thickness: f32,
-    canvas: &skia_safe::Canvas,
-) -> bool {
-    if world.get::<&CanvasSettings>(entity).is_ok()
+) -> Option<[skia_safe::Point; 4]> {
+    fn visit(
+        world: &hecs::World,
+        entity: hecs::Entity,
+        target: hecs::Entity,
+        parent: GlobalTransform,
+    ) -> Option<[skia_safe::Point; 4]> {
+        if world.get::<&CanvasSettings>(entity).is_ok()
+            || !world
+                .get::<&Node>(entity)
+                .is_ok_and(|node| node.is_activated)
+            || !world
+                .get::<&Draw2D>(entity)
+                .is_ok_and(|draw| draw.visibility)
+        {
+            return None;
+        }
+        let global = parent.append(local_transform(world, entity));
+        if entity == target {
+            let bounds = local_bounds(world, entity)?;
+            let mut points = [
+                skia_safe::Point::new(bounds.left, bounds.top),
+                skia_safe::Point::new(bounds.right, bounds.top),
+                skia_safe::Point::new(bounds.right, bounds.bottom),
+                skia_safe::Point::new(bounds.left, bounds.bottom),
+            ];
+            transform_matrix(global).map_points_inplace(&mut points);
+            return Some(points);
+        }
+        crate::core::objects::child_iter(world, entity)
+            .find_map(|child| visit(world, child, target, global))
+    }
+    if !world
+        .get::<&Node>(scope)
+        .is_ok_and(|node| node.is_activated)
         || !world
-            .get::<&Draw2D>(entity)
+            .get::<&Draw2D>(scope)
             .is_ok_and(|draw| draw.visibility)
     {
-        return false;
+        return None;
     }
-    let node = world
-        .get::<&Node>(entity)
-        .expect("Outlined object must contain a Node component.");
-    if !node.is_activated {
-        return false;
+    let mut points = crate::core::objects::child_iter(world, scope)
+        .find_map(|child| visit(world, child, target, GlobalTransform::default()))?;
+    if let Some(view) = camera_matrix2d(world, scope).and_then(|m| m.invert()) {
+        view.map_points_inplace(&mut points);
     }
-
-    let global = parent.append(local_transform(world, entity));
-    let save_count = canvas.save();
-    apply_global_transform(parent, global, canvas);
-
-    let found = if entity == target {
-        if let Some(bounds) = local_bounds(world, entity) {
-            draw_outline(bounds, thickness, canvas);
-        }
-
-        true
-    } else {
-        children(world, entity).into_iter().any(|child| {
-            draw_entity_outline_with_parent(world, child, target, global, thickness, canvas)
-        })
-    };
-
-    canvas.restore_to_count(save_count);
-    found
+    Some(points)
 }
 
 pub(crate) fn pick_entity(
@@ -188,10 +255,31 @@ fn pick_entity_with_parent(
         .then_some(entity)
 }
 
-pub(crate) fn children_by_z_index(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity> {
-    let mut children = children(world, entity);
-    children.sort_by_key(|entity| world.get::<&Draw2D>(*entity).map_or(0, |draw| draw.z_index));
-    children
+pub(crate) fn children_by_z_index(
+    world: &hecs::World,
+    entity: hecs::Entity,
+) -> impl DoubleEndedIterator<Item = hecs::Entity> + ExactSizeIterator + '_ {
+    let node = world
+        .get::<&Node>(entity)
+        .expect("Scene object must contain a Node component.");
+    let children = node.children.as_deref().unwrap_or_default();
+    let z_index = |entity| world.get::<&Draw2D>(entity).map_or(0, |draw| draw.z_index);
+    let sorted = if children
+        .windows(2)
+        .any(|pair| z_index(pair[0]) > z_index(pair[1]))
+    {
+        let mut sorted = children.to_vec();
+        sorted.sort_by_key(|entity| z_index(*entity));
+        Some(sorted)
+    } else {
+        None
+    };
+    let count = children.len();
+    (0..count).map(move |index| {
+        sorted
+            .as_deref()
+            .unwrap_or_else(|| node.children.as_deref().unwrap_or_default())[index]
+    })
 }
 
 #[doc(hidden)]
@@ -209,8 +297,7 @@ fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::
     let size = (draw.get_box)(world, entity);
     let own = (size.x > 0.0 && size.y > 0.0)
         .then(|| skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y));
-    let child_bounds = children(world, entity)
-        .into_iter()
+    let child_bounds = crate::core::objects::child_iter(world, entity)
         .filter(|child| {
             world
                 .get::<&Node>(*child)
@@ -318,19 +405,6 @@ fn affine_matrix(position: Vector2, scale: Vector2, rotation: f32) -> skia_safe:
     )
 }
 
-fn draw_outline(bounds: skia_safe::Rect, thickness: f32, canvas: &skia_safe::Canvas) {
-    let mut paint = skia_safe::Paint::default();
-    paint.set_anti_alias(true);
-    paint.set_style(skia_safe::PaintStyle::Stroke);
-    paint.set_color4f(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.8), None);
-    paint.set_stroke_width(thickness * 3.0);
-    canvas.draw_rect(bounds, &paint);
-
-    paint.set_color4f(skia_safe::Color4f::new(1.0, 1.0, 1.0, 0.9), None);
-    paint.set_stroke_width(thickness);
-    canvas.draw_rect(bounds, &paint);
-}
-
 fn union_bounds(left: skia_safe::Rect, right: skia_safe::Rect) -> skia_safe::Rect {
     skia_safe::Rect::new(
         left.left.min(right.left),
@@ -382,29 +456,6 @@ fn draw_canvas2d_inner(
     }
     for child in children_by_z_index(world, entity) {
         draw_entity_with_parent(world, child, GlobalTransform::default(), canvas, images);
-    }
-    canvas.restore_to_count(saved);
-}
-
-pub(crate) fn draw_canvas_outline2d(
-    world: &hecs::World,
-    scope: hecs::Entity,
-    target: hecs::Entity,
-    thickness: f32,
-    canvas: &skia_safe::Canvas,
-) {
-    if !world
-        .get::<&Draw2D>(scope)
-        .is_ok_and(|draw| draw.visibility)
-    {
-        return;
-    }
-    let saved = canvas.save();
-    if let Some(view) = canvas_camera_matrix(world, scope).and_then(|matrix| matrix.invert()) {
-        canvas.concat(&view);
-    }
-    for child in children(world, scope) {
-        draw_entity_outline(world, child, target, thickness, canvas);
     }
     canvas.restore_to_count(saved);
 }

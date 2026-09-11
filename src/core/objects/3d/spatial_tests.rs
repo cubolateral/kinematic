@@ -48,7 +48,8 @@ fn container_visibility_hides_its_3d_subtree() {
     scene.add_canvas_3d(&canvas);
 
     let world = scene.get_world();
-    let visible = visible_subtree_3d(&world, canvas.get_id());
+    let mut visible = Vec::new();
+    visible_subtree_3d(&world, canvas.get_id(), &mut visible);
     assert!(visible.contains(&canvas.get_id()));
     assert!(!visible.contains(&parent.get_id()));
     assert!(!visible.contains(&child.get_id()));
@@ -246,7 +247,7 @@ fn spatial_tracks_snapshots_and_lifetime_are_seekable_without_morph() {
     assert!(scene.pick(Vector2::ZERO).is_none());
     let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
     scene.draw(surface.canvas());
-    scene.draw_outline(cube.get_id(), surface.canvas(), 1.0);
+    assert!(scene.selection_outline(cube.get_id()).is_none());
 }
 
 #[test]

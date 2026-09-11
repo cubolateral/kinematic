@@ -38,6 +38,15 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         let mouse_position_cursor = ui.cursor_screen_pos();
         ui.new_line();
         ui.separator();
+        let metrics = &editor.performance;
+        ui.text_disabled(format!(
+            "Update: {:.2} ms | Render: {:.2} ms | Particles: {} | Captures: {} | Skipped: {}",
+            metrics.update_ms,
+            metrics.render_ms,
+            metrics.particles,
+            crate::core::objects::particle::CAPTURE_COUNT.get(),
+            metrics.avoided
+        ));
         if let Some(error) = editor.get_render_error() {
             ui.text_wrapped(error);
         }

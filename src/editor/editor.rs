@@ -5,6 +5,14 @@ use crate::{
     utilities::FrameTimer,
 };
 
+#[derive(Default)]
+pub(crate) struct Performance {
+    pub update_ms: f32,
+    pub render_ms: f32,
+    pub avoided: u64,
+    pub particles: usize,
+}
+
 struct EditorScene {
     scene: Scene,
     start: f32,
@@ -26,7 +34,9 @@ pub(crate) struct Editor {
     accumulator: f32,
     window_timer: FrameTimer,
     canvas_timer: FrameTimer,
-    preview_scale: f32,
+    rendered: Option<(u64, u64)>,
+    evaluated: Option<(u64, f32)>,
+    pub(crate) performance: Performance,
     pending_project_settings: Option<ProjectSettings>,
 }
 
@@ -68,14 +78,16 @@ impl Editor {
             accumulator: 0.0,
             window_timer: FrameTimer::new(),
             canvas_timer: FrameTimer::new(),
-            preview_scale: 1.0,
+            rendered: None,
+            evaluated: None,
+            performance: Performance::default(),
             pending_project_settings: None,
         };
         editor.update_active_scene(0.0);
         editor
     }
 
-    pub fn update(&mut self) -> bool {
+    pub fn update(&mut self) {
         self.window_timer.tick();
 
         if self.is_exporting {
@@ -86,13 +98,12 @@ impl Editor {
 
             self.canvas_timer.tick();
             self.accumulator = 0.0;
-            return true;
+            return;
         }
 
         self.accumulator += self.window_timer.get_delta_time();
 
         let delta = 1.0 / self.project.settings.fps.max(1) as f32;
-        let mut update_canvas = false;
 
         while self.accumulator >= delta {
             if let Some(time) = self.timeline.update(delta) {
@@ -101,10 +112,7 @@ impl Editor {
 
             self.canvas_timer.tick();
             self.accumulator -= delta;
-            update_canvas = true;
         }
-
-        update_canvas
     }
 
     pub fn draw(
@@ -112,23 +120,23 @@ impl Editor {
         skia_context: &mut skia_safe::gpu::DirectContext,
         gl: &glow::Context,
         window_size: (u32, u32),
-        update_canvas: bool,
-        show_selection: bool,
     ) {
-        if !update_canvas && !(show_selection && self.selection.get().is_some()) {
+        let scene = &self.scenes[self.active_scene].scene;
+        let key = scene.render_key();
+        if self.rendered == Some(key) {
+            self.performance.avoided += 1;
+            if self.is_exporting {
+                self.process_export_frame(gl);
+            }
             return;
         }
-
-        let (width, height) = self.preview.get_size();
-        let selected = (show_selection && !self.is_exporting)
-            .then(|| self.selection.get())
-            .flatten();
-        let scene = &self.scenes[self.active_scene].scene;
-
+        let started = std::time::Instant::now();
+        crate::core::objects::particle::DRAW_COUNT.set(0);
         let result = self
             .canvases
             .render(scene, &mut self.preview.target, skia_context);
         if let Err(error) = result {
+            self.rendered = None;
             self.render_error = Some(error);
             if self.is_exporting {
                 self.renderer.cancel();
@@ -141,39 +149,15 @@ impl Editor {
             return;
         }
         self.render_error = None;
-        if let Some(entity) = selected {
-            let output = scene.get_view();
-            let output_size = scene
-                .get_world()
-                .get::<&crate::core::objects::CanvasSettings>(output.entity)
-                .map(|settings| settings.resolution)
-                .unwrap_or((width, height));
-            let scale = (
-                width as f32 / output_size.0.max(1) as f32,
-                height as f32 / output_size.1.max(1) as f32,
-            );
-            self.preview.draw(skia_context, gl, window_size, |canvas| {
-                let saved = canvas.save();
-                canvas.translate((width as f32 * 0.5, height as f32 * 0.5));
-                canvas.scale(scale);
-                scene.draw_outline(
-                    entity,
-                    canvas,
-                    2.0 / (self.preview_scale * scale.0).max(0.001),
-                );
-                canvas.restore_to_count(saved);
-            });
-        }
+        self.performance.particles = crate::core::objects::particle::DRAW_COUNT.get();
+        self.rendered = Some(key);
+        self.performance.render_ms = started.elapsed().as_secs_f32() * 1000.0;
         crate::renderer::target::reset_gl(gl, window_size);
         skia_context.reset(None);
 
         if self.is_exporting {
             self.process_export_frame(gl);
         }
-    }
-
-    pub fn set_preview_scale(&mut self, scale: f32) {
-        self.preview_scale = scale.max(0.001);
     }
 
     pub fn toggle_export(&mut self, silent: bool) {
@@ -199,6 +183,7 @@ impl Editor {
 
         self.timeline.pause();
         self.timeline.go_to_start();
+        self.evaluated = None;
         self.update_active_scene(0.0);
         self.pending_export_time = None;
         self.is_exporting = true;
@@ -404,7 +389,13 @@ impl Editor {
 
         let scene = &self.scenes[self.active_scene];
         let local_time = (time - scene.start).clamp(0.0, scene.end - scene.start);
-        scene.scene.update(local_time);
+        let identity = scene.scene.render_key().0;
+        if self.evaluated != Some((identity, local_time)) {
+            let started = std::time::Instant::now();
+            scene.scene.update(local_time);
+            self.performance.update_ms = started.elapsed().as_secs_f32() * 1000.0;
+            self.evaluated = Some((identity, local_time));
+        }
     }
 }
 
