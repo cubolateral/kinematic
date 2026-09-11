@@ -1,7 +1,6 @@
 use kinematic_macros::Trackable;
 
-pub(crate) const PARTICLE_COUNT: u32 = 4096;
-pub(crate) const PARTICLE_DISTANCE: f32 = 32.0;
+pub(crate) const PARTICLE_DISTANCE: f32 = 64.0;
 pub(crate) const PARTICLE_RADIUS: f32 = 1.0;
 pub(crate) const PARTICLE_STAGGER: f32 = 0.75;
 pub(crate) const PARTICLE_FADE_START: f32 = 0.9;

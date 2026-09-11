@@ -3,9 +3,7 @@ use std::path::Path;
 use kinematic_macros::Object;
 
 use crate::core::{
-    components::{
-        Draw2D, Morph, PARTICLE_COUNT, Style, Transform2D, draw_styled_path, stroke_width_for_scale,
-    },
+    components::{Draw2D, Morph, Style, Transform2D, draw_styled_path, stroke_width_for_scale},
     objects::{CreationDraw, ImageSource, RectShape, particle_visual_key, rect_path},
     types::{Color, Vector2},
 };
@@ -118,7 +116,6 @@ fn draw_image_2d(
             cache_slot: 0,
             bounds: particle_bounds,
             visual_key,
-            particle_count: PARTICLE_COUNT as usize,
             style: &style,
             pixel_color: Some(&pixel_color),
             morph: &morph,

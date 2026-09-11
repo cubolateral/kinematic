@@ -2,8 +2,8 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
     components::{
-        Draw2D, Morph, PARTICLE_COUNT, Style, Transform2D, draw_complete_styled_path,
-        draw_styled_path, stroke_width_for_scale,
+        Draw2D, Morph, Style, Transform2D, draw_complete_styled_path, draw_styled_path,
+        stroke_width_for_scale,
     },
     objects::{CreationDraw, particle_visual_key, regular_polygon_vertices},
     types::{Vector2, vec2},
@@ -97,7 +97,6 @@ impl Default for RegularPolygon2D {
                             cache_slot: 0,
                             bounds,
                             visual_key,
-                            particle_count: PARTICLE_COUNT as usize,
                             style: &style,
                             pixel_color: None,
                             morph: &morph,

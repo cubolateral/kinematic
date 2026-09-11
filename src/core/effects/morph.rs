@@ -1,8 +1,7 @@
 use crate::core::{
     Easing, Task,
     components::{
-        Draw2D, Morph as MorphState, Node, PARTICLE_COUNT, PARTICLE_FADE_START, Style,
-        stroke_width_for_scale,
+        Draw2D, Morph as MorphState, Node, PARTICLE_FADE_START, Style, stroke_width_for_scale,
     },
     objects::{
         GlobalTransform, Morphable, Object, ObjectHandler, ObjectTrackable, Rect,
@@ -106,10 +105,8 @@ impl MorphEffect {
                 target_parent.is_none() || target_parent == Some(parent),
                 "Morph objects must share the same parent."
             );
-            let count = PARTICLE_COUNT as usize;
-            let from_silhouette =
-                capture(&world, from.get_id(), parent, count, start, source_opacity);
-            let to_silhouette = capture(&world, to.get_id(), parent, count, start, target_opacity);
+            let from_silhouette = capture(&world, from.get_id(), parent, start, source_opacity);
+            let to_silhouette = capture(&world, to.get_id(), parent, start, target_opacity);
             (parent, from_silhouette, to_silhouette)
         };
         let data = ParticleTransform::new(from_silhouette, to_silhouette, self.easing);
@@ -193,7 +190,7 @@ impl MorphEffect {
         if self.fade_from {
             tasks.push(
                 from.animate_from(Draw2D::opacity_property(), source_opacity, 0.0)
-                    .duration(self.duration * (1.0 - PARTICLE_FADE_START))
+                    .duration(fade_duration)
                     .easing(Easing::Linear)
                     .task(),
             );
@@ -238,7 +235,6 @@ pub(crate) fn refresh_morphs(world: &hecs::World, edits: &[AppearanceEdit]) {
                     world,
                     endpoints.from,
                     endpoints.parent,
-                    PARTICLE_COUNT as usize,
                     endpoints.time,
                     endpoints.from_opacity,
                 )
@@ -250,7 +246,6 @@ pub(crate) fn refresh_morphs(world: &hecs::World, edits: &[AppearanceEdit]) {
                     world,
                     endpoints.to,
                     endpoints.parent,
-                    PARTICLE_COUNT as usize,
                     endpoints.time,
                     endpoints.to_opacity,
                 )
@@ -380,7 +375,6 @@ fn capture(
     world: &hecs::World,
     entity: hecs::Entity,
     parent: hecs::Entity,
-    count: usize,
     time: f32,
     opacity: f32,
 ) -> Silhouette {
@@ -393,7 +387,7 @@ fn capture(
     let bounds = record(world, entity, entity, opacity, parent, canvas, &basis, time)
         .unwrap_or_else(|| skia_safe::Rect::from_xywh(0.0, 0.0, 1.0, 1.0));
     let picture = recorder.finish_recording_as_picture(None).unwrap();
-    let silhouette = Silhouette::capture(bounds, count, |canvas| {
+    let silhouette = Silhouette::capture(bounds, |canvas| {
         canvas.draw_picture(&picture, None, None);
     });
     silhouette

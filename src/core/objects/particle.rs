@@ -5,8 +5,10 @@ thread_local! {
 
 use crate::core::{
     Easing,
-    components::{PARTICLE_COUNT, PARTICLE_FADE_START, PARTICLE_RADIUS},
-    objects::{MorphParticleRoute, draw_particle_batch, silhouette_grid},
+    components::{PARTICLE_FADE_START, PARTICLE_RADIUS},
+    objects::{
+        MorphParticleRoute, draw_particle_batch, particle_count_for_bounds, silhouette_grid,
+    },
     types::Vector2,
 };
 
@@ -30,10 +32,6 @@ pub(crate) struct ParticleTransform {
 impl Silhouette {
     pub(crate) fn is_empty(&self) -> bool {
         self.samples.is_empty()
-    }
-
-    pub(crate) fn sample_count(&self) -> usize {
-        self.samples.len()
     }
 
     #[cfg(test)]
@@ -69,11 +67,7 @@ impl Silhouette {
     }
 
     /// Samples colors and positions from a drawing in local coordinates.
-    pub(crate) fn capture(
-        bounds: skia_safe::Rect,
-        count: usize,
-        draw: impl FnOnce(&skia_safe::Canvas),
-    ) -> Self {
+    pub(crate) fn capture(bounds: skia_safe::Rect, draw: impl FnOnce(&skia_safe::Canvas)) -> Self {
         #[cfg(test)]
         CAPTURE_COUNT.set(CAPTURE_COUNT.get() + 1);
         assert!(
@@ -96,7 +90,7 @@ impl Silhouette {
         draw(surface.canvas());
         let points = silhouette_grid(
             &mut surface,
-            count,
+            particle_count_for_bounds(bounds),
             Vector2::new(bounds.left, bounds.top),
             density,
             bounds,
@@ -173,20 +167,14 @@ pub(crate) fn morph_opacities(progress: f32) -> (f32, f32) {
 }
 
 fn particle_opacity(progress: f32) -> f32 {
-    const SOURCE_FADE_END: f32 = 0.1;
-
+    let fade_duration = 1.0 - PARTICLE_FADE_START;
     let (_, target_progress) = morph_opacities(progress);
-    smoothstep((progress / SOURCE_FADE_END).clamp(0.0, 1.0)) * (1.0 - target_progress)
+    smoothstep((progress / fade_duration).clamp(0.0, 1.0)) * (1.0 - target_progress)
 }
 
 impl ParticleTransform {
     pub(crate) fn new(from: Silhouette, to: Silhouette, easing: Easing) -> Self {
-        let count = if from.is_empty() || to.is_empty() {
-            0
-        } else {
-            PARTICLE_COUNT as usize
-        };
-        Self::with_count(from, to, easing, count)
+        Self::sampled(from, to, easing)
     }
 
     pub(crate) fn sampled(from: Silhouette, to: Silhouette, easing: Easing) -> Self {
@@ -224,7 +212,7 @@ impl ParticleTransform {
         let count = if self.from.is_empty() || self.to.is_empty() {
             0
         } else {
-            PARTICLE_COUNT as usize
+            self.from.samples.len().max(self.to.samples.len())
         };
         self.routes = Self::routes(&self.from, &self.to, count);
     }
@@ -256,5 +244,20 @@ impl ParticleTransform {
             ));
         }
         draw_particle_batch(canvas, &positions, &colors, PARTICLE_RADIUS);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn morph_fades_only_near_its_endpoints() {
+        assert_eq!(morph_opacities(0.0), (1.0, 0.0));
+        assert_eq!(morph_opacities(0.5), (0.0, 0.0));
+        assert_eq!(morph_opacities(1.0), (0.0, 1.0));
+        assert_eq!(particle_opacity(0.0), 0.0);
+        assert!(particle_opacity(0.01) > 0.0);
+        assert_eq!(particle_opacity(0.5), 1.0);
     }
 }

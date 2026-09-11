@@ -3,7 +3,6 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::core::{
     Easing, Task, Tween,
-    components::PARTICLE_COUNT,
     components::{Draw2D, Morph, Style, Transform2D, stroke_width_for_scale},
     objects::{
         CreationDraw, ObjectHandler,
@@ -380,17 +379,13 @@ fn capture_text_morph_silhouette(
     transform: &Transform2D,
     glyphs: &[skia_safe::GlyphId],
     positions: &[skia_safe::Point],
-    particle_count: usize,
 ) -> Silhouette {
-    let size = text_box(shape);
-    let padding = stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5 + 2.0;
-    let bounds = skia_safe::Rect::new(
-        -size.x * 0.5 - padding,
-        -size.y * 0.5 - padding,
-        size.x * 0.5 + padding,
-        size.y * 0.5 + padding,
-    );
-    Silhouette::capture(bounds, particle_count, |canvas| {
+    let layer = GlyphLayer {
+        glyphs: glyphs.to_vec(),
+        positions: positions.to_vec(),
+    };
+    let bounds = glyph_layer_bounds(shape, style, transform, &layer);
+    Silhouette::capture(bounds, |canvas| {
         let font = shape.font.skia_font(shape.size);
         draw_glyphs(
             glyphs,
@@ -410,23 +405,8 @@ fn text_morph_silhouette(
     style: &Style,
     transform: &Transform2D,
     layer: &GlyphLayer,
-    total_glyphs: usize,
 ) -> Silhouette {
-    let particle_count = if layer.glyphs.is_empty() {
-        0
-    } else {
-        ((PARTICLE_COUNT as usize * layer.glyphs.len()).div_ceil(total_glyphs.max(1)))
-            .clamp(128, PARTICLE_COUNT as usize)
-    };
-
-    capture_text_morph_silhouette(
-        shape,
-        style,
-        transform,
-        &layer.glyphs,
-        &layer.positions,
-        particle_count,
-    )
+    capture_text_morph_silhouette(shape, style, transform, &layer.glyphs, &layer.positions)
 }
 
 fn prepare_text_morph(
@@ -477,17 +457,9 @@ fn prepare_text_morph(
 
     let source = glyph_layer(&from, |index| !matched_from[index]);
     let target = glyph_layer(&to, |index| !matched_to[index]);
-    let from_glyph_count = from.iter().map(|cluster| cluster.glyphs.len()).sum();
-    let to_glyph_count = to.iter().map(|cluster| cluster.glyphs.len()).sum();
-    let mut from_silhouette = text_morph_silhouette(
-        from_shape,
-        from_style,
-        from_transform,
-        &source,
-        from_glyph_count,
-    );
-    let mut to_silhouette =
-        text_morph_silhouette(to_shape, to_style, to_transform, &target, to_glyph_count);
+    let mut from_silhouette =
+        text_morph_silhouette(from_shape, from_style, from_transform, &source);
+    let mut to_silhouette = text_morph_silhouette(to_shape, to_style, to_transform, &target);
 
     if from_silhouette.is_empty() && !to_silhouette.is_empty() {
         if let Some(cluster) = last_from_match.map(|index| &from[index]) {
@@ -497,7 +469,6 @@ fn prepare_text_morph(
                 from_transform,
                 &cluster.glyphs,
                 &cluster.positions,
-                to_silhouette.sample_count(),
             );
         }
         if from_silhouette.is_empty() {
@@ -511,7 +482,6 @@ fn prepare_text_morph(
                 to_transform,
                 &cluster.glyphs,
                 &cluster.positions,
-                from_silhouette.sample_count(),
             );
         }
         if to_silhouette.is_empty() {
@@ -604,12 +574,11 @@ struct WritePlan {
     steps: Vec<WriteStep>,
     character_duration: f32,
     interval: f32,
-    particle_count: usize,
     easing: Easing,
     reverse: bool,
 }
 
-const WRITE_INTERVAL_RATIO: f32 = 0.1;
+const WRITE_INTERVAL_RATIO: f32 = 0.05;
 
 #[derive(Default, Trackable)]
 struct WriteState {
@@ -636,13 +605,6 @@ fn prepare_write_plan(
     let character_duration =
         duration / (1.0 + count.saturating_sub(1) as f32 * WRITE_INTERVAL_RATIO);
     let interval = character_duration * WRITE_INTERVAL_RATIO;
-    let particle_count = if count == 0 {
-        0
-    } else {
-        (PARTICLE_COUNT as usize)
-            .div_ceil(count)
-            .clamp(128, PARTICLE_COUNT as usize)
-    };
     let mut steps = Vec::with_capacity(clusters.len());
     let font_path = shape.font.path().to_string_lossy();
 
@@ -677,7 +639,6 @@ fn prepare_write_plan(
         steps,
         character_duration,
         interval,
-        particle_count,
         easing,
         reverse,
     }
@@ -835,7 +796,6 @@ fn draw_write(
             cache_slot: index as u64 + 1,
             bounds: step.bounds,
             visual_key: step.visual_key,
-            particle_count: plan.particle_count,
             style,
             pixel_color: None,
             morph: &morph,
@@ -954,7 +914,6 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
             cache_slot: 0,
             bounds,
             visual_key,
-            particle_count: PARTICLE_COUNT as usize,
             style: &style,
             pixel_color: None,
             morph: &morph_state,

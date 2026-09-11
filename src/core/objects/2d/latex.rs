@@ -2,7 +2,6 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
     Tween,
-    components::PARTICLE_COUNT,
     components::{
         Draw2D, Morph, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale,
     },
@@ -83,7 +82,7 @@ fn latex_morph_silhouette(
         size.x * 0.5 + padding,
         size.y * 0.5 + padding,
     );
-    Silhouette::capture(bounds, PARTICLE_COUNT as usize, |canvas| {
+    Silhouette::capture(bounds, |canvas| {
         draw_complete_latex(shape, style, 1.0, transform.scale, canvas);
     })
 }
@@ -174,7 +173,6 @@ fn draw_latex(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Can
             cache_slot: 0,
             bounds,
             visual_key,
-            particle_count: PARTICLE_COUNT as usize,
             style: &style,
             pixel_color: None,
             morph: &morph_state,

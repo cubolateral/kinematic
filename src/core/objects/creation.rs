@@ -15,6 +15,7 @@ const MAX_ATLAS_DIMENSION: f32 = 2048.0;
 const MAX_CACHE_ENTRIES: usize = 64;
 const MAX_GRID_OVERSAMPLING: usize = 64;
 const MAX_PARTICLE_COUNT: usize = 20_000;
+const PARTICLE_SPACING: f32 = 2.0;
 const PARTICLE_SPRITE_RADIUS: f32 = 14.0;
 const PARTICLE_SPRITE_SIZE: i32 = 32;
 
@@ -70,7 +71,6 @@ pub(crate) struct CreationDraw<'a> {
     pub cache_slot: u64,
     pub bounds: skia_safe::Rect,
     pub visual_key: u64,
-    pub particle_count: usize,
     pub style: &'a Style,
     pub pixel_color: Option<&'a dyn Fn(Vector2) -> Color>,
     pub morph: &'a Morph,
@@ -86,7 +86,6 @@ impl CreationDraw<'_> {
             cache_slot,
             bounds,
             visual_key,
-            particle_count,
             style,
             pixel_color,
             morph,
@@ -107,6 +106,7 @@ impl CreationDraw<'_> {
         }
 
         let density = mask_density(canvas, bounds);
+        let particle_count = particle_count_for_bounds(bounds);
         let fingerprint = cache_fingerprint(visual_key, bounds, density, particle_count);
         let entity_key = entity
             .to_bits()
@@ -154,6 +154,17 @@ fn valid_bounds(bounds: skia_safe::Rect) -> bool {
         && bounds.bottom.is_finite()
         && bounds.width() > 0.0
         && bounds.height() > 0.0
+}
+
+/// Keeps particle centers two pixels apart across an object's bounds.
+pub(crate) fn particle_count_for_bounds(bounds: skia_safe::Rect) -> usize {
+    if !valid_bounds(bounds) {
+        return 0;
+    }
+
+    let columns = (bounds.width() / PARTICLE_SPACING).ceil() as usize;
+    let rows = (bounds.height() / PARTICLE_SPACING).ceil() as usize;
+    columns.saturating_mul(rows).clamp(1, MAX_PARTICLE_COUNT)
 }
 
 fn mask_density(canvas: &skia_safe::Canvas, bounds: skia_safe::Rect) -> f32 {
@@ -648,6 +659,22 @@ mod tests {
         assert!(middle.distance(linear_middle) > 0.01);
         assert_eq!(particle_position(&particle, 100.0, 1.0), target);
         assert_eq!(particle_position(&particle, 0.0, 0.5), target);
+    }
+
+    #[test]
+    fn particle_count_uses_a_two_pixel_grid() {
+        assert_eq!(
+            particle_count_for_bounds(skia_safe::Rect::from_wh(10.0, 20.0)),
+            50
+        );
+        assert_eq!(
+            particle_count_for_bounds(skia_safe::Rect::from_wh(11.0, 21.0)),
+            66
+        );
+        assert_eq!(
+            particle_count_for_bounds(skia_safe::Rect::from_wh(1_000.0, 1_000.0)),
+            MAX_PARTICLE_COUNT
+        );
     }
 
     #[test]

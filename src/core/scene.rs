@@ -1397,13 +1397,34 @@ mod tests {
             assert!(morph.particles_enabled);
         }
 
-        scene.update(4.0);
-        let world = scene.get_world();
-        let mut query = world.query::<(&Morph,)>();
-        let (morph,) = query.iter().next().unwrap();
+        scene.update(3.0);
+        {
+            let world = scene.get_world();
+            let mut query = world.query::<(&Morph, &Draw2D)>();
+            let (morph, draw) = query.iter().next().unwrap();
 
-        assert_eq!(morph.progress, 0.0);
-        assert!(!morph.particles_enabled);
+            assert!(morph.particles_enabled);
+            assert_eq!(draw.opacity, 1.0);
+        }
+
+        scene.update(4.0);
+        {
+            let world = scene.get_world();
+            let mut query = world.query::<(&Morph, &Draw2D)>();
+            let (morph, draw) = query.iter().next().unwrap();
+
+            assert_eq!(morph.progress, 0.0);
+            assert!(!morph.particles_enabled);
+            assert_eq!(draw.opacity, 0.0);
+        }
+
+        scene.update(3.0);
+        let world = scene.get_world();
+        let mut query = world.query::<(&Morph, &Draw2D)>();
+        let (morph, draw) = query.iter().next().unwrap();
+
+        assert!(morph.particles_enabled);
+        assert_eq!(draw.opacity, 1.0);
     }
 
     #[test]

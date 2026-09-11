@@ -5,8 +5,13 @@ use crate::core::{
     objects::{Morphable, ObjectHandler},
 };
 
-fn play_creation<T>(handler: &T, duration: f32, easing: Easing, progress: (f32, f32))
-where
+fn play_creation<T>(
+    handler: &T,
+    duration: f32,
+    easing: Easing,
+    progress: (f32, f32),
+    hide_at_end: bool,
+) where
     T: ObjectHandler,
     T::Object: Morphable,
 {
@@ -27,7 +32,21 @@ where
         .duration(duration)
         .easing(easing)
         .task();
-    animator.play(Task::All(vec![transition, particles]));
+    let mut tasks = vec![transition, particles];
+    if hide_at_end {
+        tasks.push(Task::Chain(vec![
+            Task::Wait(duration),
+            handler
+                .animate_from(
+                    Draw2D::opacity_property(),
+                    handler.get(Draw2D::opacity_property()),
+                    0.0,
+                )
+                .duration(0.0)
+                .task(),
+        ]));
+    }
+    animator.play(Task::All(tasks));
 }
 
 /// Forms an object from its signature particle cloud.
@@ -70,7 +89,7 @@ where
     T::Object: Morphable,
 {
     fn play(self, handler: &T) {
-        play_creation(handler, self.duration, self.easing, (0.0, 1.0));
+        play_creation(handler, self.duration, self.easing, (0.0, 1.0), false);
     }
 }
 
@@ -114,7 +133,7 @@ where
     T::Object: Morphable,
 {
     fn play(self, handler: &T) {
-        play_creation(handler, self.duration, self.easing, (1.0, 0.0));
+        play_creation(handler, self.duration, self.easing, (1.0, 0.0), true);
     }
 }
 

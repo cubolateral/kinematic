@@ -16,7 +16,7 @@ mod two_d;
 
 pub use canvas::*;
 pub use container::*;
-pub(crate) use creation::{CreationDraw, particle_visual_key};
+pub(crate) use creation::{CreationDraw, particle_count_for_bounds, particle_visual_key};
 pub(crate) use creation::{MorphParticleRoute, draw_particle_batch, silhouette_grid};
 pub(crate) use image::ImageSource;
 pub use object::*;
