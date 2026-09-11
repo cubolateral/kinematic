@@ -231,6 +231,40 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             }
         });
 
+        match type_name(field_ty).as_deref() {
+            Some(name @ ("Vector2" | "Vector3" | "Quad" | "Color")) => {
+                let components: &[&str] = match name {
+                    "Vector2" | "Vector3" => &["x", "y", "z"],
+                    "Quad" => &["a", "b", "c", "d"],
+                    _ => &["r", "g", "b", "a"],
+                };
+
+                for component in components
+                    .iter()
+                    .copied()
+                    .filter(|component| !matches!((name, *component), ("Vector2", "z")))
+                {
+                    let component_method_name = format_ident!("{}_{}", get_method_name, component);
+                    let component_set_method_name =
+                        format_ident!("{}_{}", set_method_name, component);
+                    let component_field = format_ident!("{}", component);
+
+                    direct_fns.push(quote! {
+                        pub fn #component_method_name(&self) -> f32 {
+                            self.#field_ident.get().#component_field
+                        }
+
+                        pub fn #component_set_method_name(&self, value: f32) {
+                            let mut component = self.#field_ident.get();
+                            component.#component_field = value;
+                            self.#field_ident.set_direct(component);
+                        }
+                    });
+                }
+            }
+            _ => {}
+        }
+
         let (value_generic, value_type, from_generic, from_type, to_type) =
             if matches!(type_name(field_ty).as_deref(), Some("Quad" | "String")) {
                 (
