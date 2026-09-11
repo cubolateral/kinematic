@@ -1,13 +1,12 @@
 use super::{
     layout::{Layout, TimeRange},
     metrics::{
-        KEYFRAME_HITBOX_SIZE, KEYFRAME_HOVER_SCALE, KEYFRAME_RADIUS, PANEL_TEXT_PADDING,
-        SEGMENT_THICKNESS, TRACK_HEIGHT, TRACK_SPACING,
+        KEYFRAME_HITBOX_SIZE, PANEL_TEXT_PADDING, SEGMENT_THICKNESS, TRACK_HEIGHT, TRACK_SPACING,
     },
 };
 use crate::{
     core::{Track, components::Animation},
-    ui::widgets::text_size,
+    ui::{icons, widgets::text_size},
 };
 
 #[derive(Clone, Copy)]
@@ -153,14 +152,13 @@ impl TrackView {
                         if time < start || time > end {
                             continue;
                         }
-                        draw_list
-                            .add_circle(
-                                [self.time.x(self.layout, time), center],
-                                KEYFRAME_RADIUS,
-                                self.text,
-                            )
-                            .filled(true)
-                            .build();
+                        draw_keyframe(
+                            ui,
+                            draw_list,
+                            self.time.x(self.layout, time),
+                            center,
+                            self.text,
+                        );
                     }
                 }
                 Some(self.time.x(self.layout, visible_start) + 4.0)
@@ -206,14 +204,13 @@ impl TrackView {
             let hit_max = [x + hit_half_size, center + hit_half_size];
             let hovered = self.hovered && ui.is_mouse_hovering_rect(hit_min, hit_max);
 
-            draw_list
-                .add_circle(
-                    [x, center],
-                    KEYFRAME_RADIUS * if hovered { KEYFRAME_HOVER_SCALE } else { 1.0 },
-                    self.keyframe,
-                )
-                .filled(true)
-                .build();
+            draw_keyframe(
+                ui,
+                draw_list,
+                x,
+                center,
+                if hovered { self.active } else { self.keyframe },
+            );
 
             if hovered {
                 hovered_time = Some((keyframe.time, keyframe_time));
@@ -244,6 +241,21 @@ impl TrackView {
             });
         }
     }
+}
+
+fn draw_keyframe(
+    ui: &dear_imgui_rs::Ui,
+    draw_list: &dear_imgui_rs::DrawListMut<'_>,
+    x: f32,
+    center: f32,
+    color: u32,
+) {
+    let size = text_size(ui, icons::DIAMOND);
+    draw_list.add_text(
+        [x - size[0] * 0.5, center - size[1] * 0.5],
+        color,
+        icons::DIAMOND,
+    );
 }
 
 pub(super) fn height(world: &hecs::World, entity: hecs::Entity) -> f32 {

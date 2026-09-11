@@ -1,9 +1,7 @@
 pub(super) const BUTTON_SIZE: f32 = 25.0;
 pub(super) const FULLSCREEN_SCRUBBER_HEIGHT: f32 = 12.0;
 pub(super) const FULLSCREEN_SCRUBBER_THICKNESS: f32 = 3.0;
-pub(super) const KEYFRAME_RADIUS: f32 = 3.0;
 pub(super) const KEYFRAME_HITBOX_SIZE: f32 = 16.0;
-pub(super) const KEYFRAME_HOVER_SCALE: f32 = 1.5;
 pub(super) const LABEL_PADDING: [f32; 2] = [8.0, 4.0];
 pub(super) const SCRUBBER_HEIGHT: f32 = 40.0;
 pub(super) const SEGMENT_THICKNESS: f32 = 4.0;

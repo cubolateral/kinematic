@@ -29,10 +29,10 @@ pub(super) fn apply_default_layout(ui: &dear_imgui_rs::Ui, dock: dear_imgui_rs::
     );
 
     dear_imgui_rs::DockBuilder::dock_window(ui, scene_tree::WINDOW_NAME, left_node);
-    dear_imgui_rs::DockBuilder::dock_window(ui, export::WINDOW_NAME, left_node);
+    dear_imgui_rs::DockBuilder::dock_window(ui, settings::WINDOW_NAME, left_node);
     dear_imgui_rs::DockBuilder::dock_window(ui, preview::WINDOW_NAME, preview_node);
     dear_imgui_rs::DockBuilder::dock_window(ui, inspector::WINDOW_NAME, right_node);
-    dear_imgui_rs::DockBuilder::dock_window(ui, settings::WINDOW_NAME, right_node);
+    dear_imgui_rs::DockBuilder::dock_window(ui, export::WINDOW_NAME, right_node);
     dear_imgui_rs::DockBuilder::dock_window(ui, timeline::WINDOW_NAME, timeline_node);
     dear_imgui_rs::DockBuilder::finish(ui, dock);
 }

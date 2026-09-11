@@ -13,6 +13,11 @@ pub(super) struct PreviewImage {
     texture: dear_imgui_rs::TextureId,
 }
 
+pub(super) struct InteractionResult {
+    pub clicked: Option<Vector2>,
+    pub mouse_position: Option<Vector2>,
+}
+
 pub(super) fn preview(editor: &mut Editor) -> PreviewImage {
     let preview = editor.get_preview();
     let (width, height) = preview.get_size();
@@ -58,7 +63,7 @@ pub(super) fn draw_interactive(
     available: [f32; 2],
     state: &mut State,
     editor: &mut Editor,
-) -> Option<Vector2> {
+) -> InteractionResult {
     let available = [available[0].max(1.0), available[1].max(1.0)];
     let viewport_min = ui.cursor_screen_pos();
     let viewport_max = [
@@ -122,14 +127,34 @@ pub(super) fn draw_interactive(
     let over_image = hovered
         && (image_min[0]..=image_max[0]).contains(&mouse[0])
         && (image_min[1]..=image_max[1]).contains(&mouse[1]);
+    let mouse_position = if over_image {
+        Some(canvas_position(mouse, image_min, scale, preview.size))
+    } else {
+        None
+    };
     if !ui.is_mouse_released(left) || !state.release(over_image) {
-        return None;
+        return InteractionResult {
+            clicked: None,
+            mouse_position,
+        };
     }
 
-    let x = (mouse[0] - image_min[0]) / scale - preview.size[0] * 0.5;
-    let y = (mouse[1] - image_min[1]) / scale - preview.size[1] * 0.5;
+    InteractionResult {
+        clicked: mouse_position,
+        mouse_position,
+    }
+}
 
-    Some(vec2(x, y))
+fn canvas_position(
+    mouse: [f32; 2],
+    image_min: [f32; 2],
+    scale: f32,
+    preview_size: [f32; 2],
+) -> Vector2 {
+    vec2(
+        (mouse[0] - image_min[0]) / scale - preview_size[0] * 0.5,
+        (mouse[1] - image_min[1]) / scale - preview_size[1] * 0.5,
+    )
 }
 
 fn draw_outline(

@@ -12,7 +12,7 @@ use crate::{
 };
 use std::{ffi::CString, os::raw::c_void, ptr};
 
-use super::widgets::text_size;
+use super::widgets::{NumericValue, numeric_input_arrows, text_size};
 
 pub(super) const WINDOW_NAME: &str = "Inspector";
 
@@ -195,7 +195,13 @@ fn edit_value(ui: &dear_imgui_rs::Ui, name: &str, value: &mut TrackValue) -> boo
                 false
             }
         }
-        TrackValue::String(v) => ui.input_text(name, v).build(),
+        TrackValue::String(v) => ui
+            .input_text_multiline(name, v, [0.0, ui.frame_height() * 3.0])
+            .flags(
+                dear_imgui_rs::InputTextMultilineFlags::CTRL_ENTER_FOR_NEW_LINE
+                    | dear_imgui_rs::InputTextMultilineFlags::WORD_WRAP,
+            )
+            .build(),
     }
 }
 
@@ -240,14 +246,17 @@ fn vertical_drag<T>(
     speed: f32,
     format: &str,
     data_type: dear_imgui_rs::sys::ImGuiDataType,
-) -> bool {
+) -> bool
+where
+    T: NumericValue,
+{
     let label = CString::new(label).expect("Inspector labels must not contain null bytes.");
     let format = CString::new(format).expect("Inspector formats must not contain null bytes.");
     let flags = dear_imgui_rs::sys::ImGuiSliderFlags_Vertical
         | dear_imgui_rs::sys::ImGuiSliderFlags_NoRoundToFormat;
 
     // SAFETY: The data type matches T at every call site and both strings live through the call.
-    let changed = unsafe {
+    let mut changed = unsafe {
         dear_imgui_rs::sys::igDragScalar(
             label.as_ptr(),
             data_type,
@@ -260,8 +269,15 @@ fn vertical_drag<T>(
         )
     };
 
-    if ui.is_item_hovered() && !(ui.is_item_active() && ui.io().want_text_input()) {
-        ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeNS));
+    let text_editing = ui.is_item_active() && ui.io().want_text_input();
+    if ui.is_item_active() && !text_editing && ui.is_mouse_down(dear_imgui_rs::MouseButton::Left) {
+        const HORIZONTAL_SPEED_MULTIPLIER: f32 = 10.0;
+        changed |= value.offset(ui.io().mouse_delta()[0] * speed * HORIZONTAL_SPEED_MULTIPLIER);
+    }
+    changed |= numeric_input_arrows(ui, value);
+
+    if ui.is_item_hovered() && !text_editing {
+        ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeAll));
     }
 
     changed

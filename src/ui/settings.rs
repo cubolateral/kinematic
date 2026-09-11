@@ -2,7 +2,10 @@ use std::{fs, path::Path};
 
 use crate::{core::ProjectSettings, editor::Editor};
 
-use super::theme::Appearance;
+use super::{
+    theme::Appearance,
+    widgets::{numeric_input_arrows, text_size},
+};
 
 pub(super) const WINDOW_NAME: &str = "Configuration";
 const SETTINGS_PATH: &str = ".kinematic/settings.ron";
@@ -74,8 +77,9 @@ pub(super) fn draw(
         ui.separator_with_text("Project");
         let project_changed = {
             let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
-            let resolution_changed = ui.input_int2("Resolution", &mut state.resolution).build();
-            let fps_changed = ui.input_int("FPS", &mut state.fps);
+            let resolution_changed =
+                input_int_components(ui, "Resolution", &mut state.resolution, ["Width", "Height"]);
+            let fps_changed = input_int(ui, "FPS", &mut state.fps);
             resolution_changed || fps_changed
         };
         let valid_resolution = state
@@ -123,6 +127,39 @@ pub(super) fn draw(
         }
     });
 
+    changed
+}
+
+fn input_int(ui: &dear_imgui_rs::Ui, label: &str, value: &mut i32) -> bool {
+    let mut changed = ui.input_scalar(label, value).build();
+    changed |= numeric_input_arrows(ui, value);
+    changed
+}
+
+fn input_int_components<const N: usize>(
+    ui: &dear_imgui_rs::Ui,
+    label: &str,
+    values: &mut [i32; N],
+    component_names: [&str; N],
+) -> bool {
+    let spacing = unsafe { ui.style().item_inner_spacing() }[0];
+    let label_width = text_size(ui, label)[0];
+    let fields_width = (ui.calc_item_width() - label_width - spacing).max(N as f32);
+    let field_width = ((fields_width - spacing * N.saturating_sub(1) as f32) / N as f32).max(1.0);
+    let mut changed = false;
+
+    for (index, (value, component_name)) in values.iter_mut().zip(component_names).enumerate() {
+        if index > 0 {
+            ui.same_line_with_spacing(0.0, spacing);
+        }
+
+        ui.set_next_item_width(field_width);
+        let component_label = format!("##{label}:{component_name}");
+        changed |= input_int(ui, &component_label, value);
+    }
+
+    ui.same_line_with_spacing(0.0, spacing);
+    ui.text(label);
     changed
 }
 
