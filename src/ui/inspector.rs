@@ -15,8 +15,20 @@ use std::{ffi::CString, os::raw::c_void, ptr};
 use super::widgets::{NumericValue, numeric_input_arrows, text_size};
 
 pub(super) const WINDOW_NAME: &str = "Inspector";
+const DRAG_DIRECTION_THRESHOLD: f32 = 4.0;
 
-pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DragAxis {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Default)]
+pub(super) struct State {
+    drag: Option<(dear_imgui_rs::Id, Option<DragAxis>)>,
+}
+
+pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
     let selected = editor.get_selected_entity();
     let editing_disabled = editor.is_exporting() || editor.get_timeline().is_playing();
 
@@ -63,8 +75,9 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         }
         if let Ok(mut sphere) = world.get::<&mut SphereShape>(entity) {
             let mut segments = sphere.segments;
-            if vertical_drag(
+            if numeric_drag(
                 ui,
+                state,
                 "Segments",
                 &mut segments,
                 1.0,
@@ -93,7 +106,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
                 let _id = ui.push_id(&format!("{}:{}", trackable.name, track.id));
                 let mut value = (track.get)(&world, entity);
                 let before = value.clone();
-                if edit_value(ui, track.name, &mut value) {
+                if edit_value(ui, state, track.name, &mut value) {
                     (track.set)(&world, entity, value.clone());
                     edits.push(AppearanceEdit {
                         entity,
@@ -120,13 +133,19 @@ fn property(ui: &dear_imgui_rs::Ui, name: &str, value: &str) {
     ui.text_disabled(value);
 }
 
-fn edit_value(ui: &dear_imgui_rs::Ui, name: &str, value: &mut TrackValue) -> bool {
+fn edit_value(
+    ui: &dear_imgui_rs::Ui,
+    state: &mut State,
+    name: &str,
+    value: &mut TrackValue,
+) -> bool {
     match value {
         TrackValue::Bool(v) => ui.checkbox(name, v),
         TrackValue::F32(v) => {
             let format = float_format(*v);
-            vertical_drag(
+            numeric_drag(
                 ui,
+                state,
                 name,
                 v,
                 0.01,
@@ -136,23 +155,25 @@ fn edit_value(ui: &dear_imgui_rs::Ui, name: &str, value: &mut TrackValue) -> boo
         }
         TrackValue::Quad(v) => {
             let mut values = v.to_array();
-            if edit_float_components(ui, name, &mut values, ["a", "b", "c", "d"]) {
+            if edit_float_components(ui, state, name, &mut values, ["a", "b", "c", "d"]) {
                 *v = values.into();
                 true
             } else {
                 false
             }
         }
-        TrackValue::U32(v) => vertical_drag(
+        TrackValue::U32(v) => numeric_drag(
             ui,
+            state,
             name,
             v,
             1.0,
             "%u",
             dear_imgui_rs::sys::ImGuiDataType_U32,
         ),
-        TrackValue::I32(v) => vertical_drag(
+        TrackValue::I32(v) => numeric_drag(
             ui,
+            state,
             name,
             v,
             1.0,
@@ -161,7 +182,7 @@ fn edit_value(ui: &dear_imgui_rs::Ui, name: &str, value: &mut TrackValue) -> boo
         ),
         TrackValue::Vector2(v) => {
             let mut values = v.to_array();
-            if edit_float_components(ui, name, &mut values, ["x", "y"]) {
+            if edit_float_components(ui, state, name, &mut values, ["x", "y"]) {
                 *v = values.into();
                 true
             } else {
@@ -170,7 +191,7 @@ fn edit_value(ui: &dear_imgui_rs::Ui, name: &str, value: &mut TrackValue) -> boo
         }
         TrackValue::Vector3(v) => {
             let mut values = v.to_array();
-            if edit_float_components(ui, name, &mut values, ["x", "y", "z"]) {
+            if edit_float_components(ui, state, name, &mut values, ["x", "y", "z"]) {
                 *v = values.into();
                 true
             } else {
@@ -179,7 +200,7 @@ fn edit_value(ui: &dear_imgui_rs::Ui, name: &str, value: &mut TrackValue) -> boo
         }
         TrackValue::Quaternion(v) => {
             let mut values = v.to_array();
-            if edit_float_components(ui, name, &mut values, ["x", "y", "z", "w"]) {
+            if edit_float_components(ui, state, name, &mut values, ["x", "y", "z", "w"]) {
                 *v = normalized_quaternion(glam::Quat::from_array(values));
                 true
             } else {
@@ -207,6 +228,7 @@ fn edit_value(ui: &dear_imgui_rs::Ui, name: &str, value: &mut TrackValue) -> boo
 
 fn edit_float_components<const N: usize>(
     ui: &dear_imgui_rs::Ui,
+    state: &mut State,
     name: &str,
     values: &mut [f32; N],
     prefixes: [&str; N],
@@ -224,8 +246,9 @@ fn edit_float_components<const N: usize>(
         ui.set_next_item_width(width);
         let label = format!("##{name}:{prefix}");
         let format = format!("{prefix}: {}", float_format(*value));
-        changed |= vertical_drag(
+        changed |= numeric_drag(
             ui,
+            state,
             &label,
             value,
             0.01,
@@ -239,8 +262,9 @@ fn edit_float_components<const N: usize>(
     changed
 }
 
-fn vertical_drag<T>(
+fn numeric_drag<T>(
     ui: &dear_imgui_rs::Ui,
+    state: &mut State,
     label: &str,
     value: &mut T,
     speed: f32,
@@ -252,8 +276,7 @@ where
 {
     let label = CString::new(label).expect("Inspector labels must not contain null bytes.");
     let format = CString::new(format).expect("Inspector formats must not contain null bytes.");
-    let flags = dear_imgui_rs::sys::ImGuiSliderFlags_Vertical
-        | dear_imgui_rs::sys::ImGuiSliderFlags_NoRoundToFormat;
+    let flags = dear_imgui_rs::sys::ImGuiSliderFlags_NoRoundToFormat;
 
     // SAFETY: The data type matches T at every call site and both strings live through the call.
     let mut changed = unsafe {
@@ -261,7 +284,7 @@ where
             label.as_ptr(),
             data_type,
             value as *mut T as *mut c_void,
-            speed,
+            0.0,
             ptr::null(),
             ptr::null(),
             format.as_ptr(),
@@ -270,9 +293,38 @@ where
     };
 
     let text_editing = ui.is_item_active() && ui.io().want_text_input();
-    if ui.is_item_active() && !text_editing && ui.is_mouse_down(dear_imgui_rs::MouseButton::Left) {
-        const HORIZONTAL_SPEED_MULTIPLIER: f32 = 10.0;
-        changed |= value.offset(ui.io().mouse_delta()[0] * speed * HORIZONTAL_SPEED_MULTIPLIER);
+    if !ui.is_item_active() {
+        if state.drag.is_some_and(|(id, _)| id == ui.item_id()) {
+            state.drag = None;
+        }
+    } else if !text_editing && ui.is_mouse_down(dear_imgui_rs::MouseButton::Left) {
+        let item = ui.item_id();
+        if ui.is_item_activated() {
+            state.drag = Some((item, None));
+        }
+
+        if let Some((_, axis)) = state.drag.as_mut().filter(|(id, _)| *id == item) {
+            if axis.is_none() {
+                let delta = ui.mouse_drag_delta_with_threshold(
+                    dear_imgui_rs::MouseButton::Left,
+                    DRAG_DIRECTION_THRESHOLD,
+                );
+                if delta[0].abs().max(delta[1].abs()) >= DRAG_DIRECTION_THRESHOLD {
+                    *axis = Some(if delta[1].abs() > delta[0].abs() {
+                        DragAxis::Vertical
+                    } else {
+                        DragAxis::Horizontal
+                    });
+                }
+            }
+
+            let amount = match *axis {
+                Some(DragAxis::Vertical) => -ui.io().mouse_delta()[1] * speed,
+                Some(DragAxis::Horizontal) => ui.io().mouse_delta()[0] * speed * 10.0,
+                None => 0.0,
+            };
+            changed |= value.offset(amount);
+        }
     }
     changed |= numeric_input_arrows(ui, value);
 
