@@ -34,11 +34,25 @@ pub(in crate::ui) struct State {
 
 impl State {
     pub fn sync_duration(&mut self, duration: f32) {
-        if self.duration != duration {
-            self.duration = duration;
-            self.view_start = 0.0;
-            self.view_end = duration;
+        if self.duration == duration {
+            return;
         }
+
+        let old_duration = self.duration;
+        let old_span = self.view_end - self.view_start;
+        self.duration = duration.max(0.0);
+
+        if old_duration <= 0.0 || old_span <= 0.0 {
+            self.view_start = 0.0;
+            self.view_end = self.duration;
+            return;
+        }
+
+        // Keep the absolute timeline range so changing an event does not unexpectedly
+        // change the ruler scale or the user's current pan.
+        let span = old_span.min(self.duration);
+        self.view_start = self.view_start.clamp(0.0, self.duration - span);
+        self.view_end = self.view_start + span;
     }
 
     pub fn view_range(&self) -> (f32, f32) {
@@ -190,6 +204,19 @@ mod tests {
         state.sync_duration(12.0);
 
         assert_eq!(state.view_range(), (0.0, 12.0));
+    }
+
+    #[test]
+    fn duration_changes_preserve_the_visible_absolute_range() {
+        let mut state = State::default();
+        state.sync_duration(20.0);
+        state.zoom(-100.0, 0.5);
+        state.pan(-20.0, 100.0);
+        let range = state.view_range();
+
+        state.sync_duration(30.0);
+
+        assert_eq!(state.view_range(), range);
     }
 
     #[test]
