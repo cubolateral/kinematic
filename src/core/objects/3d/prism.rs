@@ -11,7 +11,7 @@ use kinematic_macros::{Object, Trackable};
 pub struct PrismShape {
     #[track]
     pub size: Vector3,
-    #[track]
+    #[track(min = 3, max = 256)]
     pub sides: u32,
     #[track]
     pub top_cap: bool,

@@ -1,5 +1,159 @@
 use quote::{format_ident, quote};
-use syn::{Data, DeriveInput, Fields, parse_macro_input};
+use syn::{Data, DeriveInput, Expr, Fields, Lit, UnOp, parse_macro_input, spanned::Spanned};
+
+#[derive(Default)]
+struct TrackArgs {
+    min: Option<Expr>,
+    max: Option<Expr>,
+}
+
+fn track_args(field: &syn::Field) -> syn::Result<Option<TrackArgs>> {
+    let Some(attribute) = field
+        .attrs
+        .iter()
+        .find(|attribute| attribute.path().is_ident("track"))
+    else {
+        return Ok(None);
+    };
+    let mut args = TrackArgs::default();
+    if matches!(attribute.meta, syn::Meta::Path(_)) {
+        return Ok(Some(args));
+    }
+    attribute.parse_nested_meta(|meta| {
+        let target = if meta.path.is_ident("min") {
+            &mut args.min
+        } else if meta.path.is_ident("max") {
+            &mut args.max
+        } else {
+            return Err(meta.error("Expected `min` or `max`."));
+        };
+        if target.is_some() {
+            return Err(meta.error("Duplicate track limit."));
+        }
+        *target = Some(meta.value()?.parse()?);
+        Ok(())
+    })?;
+    Ok(Some(args))
+}
+
+fn numeric_literal(expr: &Expr, integer: bool, unsigned: bool) -> syn::Result<f64> {
+    let (negative, literal) = match expr {
+        Expr::Lit(expr) => (false, &expr.lit),
+        Expr::Unary(expr) if matches!(expr.op, UnOp::Neg(_)) => {
+            let Expr::Lit(operand) = expr.expr.as_ref() else {
+                return Err(syn::Error::new(
+                    expr.span(),
+                    "Track limits must be numeric literals.",
+                ));
+            };
+            (true, &operand.lit)
+        }
+        _ => {
+            return Err(syn::Error::new(
+                expr.span(),
+                "Track limits must be numeric literals.",
+            ));
+        }
+    };
+
+    if unsigned && negative {
+        return Err(syn::Error::new(
+            expr.span(),
+            "A `u32` track limit cannot be negative.",
+        ));
+    }
+
+    let value = match literal {
+        Lit::Int(value) => value.base10_parse::<f64>(),
+        Lit::Float(value) if !integer => value.base10_parse::<f64>(),
+        _ => {
+            return Err(syn::Error::new(
+                expr.span(),
+                "This track type requires integer limits.",
+            ));
+        }
+    }
+    .map_err(|error| syn::Error::new(expr.span(), error))?;
+
+    Ok(if negative { -value } else { value })
+}
+
+fn limits_tokens(field: &syn::Field, args: &TrackArgs) -> syn::Result<proc_macro2::TokenStream> {
+    let field_type = type_name(&field.ty);
+    let Some(kind @ ("f32" | "i32" | "u32")) = field_type.as_deref() else {
+        if args.min.is_some() || args.max.is_some() {
+            return Err(syn::Error::new(
+                field.ty.span(),
+                "Track limits are only supported for `f32`, `i32`, and `u32`.",
+            ));
+        }
+        return Ok(quote!(kinematic::core::TrackLimits::None));
+    };
+
+    if args.min.is_none() && args.max.is_none() {
+        return Ok(quote!(kinematic::core::TrackLimits::None));
+    }
+
+    let integer = kind != "f32";
+    let unsigned = kind == "u32";
+    let min_value = args
+        .min
+        .as_ref()
+        .map(|value| numeric_literal(value, integer, unsigned))
+        .transpose()?;
+    let max_value = args
+        .max
+        .as_ref()
+        .map(|value| numeric_literal(value, integer, unsigned))
+        .transpose()?;
+
+    if let (Some(min), Some(max)) = (min_value, max_value)
+        && min > max
+    {
+        return Err(syn::Error::new(
+            field.span(),
+            "Track `min` cannot be greater than `max`.",
+        ));
+    }
+    if integer {
+        let max = if unsigned {
+            u32::MAX as f64
+        } else {
+            i32::MAX as f64
+        };
+        let min = if unsigned { 0.0 } else { i32::MIN as f64 };
+        for (expr, value) in [
+            args.min.as_ref().zip(min_value),
+            args.max.as_ref().zip(max_value),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if value < min || value > max {
+                return Err(syn::Error::new(
+                    expr.span(),
+                    "Track limit is outside the field type's range.",
+                ));
+            }
+        }
+    }
+
+    let min = args
+        .min
+        .as_ref()
+        .map_or_else(|| quote!(None), |value| quote!(Some(#value)));
+    let max = args
+        .max
+        .as_ref()
+        .map_or_else(|| quote!(None), |value| quote!(Some(#value)));
+    let variant = format_ident!("{}", kind.to_uppercase());
+    Ok(quote! {
+        kinematic::core::TrackLimits::#variant {
+            min: #min,
+            max: #max,
+        }
+    })
+}
 
 fn type_fragment(identifier: &syn::Ident) -> String {
     identifier
@@ -58,15 +212,19 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         _ => panic!("Trackable can only be derived for structs."),
     };
 
-    let tracked_fields: Vec<_> = fields
+    let tracked_fields: Vec<_> = match fields
         .iter()
-        .filter(|field| {
-            field
-                .attrs
-                .iter()
-                .any(|attribute| attribute.path().is_ident("track"))
+        .map(|field| {
+            track_args(field).and_then(|args| {
+                args.map(|args| limits_tokens(field, &args).map(|limits| (field, limits)))
+                    .transpose()
+            })
         })
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()
+    {
+        Ok(fields) => fields.into_iter().flatten().collect(),
+        Err(error) => return error.into_compile_error().into(),
+    };
     let count = tracked_fields.len();
     let mut type_assertions = Vec::with_capacity(count);
     let mut track_entries = Vec::with_capacity(count);
@@ -99,6 +257,29 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             } else {
                 (quote!(), quote!(#field_ty), quote!(value))
             };
+        let assignment = tracked_fields
+            .iter()
+            .position(|(tracked, _)| std::ptr::eq(*tracked, field))
+            .map_or_else(
+                || quote! {
+                    <T as #builder_component_trait<#struct_name>>::component_mut(
+                        &mut self,
+                    ).#field_ident = #setter_value;
+                },
+                |id| {
+                    let id = id as u32;
+                    quote! {
+                        let value = #setter_value;
+                        let value = <#struct_name as #trackable_trait>::track(#id).clamp(
+                            <#field_ty as #track_value_type_trait>::into_track_value(value),
+                        );
+                        <T as #builder_component_trait<#struct_name>>::component_mut(
+                            &mut self,
+                        ).#field_ident = <#field_ty as #track_value_type_trait>::from_track_value(value)
+                            .expect("Track limits must preserve the field value type.");
+                    }
+                },
+            );
         builder_setters.push(quote! {
             #[doc(hidden)]
             #field_visibility trait #setter_trait: Sized {
@@ -111,9 +292,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 T: #builder_component_trait<#struct_name>,
             {
                 fn #field_ident #setter_generic (mut self, value: #setter_value_type) -> Self {
-                    <T as #builder_component_trait<#struct_name>>::component_mut(
-                        &mut self,
-                    ).#field_ident = #setter_value;
+                    #assignment
                     self
                 }
             }
@@ -158,7 +337,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         }
     }
 
-    for (id, field) in tracked_fields.iter().enumerate() {
+    for (id, (field, limits)) in tracked_fields.iter().enumerate() {
         let field_ident = field.ident.as_ref().unwrap();
         let field_ty = &field.ty;
         let id = id as u32;
@@ -179,12 +358,16 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             #track_info_type {
                 id: #id,
                 name: #field_name,
+                limits: #limits,
                 get: |world, entity| {
-                    <#field_ty as #track_value_type_trait>::into_track_value(
+                    <#struct_name as #trackable_trait>::track(#id).clamp(
+                        <#field_ty as #track_value_type_trait>::into_track_value(
                         world.get::<&#struct_name>(entity).unwrap().#field_ident.clone()
+                        )
                     )
                 },
                 set: |world, entity, value| {
+                    let value = <#struct_name as #trackable_trait>::track(#id).clamp(value);
                     if let Some(value) = <#field_ty as #track_value_type_trait>::from_track_value(value) {
                         world.get::<&mut #struct_name>(entity).unwrap().#field_ident = value;
                     }
@@ -210,6 +393,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                         .clone()
                 },
                 |world, entity, value| {
+                    let value = <#struct_name as #trackable_trait>::track(#id).clamp(
+                        <#field_ty as #track_value_type_trait>::into_track_value(value),
+                    );
+                    let value = <#field_ty as #track_value_type_trait>::from_track_value(value)
+                        .expect("Track limits must preserve the field value type.");
                     let mut component = world
                         .get::<&mut #struct_name>(entity)
                         .unwrap();
@@ -340,6 +528,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                         world.get::<&#struct_name>(entity).unwrap().#field_ident.clone()
                     },
                     |world, entity, value| {
+                        let value = <#struct_name as #trackable_trait>::track(#id).clamp(
+                            <#field_ty as #track_value_type_trait>::into_track_value(value),
+                        );
+                        let value = <#field_ty as #track_value_type_trait>::from_track_value(value)
+                            .expect("Track limits must preserve the field value type.");
                         let mut component = world.get::<&mut #struct_name>(entity).unwrap();
                         let old_value = component.#field_ident.clone();
                         component.#field_ident = value;
@@ -651,4 +844,37 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     };
 
     proc_macro::TokenStream::from(expanded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn parses_optional_track_limits() {
+        let unbounded: syn::Field = parse_quote!(#[track] value: f32);
+        let minimum: syn::Field = parse_quote!(#[track(min = 0.0)] value: f32);
+        let maximum: syn::Field = parse_quote!(#[track(max = 100)] value: u32);
+
+        assert!(limits_tokens(&unbounded, &track_args(&unbounded).unwrap().unwrap()).is_ok());
+        assert!(limits_tokens(&minimum, &track_args(&minimum).unwrap().unwrap()).is_ok());
+        assert!(limits_tokens(&maximum, &track_args(&maximum).unwrap().unwrap()).is_ok());
+    }
+
+    #[test]
+    fn rejects_limits_for_other_track_types() {
+        let field: syn::Field = parse_quote!(#[track(min = 0)] value: bool);
+        let args = track_args(&field).unwrap().unwrap();
+
+        assert!(limits_tokens(&field, &args).is_err());
+    }
+
+    #[test]
+    fn rejects_reversed_limits() {
+        let field: syn::Field = parse_quote!(#[track(min = 10, max = -10)] value: i32);
+        let args = track_args(&field).unwrap().unwrap();
+
+        assert!(limits_tokens(&field, &args).is_err());
+    }
 }

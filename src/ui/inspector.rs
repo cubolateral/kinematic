@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        TrackValue,
+        TrackInfo, TrackLimits, TrackValue,
         components::{Animation, Inspection, Name, Node},
         normalized_quaternion,
         objects::{
@@ -85,6 +85,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                     1.0,
                     "%u",
                     dear_imgui_rs::sys::ImGuiDataType_U32,
+                    Some(&3),
+                    Some(&256),
                 ) {
                     sphere.segments = segments.clamp(3, 256);
                     scene.invalidate();
@@ -120,7 +122,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 } else {
                     track.name.to_owned()
                 };
-                if edit_value(ui, state, &label, &mut value) {
+                if edit_value(ui, state, &label, &mut value, track) {
+                    value = track.clamp(value);
                     (track.set)(&world, entity, value.clone());
                     edits.push(AppearanceEdit {
                         entity,
@@ -162,11 +165,16 @@ fn edit_value(
     state: &mut State,
     name: &str,
     value: &mut TrackValue,
+    track: &TrackInfo,
 ) -> bool {
     match value {
         TrackValue::Bool(v) => ui.checkbox(name, v),
         TrackValue::F32(v) => {
             let format = float_format(*v);
+            let (min, max) = match track.limits {
+                TrackLimits::F32 { min, max } => (min, max),
+                _ => (None, None),
+            };
             numeric_drag(
                 ui,
                 state,
@@ -175,6 +183,8 @@ fn edit_value(
                 0.01,
                 &format,
                 dear_imgui_rs::sys::ImGuiDataType_Float,
+                min.as_ref(),
+                max.as_ref(),
             )
         }
         TrackValue::Quad(v) => {
@@ -194,6 +204,14 @@ fn edit_value(
             1.0,
             "%u",
             dear_imgui_rs::sys::ImGuiDataType_U32,
+            match &track.limits {
+                TrackLimits::U32 { min, .. } => min.as_ref(),
+                _ => None,
+            },
+            match &track.limits {
+                TrackLimits::U32 { max, .. } => max.as_ref(),
+                _ => None,
+            },
         ),
         TrackValue::I32(v) => numeric_drag(
             ui,
@@ -203,6 +221,14 @@ fn edit_value(
             1.0,
             "%d",
             dear_imgui_rs::sys::ImGuiDataType_S32,
+            match &track.limits {
+                TrackLimits::I32 { min, .. } => min.as_ref(),
+                _ => None,
+            },
+            match &track.limits {
+                TrackLimits::I32 { max, .. } => max.as_ref(),
+                _ => None,
+            },
         ),
         TrackValue::Vector2(v) => {
             let mut values = v.to_array();
@@ -278,6 +304,8 @@ fn edit_float_components<const N: usize>(
             0.01,
             &format,
             dear_imgui_rs::sys::ImGuiDataType_Float,
+            None,
+            None,
         );
     }
 
@@ -294,6 +322,8 @@ fn numeric_drag<T>(
     speed: f32,
     format: &str,
     data_type: dear_imgui_rs::sys::ImGuiDataType,
+    min: Option<&T>,
+    max: Option<&T>,
 ) -> bool
 where
     T: NumericValue,
@@ -309,8 +339,8 @@ where
             data_type,
             value as *mut T as *mut c_void,
             0.0,
-            ptr::null(),
-            ptr::null(),
+            min.map_or(ptr::null(), |value| value as *const T as *const c_void),
+            max.map_or(ptr::null(), |value| value as *const T as *const c_void),
             format.as_ptr(),
             flags,
         )

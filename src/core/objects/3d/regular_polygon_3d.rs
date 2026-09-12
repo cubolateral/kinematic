@@ -12,7 +12,7 @@ use kinematic_macros::{Object, Trackable};
 pub struct RegularPolygon3DShape {
     #[track]
     pub size: Vector2,
-    #[track]
+    #[track(min = 3, max = 256)]
     pub sides: u32,
 }
 

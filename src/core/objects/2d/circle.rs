@@ -12,7 +12,7 @@ use crate::core::{
 #[derive(Clone, Trackable)]
 /// Geometry of a circular object.
 pub struct CircleShape {
-    #[track]
+    #[track(min = 0.0)]
     pub radius: f32,
 }
 

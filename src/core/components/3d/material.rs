@@ -6,11 +6,11 @@ use kinematic_macros::Trackable;
 pub struct Material {
     #[track]
     pub albedo: Color,
-    #[track]
+    #[track(min = 0.0, max = 1.0)]
     pub opacity: f32,
-    #[track]
+    #[track(min = 0.0, max = 1.0)]
     pub metallic: f32,
-    #[track]
+    #[track(min = 0.04, max = 1.0)]
     pub roughness: f32,
     #[track]
     pub unlit: bool,

@@ -9,7 +9,7 @@ pub struct Camera2D {
     #[track]
     pub camera_position: Vector2,
     /// Magnification applied to the scene.
-    #[track]
+    #[track(min = 0.000001)]
     pub camera_zoom: f32,
     /// Rotation of the view in radians.
     #[track]

@@ -72,6 +72,8 @@ impl<Object> Tween<Object> {
         to: TrackValue,
         animator: AnimatorHandle,
     ) -> Self {
+        let from = track_info.clamp(from);
+        let to = track_info.clamp(to);
         Self {
             world,
             entity,
@@ -106,8 +108,8 @@ impl<Object> Tween<Object> {
                 .map(|(type_id, track_info, from, to)| TweenTarget {
                     type_id,
                     track_info,
-                    from,
-                    to,
+                    from: track_info.clamp(from),
+                    to: track_info.clamp(to),
                     rotation: None,
                 })
                 .collect(),
@@ -144,7 +146,7 @@ impl<Object> Tween<Object> {
             let from = (track_info.get)(&world, self.entity);
             let value = T::from_track_value(from.clone())
                 .expect("Track metadata must return its declared value type.");
-            let to = update(value).into_track_value();
+            let to = track_info.clamp(update(value).into_track_value());
 
             (track_info.set)(&world, self.entity, to.clone());
             (from, to)
@@ -179,8 +181,8 @@ impl<Object> Tween<Object> {
     ) -> Self {
         let type_id = property.get_type_id();
         let track_info = property.get_info();
-        let from = from.into_track_value();
-        let to = to.into_track_value();
+        let from = track_info.clamp(from.into_track_value());
+        let to = track_info.clamp(to.into_track_value());
 
         {
             let world = self.world.borrow();

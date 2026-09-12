@@ -12,7 +12,7 @@ pub struct Style {
     #[track]
     pub stroke: Color,
     /// Width used to outline the style.
-    #[track]
+    #[track(min = 0.0)]
     pub stroke_width: f32,
 }
 

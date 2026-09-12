@@ -11,7 +11,7 @@ pub struct Draw2D {
     #[track]
     pub visibility: bool,
     /// Transparency applied while drawing this entity, from `0.0` to `1.0`.
-    #[track]
+    #[track(min = 0.0, max = 1.0)]
     pub opacity: f32,
     /// Stacking order among sibling objects. Higher values are drawn in front.
     #[track]

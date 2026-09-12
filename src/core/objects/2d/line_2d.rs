@@ -19,13 +19,13 @@ pub struct Line2DShape {
     #[track]
     pub to: Vector2,
     /// Width of the line body.
-    #[track]
+    #[track(min = 0.0)]
     pub thickness: f32,
     /// Size of the arrowhead at the starting point.
-    #[track]
+    #[track(min = 0.0)]
     pub from_arrow_size: f32,
     /// Size of the arrowhead at the ending point.
-    #[track]
+    #[track(min = 0.0)]
     pub to_arrow_size: f32,
 }
 

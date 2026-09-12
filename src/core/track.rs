@@ -67,7 +67,9 @@ impl Track {
         let set = self.info.set;
         let time = self.repeat.map_or(time, |repeat| repeat.local_time(time));
         let (left, right) = self.find_keyframes(time);
-        if let Some(value) = Self::sample_keyframes(left, right, time) {
+        if let Some(value) =
+            Self::sample_keyframes(left, right, time).map(|value| self.info.clamp(value))
+        {
             set(world, entity, value);
         }
     }
@@ -80,7 +82,7 @@ impl Track {
             .partition_point(|keyframe| keyframe.time <= time);
         let left = right.checked_sub(1).map(|index| &self.keyframes[index]);
         let right = self.keyframes.get(right);
-        Self::sample_keyframes(left, right, time)
+        Self::sample_keyframes(left, right, time).map(|value| self.info.clamp(value))
     }
 
     fn sample_keyframes(
@@ -222,6 +224,7 @@ impl Track {
         interpolation: TrackInterpolation,
     ) {
         self.clear_current_tween_range();
+        let value = self.info.clamp(value);
 
         if let Some(last) = self.keyframes.last_mut() {
             // Keyframes are appended in time order because runtime lookup assumes
@@ -474,12 +477,13 @@ impl<T: TrackValueType> TrackHandle<T> {
     /// Returns the current component field value without creating a tween.
     pub fn get(&self) -> T {
         let world = self.world.borrow();
-        (self.get)(&world, self.entity)
+        self.clamp((self.get)(&world, self.entity))
     }
 
     /// Writes the current component field value without creating a tween.
     #[doc(hidden)]
     pub fn set_direct(&self, value: T) {
+        let value = self.clamp(value);
         let old_value = {
             let mut world = self.world.borrow_mut();
             (self.replace)(&mut world, self.entity, value)
@@ -501,6 +505,7 @@ impl<T: TrackValueType> TrackHandle<T> {
     #[doc(hidden)]
     pub fn set_for<Object>(&self, value: T) -> Tween<Object> {
         self.animator.assert_timeline_mutation();
+        let value = self.clamp(value);
         let old_value = {
             let mut world = self.world.borrow_mut();
             (self.replace)(&mut world, self.entity, value.clone())
@@ -521,7 +526,7 @@ impl<T: TrackValueType> TrackHandle<T> {
         let (old_value, new_value) = {
             let world = self.world.borrow();
             let old_value = (self.get)(&world, self.entity);
-            let new_value = update(old_value.clone());
+            let new_value = self.clamp(update(old_value.clone()));
             drop(world);
             let mut world = self.world.borrow_mut();
             (self.replace)(&mut world, self.entity, new_value.clone());
@@ -534,6 +539,8 @@ impl<T: TrackValueType> TrackHandle<T> {
     /// Creates a tween from an explicit starting value to a target value.
     pub fn animate_from<Object>(&self, from: T, to: T) -> Tween<Object> {
         self.animator.assert_timeline_mutation();
+        let from = self.clamp(from);
+        let to = self.clamp(to);
         let mut world = self.world.borrow_mut();
         (self.replace)(&mut world, self.entity, to.clone());
         drop(world);
@@ -545,6 +552,7 @@ impl<T: TrackValueType> TrackHandle<T> {
     pub fn animate<Object>(&self, to: T) -> Tween<Object> {
         self.animator.assert_timeline_mutation();
         let from = self.get();
+        let to = self.clamp(to);
         let mut world = self.world.borrow_mut();
         (self.replace)(&mut world, self.entity, to.clone());
         drop(world);
@@ -562,6 +570,11 @@ impl<T: TrackValueType> TrackHandle<T> {
             to.into_track_value(),
             self.animator.clone(),
         )
+    }
+
+    fn clamp(&self, value: T) -> T {
+        T::from_track_value(self.info.clamp(value.into_track_value()))
+            .expect("Track limits must preserve the field value type.")
     }
 }
 
@@ -653,12 +666,73 @@ impl<T: TrackValueType> TrackProperty<T> {
 mod tests {
     use super::*;
 
+    #[derive(Clone, kinematic_macros::Trackable)]
+    struct BoundedValues {
+        #[track(min = 0.0, max = 1.0)]
+        float: f32,
+        #[track(min = -10)]
+        signed: i32,
+        #[track(max = 100)]
+        unsigned: u32,
+    }
+
     static TEST_TRACK_INFO: TrackInfo = TrackInfo {
         id: 0,
         name: "value",
+        limits: TrackLimits::None,
         get: |_, _| TrackValue::F32(0.0),
         set: |_, _, _| {},
     };
+
+    static BOUNDED_TRACK_INFO: TrackInfo = TrackInfo {
+        id: 0,
+        name: "value",
+        limits: TrackLimits::F32 {
+            min: Some(0.0),
+            max: Some(1.0),
+        },
+        get: |world, entity| TrackValue::F32(*world.get::<&f32>(entity).unwrap()),
+        set: |world, entity, value| {
+            if let TrackValue::F32(value) = value {
+                *world.get::<&mut f32>(entity).unwrap() = value;
+            }
+        },
+    };
+
+    #[test]
+    fn generated_track_limits_clamp_every_numeric_type() {
+        let mut world = hecs::World::new();
+        let entity = world.spawn((BoundedValues {
+            float: 0.5,
+            signed: 0,
+            unsigned: 50,
+        },));
+
+        (BoundedValues::track(0).set)(&world, entity, TrackValue::F32(2.0));
+        (BoundedValues::track(1).set)(&world, entity, TrackValue::I32(-20));
+        (BoundedValues::track(2).set)(&world, entity, TrackValue::U32(200));
+
+        let values = world.get::<&BoundedValues>(entity).unwrap();
+        assert_eq!(values.float, 1.0);
+        assert_eq!(values.signed, -10);
+        assert_eq!(values.unsigned, 100);
+    }
+
+    #[test]
+    fn bounded_track_clamps_endpoints_and_interpolation_overshoot() {
+        let mut track = Track::new(&BOUNDED_TRACK_INFO);
+        track.add_tween(
+            0.0,
+            TrackValue::F32(-1.0),
+            TrackValue::F32(2.0),
+            1.0,
+            Easing::OutBack,
+        );
+
+        assert_eq!(track.sample(0.0), Some(TrackValue::F32(0.0)));
+        assert_eq!(track.sample(0.8), Some(TrackValue::F32(1.0)));
+        assert_eq!(track.sample(1.0), Some(TrackValue::F32(1.0)));
+    }
 
     #[test]
     fn caches_the_current_tween_range() {
@@ -907,10 +981,57 @@ pub struct TrackInfo {
     pub id: TrackId,
     /// Human-readable field name used by tooling and debugging.
     pub name: &'static str,
+    /// Optional numeric bounds shared by animation and editing.
+    pub limits: TrackLimits,
     /// Reads the current value of the tracked field.
     pub get: TrackGetter,
     /// Writes an interpolated value back to the field.
     pub set: TrackSetter,
+}
+
+impl TrackInfo {
+    /// Restricts a runtime value to this track's numeric bounds.
+    pub fn clamp(&self, value: TrackValue) -> TrackValue {
+        match (value, self.limits) {
+            (TrackValue::F32(value), TrackLimits::F32 { min, max }) => {
+                TrackValue::F32(clamp_numeric(value, min, max))
+            }
+            (TrackValue::I32(value), TrackLimits::I32 { min, max }) => {
+                TrackValue::I32(clamp_numeric(value, min, max))
+            }
+            (TrackValue::U32(value), TrackLimits::U32 { min, max }) => {
+                TrackValue::U32(clamp_numeric(value, min, max))
+            }
+            (value, _) => value,
+        }
+    }
+}
+
+fn clamp_numeric<T: PartialOrd>(mut value: T, min: Option<T>, max: Option<T>) -> T {
+    if let Some(min) = min
+        && value < min
+    {
+        value = min;
+    }
+    if let Some(max) = max
+        && value > max
+    {
+        value = max;
+    }
+    value
+}
+
+/// Optional bounds for a numeric track.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TrackLimits {
+    /// An unbounded track.
+    None,
+    /// Bounds for an `f32` track.
+    F32 { min: Option<f32>, max: Option<f32> },
+    /// Bounds for an `i32` track.
+    I32 { min: Option<i32>, max: Option<i32> },
+    /// Bounds for a `u32` track.
+    U32 { min: Option<u32>, max: Option<u32> },
 }
 
 /// Metadata for a component that exposes one or more tracked fields.

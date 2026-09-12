@@ -23,10 +23,10 @@ pub struct Latex2DShape {
     #[track]
     pub text: String,
     /// Font size in logical canvas units.
-    #[track]
+    #[track(min = 0.0)]
     pub size: f32,
     /// Extra glyph thickness in logical canvas units.
-    #[track]
+    #[track(min = 0.0)]
     pub thickness: f32,
 }
 

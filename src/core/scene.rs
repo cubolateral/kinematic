@@ -1389,6 +1389,22 @@ mod tests {
     }
 
     #[test]
+    fn track_limits_apply_to_builders_setters_and_tween_variants() {
+        let mut scene = Scene::new();
+        let circle = circle().opacity(2.0).build(&mut scene);
+
+        assert_eq!(circle.get_opacity(), 1.0);
+        circle.set_opacity(-1.0_f32);
+        assert_eq!(circle.get_opacity(), 0.0);
+        let _ = circle.opacity(2.0);
+        assert_eq!(circle.get_opacity(), 1.0);
+        let _ = circle.opacity_from(-1.0, 2.0);
+        assert_eq!(circle.get_opacity(), 1.0);
+        let _ = circle.opacity_by(-2.0);
+        assert_eq!(circle.get_opacity(), 0.0);
+    }
+
+    #[test]
     fn object_handlers_animate_properties_and_generate_from_shortcuts() {
         let mut scene = Scene::new();
         let circle: CircleHandler = circle().build(&mut scene);

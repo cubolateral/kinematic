@@ -15,19 +15,19 @@ pub struct Line3DShape {
     #[track]
     pub to: Vector3,
     /// Diameter of the line body.
-    #[track]
+    #[track(min = 0.0)]
     pub thickness: f32,
     /// Length of the arrowhead at the starting point.
-    #[track]
+    #[track(min = 0.0)]
     pub from_arrow_size: f32,
     /// Length of the arrowhead at the ending point.
-    #[track]
+    #[track(min = 0.0)]
     pub to_arrow_size: f32,
     /// Number of sides around the line body.
-    #[track]
+    #[track(min = 3, max = 256)]
     pub line_sides: u32,
     /// Number of sides around each arrowhead.
-    #[track]
+    #[track(min = 3, max = 256)]
     pub arrow_sides: u32,
 }
 

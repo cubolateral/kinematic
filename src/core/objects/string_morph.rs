@@ -99,7 +99,7 @@ impl ContentMorphTransition {
 
 #[derive(Default, Trackable)]
 pub(super) struct ContentMorph {
-    #[track]
+    #[track(min = 0.0, max = 1.0)]
     pub(super) progress: f32,
     #[track]
     pub(super) transition: u32,

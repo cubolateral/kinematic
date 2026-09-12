@@ -33,16 +33,16 @@ pub struct Text3DShape {
     #[track]
     pub text: String,
     /// Font size in world units.
-    #[track]
+    #[track(min = 0.0)]
     pub size: f32,
     /// Horizontal line alignment from `-1.0` left to `1.0` right.
-    #[track]
+    #[track(min = -1.0, max = 1.0)]
     pub align: f32,
     /// Extra glyph thickness in world units.
-    #[track]
+    #[track(min = 0.0)]
     pub thickness: f32,
     /// Extrusion depth in world units.
-    #[track]
+    #[track(min = 0.0)]
     pub depth: f32,
 
     /// Font used to build the text geometry.

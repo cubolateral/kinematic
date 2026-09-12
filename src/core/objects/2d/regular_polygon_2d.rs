@@ -14,7 +14,7 @@ use crate::core::{
 pub struct RegularPolygon2DShape {
     #[track]
     pub size: Vector2,
-    #[track]
+    #[track(min = 3, max = 256)]
     pub sides: u32,
 }
 

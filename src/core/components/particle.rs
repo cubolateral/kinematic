@@ -13,7 +13,7 @@ pub(crate) const PARTICLE_FADE_START: f32 = 0.9;
 #[derive(Clone, Default, Trackable, Debug)]
 pub(crate) struct Morph {
     /// Normalized transition progress.
-    #[track]
+    #[track(min = 0.0, max = 1.0)]
     pub progress: f32,
     /// Whether the signature particle cloud is active.
     #[track]

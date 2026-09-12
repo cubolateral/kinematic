@@ -125,13 +125,13 @@ pub struct TextShape {
     #[track]
     pub text: String,
     /// Font size in logical canvas units.
-    #[track]
+    #[track(min = 0.0)]
     pub size: f32,
     /// Horizontal line alignment from `-1.0` left to `1.0` right.
-    #[track]
+    #[track(min = -1.0, max = 1.0)]
     pub align: f32,
     /// Extra glyph thickness in logical canvas units.
-    #[track]
+    #[track(min = 0.0)]
     pub thickness: f32,
 
     /// Font used to render the text.
@@ -583,7 +583,7 @@ const WRITE_INTERVAL_RATIO: f32 = 0.05;
 
 #[derive(Default, Trackable)]
 struct WriteState {
-    #[track]
+    #[track(min = 0.0)]
     progress: f32,
     #[track]
     transition: u32,
@@ -1327,12 +1327,12 @@ mod tests {
             fn build(&mut self, scene: &mut Scene) {
                 let label = text_2d().text("ABC").build(scene);
                 scene.get_world_2d().add(&label);
-                write().duration(1.0).play(&label);
+                write().duration(2.0).play(&label);
             }
         }
 
         let mut scene = Scene::new();
-        assert_eq!(scene.build(&mut WrittenText), 1.0);
+        assert_eq!(scene.build(&mut WrittenText), 2.0);
 
         scene.update(0.5);
         let world = scene.get_world();
@@ -1346,12 +1346,12 @@ mod tests {
         assert!(plan.interval < plan.character_duration);
         assert!(approximately_equal(
             plan.character_duration + plan.interval * 2.0,
-            1.0,
+            2.0,
         ));
 
         drop(query);
         drop(world);
-        scene.update(1.0);
+        scene.update(2.0);
         let world = scene.get_world();
         assert!(!world.query::<&WriteState>().iter().next().unwrap().active);
     }
@@ -1401,12 +1401,12 @@ mod tests {
             fn build(&mut self, scene: &mut Scene) {
                 let label = text_2d().text("ABC").build(scene);
                 scene.get_world_2d().add(&label);
-                unwrite().duration(1.0).play(&label);
+                unwrite().duration(2.0).play(&label);
             }
         }
 
         let mut scene = Scene::new();
-        assert_eq!(scene.build(&mut UnwrittenText), 1.0);
+        assert_eq!(scene.build(&mut UnwrittenText), 2.0);
         scene.update(0.0);
         {
             let world = scene.get_world();
@@ -1417,6 +1417,10 @@ mod tests {
         }
 
         scene.update(1.0);
+        let world = scene.get_world();
+        assert!(world.query::<&WriteState>().iter().next().unwrap().active);
+        drop(world);
+        scene.update(2.0);
         let world = scene.get_world();
         assert!(!world.query::<&WriteState>().iter().next().unwrap().active);
         assert_eq!(

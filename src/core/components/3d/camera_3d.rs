@@ -15,13 +15,13 @@ pub struct Camera3D {
     #[track]
     pub camera_rotation: Quaternion,
     /// Vertical field of view in radians.
-    #[track]
+    #[track(min = 0.000001, max = 3.1415915)]
     pub camera_fov: f32,
     /// Near clipping plane distance.
-    #[track]
+    #[track(min = 0.000001)]
     pub camera_near: f32,
     /// Far clipping plane distance.
-    #[track]
+    #[track(min = 0.000001)]
     pub camera_far: f32,
 }
 
