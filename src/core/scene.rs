@@ -335,9 +335,13 @@ impl Scene {
         canvas.restore_to_count(save_count);
     }
 
-    pub(crate) fn selection_outline(&self, entity: hecs::Entity) -> Option<[[f32; 2]; 4]> {
+    pub(crate) fn selection_outline(&self, entity: hecs::Entity) -> Option<Vec<[[f32; 2]; 2]>> {
+        let view_2d = self.get_root().is_view_2d();
         let output = self.get_view();
         let world = self.world.borrow();
+        if !view_2d {
+            return crate::core::objects::outline_segments3d(&world, output.entity, entity);
+        }
         if !self.output_is_active_2d(&world, output.entity) {
             return None;
         }
@@ -346,19 +350,27 @@ impl Scene {
             .get::<&crate::core::objects::CanvasSettings>(output.entity)
             .ok()?
             .resolution;
-        Some(points.map(|p| {
+        let points = points.map(|p| {
             [
                 p.x / size.0.max(1) as f32 + 0.5,
                 p.y / size.1.max(1) as f32 + 0.5,
             ]
-        }))
+        });
+        Some(
+            (0..4)
+                .map(|index| [points[index], points[(index + 1) % 4]])
+                .collect(),
+        )
     }
 
     pub(crate) fn pick(&self, point: Vector2) -> Option<hecs::Entity> {
+        let view_2d = self.get_root().is_view_2d();
         let output = self.get_view();
         let world = self.world.borrow();
-        if self.output_is_active_2d(&world, output.entity) {
+        if view_2d && self.output_is_active_2d(&world, output.entity) {
             crate::core::objects::pick_canvas2d(&world, output.entity, point)
+        } else if !view_2d {
+            crate::core::objects::pick_canvas3d(&world, output.entity, point)
         } else {
             None
         }
@@ -630,6 +642,33 @@ mod tests {
         scene.update(0.5);
         assert_ne!(scene.render_key(), edited);
         assert_ne!(Scene::new().render_key().0, rendered.0);
+    }
+
+    #[test]
+    fn preview_hit_testing_and_debug_follow_the_root_view_dimension() {
+        let mut scene = Scene::new_with_resolution((64, 64));
+        let rectangle = rect().size(vec2(16.0, 16.0)).build(&mut scene);
+        scene.get_world_2d().add(&rectangle);
+        let near_cube = cube().build(&mut scene);
+        let far_cube = cube().position(vec3(0.0, 0.0, -2.0)).build(&mut scene);
+        scene.get_world_3d().add(&near_cube);
+        scene.get_world_3d().add(&far_cube);
+
+        assert_eq!(scene.pick(Vector2::ZERO), Some(rectangle.get_id()));
+        assert_eq!(
+            scene.selection_outline(rectangle.get_id()).unwrap().len(),
+            4
+        );
+
+        scene.get_root().view_2d(false).immediate();
+
+        assert_eq!(scene.pick(Vector2::ZERO), Some(near_cube.get_id()));
+        assert!(scene.pick(vec2(31.0, 31.0)).is_none());
+        assert_eq!(
+            scene.selection_outline(near_cube.get_id()).unwrap().len(),
+            12
+        );
+        assert!(scene.selection_outline(rectangle.get_id()).is_none());
     }
 
     #[test]

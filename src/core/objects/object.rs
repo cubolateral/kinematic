@@ -452,7 +452,10 @@ pub(crate) fn object_box3d(world: &hecs::World, entity: hecs::Entity) -> glam::V
     bounds3d(world, entity).map_or(glam::Vec3::ZERO, |(min, max)| max - min)
 }
 
-fn bounds3d(world: &hecs::World, entity: hecs::Entity) -> Option<(glam::Vec3, glam::Vec3)> {
+pub(crate) fn bounds3d(
+    world: &hecs::World,
+    entity: hecs::Entity,
+) -> Option<(glam::Vec3, glam::Vec3)> {
     let size = world
         .get::<&Draw3D>(entity)
         .ok()

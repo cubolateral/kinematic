@@ -1,8 +1,8 @@
 use crate::core::{
-    components::{Camera2D, Draw2D, Node, Simulation, Transform2D},
+    components::{Camera2D, Camera3D, Draw2D, Draw3D, Node, Simulation, Transform2D},
     objects::{
-        CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, draw_projection_2d,
-        local_transform,
+        CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, bounds3d,
+        draw_projection_2d, global_matrix3d, local_transform,
     },
     types::Vector2,
 };
@@ -480,6 +480,213 @@ pub(crate) fn pick_canvas2d(
         .into_iter()
         .rev()
         .find_map(|child| pick_entity(world, child, point))
+}
+
+pub(crate) fn pick_canvas3d(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    point: Vector2,
+) -> Option<hecs::Entity> {
+    if !world
+        .get::<&Draw3D>(scope)
+        .is_ok_and(|draw| draw.visibility)
+    {
+        return None;
+    }
+    let settings = world.get::<&CanvasSettings>(scope).ok()?;
+    let camera = world.get::<&Camera3D>(scope).ok()?;
+    camera.validate().ok()?;
+    let ray = camera_ray(&camera, settings.resolution, point)?;
+
+    crate::core::objects::child_iter(world, scope)
+        .filter_map(|child| pick_entity3d(world, child, ray))
+        .min_by(|left, right| left.0.total_cmp(&right.0))
+        .map(|(_, entity)| entity)
+}
+
+pub(crate) fn outline_segments3d(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    target: hecs::Entity,
+) -> Option<Vec<[[f32; 2]; 2]>> {
+    fn contains(world: &hecs::World, entity: hecs::Entity, target: hecs::Entity) -> bool {
+        if world.get::<&CanvasSettings>(entity).is_ok()
+            || !world
+                .get::<&Node>(entity)
+                .is_ok_and(|node| node.is_activated)
+            || !world
+                .get::<&Draw3D>(entity)
+                .is_ok_and(|draw| draw.visibility)
+        {
+            return false;
+        }
+        entity == target
+            || crate::core::objects::child_iter(world, entity)
+                .any(|child| contains(world, child, target))
+    }
+
+    if !world
+        .get::<&Node>(scope)
+        .is_ok_and(|node| node.is_activated)
+        || !world
+            .get::<&Draw3D>(scope)
+            .is_ok_and(|draw| draw.visibility)
+        || !crate::core::objects::child_iter(world, scope)
+            .any(|child| contains(world, child, target))
+    {
+        return None;
+    }
+
+    let settings = world.get::<&CanvasSettings>(scope).ok()?;
+    let camera = world.get::<&Camera3D>(scope).ok()?;
+    camera.validate().ok()?;
+    let (min, max) = bounds3d(world, target)?;
+    let transform = global_matrix3d(world, target);
+    let view_projection =
+        camera_projection(&camera, settings.resolution)? * camera.matrix().inverse();
+    let corners = [
+        glam::vec3(min.x, min.y, min.z),
+        glam::vec3(max.x, min.y, min.z),
+        glam::vec3(max.x, max.y, min.z),
+        glam::vec3(min.x, max.y, min.z),
+        glam::vec3(min.x, min.y, max.z),
+        glam::vec3(max.x, min.y, max.z),
+        glam::vec3(max.x, max.y, max.z),
+        glam::vec3(min.x, max.y, max.z),
+    ]
+    .map(|corner| project_point(view_projection, transform.transform_point3(corner)))
+    .into_iter()
+    .collect::<Option<Vec<_>>>()?;
+    const EDGES: [(usize, usize); 12] = [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 0),
+        (4, 5),
+        (5, 6),
+        (6, 7),
+        (7, 4),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ];
+    Some(
+        EDGES
+            .into_iter()
+            .map(|(from, to)| [corners[from], corners[to]])
+            .collect(),
+    )
+}
+
+#[derive(Clone, Copy)]
+struct Ray3D {
+    origin: glam::Vec3,
+    direction: glam::Vec3,
+    near: f32,
+    far: f32,
+}
+
+fn camera_ray(camera: &Camera3D, resolution: (u32, u32), point: Vector2) -> Option<Ray3D> {
+    let width = resolution.0.max(1) as f32;
+    let height = resolution.1.max(1) as f32;
+    let tan = (camera.camera_fov * 0.5).tan();
+    let local_direction = glam::vec3(
+        point.x * 2.0 / width * width / height * tan,
+        -point.y * 2.0 / height * tan,
+        -1.0,
+    )
+    .normalize();
+    let rotation = crate::core::normalized_quaternion(camera.camera_rotation);
+    let direction = rotation * local_direction;
+    direction.is_finite().then_some(Ray3D {
+        origin: camera.camera_position,
+        direction,
+        near: camera.camera_near,
+        far: camera.camera_far,
+    })
+}
+
+fn pick_entity3d(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    ray: Ray3D,
+) -> Option<(f32, hecs::Entity)> {
+    if world.get::<&CanvasSettings>(entity).is_ok()
+        || !world
+            .get::<&Node>(entity)
+            .is_ok_and(|node| node.is_activated)
+        || !world
+            .get::<&Draw3D>(entity)
+            .is_ok_and(|draw| draw.visibility)
+    {
+        return None;
+    }
+
+    if let Some(hit) = crate::core::objects::child_iter(world, entity)
+        .filter_map(|child| pick_entity3d(world, child, ray))
+        .min_by(|left, right| left.0.total_cmp(&right.0))
+    {
+        return Some(hit);
+    }
+
+    let (min, max) = bounds3d(world, entity)?;
+    let inverse = global_matrix3d(world, entity).inverse();
+    if !inverse.is_finite() {
+        return None;
+    }
+    let origin = inverse.transform_point3(ray.origin);
+    let direction = inverse.transform_vector3(ray.direction);
+    ray_cuboid_intersection(origin, direction, min, max, ray.near, ray.far)
+        .map(|distance| (distance, entity))
+}
+
+fn ray_cuboid_intersection(
+    origin: glam::Vec3,
+    direction: glam::Vec3,
+    min: glam::Vec3,
+    max: glam::Vec3,
+    mut near: f32,
+    mut far: f32,
+) -> Option<f32> {
+    for axis in 0..3 {
+        let origin = origin[axis];
+        let direction = direction[axis];
+        if direction.abs() <= f32::EPSILON {
+            if origin < min[axis] || origin > max[axis] {
+                return None;
+            }
+            continue;
+        }
+        let first = (min[axis] - origin) / direction;
+        let second = (max[axis] - origin) / direction;
+        near = near.max(first.min(second));
+        far = far.min(first.max(second));
+        if near > far {
+            return None;
+        }
+    }
+    Some(near)
+}
+
+fn camera_projection(camera: &Camera3D, resolution: (u32, u32)) -> Option<glam::Mat4> {
+    let aspect = resolution.0 as f32 / resolution.1.max(1) as f32;
+    let projection = glam::camera::rh::proj::opengl::perspective(
+        camera.camera_fov,
+        aspect,
+        camera.camera_near,
+        camera.camera_far,
+    );
+    projection.is_finite().then_some(projection)
+}
+
+fn project_point(view_projection: glam::Mat4, point: glam::Vec3) -> Option<[f32; 2]> {
+    let clip = view_projection * point.extend(1.0);
+    if !clip.is_finite() || clip.w <= f32::EPSILON {
+        return None;
+    }
+    let ndc = clip.truncate() / clip.w;
+    Some([ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5])
 }
 
 fn canvas_camera_matrix(world: &hecs::World, scope: hecs::Entity) -> Option<skia_safe::Matrix> {

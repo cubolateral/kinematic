@@ -179,20 +179,20 @@ fn selection(
     let Some(entity) = editor.get_selected_entity() else {
         return;
     };
-    let Some(points) = editor.get_scene().selection_outline(entity) else {
+    let Some(segments) = editor.get_scene().selection_outline(entity) else {
         return;
     };
-    let points = points.map(|p| {
-        [
-            min[0] + p[0] * (max[0] - min[0]),
-            min[1] + p[1] * (max[1] - min[1]),
-        ]
-    });
     let _clip = draw_list.push_clip_rect(min, max, true);
     for (color, width) in [([0.0, 0.0, 0.0, 0.8], 6.0), ([1.0, 1.0, 1.0, 0.9], 2.0)] {
-        for index in 0..4 {
+        for [from, to] in &segments {
+            let project = |point: [f32; 2]| {
+                [
+                    min[0] + point[0] * (max[0] - min[0]),
+                    min[1] + point[1] * (max[1] - min[1]),
+                ]
+            };
             draw_list
-                .add_line(points[index], points[(index + 1) % 4], color)
+                .add_line(project(*from), project(*to), color)
                 .thickness(width)
                 .build();
         }
