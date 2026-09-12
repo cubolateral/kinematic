@@ -1,7 +1,7 @@
 use crate::{
     core::{
         TrackValue,
-        components::{Inspection, Name, Node},
+        components::{Animation, Inspection, Name, Node},
         normalized_quaternion,
         objects::{
             CanvasSettings, ProjectionSource, SphereShape,
@@ -12,7 +12,10 @@ use crate::{
 };
 use std::{ffi::CString, os::raw::c_void, ptr};
 
-use super::widgets::{NumericValue, numeric_input_arrows, text_size};
+use super::{
+    icons,
+    widgets::{NumericValue, numeric_input_arrows, text_size},
+};
 
 pub(super) const WINDOW_NAME: &str = "Inspector";
 const DRAG_DIRECTION_THRESHOLD: f32 = 4.0;
@@ -29,16 +32,17 @@ pub(super) struct State {
 }
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
-    let selected = editor.get_selected_entity();
-    let editing_disabled = editor.is_exporting() || editor.get_timeline().is_playing();
+    let selected = editor.get_selected_object();
+    let is_exporting = editor.is_exporting();
+    let is_playing = editor.get_timeline().is_playing();
 
     ui.window(WINDOW_NAME).build(|| {
-        let Some(entity) = selected else {
+        let Some((scene_index, entity)) = selected else {
             ui.text_wrapped("Select an object from the Scene Tree or Timeline.");
             return;
         };
 
-        let scene = editor.get_scene();
+        let scene = editor.get_scene_at(scene_index);
         let world = scene.get_world();
         let Ok(inspection) = world.get::<&Inspection>(entity) else {
             ui.text_disabled("The selected object is unavailable.");
@@ -61,43 +65,41 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         ui.text_disabled(format!("Entity ID: {}.", entity.to_bits()));
         ui.text_disabled(format!("Object type: {}.", inspection.object_name));
         ui.separator();
-        if !node.is_activated {
-            ui.text_disabled("Inactive objects cannot be edited.");
-            return;
-        }
 
-        let _disabled = ui.begin_disabled_with_cond(editing_disabled);
-        if let Ok(settings) = world.get::<&CanvasSettings>(entity) {
-            property(
-                ui,
-                "Resolution",
-                &format!("{} x {}.", settings.resolution.0, settings.resolution.1),
-            );
-        }
-        if let Ok(mut sphere) = world.get::<&mut SphereShape>(entity) {
-            let mut segments = sphere.segments;
-            if numeric_drag(
-                ui,
-                state,
-                "Segments",
-                &mut segments,
-                1.0,
-                "%u",
-                dear_imgui_rs::sys::ImGuiDataType_U32,
-            ) {
-                sphere.segments = segments.clamp(3, 256);
-                scene.invalidate();
+        {
+            let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing);
+            if let Ok(settings) = world.get::<&CanvasSettings>(entity) {
+                property(
+                    ui,
+                    "Resolution",
+                    &format!("{} x {}.", settings.resolution.0, settings.resolution.1),
+                );
             }
-        }
-        if let Ok(source) = world.get::<&ProjectionSource>(entity) {
-            property(
-                ui,
-                "Source canvas",
-                &source.0.map_or_else(
-                    || "Unassigned.".into(),
-                    |texture| format!("{}.", texture.entity.to_bits()),
-                ),
-            );
+            if let Ok(mut sphere) = world.get::<&mut SphereShape>(entity) {
+                let mut segments = sphere.segments;
+                if numeric_drag(
+                    ui,
+                    state,
+                    "Segments",
+                    &mut segments,
+                    1.0,
+                    "%u",
+                    dear_imgui_rs::sys::ImGuiDataType_U32,
+                ) {
+                    sphere.segments = segments.clamp(3, 256);
+                    scene.invalidate();
+                }
+            }
+            if let Ok(source) = world.get::<&ProjectionSource>(entity) {
+                property(
+                    ui,
+                    "Source canvas",
+                    &source.0.map_or_else(
+                        || "Unassigned.".into(),
+                        |texture| format!("{}.", texture.entity.to_bits()),
+                    ),
+                );
+            }
         }
 
         let mut edits = Vec::new();
@@ -106,16 +108,33 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
             for track in (trackable.get)() {
                 let _id = ui.push_id(&format!("{}:{}", trackable.name, track.id));
+                let component = (trackable.type_id)();
+                let animated = world
+                    .get::<&Animation>(entity)
+                    .is_ok_and(|animation| animation.animates(component, track));
+                let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing && animated);
                 let mut value = (track.get)(&world, entity);
                 let before = value.clone();
-                if edit_value(ui, state, track.name, &mut value) {
+                let label = if animated {
+                    format!("{} {}", track.name, icons::DIAMOND)
+                } else {
+                    track.name.to_owned()
+                };
+                if edit_value(ui, state, &label, &mut value) {
                     (track.set)(&world, entity, value.clone());
                     edits.push(AppearanceEdit {
                         entity,
-                        component: (trackable.type_id)(),
+                        component,
                         track,
                         before,
                         value,
+                    });
+                }
+                if animated && ui.is_item_hovered() {
+                    ui.tooltip_text(if is_playing {
+                        "Animated track. Pause playback to edit it."
+                    } else {
+                        "Animated track."
                     });
                 }
             }

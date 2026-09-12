@@ -8,6 +8,7 @@ pub(in crate::ui) struct State {
     pan: [f32; 2],
     pointer_down: bool,
     pointer_moved: bool,
+    debug_metrics: bool,
 }
 
 impl Default for State {
@@ -17,6 +18,7 @@ impl Default for State {
             pan: [0.0; 2],
             pointer_down: false,
             pointer_moved: false,
+            debug_metrics: false,
         }
     }
 }
@@ -35,6 +37,14 @@ impl State {
         self.pan = [0.0; 2];
         self.pointer_down = false;
         self.pointer_moved = false;
+    }
+
+    pub fn debug_metrics(&self) -> bool {
+        self.debug_metrics
+    }
+
+    pub fn toggle_debug_metrics(&mut self) {
+        self.debug_metrics = !self.debug_metrics;
     }
 
     pub fn zoom_at(&mut self, wheel: f32, anchor: [f32; 2]) {

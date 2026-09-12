@@ -15,6 +15,18 @@ pub(crate) struct Animation {
 }
 
 impl Animation {
+    pub(crate) fn animates(
+        &self,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+    ) -> bool {
+        self.tracks.iter().any(|track| {
+            track.type_id == type_id
+                && track.track.info.id == track_info.id
+                && !track.track.keyframes.is_empty()
+        })
+    }
+
     pub(crate) fn sample(
         &self,
         type_id: std::any::TypeId,

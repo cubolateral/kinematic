@@ -19,6 +19,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     let world = editor.get_scene().get_world();
     let mut clicked = None;
     let mut empty_clicked = false;
+    let mut visibility_changed = false;
     let _text_align = ui.push_style_var(dear_imgui_rs::StyleVar::SelectableTextAlign([0.0, 0.5]));
 
     ui.window(WINDOW_NAME).build(|| {
@@ -66,6 +67,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
                 selected == Some(root),
                 root_visibility,
                 &mut clicked,
+                &mut visibility_changed,
             );
         }
 
@@ -76,6 +78,10 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     });
 
     drop(world);
+
+    if visibility_changed {
+        editor.get_scene().invalidate();
+    }
 
     if let Some(entity) = clicked {
         editor.select_entity(entity);
@@ -93,6 +99,7 @@ fn draw_children(
     ancestor_selected: bool,
     ancestor_visible: bool,
     clicked: &mut Option<hecs::Entity>,
+    visibility_changed: &mut bool,
 ) {
     for (index, entity) in children.iter().copied().enumerate() {
         let is_last = index + 1 == children.len();
@@ -142,7 +149,8 @@ fn draw_children(
         drop(name);
         if let Some(visibility) = visibility {
             ui.same_line_with_spacing(0.0, 0.0);
-            visibility_button(world, ui, entity, visibility, effective_visibility);
+            *visibility_changed |=
+                visibility_button(world, ui, entity, visibility, effective_visibility);
         }
 
         if was_clicked {
@@ -163,6 +171,7 @@ fn draw_children(
             is_highlighted,
             effective_visibility,
             clicked,
+            visibility_changed,
         );
         branches.pop();
     }
@@ -174,7 +183,7 @@ fn visibility_button(
     entity: hecs::Entity,
     visibility: bool,
     effective_visibility: bool,
-) {
+) -> bool {
     let _id = ui.push_id(&format!("visibility_{}", entity.to_bits()));
     let clicked = controls::text_button_colored(
         ui,
@@ -196,6 +205,7 @@ fn visibility_button(
             draw.visibility = !draw.visibility;
         }
     }
+    clicked
 }
 
 fn object_visibility(world: &hecs::World, entity: hecs::Entity) -> Option<bool> {

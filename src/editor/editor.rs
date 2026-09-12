@@ -314,7 +314,18 @@ impl Editor {
     }
 
     pub fn get_selected_entity(&self) -> Option<hecs::Entity> {
+        self.selection
+            .get()
+            .filter(|(scene, _)| *scene == self.active_scene)
+            .map(|(_, entity)| entity)
+    }
+
+    pub(crate) fn get_selected_object(&self) -> Option<(usize, hecs::Entity)> {
         self.selection.get()
+    }
+
+    pub(crate) fn get_scene_at(&mut self, index: usize) -> &mut Scene {
+        &mut self.scenes[index].scene
     }
 
     pub fn select_entity(&mut self, entity: hecs::Entity) {
@@ -322,7 +333,7 @@ impl Editor {
             self.get_scene().get_world().contains(entity),
             "Selected object must belong to this scene."
         );
-        self.selection.select(entity);
+        self.selection.select(self.active_scene, entity);
     }
 
     pub fn clear_selection(&mut self) {
@@ -344,7 +355,7 @@ impl Editor {
                 source_size.1 as f32 / project_size.1.max(1) as f32,
             );
         match self.get_scene().pick(point) {
-            Some(entity) => self.selection.select(entity),
+            Some(entity) => self.selection.select(self.active_scene, entity),
             None => self.selection.clear(),
         }
     }
@@ -387,10 +398,7 @@ impl Editor {
     fn update_active_scene(&mut self, time: f32) {
         let active_scene = active_scene_at(&self.scenes, time);
 
-        if self.active_scene != active_scene {
-            self.active_scene = active_scene;
-            self.selection.clear();
-        }
+        self.active_scene = active_scene;
 
         let scene = &self.scenes[self.active_scene];
         let local_time = (time - scene.start).clamp(0.0, scene.end - scene.start);

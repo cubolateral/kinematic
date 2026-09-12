@@ -1,5 +1,6 @@
 pub(super) const BACKWARD: &str = "\u{f04a}";
 pub(super) const BACKWARD_FAST: &str = "\u{f048}";
+pub(super) const BUG: &str = "\u{f188}";
 pub(super) const COMPRESS: &str = "\u{f066}";
 pub(super) const DIAMOND: &str = "\u{25c6}";
 pub(super) const EXPAND: &str = "\u{f065}";

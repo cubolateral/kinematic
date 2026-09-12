@@ -15,6 +15,7 @@ pub(super) struct PreviewImage {
 
 pub(super) struct InteractionResult {
     pub clicked: Option<Vector2>,
+    pub clear_selection: bool,
     pub mouse_position: Option<Vector2>,
 }
 
@@ -122,15 +123,19 @@ pub(super) fn draw_interactive(
     } else {
         None
     };
-    if !ui.is_mouse_released(left) || !state.release(over_image) {
+    // The press starts inside the viewport, so a release outside the project canvas
+    // is still a deliberate click and clears the current selection.
+    if !ui.is_mouse_released(left) || !state.release(true) {
         return InteractionResult {
             clicked: None,
+            clear_selection: false,
             mouse_position,
         };
     }
 
     InteractionResult {
         clicked: mouse_position,
+        clear_selection: mouse_position.is_none(),
         mouse_position,
     }
 }
