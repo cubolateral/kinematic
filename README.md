@@ -62,7 +62,7 @@ fn example(s: &mut Scene) {
 }
 
 fn main() {
-    App::new().project("Example", vec![example]).run();
+    app().project("Example", vec![example]).run();
 }
 ```
 

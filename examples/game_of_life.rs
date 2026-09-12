@@ -141,7 +141,7 @@ fn game_of_life_3d(s: &mut Scene) {
 }
 
 fn main() {
-    App::new()
+    app()
         .project("Game of Life", vec![game_of_life_2d, game_of_life_3d])
         .run();
 }

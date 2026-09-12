@@ -19,6 +19,11 @@ pub struct App {
     project: Option<Project>,
 }
 
+/// Creates a new application.
+pub fn app() -> App {
+    App::new()
+}
+
 impl App {
     pub fn new() -> Self {
         let sdl = sdl3::init().unwrap();
@@ -103,7 +108,7 @@ impl App {
         let project = self
             .project
             .take()
-            .expect("Call App::project before App::run.");
+            .expect("Call app().project before App::run.");
         // Load another function table for the same SDL context; no additional GL context is created.
         let video = self.sdl.video().unwrap();
         let three_gl = unsafe {
