@@ -4,7 +4,162 @@ use std::{
 };
 
 use crate::core::{components::Material, objects::CanvasTexture};
-use three_d::Geometry;
+use three_d::{Geometry, InnerSpace, SquareMatrix};
+
+pub(crate) struct CachedGeometry {
+    mesh: three_d::Mesh,
+    outline: Option<MeshOutline>,
+}
+
+struct MeshOutline {
+    positions: three_d::VertexBuffer<three_d::Vec3>,
+    barycentric: three_d::VertexBuffer<three_d::Vec3>,
+    context: three_d::Context,
+    bounds: three_d::AxisAlignedBoundingBox,
+    transformation: three_d::Mat4,
+}
+
+impl MeshOutline {
+    fn new(context: &three_d::Context, mesh: &three_d::CpuMesh) -> Self {
+        let (positions, barycentric) = outline_vertices(mesh);
+        Self {
+            positions: three_d::VertexBuffer::new_with_data(context, &positions),
+            barycentric: three_d::VertexBuffer::new_with_data(context, &barycentric),
+            context: context.clone(),
+            bounds: three_d::AxisAlignedBoundingBox::new_with_positions(&positions),
+            transformation: three_d::Mat4::identity(),
+        }
+    }
+
+    fn set_transformation(&mut self, transformation: three_d::Mat4) {
+        self.transformation = transformation;
+    }
+}
+
+impl three_d::Geometry for MeshOutline {
+    fn draw(
+        &self,
+        viewer: &dyn three_d::Viewer,
+        program: &three_d::Program,
+        render_states: three_d::RenderStates,
+    ) {
+        program.use_uniform("viewProjection", viewer.projection() * viewer.view());
+        program.use_uniform("modelMatrix", self.transformation);
+        program.use_vertex_attribute("position", &self.positions);
+        program.use_vertex_attribute("barycentric", &self.barycentric);
+        program.draw_arrays(
+            render_states,
+            viewer.viewport(),
+            self.positions.vertex_count(),
+        );
+    }
+
+    fn vertex_shader_source(&self) -> String {
+        r#"
+            uniform mat4 viewProjection;
+            uniform mat4 modelMatrix;
+            in vec3 position;
+            in vec3 barycentric;
+            out vec3 bary;
+
+            void main() {
+                bary = barycentric;
+                gl_Position = viewProjection * modelMatrix * vec4(position, 1.0);
+            }
+        "#
+        .to_owned()
+    }
+
+    fn id(&self) -> three_d::GeometryId {
+        three_d::GeometryId(0x7ffe)
+    }
+
+    fn render_with_material(
+        &self,
+        material: &dyn three_d::Material,
+        viewer: &dyn three_d::Viewer,
+        lights: &[&dyn three_d::Light],
+    ) {
+        three_d::render_with_material(&self.context, viewer, self, material, lights)
+            .unwrap_or_else(|error| panic!("{error}"));
+    }
+
+    fn render_with_effect(
+        &self,
+        effect: &dyn three_d::Effect,
+        viewer: &dyn three_d::Viewer,
+        lights: &[&dyn three_d::Light],
+        color_texture: Option<three_d::ColorTexture>,
+        depth_texture: Option<three_d::DepthTexture>,
+    ) {
+        three_d::render_with_effect(
+            &self.context,
+            viewer,
+            self,
+            effect,
+            lights,
+            color_texture,
+            depth_texture,
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+    }
+
+    fn aabb(&self) -> three_d::AxisAlignedBoundingBox {
+        self.bounds.transformed(self.transformation)
+    }
+}
+
+struct OutlineMaterial {
+    width: f32,
+    color: three_d::Srgba,
+}
+
+impl three_d::Material for OutlineMaterial {
+    fn fragment_shader_source(&self, _lights: &[&dyn three_d::Light]) -> String {
+        r#"
+            layout (location = 0) out vec4 outColor;
+            uniform float lineWidth;
+            uniform vec4 lineColor;
+            in vec3 bary;
+
+            void main() {
+                vec3 derivatives = fwidth(bary);
+                vec3 interior = step(derivatives * lineWidth, bary);
+                float fill = min(min(interior.x, interior.y), interior.z);
+                outColor = vec4(lineColor.rgb, lineColor.a * (1.0 - fill));
+                gl_FragDepth = gl_FragCoord.z - 0.0001;
+            }
+        "#
+        .to_owned()
+    }
+
+    fn id(&self) -> three_d::EffectMaterialId {
+        three_d::EffectMaterialId(0x4ffe)
+    }
+
+    fn use_uniforms(
+        &self,
+        program: &three_d::Program,
+        _viewer: &dyn three_d::Viewer,
+        _lights: &[&dyn three_d::Light],
+    ) {
+        program.use_uniform("lineWidth", self.width);
+        program.use_uniform("lineColor", three_d::Vec4::from(self.color));
+    }
+
+    fn render_states(&self) -> three_d::RenderStates {
+        three_d::RenderStates {
+            write_mask: three_d::WriteMask::COLOR,
+            blend: three_d::Blend::TRANSPARENCY,
+            depth_test: three_d::DepthTest::LessOrEqual,
+            ..Default::default()
+        }
+    }
+
+    fn material_type(&self) -> three_d::MaterialType {
+        three_d::MaterialType::Transparent
+    }
+}
 
 /// Stable identity for a reusable GPU geometry.
 ///
@@ -32,7 +187,7 @@ pub struct RenderContext3D<'a> {
     pub camera: &'a three_d::Camera,
     pub target: &'a three_d::RenderTarget<'static>,
     pub three_d: &'a three_d::Context,
-    geometries: &'a mut HashMap<GeometryKey, three_d::Mesh>,
+    geometries: &'a mut HashMap<GeometryKey, CachedGeometry>,
     used_geometries: &'a mut HashSet<GeometryKey>,
     physical: &'a mut three_d::PhysicalMaterial,
     ambient: &'a three_d::AmbientLight,
@@ -47,7 +202,7 @@ impl<'a> RenderContext3D<'a> {
         camera: &'a three_d::Camera,
         target: &'a three_d::RenderTarget<'static>,
         three_d: &'a three_d::Context,
-        geometries: &'a mut HashMap<GeometryKey, three_d::Mesh>,
+        geometries: &'a mut HashMap<GeometryKey, CachedGeometry>,
         used_geometries: &'a mut HashSet<GeometryKey>,
         physical: &'a mut three_d::PhysicalMaterial,
         ambient: &'a three_d::AmbientLight,
@@ -84,9 +239,14 @@ impl<'a> RenderContext3D<'a> {
         create: impl FnOnce() -> three_d::CpuMesh,
     ) -> &mut three_d::Mesh {
         self.used_geometries.insert(key);
-        self.geometries
+        &mut self
+            .geometries
             .entry(key)
-            .or_insert_with(|| three_d::Mesh::new(self.three_d, &create()))
+            .or_insert_with(|| CachedGeometry {
+                mesh: three_d::Mesh::new(self.three_d, &create()),
+                outline: None,
+            })
+            .mesh
     }
 
     /// Resolves a canvas texture for custom materials.
@@ -121,6 +281,7 @@ impl<'a> RenderContext3D<'a> {
         );
         let states = render_states(transparent, false);
         let camera = self.camera;
+        self.prepare_geometry(key, create, data.outline_width > 0.0);
         if data.unlit {
             let material = three_d::ColorMaterial {
                 color,
@@ -128,7 +289,7 @@ impl<'a> RenderContext3D<'a> {
                 render_states: states,
                 is_transparent: transparent,
             };
-            let mesh = self.geometry(key, create);
+            let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
             mesh.set_transformation(transformation.to_cols_array_2d().into());
             mesh.render_with_material(&material, camera, &[]);
         } else {
@@ -139,14 +300,11 @@ impl<'a> RenderContext3D<'a> {
             self.physical.render_states = states;
             let physical = &*self.physical;
             let lights: [&dyn three_d::Light; 2] = [self.ambient, self.sun];
-            self.used_geometries.insert(key);
-            let mesh = self
-                .geometries
-                .entry(key)
-                .or_insert_with(|| three_d::Mesh::new(self.three_d, &create()));
+            let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
             mesh.set_transformation(transformation.to_cols_array_2d().into());
             mesh.render_with_material(physical, camera, &lights);
         }
+        self.render_outline(key, transformation, data);
         Ok(())
     }
 
@@ -174,9 +332,10 @@ impl<'a> RenderContext3D<'a> {
         );
         let states = render_states(true, false);
         let camera = self.camera;
+        self.prepare_geometry(key, create, data.outline_width > 0.0);
 
         if data.unlit {
-            let mesh = self.geometry(key, create);
+            let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
             mesh.set_transformation(transformation.to_cols_array_2d().into());
             mesh.render_with_material(
                 &three_d::ColorMaterial {
@@ -197,16 +356,151 @@ impl<'a> RenderContext3D<'a> {
             material.is_transparent = true;
             material.render_states = states;
             let lights: [&dyn three_d::Light; 2] = [self.ambient, self.sun];
-            self.used_geometries.insert(key);
-            let mesh = self
-                .geometries
-                .entry(key)
-                .or_insert_with(|| three_d::Mesh::new(self.three_d, &create()));
+            let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
             mesh.set_transformation(transformation.to_cols_array_2d().into());
             mesh.render_with_material(&material, camera, &lights);
         }
+        self.render_outline(key, transformation, data);
         Ok(())
     }
+
+    fn prepare_geometry(
+        &mut self,
+        key: GeometryKey,
+        create: impl FnOnce() -> three_d::CpuMesh,
+        outline: bool,
+    ) {
+        self.used_geometries.insert(key);
+        let needs_mesh = !self.geometries.contains_key(&key);
+        let needs_outline = outline
+            && self
+                .geometries
+                .get(&key)
+                .is_none_or(|geometry| geometry.outline.is_none());
+        if !needs_mesh && !needs_outline {
+            return;
+        }
+
+        let cpu = create();
+        if needs_mesh {
+            self.geometries.insert(
+                key,
+                CachedGeometry {
+                    mesh: three_d::Mesh::new(self.three_d, &cpu),
+                    outline: outline.then(|| MeshOutline::new(self.three_d, &cpu)),
+                },
+            );
+        } else {
+            self.geometries.get_mut(&key).unwrap().outline =
+                Some(MeshOutline::new(self.three_d, &cpu));
+        }
+    }
+
+    fn render_outline(&mut self, key: GeometryKey, transformation: glam::Mat4, data: &Material) {
+        if data.outline_width <= 0.0 {
+            return;
+        }
+        let [r, g, b, a] = data.outline_color.rgba();
+        let outline = self
+            .geometries
+            .get_mut(&key)
+            .unwrap()
+            .outline
+            .as_mut()
+            .unwrap();
+        outline.set_transformation(transformation.to_cols_array_2d().into());
+        outline.render_with_material(
+            &OutlineMaterial {
+                width: data.outline_width,
+                color: three_d::Srgba::new(
+                    channel(r),
+                    channel(g),
+                    channel(b),
+                    channel(a * data.opacity),
+                ),
+            },
+            self.camera,
+            &[],
+        );
+    }
+}
+
+type PositionKey = [u32; 3];
+
+fn outline_vertices(mesh: &three_d::CpuMesh) -> (Vec<three_d::Vec3>, Vec<three_d::Vec3>) {
+    let source = mesh.positions.to_f32();
+    let indices = mesh
+        .indices
+        .to_u32()
+        .unwrap_or_else(|| (0..source.len() as u32).collect());
+    let positions: Vec<_> = indices
+        .iter()
+        .map(|index| source[*index as usize])
+        .collect();
+    let triangle_count = positions.len() / 3;
+    let mut edges: HashMap<(PositionKey, PositionKey), Vec<(usize, usize, three_d::Vec3)>> =
+        HashMap::new();
+
+    for (triangle, vertices) in positions.chunks_exact(3).enumerate() {
+        let normal = (vertices[1] - vertices[0]).cross(vertices[2] - vertices[0]);
+        let normal = if normal.magnitude2() > f32::EPSILON {
+            normal.normalize()
+        } else {
+            three_d::vec3(0.0, 0.0, 0.0)
+        };
+        for (edge, [from, to]) in [[1, 2], [2, 0], [0, 1]].into_iter().enumerate() {
+            let from = position_key(vertices[from]);
+            let to = position_key(vertices[to]);
+            let key = if from <= to { (from, to) } else { (to, from) };
+            edges.entry(key).or_default().push((triangle, edge, normal));
+        }
+    }
+
+    let mut hidden = vec![[false; 3]; triangle_count];
+    for adjacent in edges.values() {
+        if let [
+            (first_triangle, first_edge, first_normal),
+            (second_triangle, second_edge, second_normal),
+        ] = adjacent.as_slice()
+            && first_normal.magnitude2() > 0.0
+            && second_normal.magnitude2() > 0.0
+            && first_normal.dot(*second_normal).abs() >= 1.0 - 1e-5
+        {
+            hidden[*first_triangle][*first_edge] = true;
+            hidden[*second_triangle][*second_edge] = true;
+        }
+    }
+
+    let mut barycentric = Vec::with_capacity(positions.len());
+    for hidden_edges in hidden {
+        let mut triangle = [
+            three_d::vec3(1.0, 0.0, 0.0),
+            three_d::vec3(0.0, 1.0, 0.0),
+            three_d::vec3(0.0, 0.0, 1.0),
+        ];
+        for (edge, hidden) in hidden_edges.into_iter().enumerate() {
+            if hidden {
+                for barycentric in &mut triangle {
+                    barycentric[edge] = 1.0;
+                }
+            }
+        }
+        barycentric.extend(triangle);
+    }
+
+    (positions, barycentric)
+}
+
+fn position_key(position: three_d::Vec3) -> PositionKey {
+    [
+        normalized_float_bits(position.x),
+        normalized_float_bits(position.y),
+        normalized_float_bits(position.z),
+    ]
+}
+
+fn normalized_float_bits(value: f32) -> u32 {
+    if value == 0.0 { 0 } else { value.to_bits() }
 }
 
 /// Local three-dimensional rendering callback and bounds for an entity.
@@ -306,5 +600,17 @@ mod tests {
             combine_transforms(base, local).transform_point3(glam::Vec3::ZERO),
             glam::vec3(4.0, 3.0, 0.0)
         );
+    }
+
+    #[test]
+    fn outline_hides_only_the_coplanar_diagonal_of_each_cube_face() {
+        let (_, barycentric) = outline_vertices(&three_d::CpuMesh::cube());
+
+        for triangle in barycentric.chunks_exact(3) {
+            let hidden_edges = (0..3)
+                .filter(|edge| triangle.iter().all(|vertex| vertex[*edge] == 1.0))
+                .count();
+            assert_eq!(hidden_edges, 1);
+        }
     }
 }

@@ -4,6 +4,19 @@ use crate::prelude::*;
 use crate::renderer::plan::{active_subtree, canvas_order, order_dependencies, visible_subtree_3d};
 
 #[test]
+fn primitive_3d_builders_expose_outline_material_fields() {
+    let mut scene = Scene::new();
+    let color = Color::new(0.25, 0.5, 0.75, 0.8);
+    let primitive = sphere()
+        .outline_color(color)
+        .outline_width(3.0)
+        .build(&mut scene);
+
+    assert_eq!(primitive.get_outline_color(), color);
+    assert_eq!(primitive.get_outline_width(), 3.0);
+}
+
+#[test]
 fn spatial_handlers_compose_transforms_and_bounds() {
     let mut scene = Scene::new();
     let canvas = canvas_3d().resolution((640, 480)).build(&mut scene);

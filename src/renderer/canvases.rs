@@ -4,7 +4,7 @@ use super::{
 };
 use crate::core::{
     Scene, SceneIdentity,
-    components::{Camera3D, Draw3D, GeometryKey, RenderContext3D},
+    components::{CachedGeometry, Camera3D, Draw3D, GeometryKey, RenderContext3D},
     objects::{CanvasDimension, CanvasSettings, CanvasTexture, draw_canvas2d_with_images},
 };
 use glow::HasContext;
@@ -15,7 +15,7 @@ use std::{
 
 pub(crate) struct Canvases {
     targets: HashMap<CanvasTexture, Target>,
-    geometries: HashMap<GeometryKey, three_d::Mesh>,
+    geometries: HashMap<GeometryKey, CachedGeometry>,
     plans: PlanCache,
     visible: Vec<hecs::Entity>,
     images: HashMap<CanvasTexture, skia_safe::Image>,
