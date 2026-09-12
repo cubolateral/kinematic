@@ -1,4 +1,4 @@
-use crate::core::{Easing, effects::Effect, objects::TextHandler};
+use crate::core::{Easing, effects::Effect, objects::Text2DHandler};
 
 /// Writes text one character at a time through overlapping particle morphs.
 pub struct Write {
@@ -38,8 +38,8 @@ impl Default for Write {
     }
 }
 
-impl Effect<TextHandler> for Write {
-    fn play(self, handler: &TextHandler) {
+impl Effect<Text2DHandler> for Write {
+    fn play(self, handler: &Text2DHandler) {
         handler.play_write(self.duration, self.easing, false);
     }
 }
@@ -87,8 +87,8 @@ impl Default for Unwrite {
     }
 }
 
-impl Effect<TextHandler> for Unwrite {
-    fn play(self, handler: &TextHandler) {
+impl Effect<Text2DHandler> for Unwrite {
+    fn play(self, handler: &Text2DHandler) {
         handler.play_write(self.duration, self.easing, true);
     }
 }

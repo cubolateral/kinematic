@@ -497,7 +497,7 @@ mod tests {
                 source.add(&child);
                 parent.add(&source);
                 scene.get_world_2d().add(&parent);
-                let target = text().text("A").size(20.0).build(scene);
+                let target = text_2d().text("A").size(20.0).build(scene);
                 morph().duration(1.0).play(&source, &target);
                 let next = circle().radius(8.0).build(scene);
                 morph().duration(1.0).play(&target, &next);

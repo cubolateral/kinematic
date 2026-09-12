@@ -11,26 +11,31 @@ use crate::core::{
         particle::Silhouette,
         particle_visual_key,
         string_morph::{ContentMorph, ContentMorphTransition, fade_string, morph_string},
+        text_2d::weighted_path,
     },
     types::Vector2,
 };
 
 /// Mathematical source and size of a LaTeX object.
 #[derive(Clone, Trackable)]
-pub struct LatexShape {
+pub struct Latex2DShape {
     /// LaTeX math source, without dollar delimiters.
     #[track]
     pub text: String,
     /// Font size in logical canvas units.
     #[track]
     pub size: f32,
+    /// Extra glyph thickness in logical canvas units.
+    #[track]
+    pub thickness: f32,
 }
 
-impl Default for LatexShape {
+impl Default for Latex2DShape {
     fn default() -> Self {
         Self {
             text: r"e^{i\pi}+1=0".to_owned(),
             size: 64.0,
+            thickness: 0.0,
         }
     }
 }
@@ -44,7 +49,7 @@ impl Default for LatexShape {
 /// use kinematic::prelude::*;
 ///
 /// let mut scene = Scene::new();
-/// let formula = latex()
+/// let formula = latex_2d()
 ///     .text(r"\frac{1}{2}")
 ///     .size(64.0)
 ///     .build(&mut scene);
@@ -52,11 +57,11 @@ impl Default for LatexShape {
 /// formula.morph(r"\sqrt{2}").duration(2.0).play();
 /// ```
 #[derive(Object, hecs::Bundle)]
-#[object(spatial = "2d", builder = "latex")]
+#[object(spatial = "2d", builder = "latex_2d")]
 #[morph]
-pub struct Latex {
+pub struct Latex2D {
     #[trackable]
-    pub shape: LatexShape,
+    pub shape: Latex2DShape,
     #[trackable]
     pub style: Style,
     #[trackable]
@@ -65,12 +70,12 @@ pub struct Latex {
     pub draw: Draw2D,
 }
 
-fn latex_box(shape: &LatexShape) -> Vector2 {
-    geometry(&shape.text).size * shape.size.max(0.0)
+fn latex_box(shape: &Latex2DShape) -> Vector2 {
+    geometry(&shape.text).size * shape.size.max(0.0) + Vector2::splat(shape.thickness.max(0.0))
 }
 
 fn latex_morph_silhouette(
-    shape: &LatexShape,
+    shape: &Latex2DShape,
     style: &Style,
     transform: &Transform2D,
 ) -> Silhouette {
@@ -89,7 +94,7 @@ fn latex_morph_silhouette(
 
 fn draw_latex_morph(
     transition: &ContentMorphTransition,
-    shape: &LatexShape,
+    shape: &Latex2DShape,
     style: &Style,
     transform: &Transform2D,
     progress: f32,
@@ -107,7 +112,7 @@ fn draw_latex_morph(
 }
 
 fn draw_complete_latex(
-    shape: &LatexShape,
+    shape: &Latex2DShape,
     style: &Style,
     opacity: f32,
     scale: Vector2,
@@ -124,13 +129,14 @@ fn draw_complete_latex(
     part_style.stroke_width /= size;
     for part in &geometry.parts {
         part_style.fill = part.color.unwrap_or(style.fill);
-        draw_complete_styled_path(&part.path, &part_style, scale, opacity, canvas);
+        let path = weighted_path(&part.path, shape.thickness / size);
+        draw_complete_styled_path(&path, &part_style, scale, opacity, canvas);
     }
     canvas.restore();
 }
 
 fn draw_latex(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
-    let shape = world.get::<&LatexShape>(entity).unwrap();
+    let shape = world.get::<&Latex2DShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let morph_state = world.get::<&Morph>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
@@ -162,7 +168,7 @@ fn draw_latex(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Can
             size.y * 0.5 + stroke_padding,
         );
         let visual_key = particle_visual_key(
-            "Latex",
+            "Latex2D",
             &style,
             &[shape.size, transform.scale.x, transform.scale.y],
             &[&shape.text],
@@ -189,7 +195,7 @@ fn draw_latex(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Can
     draw_complete_latex(&shape, &style, opacity, transform.scale, canvas);
 }
 
-impl Default for Latex {
+impl Default for Latex2D {
     fn default() -> Self {
         Self {
             shape: Default::default(),
@@ -197,17 +203,17 @@ impl Default for Latex {
             transform: Default::default(),
             draw: Draw2D {
                 on_draw: draw_latex,
-                get_box: |world, entity| latex_box(&world.get::<&LatexShape>(entity).unwrap()),
+                get_box: |world, entity| latex_box(&world.get::<&Latex2DShape>(entity).unwrap()),
                 ..Default::default()
             },
         }
     }
 }
 
-impl LatexHandler {
+impl Latex2DHandler {
     /// Cross-fades the current formula source into `text` on the same object.
-    pub fn fade(&self, text: impl Into<String>) -> Tween<Latex> {
-        let from = self.get(LatexShape::text_property());
+    pub fn fade(&self, text: impl Into<String>) -> Tween<Latex2D> {
+        let from = self.get(Latex2DShape::text_property());
         let to = text.into();
         let tween = self.text(to.clone());
         fade_string(tween, self.get_id(), from, to)
@@ -217,9 +223,9 @@ impl LatexHandler {
     ///
     /// Unlike [`crate::core::effects::morph`], this keeps the same formula object and
     /// changes its discrete string value when the returned tween completes.
-    pub fn morph(&self, text: impl Into<String>) -> Tween<Latex> {
+    pub fn morph(&self, text: impl Into<String>) -> Tween<Latex2D> {
         let text = text.into();
-        let from_text = self.get(LatexShape::text_property());
+        let from_text = self.get(Latex2DShape::text_property());
         let tween = self.text(text.clone());
         morph_string(
             tween,
@@ -254,7 +260,7 @@ mod tests {
 
         impl SceneBuilder for FadingFormula {
             fn build(&mut self, scene: &mut Scene) {
-                let formula = latex().text("x").build(scene);
+                let formula = latex_2d().text("x").build(scene);
                 scene.get_world_2d().add(&formula);
                 formula
                     .fade(r"\frac{1}{2}")
@@ -266,11 +272,11 @@ mod tests {
 
         let mut scene = Scene::new();
         assert_eq!(scene.build(&mut FadingFormula), 2.0);
-        assert_eq!(scene.get_world().query::<&LatexShape>().iter().count(), 1);
+        assert_eq!(scene.get_world().query::<&Latex2DShape>().iter().count(), 1);
 
         let state = |scene: &Scene| {
             let world = scene.get_world();
-            let mut query = world.query::<(&LatexShape, &Draw2D)>();
+            let mut query = world.query::<(&Latex2DShape, &Draw2D)>();
             let (shape, draw) = query.iter().next().unwrap();
             (shape.text.clone(), draw.opacity)
         };
@@ -290,8 +296,8 @@ mod tests {
         struct FormulaScene;
         impl SceneBuilder for FormulaScene {
             fn build(&mut self, scene: &mut Scene) {
-                let formula = latex().text(r"\frac{1}{2}").build(scene);
-                assert_eq!(formula.get_name(), "Latex");
+                let formula = latex_2d().text(r"\frac{1}{2}").build(scene);
+                assert_eq!(formula.get_name(), "Latex2D");
                 scene.get_world_2d().add(&formula);
                 creation().duration(1.0).play(&formula);
                 formula.morph(r"\sqrt{2}").play();
@@ -316,7 +322,7 @@ mod tests {
         scene.update(2.5);
         {
             let world = scene.get_world();
-            let mut query = world.query::<(&LatexShape, &ContentMorph)>();
+            let mut query = world.query::<(&Latex2DShape, &ContentMorph)>();
             let (shape, morph) = query.iter().next().unwrap();
             assert_eq!(shape.text, r"\sqrt{2}");
             assert_eq!(morph.transition, 1);
@@ -328,7 +334,7 @@ mod tests {
         scene.update(3.0);
         let world = scene.get_world();
         assert_eq!(
-            world.query::<&LatexShape>().iter().next().unwrap().text,
+            world.query::<&Latex2DShape>().iter().next().unwrap().text,
             r"e^{i\pi}+1=0"
         );
     }
@@ -336,7 +342,7 @@ mod tests {
     #[test]
     fn formulas_draw_decorations_colors_and_scale_within_their_bounds() {
         let mut scene = Scene::new();
-        let formula = latex()
+        let formula = latex_2d()
             .text(r"\boxed{\color{red}{\frac{x^2}{\sqrt{2}}}}+\cancel{y}")
             .size(48.0)
             .fill(Color::BLUE)

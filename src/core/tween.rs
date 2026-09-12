@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn endpoints_include_overrides_without_mutating_the_scene() {
         let mut scene = Scene::new();
-        let object = text().fill(Color::RED).build(&mut scene);
+        let object = text_2d().fill(Color::RED).build(&mut scene);
         let tween = object.fill(Color::YELLOW).fill(Color::BLUE).animate_from(
             Style::stroke_width_property(),
             2.0,

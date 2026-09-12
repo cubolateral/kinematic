@@ -84,14 +84,14 @@ fn visual_bounds(
     inverse: Option<skia_safe::Matrix>,
 ) -> Option<skia_safe::Rect> {
     use crate::core::components::{Morph, Style, stroke_width_for_scale};
-    use crate::core::objects::{LatexShape, TextShape, particle::ParticleTransform};
+    use crate::core::objects::{Latex2DShape, TextShape, particle::ParticleTransform};
     let inverse = inverse?;
     if world
         .get::<&Morph>(entity)
         .is_ok_and(|m| m.particles_enabled)
         || world.get::<&ParticleTransform>(entity).is_ok()
         || world.get::<&TextShape>(entity).is_ok()
-        || world.get::<&LatexShape>(entity).is_ok()
+        || world.get::<&Latex2DShape>(entity).is_ok()
     {
         return None;
     }

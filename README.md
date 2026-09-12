@@ -435,12 +435,12 @@ three, or four values (`round(10)`, `round([10, 30])`, and so on).
 
 ## LaTeX formulas
 
-`Latex` uses the native RaTeX layout engine and embedded KaTeX fonts.
+`Latex2D` uses the native RaTeX layout engine and embedded KaTeX fonts.
 Formula geometry is cached and drawn as Skia vector paths. Size, fill, stroke,
 transform, and creation effects work like other scene objects.
 
 ```rust
-let formula = latex()
+let formula = latex_2d()
     .text(r"\frac{1}{2}")
     .size(64.0)
     .build(s);
@@ -462,7 +462,7 @@ colors, and resolves the destination into its complete appearance.
 
 ```rust
 let source = circle().radius(80.0).fill(Color::RED).build(s);
-let target = text()
+let target = text_2d()
     .text("Kinematic")
     .position(vec2(240.0, 0.0))
     .fill(Color::BLUE)

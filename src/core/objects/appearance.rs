@@ -198,13 +198,13 @@ mod tests {
             let mut entity = None;
             scene.build(&mut Build(|scene: &mut Scene| {
                 entity = Some(if use_latex {
-                    let object = latex().text("A").size(32.0).build(scene);
+                    let object = latex_2d().text("A").size(32.0).build(scene);
                     scene.get_world_2d().add(&object);
                     object.morph("B").easing(Easing::Linear).play();
                     object.morph("C").easing(Easing::Linear).play();
                     object.get_id()
                 } else {
-                    let object = text().text("A").size(32.0).build(scene);
+                    let object = text_2d().text("A").size(32.0).build(scene);
                     scene.get_world_2d().add(&object);
                     object.morph("B").easing(Easing::Linear).play();
                     object.morph("C").easing(Easing::Linear).play();
@@ -281,7 +281,7 @@ mod tests {
         let mut ids = None;
         scene.build(&mut Build(|scene: &mut Scene| {
             let group = group_2d().build(scene);
-            let source = text().text("A").size(32.0).build(scene);
+            let source = text_2d().text("A").size(32.0).build(scene);
             group.add(&source);
             scene.get_world_2d().add(&group);
             let target = circle().radius(20.0).build(scene);
@@ -339,7 +339,7 @@ mod tests {
             let mut entity = None;
             scene.build(&mut Build(|scene: &mut Scene| {
                 if use_latex {
-                    let object = latex().text(from).size(32.0).build(scene);
+                    let object = latex_2d().text(from).size(32.0).build(scene);
                     entity = Some(object.get_id());
                     scene.get_world_2d().add(&object);
                     creation().duration(1.0).play(&object);
@@ -347,7 +347,7 @@ mod tests {
                     scene.wait(1.0);
                     uncreation().duration(1.0).play(&object);
                 } else {
-                    let object = text().text(from).size(32.0).build(scene);
+                    let object = text_2d().text(from).size(32.0).build(scene);
                     entity = Some(object.get_id());
                     scene.get_world_2d().add(&object);
                     if use_write {
@@ -413,8 +413,8 @@ mod tests {
             let mut scene = Scene::new();
             let mut ids = None;
             scene.build(&mut Build(|scene: &mut Scene| {
-                let source = text().text(from).size(32.0).build(scene);
-                let target = text().text(to).size(32.0).build(scene);
+                let source = text_2d().text(from).size(32.0).build(scene);
+                let target = text_2d().text(to).size(32.0).build(scene);
                 scene.get_world_2d().add(&source);
                 write().duration(1.0).play(&source);
                 morph()
@@ -467,7 +467,7 @@ mod tests {
             let mut scene = Scene::new();
             let mut entity = None;
             scene.build(&mut Build(|scene: &mut Scene| {
-                let object = text().text("A").size(32.0).build(scene);
+                let object = text_2d().text("A").size(32.0).build(scene);
                 entity = Some(object.get_id());
                 scene.get_world_2d().add(&object);
                 if use_write && reverse {

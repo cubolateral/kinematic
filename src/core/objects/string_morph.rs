@@ -75,6 +75,15 @@ impl ContentMorphTransition {
         matches!(self.prepared, Some(PreparedContentMorph::Fade))
     }
 
+    pub(super) fn fade_layers(&self, progress: f32) -> Option<[(String, f32); 2]> {
+        self.is_fade().then(|| {
+            [
+                (self.from_text.clone(), 1.0 - progress),
+                (self.to_text.clone(), progress),
+            ]
+        })
+    }
+
     pub(super) fn text_plan(&self) -> &TextMorphPlan {
         let PreparedContentMorph::Text(plan) = self
             .prepared
@@ -336,7 +345,7 @@ mod tests {
     impl SceneBuilder for StyledMorph {
         fn build(&mut self, scene: &mut Scene) {
             let task = if self.latex {
-                let object = latex()
+                let object = latex_2d()
                     .text("x")
                     .size(self.size)
                     .fill(self.style.fill)
@@ -357,7 +366,7 @@ mod tests {
                 .easing(Easing::Linear)
                 .task()
             } else {
-                let object = text()
+                let object = text_2d()
                     .text("A\nBC")
                     .size(self.size)
                     .fill(self.style.fill)

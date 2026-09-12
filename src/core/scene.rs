@@ -1301,9 +1301,9 @@ mod tests {
 
     #[test]
     fn object_builder_sets_component_values_and_preserves_object_defaults() {
-        let default = Text::default();
+        let default = Text2D::default();
         let mut scene = Scene::new();
-        let handler = text()
+        let handler = text_2d()
             .opacity(0.5)
             .z_index(-7)
             .position(vec2(10.0, 20.0))
@@ -1351,7 +1351,7 @@ mod tests {
     fn object_names_default_to_the_type_and_remain_mutable() {
         let mut scene = Scene::new();
         let circle = circle().build(&mut scene);
-        let label = text().name("Caption").build(&mut scene);
+        let label = text_2d().name("Caption").build(&mut scene);
         let root = scene.get_root();
 
         assert_eq!(circle.get_name(), "Circle");
@@ -1374,7 +1374,7 @@ mod tests {
     #[test]
     fn object_handler_exposes_trackable_fields_directly() {
         let mut scene = Scene::new();
-        let text: TextHandler = text().build(&mut scene);
+        let text: Text2DHandler = text_2d().build(&mut scene);
         let circle: CircleHandler = circle().build(&mut scene);
 
         let _ = text.opacity(0.25);
@@ -1797,7 +1797,7 @@ mod tests {
                         .size(vec2(16.0, 16.0))
                         .fill(Color::GREEN)
                         .build(scene);
-                    let text = text()
+                    let text = text_2d()
                         .text("A")
                         .size(20.0)
                         .position(vec2(32.0, 0.0))

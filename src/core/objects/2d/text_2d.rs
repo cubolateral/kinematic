@@ -3,7 +3,9 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::core::{
     Easing, Task, Tween,
-    components::{Draw2D, Morph, Style, Transform2D, stroke_width_for_scale},
+    components::{
+        Draw2D, Morph, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale,
+    },
     objects::{
         CreationDraw, ObjectHandler,
         appearance::AppearanceEdit,
@@ -14,7 +16,7 @@ use crate::core::{
             fade_string, morph_text,
         },
     },
-    types::{Color, Vector2},
+    types::Vector2,
 };
 
 type FontCache = std::collections::HashMap<std::path::PathBuf, skia_safe::Typeface>;
@@ -150,9 +152,9 @@ impl Default for TextShape {
 
 /// Built-in text scene object.
 #[derive(Object, hecs::Bundle)]
-#[object(spatial = "2d", builder = "text")]
+#[object(spatial = "2d", builder = "text_2d")]
 #[morph]
-pub struct Text {
+pub struct Text2D {
     #[trackable]
     pub shape: TextShape,
     #[trackable]
@@ -163,7 +165,7 @@ pub struct Text {
     pub draw: Draw2D,
 }
 
-impl TextBuilder {
+impl Text2DBuilder {
     /// Sets a bundled font or the path to a user-provided TTF or OTF file.
     pub fn font(mut self, font: impl Into<Font>) -> Self {
         self.object.shape.font = font.into();
@@ -175,20 +177,6 @@ struct TextLine<'a> {
     text: &'a str,
     width: f32,
     origin: (f32, f32),
-}
-
-fn text_paint(color: Color, opacity: f32, thickness: f32) -> skia_safe::Paint {
-    let [r, g, b, a] = color.rgba();
-    let mut paint = skia_safe::Paint::new(
-        skia_safe::Color4f::new(r, g, b, a * opacity.clamp(0.0, 1.0)),
-        None,
-    );
-    paint.set_anti_alias(true);
-    if thickness > 0.0 {
-        paint.set_style(skia_safe::PaintStyle::StrokeAndFill);
-        paint.set_stroke_width(thickness);
-    }
-    paint
 }
 
 fn text_lines<'a>(shape: &'a TextShape, font: &skia_safe::Font) -> Vec<TextLine<'a>> {
@@ -224,7 +212,7 @@ fn text_lines<'a>(shape: &'a TextShape, font: &skia_safe::Font) -> Vec<TextLine<
         .collect()
 }
 
-fn text_box(shape: &TextShape) -> Vector2 {
+pub(crate) fn text_box(shape: &TextShape) -> Vector2 {
     let font = shape.font.skia_font(shape.size);
     let lines = text_lines(shape, &font);
     let (_, metrics) = font.metrics();
@@ -361,16 +349,14 @@ fn draw_glyphs(
     if glyphs.is_empty() {
         return;
     }
-    let mut paint = text_paint(style.fill, opacity, thickness);
-    canvas.draw_glyphs_at(glyphs, positions, (0.0, 0.0), font, &paint);
-
-    if style.stroke_width <= 0.0 {
-        return;
+    let mut builder = skia_safe::PathBuilder::new();
+    for (&glyph, &position) in glyphs.iter().zip(positions) {
+        if let Some(path) = font.get_path(glyph) {
+            builder.add_path_with_offset(&path, position, None);
+        }
     }
-    paint.set_color4f(text_paint(style.stroke, opacity, 0.0).color4f(), None);
-    paint.set_style(skia_safe::PaintStyle::Stroke);
-    paint.set_stroke_width(stroke_width_for_scale(style.stroke_width, scale));
-    canvas.draw_glyphs_at(glyphs, positions, (0.0, 0.0), font, &paint);
+    let path = weighted_path(&builder.detach(), thickness);
+    draw_complete_styled_path(&path, style, scale, opacity, canvas);
 }
 
 fn capture_text_morph_silhouette(
@@ -860,25 +846,48 @@ fn draw_complete_text(
     scale: Vector2,
     canvas: &skia_safe::Canvas,
 ) {
+    draw_complete_styled_path(&text_path(shape), style, scale, opacity, canvas);
+}
+
+pub(crate) fn text_path(shape: &TextShape) -> skia_safe::Path {
     let font = shape.font.skia_font(shape.size);
-    let mut paint = text_paint(style.fill, opacity, shape.thickness);
-    let lines = text_lines(shape, &font);
-
-    for line in &lines {
-        canvas.draw_str(line.text, line.origin, &font, &paint);
+    let mut builder = skia_safe::PathBuilder::new();
+    for line in text_lines(shape, &font) {
+        let glyphs = font.text_to_glyphs_vec(line.text);
+        let mut positions = vec![skia_safe::Point::default(); glyphs.len()];
+        font.get_pos(
+            &glyphs,
+            &mut positions,
+            Some(skia_safe::Point::new(line.origin.0, line.origin.1)),
+        );
+        for (glyph, position) in glyphs.into_iter().zip(positions) {
+            if let Some(path) = font.get_path(glyph) {
+                let path = path.with_offset((position.x, position.y));
+                builder.add_path(&path, None);
+            }
+        }
     }
+    weighted_path(&builder.detach(), shape.thickness)
+}
 
-    if style.stroke_width <= 0.0 {
-        return;
+pub(crate) fn weighted_path(path: &skia_safe::Path, thickness: f32) -> skia_safe::Path {
+    if thickness <= 0.0 {
+        return path.clone();
     }
-
-    paint.set_color4f(text_paint(style.stroke, opacity, 0.0).color4f(), None);
-    paint.set_style(skia_safe::PaintStyle::Stroke);
-    paint.set_stroke_width(stroke_width_for_scale(style.stroke_width, scale));
-
-    for line in lines {
-        canvas.draw_str(line.text, line.origin, &font, &paint);
-    }
+    let mut paint = skia_safe::Paint::default();
+    paint
+        .set_style(skia_safe::PaintStyle::Stroke)
+        .set_stroke_join(skia_safe::PaintJoin::Round)
+        .set_stroke_width(thickness);
+    let mut stroke = skia_safe::PathBuilder::new();
+    skia_safe::path_utils::fill_path_with_paint(path, &paint, &mut stroke, None, None);
+    let stroke = stroke.detach();
+    let mut combined = skia_safe::PathBuilder::new();
+    combined.add_path(path, None).add_path(&stroke, None);
+    let combined = combined.detach();
+    path.op(&stroke, skia_safe::PathOp::Union)
+        .or_else(|| combined.simplify())
+        .unwrap_or(combined)
 }
 
 fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
@@ -922,7 +931,7 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
         );
         let font_path = shape.font.path().to_string_lossy();
         let visual_key = particle_visual_key(
-            "Text",
+            "Text2D",
             &style,
             &[
                 shape.size,
@@ -955,7 +964,7 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
     draw_complete_text(&shape, &style, opacity, transform.scale, canvas);
 }
 
-impl Default for Text {
+impl Default for Text2D {
     fn default() -> Self {
         Self {
             shape: Default::default(),
@@ -970,9 +979,9 @@ impl Default for Text {
     }
 }
 
-impl TextHandler {
+impl Text2DHandler {
     /// Cross-fades the current string into `text` on the same object.
-    pub fn fade(&self, text: impl Into<String>) -> Tween<Text> {
+    pub fn fade(&self, text: impl Into<String>) -> Tween<Text2D> {
         let from = self.get(TextShape::text_property());
         let to = text.into();
         let tween = self.text(to.clone());
@@ -983,7 +992,7 @@ impl TextHandler {
     ///
     /// Unlike [`crate::core::effects::morph`], this keeps the same text object and
     /// changes its discrete string value when the returned tween completes.
-    pub fn morph(&self, text: impl Into<String>) -> Tween<Text> {
+    pub fn morph(&self, text: impl Into<String>) -> Tween<Text2D> {
         let text = text.into();
         let from_text = self.get(TextShape::text_property());
         let tween = self.text(text.clone());
@@ -1023,25 +1032,25 @@ impl TextHandler {
         };
         let progress = WriteState::progress_property()
             .handle(world.clone(), self.get_id(), animator.clone())
-            .animate_from::<Text>(0.0, total_duration)
+            .animate_from::<Text2D>(0.0, total_duration)
             .duration(total_duration)
             .easing(Easing::Linear)
             .task();
         let transition = WriteState::transition_property()
             .handle(world.clone(), self.get_id(), animator.clone())
-            .animate_from::<Text>(transition, transition)
+            .animate_from::<Text2D>(transition, transition)
             .duration(total_duration)
             .easing(Easing::Linear)
             .task();
         let activate = WriteState::active_property()
             .handle(world.clone(), self.get_id(), animator.clone())
-            .animate_from::<Text>(false, true)
+            .animate_from::<Text2D>(false, true)
             .duration(0.0)
             .easing(Easing::Linear)
             .task();
         let active = WriteState::active_property()
             .handle(world.clone(), self.get_id(), animator.clone())
-            .animate_from::<Text>(true, false)
+            .animate_from::<Text2D>(true, false)
             .duration(total_duration)
             .easing(Easing::Linear)
             .task();
@@ -1049,7 +1058,7 @@ impl TextHandler {
         if reverse {
             let hide = Draw2D::opacity_property()
                 .handle(world, self.get_id(), animator.clone())
-                .animate_from::<Text>(opacity, 0.0)
+                .animate_from::<Text2D>(opacity, 0.0)
                 .duration(0.0)
                 .task();
             animator.play(Task::Chain(vec![animation, hide]));
@@ -1087,12 +1096,12 @@ mod tests {
     #[test]
     fn builder_accepts_bundled_and_user_fonts_with_trackable_thickness() {
         let mut scene = Scene::new();
-        let bundled = text()
+        let bundled = text_2d()
             .font(fonts::HACK_MONO)
             .thickness(3.0)
             .build(&mut scene);
         let custom_path = std::path::PathBuf::from(fonts::CASKAYDIA_MONO);
-        let custom = text().font(custom_path.clone()).build(&mut scene);
+        let custom = text_2d().font(custom_path.clone()).build(&mut scene);
         let world = scene.get_world();
 
         assert_eq!(
@@ -1111,12 +1120,25 @@ mod tests {
     }
 
     #[test]
+    fn thickness_expands_a_filled_path_without_creating_a_gap() {
+        let path = skia_safe::Path::rect(skia_safe::Rect::from_xywh(0.0, 0.0, 10.0, 10.0), None);
+        let weighted = weighted_path(&path, 4.0);
+        let bounds = weighted.compute_tight_bounds();
+
+        assert!(weighted.contains((5.0, 5.0)));
+        assert!(!path.contains((-1.0, 5.0)));
+        assert!(weighted.contains((-1.0, 5.0)));
+        assert!((bounds.width() - 14.0).abs() < 0.01);
+        assert!((bounds.height() - 14.0).abs() < 0.01);
+    }
+
+    #[test]
     fn fade_swaps_text_halfway_without_creating_another_object() {
         struct FadingText;
 
         impl SceneBuilder for FadingText {
             fn build(&mut self, scene: &mut Scene) {
-                let label = text().text("From").build(scene);
+                let label = text_2d().text("From").build(scene);
                 scene.get_world_2d().add(&label);
                 label.fade("To").duration(2.0).easing(Easing::Linear).play();
             }
@@ -1151,7 +1173,7 @@ mod tests {
 
         impl SceneBuilder for ConsecutiveMorphs {
             fn build(&mut self, scene: &mut Scene) {
-                let text = text().text("Kinematic").build(scene);
+                let text = text_2d().text("Kinematic").build(scene);
                 scene.get_world_2d().add(&text);
                 text.morph("Is").play();
                 text.morph("Awesome.").play();
@@ -1303,7 +1325,7 @@ mod tests {
 
         impl SceneBuilder for WrittenText {
             fn build(&mut self, scene: &mut Scene) {
-                let label = text().text("ABC").build(scene);
+                let label = text_2d().text("ABC").build(scene);
                 scene.get_world_2d().add(&label);
                 write().duration(1.0).play(&label);
             }
@@ -1340,7 +1362,7 @@ mod tests {
 
         impl SceneBuilder for DelayedWrite {
             fn build(&mut self, scene: &mut Scene) {
-                let label = text().text("AB").build(scene);
+                let label = text_2d().text("AB").build(scene);
                 scene.get_world_2d().add(&label);
                 scene.wait(1.0);
                 write().duration(1.0).play(&label);
@@ -1377,7 +1399,7 @@ mod tests {
 
         impl SceneBuilder for UnwrittenText {
             fn build(&mut self, scene: &mut Scene) {
-                let label = text().text("ABC").build(scene);
+                let label = text_2d().text("ABC").build(scene);
                 scene.get_world_2d().add(&label);
                 unwrite().duration(1.0).play(&label);
             }
