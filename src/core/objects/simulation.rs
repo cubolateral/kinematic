@@ -30,7 +30,10 @@ impl Default for Simulation2D {
             transform: Transform2D::default(),
             draw: Draw2D {
                 on_draw: |world, entity, canvas, _opacity| {
-                    world.get::<&Simulation>(entity).unwrap().draw_2d(canvas);
+                    world
+                        .get::<&Simulation>(entity)
+                        .unwrap()
+                        .draw_2d(world, entity, canvas);
                 },
                 get_box: |world, entity| world.get::<&Simulation>(entity).unwrap().box_2d(),
                 ..Draw2D::default()
@@ -54,7 +57,7 @@ impl Simulation2DHandler {
     /// updating is enabled, one explicit call shares its automatic step instead
     /// of adding a duplicate.
     pub fn update(&self) {
-        schedule_update(self);
+        schedule_simulation_update(self);
     }
 }
 
@@ -102,11 +105,15 @@ impl Simulation3DHandler {
     /// updating is enabled, one explicit call shares its automatic step instead
     /// of adding a duplicate.
     pub fn update(&self) {
-        schedule_update(self);
+        schedule_simulation_update(self);
     }
 }
 
-fn schedule_update(handler: &impl ObjectHandler) {
+/// Schedules one explicit step for a custom simulation object.
+///
+/// The object must contain a [`Simulation`] component. Multiple calls at the
+/// same scene time schedule multiple steps.
+pub fn schedule_simulation_update(handler: &impl ObjectHandler) {
     let animator = handler.object_animator();
     animator.assert_finite_scope();
     handler
@@ -123,7 +130,10 @@ fn draw_simulation_3d(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     let previous = context.set_current_transform(global_matrix3d(world, entity));
-    let result = world.get::<&Simulation>(entity).unwrap().draw_3d(context);
+    let result = world
+        .get::<&Simulation>(entity)
+        .unwrap()
+        .draw_3d(world, entity, context);
     context.set_current_transform(previous);
     result
 }
@@ -148,7 +158,7 @@ mod tests {
     }
 
     impl SimulationState2D for Solid {
-        fn on_draw(&self, canvas: &skia_safe::Canvas) {
+        fn on_draw(&self, _world: &hecs::World, _entity: hecs::Entity, canvas: &skia_safe::Canvas) {
             canvas.draw_rect(
                 skia_safe::Rect::from_xywh(-4.0, -4.0, 8.0, 8.0),
                 &skia_safe::Paint::new(skia_safe::colors::WHITE, None),
@@ -168,7 +178,12 @@ mod tests {
     }
 
     impl SimulationState2D for Counter {
-        fn on_draw(&self, _canvas: &skia_safe::Canvas) {
+        fn on_draw(
+            &self,
+            _world: &hecs::World,
+            _entity: hecs::Entity,
+            _canvas: &skia_safe::Canvas,
+        ) {
             *self.observed.lock().unwrap() = self.steps;
         }
 

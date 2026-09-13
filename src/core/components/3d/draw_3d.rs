@@ -228,7 +228,10 @@ impl<'a> RenderContext3D<'a> {
         self.current_transform
     }
 
-    pub(crate) fn set_current_transform(&mut self, transform: glam::Mat4) -> glam::Mat4 {
+    /// Replaces the transform applied before local geometry and returns the previous one.
+    ///
+    /// Custom object wrappers should restore the returned transform after delegating drawing.
+    pub fn set_current_transform(&mut self, transform: glam::Mat4) -> glam::Mat4 {
         std::mem::replace(&mut self.current_transform, transform)
     }
 

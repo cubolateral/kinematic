@@ -19,12 +19,13 @@ pub trait SimulationState: Clone + Send + Sync + 'static {
 
 /// A simulation state that can draw itself in a two-dimensional scene.
 ///
-/// Drawing receives the object's local Skia canvas. The scene renderer applies
-/// [`crate::core::components::Transform2D`] and composites opacity before this
-/// callback. It must not mutate simulation state.
+/// Drawing receives the scene world, simulation entity, and object's local Skia
+/// canvas. The scene renderer applies [`crate::core::components::Transform2D`]
+/// and composites opacity before this callback. It must not mutate simulation
+/// state.
 pub trait SimulationState2D: SimulationState {
     /// Draws the current state in the simulation object's local coordinates.
-    fn on_draw(&self, canvas: &skia_safe::Canvas);
+    fn on_draw(&self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas);
 
     /// Returns the simulation's local bounding-box size.
     fn get_box(&self) -> glam::Vec2 {
@@ -34,12 +35,18 @@ pub trait SimulationState2D: SimulationState {
 
 /// A simulation state that can draw itself in a three-dimensional scene.
 ///
-/// Submit geometry with transforms local to the simulation. [`RenderContext3D`]
-/// combines them with the simulation object's global transform. Drawing must
-/// not mutate simulation state.
+/// Drawing receives the scene world and simulation entity. Submit geometry with
+/// transforms local to the simulation. [`RenderContext3D`] combines them with
+/// the simulation object's global transform. Drawing must not mutate simulation
+/// state.
 pub trait SimulationState3D: SimulationState {
     /// Draws the current state using the supplied global object transform.
-    fn on_draw(&self, context: &mut RenderContext3D<'_>) -> Result<(), String>;
+    fn on_draw(
+        &self,
+        world: &hecs::World,
+        entity: hecs::Entity,
+        context: &mut RenderContext3D<'_>,
+    ) -> Result<(), String>;
 
     /// Returns the simulation's local bounding-box size.
     fn get_box(&self) -> glam::Vec3 {
@@ -50,11 +57,16 @@ pub trait SimulationState3D: SimulationState {
 trait ErasedSimulation: Send + Sync {
     fn clone_box(&self) -> Box<dyn ErasedSimulation>;
     fn on_update(&mut self, dt: f32);
-    fn draw_2d(&self, _canvas: &skia_safe::Canvas) {}
+    fn draw_2d(&self, _world: &hecs::World, _entity: hecs::Entity, _canvas: &skia_safe::Canvas) {}
     fn box_2d(&self) -> glam::Vec2 {
         glam::Vec2::ZERO
     }
-    fn draw_3d(&self, _context: &mut RenderContext3D<'_>) -> Result<(), String> {
+    fn draw_3d(
+        &self,
+        _world: &hecs::World,
+        _entity: hecs::Entity,
+        _context: &mut RenderContext3D<'_>,
+    ) -> Result<(), String> {
         Ok(())
     }
     fn box_3d(&self) -> glam::Vec3 {
@@ -80,8 +92,8 @@ impl<S: SimulationState2D> ErasedSimulation for State2D<S> {
         self.0.on_update(dt);
     }
 
-    fn draw_2d(&self, canvas: &skia_safe::Canvas) {
-        self.0.on_draw(canvas);
+    fn draw_2d(&self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+        self.0.on_draw(world, entity, canvas);
     }
 
     fn box_2d(&self) -> glam::Vec2 {
@@ -101,8 +113,13 @@ impl<S: SimulationState3D> ErasedSimulation for State3D<S> {
         self.0.on_update(dt);
     }
 
-    fn draw_3d(&self, context: &mut RenderContext3D<'_>) -> Result<(), String> {
-        self.0.on_draw(context)
+    fn draw_3d(
+        &self,
+        world: &hecs::World,
+        entity: hecs::Entity,
+        context: &mut RenderContext3D<'_>,
+    ) -> Result<(), String> {
+        self.0.on_draw(world, entity, context)
     }
 
     fn box_3d(&self) -> glam::Vec3 {
@@ -179,11 +196,13 @@ impl Default for Simulation {
 }
 
 impl Simulation {
-    pub(crate) fn new_2d<S: SimulationState2D>(state: S) -> Self {
+    /// Creates runtime storage for a custom two-dimensional simulation object.
+    pub fn new_2d<S: SimulationState2D>(state: S) -> Self {
         Self::new(Box::new(State2D(state)))
     }
 
-    pub(crate) fn new_3d<S: SimulationState3D>(state: S) -> Self {
+    /// Creates runtime storage for a custom three-dimensional simulation object.
+    pub fn new_3d<S: SimulationState3D>(state: S) -> Self {
         Self::new(Box::new(State3D(state)))
     }
 
@@ -283,19 +302,28 @@ impl Simulation {
         }
     }
 
-    pub(crate) fn draw_2d(&self, canvas: &skia_safe::Canvas) {
-        self.current.draw_2d(canvas);
+    /// Draws the current 2D state with access to its owning scene entity.
+    pub fn draw_2d(&self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+        self.current.draw_2d(world, entity, canvas);
     }
 
-    pub(crate) fn box_2d(&self) -> glam::Vec2 {
+    /// Returns the current 2D state's local bounding-box size.
+    pub fn box_2d(&self) -> glam::Vec2 {
         self.current.box_2d()
     }
 
-    pub(crate) fn draw_3d(&self, context: &mut RenderContext3D<'_>) -> Result<(), String> {
-        self.current.draw_3d(context)
+    /// Draws the current 3D state with access to its owning scene entity.
+    pub fn draw_3d(
+        &self,
+        world: &hecs::World,
+        entity: hecs::Entity,
+        context: &mut RenderContext3D<'_>,
+    ) -> Result<(), String> {
+        self.current.draw_3d(world, entity, context)
     }
 
-    pub(crate) fn box_3d(&self) -> glam::Vec3 {
+    /// Returns the current 3D state's local bounding-box size.
+    pub fn box_3d(&self) -> glam::Vec3 {
         self.current.box_3d()
     }
 }
@@ -313,6 +341,21 @@ mod tests {
         observed: Arc<Mutex<(u64, f32)>>,
     }
 
+    struct DrawSetting(u32);
+
+    #[derive(Clone)]
+    struct ComponentReader(Arc<Mutex<Option<u32>>>);
+
+    impl SimulationState for ComponentReader {
+        fn on_update(&mut self, _dt: f32) {}
+    }
+
+    impl SimulationState2D for ComponentReader {
+        fn on_draw(&self, world: &hecs::World, entity: hecs::Entity, _canvas: &skia_safe::Canvas) {
+            *self.0.lock().unwrap() = Some(world.get::<&DrawSetting>(entity).unwrap().0);
+        }
+    }
+
     impl SimulationState for Counter {
         fn on_update(&mut self, dt: f32) {
             self.steps += 1;
@@ -321,15 +364,40 @@ mod tests {
     }
 
     impl SimulationState2D for Counter {
-        fn on_draw(&self, _canvas: &skia_safe::Canvas) {
+        fn on_draw(
+            &self,
+            _world: &hecs::World,
+            _entity: hecs::Entity,
+            _canvas: &skia_safe::Canvas,
+        ) {
             *self.observed.lock().unwrap() = (self.steps, self.elapsed);
         }
     }
 
     fn observed(simulation: &Simulation, value: &Arc<Mutex<(u64, f32)>>) -> (u64, f32) {
         let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
-        simulation.draw_2d(surface.canvas());
+        let mut world = hecs::World::new();
+        let entity = world.spawn(());
+        simulation.draw_2d(&world, entity, surface.canvas());
         *value.lock().unwrap()
+    }
+
+    #[test]
+    fn drawing_can_read_components_from_the_simulation_entity() {
+        let observed = Arc::new(Mutex::new(None));
+        let mut world = hecs::World::new();
+        let entity = world.spawn((
+            Simulation::new_2d(ComponentReader(Arc::clone(&observed))),
+            DrawSetting(42),
+        ));
+        let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
+
+        world
+            .get::<&Simulation>(entity)
+            .unwrap()
+            .draw_2d(&world, entity, surface.canvas());
+
+        assert_eq!(*observed.lock().unwrap(), Some(42));
     }
 
     #[test]

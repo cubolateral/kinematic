@@ -155,12 +155,22 @@ processes. Unlike a tween, a simulation owns mutable state and advances it in
 fixed steps with `dt = 1.0 / fps`.
 
 The state implements `SimulationState` for updates and the dimension-specific
-trait for read-only drawing. It must be `Clone + Send + Sync + 'static` because
-complete state clones are used as runtime checkpoints and stored in the ECS.
-The example below is Conway's Game of Life: a generation cannot be sampled from
-an isolated keyframe because every cell depends on the preceding generation.
+trait for read-only drawing. Drawing receives the scene `World` and the
+simulation `Entity`, so it can read trackable appearance components from the
+object. It must be `Clone + Send + Sync + 'static` because complete state clones
+are used as runtime checkpoints and stored in the ECS. Every value that affects
+future updates must remain in the simulation state so seeking can replay it
+deterministically. The example below is Conway's Game of Life: a generation
+cannot be sampled from an isolated keyframe because every cell depends on the
+preceding generation.
 
 ```rust
+#[derive(Clone, Trackable)]
+struct LifeAppearance {
+    #[track]
+    color: Color,
+}
+
 #[derive(Clone)]
 struct Life {
     cells: [[bool; 8]; 8],
@@ -188,9 +198,15 @@ impl SimulationState for Life {
 }
 
 impl SimulationState2D for Life {
-    fn on_draw(&self, canvas: &skia_safe::Canvas) {
+    fn on_draw(
+        &self,
+        world: &hecs::World,
+        entity: hecs::Entity,
+        canvas: &skia_safe::Canvas,
+    ) {
+        let color = world.get::<&LifeAppearance>(entity).unwrap().color;
         let paint = skia_safe::Paint::new(
-            skia_safe::Color4f::new(1.0, 1.0, 1.0, 1.0),
+            skia_safe::Color4f::new(color.r, color.g, color.b, color.a),
             None,
         );
         for (y, row) in self.cells.iter().enumerate() {
@@ -215,10 +231,59 @@ impl SimulationState2D for Life {
     }
 }
 
+#[derive(Object, hecs::Bundle)]
+#[object(spatial = "2d", builder = "game_of_life")]
+struct GameOfLife {
+    #[trackable]
+    simulation: Simulation,
+    #[trackable]
+    appearance: LifeAppearance,
+    #[trackable]
+    transform: Transform2D,
+    #[trackable]
+    draw: Draw2D,
+}
+
+impl Default for GameOfLife {
+    fn default() -> Self {
+        Self {
+            simulation: Simulation::default(),
+            appearance: LifeAppearance { color: Color::WHITE },
+            transform: Transform2D::default(),
+            draw: Draw2D {
+                on_draw: |world, entity, canvas, _opacity| {
+                    world
+                        .get::<&Simulation>(entity)
+                        .unwrap()
+                        .draw_2d(world, entity, canvas);
+                },
+                get_box: |world, entity| {
+                    world.get::<&Simulation>(entity).unwrap().box_2d()
+                },
+                ..Draw2D::default()
+            },
+        }
+    }
+}
+
+impl GameOfLifeBuilder {
+    fn state(mut self, state: Life) -> Self {
+        self.object.simulation = Simulation::new_2d(state);
+        self
+    }
+}
+
+impl GameOfLifeHandler {
+    fn update(&self) {
+        schedule_simulation_update(self);
+    }
+}
+
 let mut cells = [[false; 8]; 8];
 cells[3][2..5].fill(true);
-let simulation = simulation_2d()
+let simulation = game_of_life()
     .state(Life { cells })
+    .color(Color::CYAN)
     .position(vec2(100.0, 0.0))
     .build(s);
 s.get_world_2d().add(&simulation);
