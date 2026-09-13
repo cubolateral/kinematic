@@ -81,11 +81,15 @@ pub(crate) fn active_subtree(world: &hecs::World, root: hecs::Entity) -> Vec<hec
     result
 }
 
+#[cfg(test)]
 pub(crate) fn canvas_order(scene: &Scene) -> Result<Vec<hecs::Entity>, String> {
+    Ok(canvas_plan_for(scene, scene.get_view().entity)?.order)
+}
+
+pub(crate) fn canvas_plan_for(scene: &Scene, output: hecs::Entity) -> Result<RenderPlan, String> {
     let world = scene.get_world();
     let root = scene.get_root().get_id();
     let scene_id = world.get::<&SceneIdentity>(root).unwrap().0;
-    let output = scene.get_view();
     let mut graph = HashMap::new();
     for entity in active_subtree(&world, root) {
         if world.get::<&CanvasSettings>(entity).is_err() {
@@ -128,11 +132,27 @@ pub(crate) fn canvas_order(scene: &Scene) -> Result<Vec<hecs::Entity>, String> {
     }
 
     let mut reachable = HashMap::new();
-    collect(output.entity, &graph, &mut reachable)?;
+    collect(output, &graph, &mut reachable)?;
     for entity in reachable.keys() {
         validate_canvas(&world, *entity)?;
     }
-    order_dependencies(&reachable)
+    let order = order_dependencies(&reachable)?;
+    let mut sources = HashMap::new();
+    for entity in &order {
+        let mut textures = Vec::new();
+        for child in active_subtree(&world, *entity) {
+            if let Some(source) = world
+                .get::<&ProjectionSource>(child)
+                .ok()
+                .and_then(|source| source.0)
+                && !textures.contains(&source)
+            {
+                textures.push(source);
+            }
+        }
+        sources.insert(*entity, textures);
+    }
+    Ok(RenderPlan { order, sources })
 }
 
 #[derive(Default)]
@@ -162,30 +182,14 @@ impl PlanCache {
             .get(&identity)
             .is_none_or(|entry| entry.revision != revision || entry.output != output)
         {
-            let order = canvas_order(scene)?;
-            let world = scene.get_world();
-            let mut sources = HashMap::new();
-            for entity in &order {
-                let mut textures = Vec::new();
-                for child in active_subtree(&world, *entity) {
-                    if let Some(source) = world
-                        .get::<&ProjectionSource>(child)
-                        .ok()
-                        .and_then(|source| source.0)
-                        && !textures.contains(&source)
-                    {
-                        textures.push(source);
-                    }
-                }
-                sources.insert(*entity, textures);
-            }
+            let plan = canvas_plan_for(scene, output)?;
             self.entries.insert(
                 identity,
                 CachedPlan {
                     revision,
                     output,
                     last_used: frame,
-                    plan: RenderPlan { order, sources },
+                    plan,
                 },
             );
         }

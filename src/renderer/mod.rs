@@ -1,4 +1,5 @@
 pub(crate) mod canvases;
+pub(crate) mod editor_guides;
 mod encoder;
 pub(crate) mod plan;
 pub(crate) mod target;

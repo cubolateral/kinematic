@@ -157,7 +157,20 @@ fn draw_projection_2d_entity(
     draw_projection_2d(world, entity, image, canvas, opacity);
 }
 
+#[cfg(test)]
 pub(crate) fn outline_points(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    target: hecs::Entity,
+) -> Option<[skia_safe::Point; 4]> {
+    let mut points = outline_points_in_world(world, scope, target)?;
+    if let Some(view) = camera_matrix2d(world, scope).and_then(|m| m.invert()) {
+        view.map_points_inplace(&mut points);
+    }
+    Some(points)
+}
+
+pub(crate) fn outline_points_in_world(
     world: &hecs::World,
     scope: hecs::Entity,
     target: hecs::Entity,
@@ -193,6 +206,7 @@ pub(crate) fn outline_points(
         crate::core::objects::child_iter(world, entity)
             .find_map(|child| visit(world, child, target, global))
     }
+
     if !world
         .get::<&Node>(scope)
         .is_ok_and(|node| node.is_activated)
@@ -202,12 +216,8 @@ pub(crate) fn outline_points(
     {
         return None;
     }
-    let mut points = crate::core::objects::child_iter(world, scope)
-        .find_map(|child| visit(world, child, target, GlobalTransform::default()))?;
-    if let Some(view) = camera_matrix2d(world, scope).and_then(|m| m.invert()) {
-        view.map_points_inplace(&mut points);
-    }
-    Some(points)
+    crate::core::objects::child_iter(world, scope)
+        .find_map(|child| visit(world, child, target, GlobalTransform::default()))
 }
 
 pub(crate) fn pick_entity(
@@ -430,6 +440,48 @@ pub(crate) fn draw_canvas2d_with_images(
     draw_canvas2d_inner(world, entity, canvas, Some(images));
 }
 
+pub(crate) fn draw_canvas2d_editor_with_images(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    canvas: &skia_safe::Canvas,
+    images: &HashMap<CanvasTexture, skia_safe::Image>,
+    target_size: (u32, u32),
+    pan: [f32; 2],
+    zoom: f32,
+    correction: [f32; 2],
+    camera_view: bool,
+) {
+    canvas.clear(skia_safe::colors::TRANSPARENT);
+    if !world
+        .get::<&Draw2D>(entity)
+        .is_ok_and(|draw| draw.visibility)
+    {
+        return;
+    }
+
+    let saved = canvas.save();
+    canvas.translate((target_size.0 as f32 * 0.5, target_size.1 as f32 * 0.5));
+    if camera_view {
+        canvas.scale((correction[0], correction[1]));
+        if let Some(view) = camera_matrix2d(world, entity).and_then(|camera| camera.invert()) {
+            canvas.concat(&view);
+        }
+    } else {
+        canvas.translate((pan[0] * correction[0], pan[1] * correction[1]));
+        canvas.scale((zoom * correction[0], zoom * correction[1]));
+    }
+    for child in children_by_z_index(world, entity) {
+        draw_entity_with_parent(
+            world,
+            child,
+            GlobalTransform::default(),
+            canvas,
+            Some(images),
+        );
+    }
+    canvas.restore_to_count(saved);
+}
+
 fn draw_canvas2d_inner(
     world: &hecs::World,
     entity: hecs::Entity,
@@ -461,6 +513,7 @@ fn draw_canvas2d_inner(
     canvas.restore_to_count(saved);
 }
 
+#[cfg(test)]
 pub(crate) fn pick_canvas2d(
     world: &hecs::World,
     scope: hecs::Entity,
@@ -482,6 +535,24 @@ pub(crate) fn pick_canvas2d(
         .find_map(|child| pick_entity(world, child, point))
 }
 
+pub(crate) fn pick_canvas2d_in_world(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    point: Vector2,
+) -> Option<hecs::Entity> {
+    if !world
+        .get::<&Draw2D>(scope)
+        .is_ok_and(|draw| draw.visibility)
+    {
+        return None;
+    }
+    children_by_z_index(world, scope)
+        .into_iter()
+        .rev()
+        .find_map(|child| pick_entity(world, child, point))
+}
+
+#[cfg(test)]
 pub(crate) fn pick_canvas3d(
     world: &hecs::World,
     scope: hecs::Entity,
@@ -493,10 +564,26 @@ pub(crate) fn pick_canvas3d(
     {
         return None;
     }
-    let settings = world.get::<&CanvasSettings>(scope).ok()?;
     let camera = world.get::<&Camera3D>(scope).ok()?;
+    let settings = world.get::<&CanvasSettings>(scope).ok()?;
+    pick_canvas3d_with_camera(world, scope, &camera, settings.resolution, point)
+}
+
+pub(crate) fn pick_canvas3d_with_camera(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    camera: &Camera3D,
+    resolution: (u32, u32),
+    point: Vector2,
+) -> Option<hecs::Entity> {
+    if !world
+        .get::<&Draw3D>(scope)
+        .is_ok_and(|draw| draw.visibility)
+    {
+        return None;
+    }
     camera.validate().ok()?;
-    let ray = camera_ray(&camera, settings.resolution, point)?;
+    let ray = camera_ray(camera, resolution, point)?;
 
     crate::core::objects::child_iter(world, scope)
         .filter_map(|child| pick_entity3d(world, child, ray))
@@ -504,11 +591,43 @@ pub(crate) fn pick_canvas3d(
         .map(|(_, entity)| entity)
 }
 
+#[cfg(test)]
 pub(crate) fn outline_segments3d(
     world: &hecs::World,
     scope: hecs::Entity,
     target: hecs::Entity,
 ) -> Option<Vec<[[f32; 2]; 2]>> {
+    let settings = world.get::<&CanvasSettings>(scope).ok()?;
+    let camera = world.get::<&Camera3D>(scope).ok()?;
+    outline_segments3d_with_camera(world, scope, target, &camera, settings.resolution)
+}
+
+#[cfg(test)]
+pub(crate) fn outline_segments3d_with_camera(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    target: hecs::Entity,
+    camera: &Camera3D,
+    resolution: (u32, u32),
+) -> Option<Vec<[[f32; 2]; 2]>> {
+    camera.validate().ok()?;
+    let view_projection = camera_projection(camera, resolution)? * camera.matrix().inverse();
+    outline_segments3d_in_world(world, scope, target)?
+        .into_iter()
+        .map(|[from, to]| {
+            Some([
+                project_point(view_projection, from)?,
+                project_point(view_projection, to)?,
+            ])
+        })
+        .collect()
+}
+
+pub(crate) fn outline_segments3d_in_world(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    target: hecs::Entity,
+) -> Option<Vec<[glam::Vec3; 2]>> {
     fn contains(world: &hecs::World, entity: hecs::Entity, target: hecs::Entity) -> bool {
         if world.get::<&CanvasSettings>(entity).is_ok()
             || !world
@@ -537,13 +656,8 @@ pub(crate) fn outline_segments3d(
         return None;
     }
 
-    let settings = world.get::<&CanvasSettings>(scope).ok()?;
-    let camera = world.get::<&Camera3D>(scope).ok()?;
-    camera.validate().ok()?;
     let (min, max) = bounds3d(world, target)?;
     let transform = global_matrix3d(world, target);
-    let view_projection =
-        camera_projection(&camera, settings.resolution)? * camera.matrix().inverse();
     let corners = [
         glam::vec3(min.x, min.y, min.z),
         glam::vec3(max.x, min.y, min.z),
@@ -554,9 +668,7 @@ pub(crate) fn outline_segments3d(
         glam::vec3(max.x, max.y, max.z),
         glam::vec3(min.x, max.y, max.z),
     ]
-    .map(|corner| project_point(view_projection, transform.transform_point3(corner)))
-    .into_iter()
-    .collect::<Option<Vec<_>>>()?;
+    .map(|corner| transform.transform_point3(corner));
     const EDGES: [(usize, usize); 12] = [
         (0, 1),
         (1, 2),
@@ -669,6 +781,7 @@ fn ray_cuboid_intersection(
     Some(near)
 }
 
+#[cfg(test)]
 fn camera_projection(camera: &Camera3D, resolution: (u32, u32)) -> Option<glam::Mat4> {
     let aspect = resolution.0 as f32 / resolution.1.max(1) as f32;
     let projection = glam::camera::rh::proj::opengl::perspective(
@@ -680,6 +793,7 @@ fn camera_projection(camera: &Camera3D, resolution: (u32, u32)) -> Option<glam::
     projection.is_finite().then_some(projection)
 }
 
+#[cfg(test)]
 fn project_point(view_projection: glam::Mat4, point: glam::Vec3) -> Option<[f32; 2]> {
     let clip = view_projection * point.extend(1.0);
     if !clip.is_finite() || clip.w <= f32::EPSILON {
@@ -689,6 +803,7 @@ fn project_point(view_projection: glam::Mat4, point: glam::Vec3) -> Option<[f32;
     Some([ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5])
 }
 
+#[cfg(test)]
 fn canvas_camera_matrix(world: &hecs::World, scope: hecs::Entity) -> Option<skia_safe::Matrix> {
     world.get::<&CanvasSettings>(scope).ok()?;
     camera_matrix2d(world, scope)

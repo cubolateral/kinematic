@@ -163,6 +163,14 @@ impl App {
                     &self.gl,
                 );
             }
+            if let Some(size) = editor.take_pending_editor_3d_size() {
+                editor.resize_editor_3d(
+                    size,
+                    &mut self.imgui_renderer,
+                    &mut self.skia_context,
+                    &self.gl,
+                );
+            }
 
             editor.update();
 
@@ -178,6 +186,10 @@ impl App {
 
             self.ui.draw(&mut editor, self.imgui.frame());
 
+            if let Some([x, y]) = editor.take_pending_mouse_warp() {
+                self.sdl.mouse().warp_mouse_in_window(&self.window, x, y);
+            }
+
             self.imgui_renderer.render(self.imgui.render()).unwrap();
             self.window.gl_swap_window();
         }
@@ -186,5 +198,11 @@ impl App {
         self.imgui_renderer
             .texture_map_mut()
             .remove(editor.get_preview().get_imgui_texture_id());
+        self.imgui_renderer
+            .texture_map_mut()
+            .remove(editor.get_editor_2d_texture_id());
+        self.imgui_renderer
+            .texture_map_mut()
+            .remove(editor.get_editor_3d_texture_id());
     }
 }

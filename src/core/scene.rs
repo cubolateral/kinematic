@@ -335,6 +335,7 @@ impl Scene {
         canvas.restore_to_count(save_count);
     }
 
+    #[cfg(test)]
     pub(crate) fn selection_outline(&self, entity: hecs::Entity) -> Option<Vec<[[f32; 2]; 2]>> {
         let view_2d = self.get_root().is_view_2d();
         let output = self.get_view();
@@ -363,6 +364,100 @@ impl Scene {
         )
     }
 
+    pub(crate) fn nearest_canvas(
+        &self,
+        mut entity: hecs::Entity,
+    ) -> Option<(hecs::Entity, crate::core::objects::CanvasDimension)> {
+        let world = self.world.borrow();
+        loop {
+            if let Ok(settings) = world.get::<&crate::core::objects::CanvasSettings>(entity) {
+                return Some((entity, settings.dimension));
+            }
+            entity = world.get::<&Node>(entity).ok()?.parent?;
+        }
+    }
+
+    pub(crate) fn editor_2d_selection_outline(
+        &self,
+        canvas: hecs::Entity,
+        entity: hecs::Entity,
+        camera_view: bool,
+    ) -> Option<[skia_safe::Point; 4]> {
+        let world = self.world.borrow();
+        let mut points = crate::core::objects::outline_points_in_world(&world, canvas, entity)?;
+        if camera_view {
+            crate::core::objects::camera_matrix2d(&world, canvas)?
+                .invert()?
+                .map_points_inplace(&mut points);
+        }
+        Some(points)
+    }
+
+    pub(crate) fn editor_2d_camera_outline(
+        &self,
+        canvas: hecs::Entity,
+        camera_view: bool,
+    ) -> Option<[skia_safe::Point; 4]> {
+        let world = self.world.borrow();
+        let settings = world
+            .get::<&crate::core::objects::CanvasSettings>(canvas)
+            .ok()?;
+        let camera = crate::core::objects::camera_matrix2d(&world, canvas)?;
+        let half_width = settings.resolution.0 as f32 * 0.5;
+        let half_height = settings.resolution.1 as f32 * 0.5;
+        let mut points = [
+            skia_safe::Point::new(-half_width, -half_height),
+            skia_safe::Point::new(half_width, -half_height),
+            skia_safe::Point::new(half_width, half_height),
+            skia_safe::Point::new(-half_width, half_height),
+        ];
+        camera.map_points_inplace(&mut points);
+        if camera_view {
+            camera.invert()?.map_points_inplace(&mut points);
+        }
+        Some(points)
+    }
+
+    pub(crate) fn pick_editor_2d(
+        &self,
+        canvas: hecs::Entity,
+        mut point: Vector2,
+        camera_view: bool,
+    ) -> Option<hecs::Entity> {
+        let world = self.world.borrow();
+        if camera_view {
+            let camera = crate::core::objects::camera_matrix2d(&world, canvas)?;
+            let mapped = camera.map_point((point.x, point.y));
+            point = Vector2::new(mapped.x, mapped.y);
+        }
+        crate::core::objects::pick_canvas2d_in_world(&world, canvas, point)
+    }
+
+    pub(crate) fn pick_editor_3d(
+        &self,
+        canvas: hecs::Entity,
+        camera: &crate::core::components::Camera3D,
+        resolution: (u32, u32),
+        point: Vector2,
+    ) -> Option<hecs::Entity> {
+        crate::core::objects::pick_canvas3d_with_camera(
+            &self.world.borrow(),
+            canvas,
+            camera,
+            resolution,
+            point,
+        )
+    }
+
+    pub(crate) fn editor_3d_selection_segments(
+        &self,
+        canvas: hecs::Entity,
+        target: hecs::Entity,
+    ) -> Option<Vec<[glam::Vec3; 2]>> {
+        crate::core::objects::outline_segments3d_in_world(&self.world.borrow(), canvas, target)
+    }
+
+    #[cfg(test)]
     pub(crate) fn pick(&self, point: Vector2) -> Option<hecs::Entity> {
         let view_2d = self.get_root().is_view_2d();
         let output = self.get_view();
@@ -376,6 +471,7 @@ impl Scene {
         }
     }
 
+    #[cfg(test)]
     fn output_is_active_2d(&self, world: &hecs::World, entity: hecs::Entity) -> bool {
         world.get::<&Node>(entity).is_ok_and(|n| n.is_activated)
             && world
@@ -669,6 +765,58 @@ mod tests {
             12
         );
         assert!(scene.selection_outline(rectangle.get_id()).is_none());
+    }
+
+    #[test]
+    fn editor_2d_supports_free_and_camera_locked_coordinates() {
+        let mut scene = Scene::new_with_resolution((64, 64));
+        let canvas = canvas_2d()
+            .resolution((100, 80))
+            .camera_position(vec2(100.0, 0.0))
+            .camera_zoom(2.0)
+            .build(&mut scene);
+        let group = group_2d().build(&mut scene);
+        let rectangle = rect()
+            .size(vec2(10.0, 10.0))
+            .position(vec2(20.0, 0.0))
+            .build(&mut scene);
+        group.add(&rectangle);
+        canvas.add(&group);
+        scene.add_canvas_2d(&canvas);
+
+        assert_eq!(
+            scene.nearest_canvas(rectangle.get_id()),
+            Some((canvas.get_id(), CanvasDimension::Two))
+        );
+        assert_eq!(
+            scene.pick_editor_2d(canvas.get_id(), vec2(20.0, 0.0), false),
+            Some(rectangle.get_id())
+        );
+
+        let camera = scene
+            .editor_2d_camera_outline(canvas.get_id(), false)
+            .unwrap();
+        assert_eq!(camera[0], skia_safe::Point::new(75.0, -20.0));
+        assert_eq!(camera[2], skia_safe::Point::new(125.0, 20.0));
+        assert!(
+            scene
+                .editor_2d_selection_outline(canvas.get_id(), rectangle.get_id(), false)
+                .is_some()
+        );
+        assert_eq!(
+            scene.pick_editor_2d(canvas.get_id(), vec2(-160.0, 0.0), true),
+            Some(rectangle.get_id())
+        );
+        let locked_camera = scene
+            .editor_2d_camera_outline(canvas.get_id(), true)
+            .unwrap();
+        assert_eq!(locked_camera[0], skia_safe::Point::new(-50.0, -40.0));
+        assert_eq!(locked_camera[2], skia_safe::Point::new(50.0, 40.0));
+        let locked_selection = scene
+            .editor_2d_selection_outline(canvas.get_id(), rectangle.get_id(), true)
+            .unwrap();
+        assert_eq!(locked_selection[0], skia_safe::Point::new(-170.0, -10.0));
+        assert_eq!(locked_selection[2], skia_safe::Point::new(-150.0, 10.0));
     }
 
     #[test]

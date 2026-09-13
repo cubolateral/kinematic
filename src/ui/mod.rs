@@ -77,7 +77,9 @@ impl Ui {
             self.needs_initial_layout = false;
         }
 
-        scene_tree::draw(editor, ui);
+        if scene_tree::draw(editor, ui) {
+            self.preview.edit_canvas(editor.selected_canvas());
+        }
         if settings::draw(&mut self.appearance, &mut self.settings, editor, ui) {
             settings::save(&self.appearance);
         }

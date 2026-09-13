@@ -5,19 +5,20 @@ use crate::{
 
 use super::{
     controls,
-    icons::{EYE, EYE_SLASH},
+    icons::{EYE, EYE_SLASH, PENCIL},
     widgets::{hierarchy_prefix, text_size},
 };
 
 const ROW_HEIGHT: f32 = 24.0;
 pub(super) const WINDOW_NAME: &str = "Scene Tree";
 
-pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
+pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     let is_exporting = editor.is_exporting();
     let selected = editor.get_selected_entity();
     let root = editor.get_scene().get_root().get_id();
     let world = editor.get_scene().get_world();
     let mut clicked = None;
+    let mut edit_clicked = None;
     let mut empty_clicked = false;
     let mut visibility_changed = false;
     let _text_align = ui.push_style_var(dear_imgui_rs::StyleVar::SelectableTextAlign([0.0, 0.5]));
@@ -67,6 +68,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
                 selected == Some(root),
                 root_visibility,
                 &mut clicked,
+                &mut edit_clicked,
                 &mut visibility_changed,
             );
         }
@@ -83,10 +85,17 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         editor.get_scene().invalidate();
     }
 
-    if let Some(entity) = clicked {
+    if let Some(entity) = edit_clicked {
         editor.select_entity(entity);
+        true
+    } else if let Some(entity) = clicked {
+        editor.select_entity(entity);
+        false
     } else if empty_clicked {
         editor.clear_selection();
+        false
+    } else {
+        false
     }
 }
 
@@ -99,6 +108,7 @@ fn draw_children(
     ancestor_selected: bool,
     ancestor_visible: bool,
     clicked: &mut Option<hecs::Entity>,
+    edit_clicked: &mut Option<hecs::Entity>,
     visibility_changed: &mut bool,
 ) {
     for (index, entity) in children.iter().copied().enumerate() {
@@ -114,9 +124,8 @@ fn draw_children(
         let visibility = object_visibility(world, entity);
         let effective_visibility = ancestor_visible && visibility.unwrap_or(true);
         let row_id = format!("##scene_tree_{}", entity.to_bits());
-        let selectable_width = visibility
-            .map(|_| (row_width - ROW_HEIGHT).max(1.0))
-            .unwrap_or(0.0);
+        let control_count = 1.0 + f32::from(visibility.is_some());
+        let selectable_width = (row_width - ROW_HEIGHT * control_count).max(1.0);
         let was_clicked = selectable_row(ui, row_id, [selectable_width, ROW_HEIGHT]);
         if ui.is_item_hovered() {
             if let Ok(inspection) = world.get::<&Inspection>(entity) {
@@ -147,6 +156,10 @@ fn draw_children(
         );
         drop(draw_list);
         drop(name);
+        ui.same_line_with_spacing(0.0, 0.0);
+        if edit_button(ui, entity) {
+            *edit_clicked = Some(entity);
+        }
         if let Some(visibility) = visibility {
             ui.same_line_with_spacing(0.0, 0.0);
             *visibility_changed |=
@@ -171,10 +184,25 @@ fn draw_children(
             is_highlighted,
             effective_visibility,
             clicked,
+            edit_clicked,
             visibility_changed,
         );
         branches.pop();
     }
+}
+
+fn edit_button(ui: &dear_imgui_rs::Ui, entity: hecs::Entity) -> bool {
+    let _id = ui.push_id(&format!("edit_{}", entity.to_bits()));
+    let clicked = controls::text_button_colored(
+        ui,
+        PENCIL,
+        [ROW_HEIGHT, ROW_HEIGHT],
+        dear_imgui_rs::StyleColor::Text,
+    );
+    if ui.is_item_hovered() {
+        ui.tooltip_text("Edit in the matching canvas");
+    }
+    clicked
 }
 
 fn visibility_button(

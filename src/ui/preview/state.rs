@@ -1,147 +1,80 @@
-const MIN_ZOOM: f32 = 0.1;
-const MAX_ZOOM: f32 = 100.0;
-const ZOOM_STEP: f32 = 0.15;
-const PAN_THRESHOLD: f32 = 4.0;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Mode {
+    Preview,
+    Two,
+    Three,
+}
 
 pub(in crate::ui) struct State {
-    zoom: f32,
-    pan: [f32; 2],
-    pointer_down: bool,
-    pointer_moved: bool,
-    debug_metrics: bool,
+    mode: Mode,
+    requested_mode: Option<Mode>,
+    canvas_2d: Option<(usize, hecs::Entity)>,
+    canvas_3d: Option<(usize, hecs::Entity)>,
 }
 
 impl Default for State {
     fn default() -> Self {
         Self {
-            zoom: 1.0,
-            pan: [0.0; 2],
-            pointer_down: false,
-            pointer_moved: false,
-            debug_metrics: false,
+            mode: Mode::Preview,
+            requested_mode: None,
+            canvas_2d: None,
+            canvas_3d: None,
         }
     }
 }
 
 impl State {
-    pub fn zoom(&self) -> f32 {
-        self.zoom
+    pub(super) fn mode(&self) -> Mode {
+        self.mode
     }
 
-    pub fn pan(&self) -> [f32; 2] {
-        self.pan
-    }
-
-    pub fn reset(&mut self) {
-        self.zoom = 1.0;
-        self.pan = [0.0; 2];
-        self.pointer_down = false;
-        self.pointer_moved = false;
-    }
-
-    pub fn debug_metrics(&self) -> bool {
-        self.debug_metrics
-    }
-
-    pub fn toggle_debug_metrics(&mut self) {
-        self.debug_metrics = !self.debug_metrics;
-    }
-
-    pub fn zoom_at(&mut self, wheel: f32, anchor: [f32; 2]) {
-        if wheel == 0.0 {
-            return;
+    pub(super) fn set_mode(&mut self, mode: Mode) -> bool {
+        if self.mode == mode {
+            return false;
         }
+        self.mode = mode;
+        true
+    }
 
-        let old_zoom = self.zoom;
-        self.zoom = (old_zoom * (wheel * ZOOM_STEP).exp()).clamp(MIN_ZOOM, MAX_ZOOM);
-        let ratio = self.zoom / old_zoom;
+    pub(in crate::ui) fn edit_canvas(&mut self, canvas: crate::editor::SelectedCanvas) {
+        self.requested_mode = match canvas {
+            crate::editor::SelectedCanvas::Two(_) => Some(Mode::Two),
+            crate::editor::SelectedCanvas::Three(_) => Some(Mode::Three),
+            crate::editor::SelectedCanvas::None => None,
+        };
+    }
 
-        for axis in 0..2 {
-            self.pan[axis] = anchor[axis] + (self.pan[axis] - anchor[axis]) * ratio;
+    pub(super) fn take_requested_mode(&mut self) -> Option<Mode> {
+        self.requested_mode.take()
+    }
+
+    pub(super) fn sync_canvas_2d(&mut self, scene: usize, canvas: hecs::Entity) -> bool {
+        if self.canvas_2d == Some((scene, canvas)) {
+            return false;
         }
+        self.canvas_2d = Some((scene, canvas));
+        true
     }
 
-    pub fn press(&mut self) {
-        self.pointer_down = true;
-        self.pointer_moved = false;
-    }
-
-    pub fn drag(&mut self, total_delta: [f32; 2], frame_delta: [f32; 2]) {
-        if !self.pointer_down {
-            return;
+    pub(super) fn sync_canvas_3d(&mut self, scene: usize, canvas: hecs::Entity) -> bool {
+        if self.canvas_3d == Some((scene, canvas)) {
+            return false;
         }
-
-        let started =
-            !self.pointer_moved && total_delta[0].abs().max(total_delta[1].abs()) >= PAN_THRESHOLD;
-        if started {
-            self.pointer_moved = true;
-            self.pan[0] += total_delta[0];
-            self.pan[1] += total_delta[1];
-        } else if self.pointer_moved {
-            self.pan[0] += frame_delta[0];
-            self.pan[1] += frame_delta[1];
-        }
-    }
-
-    pub fn release(&mut self, hovered: bool) -> bool {
-        let select = self.pointer_down && !self.pointer_moved && hovered;
-        self.pointer_down = false;
-        self.pointer_moved = false;
-        select
-    }
-
-    pub fn is_panning(&self) -> bool {
-        self.pointer_down && self.pointer_moved
+        self.canvas_3d = Some((scene, canvas));
+        true
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::State;
+    use super::{Mode, State};
 
     #[test]
-    fn reset_restores_the_default_view() {
+    fn preview_is_the_default_mode() {
         let mut state = State::default();
-        state.zoom_at(3.0, [120.0, 80.0]);
-        state.press();
-        state.drag([10.0, 0.0], [10.0, 0.0]);
-
-        state.reset();
-
-        assert_eq!(state.zoom(), 1.0);
-        assert_eq!(state.pan(), [0.0; 2]);
-    }
-
-    #[test]
-    fn zoom_keeps_the_anchor_in_place() {
-        let mut state = State::default();
-        let anchor = [100.0, -50.0];
-
-        state.zoom_at(1.0, anchor);
-
-        let zoom = state.zoom();
-        let pan = state.pan();
-        assert!((pan[0] - anchor[0] * (1.0 - zoom)).abs() < 0.001);
-        assert!((pan[1] - anchor[1] * (1.0 - zoom)).abs() < 0.001);
-    }
-
-    #[test]
-    fn a_pan_does_not_become_a_selection() {
-        let mut state = State::default();
-        state.press();
-        state.drag([5.0, 0.0], [1.0, 0.0]);
-
-        assert_eq!(state.pan(), [5.0, 0.0]);
-        assert!(!state.release(true));
-    }
-
-    #[test]
-    fn an_unmoved_click_selects_only_when_released_over_the_view() {
-        let mut state = State::default();
-        state.press();
-        assert!(state.release(true));
-
-        state.press();
-        assert!(!state.release(false));
+        assert_eq!(state.mode(), Mode::Preview);
+        assert!(state.set_mode(Mode::Two));
+        assert_eq!(state.mode(), Mode::Two);
+        assert!(!state.set_mode(Mode::Two));
     }
 }

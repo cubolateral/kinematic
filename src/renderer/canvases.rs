@@ -1,5 +1,5 @@
 use super::{
-    plan::{PlanCache, visible_subtree_3d},
+    plan::{PlanCache, canvas_plan_for, visible_subtree_3d},
     target::{Target, reset_gl},
 };
 use crate::core::{
@@ -7,6 +7,7 @@ use crate::core::{
     components::{CachedGeometry, Camera3D, Draw3D, GeometryKey, RenderContext3D},
     objects::{CanvasDimension, CanvasSettings, CanvasTexture, draw_canvas2d_with_images},
 };
+use crate::renderer::editor_guides::{EditorGuideRenderer, EditorGuides3D};
 use glow::HasContext;
 use std::{
     collections::{HashMap, HashSet},
@@ -26,6 +27,7 @@ pub(crate) struct Canvases {
     physical: three_d::PhysicalMaterial,
     ambient: three_d::AmbientLight,
     sun: three_d::DirectionalLight,
+    editor_guides: EditorGuideRenderer,
     context: three_d::Context,
     gl: Rc<glow::Context>,
 }
@@ -50,6 +52,7 @@ impl Canvases {
                 three_d::Srgba::WHITE,
                 three_d::vec3(-1.0, -2.0, -3.0),
             ),
+            editor_guides: EditorGuideRenderer::new(),
             context,
             gl: Rc::clone(gl),
         }
@@ -62,8 +65,188 @@ impl Canvases {
         skia: &mut skia_safe::gpu::DirectContext,
     ) -> Result<(), String> {
         self.frame += 1;
-        let plan = self.plans.get(scene, self.frame)?;
-        let order = &plan.order;
+        let (order, sources) = {
+            let plan = self.plans.get(scene, self.frame)?;
+            (plan.order.clone(), plan.sources.clone())
+        };
+        self.render_targets(scene, &order, &sources, skia)?;
+
+        self.images.clear();
+        for key in &self.used_geometries {
+            self.geometry_usage.insert(*key, self.frame);
+        }
+        // Retain recently used resources across scene switches; reclaim at most one of each per render.
+        let target_bytes: u64 = self
+            .targets
+            .values()
+            .map(|target| u64::from(target.size.0) * u64::from(target.size.1) * 8)
+            .sum();
+        evict_oldest(
+            &mut self.targets,
+            &mut self.target_usage,
+            self.frame,
+            target_bytes > 256 * 1024 * 1024,
+        );
+        let over_budget = self.geometries.len() > 256;
+        evict_oldest(
+            &mut self.geometries,
+            &mut self.geometry_usage,
+            self.frame,
+            over_budget,
+        );
+        let output = scene.get_view();
+        if order.contains(&output.entity) {
+            self.targets
+                .get(&output)
+                .ok_or("Output canvas is unavailable.")?
+                .present_to(final_target);
+        } else {
+            final_target.draw_skia(skia, |canvas| {
+                canvas.clear(skia_safe::colors::BLACK);
+            });
+        }
+        Ok(())
+    }
+
+    pub fn render_editor_2d(
+        &mut self,
+        scene: &Scene,
+        entity: hecs::Entity,
+        target: &mut Target,
+        skia: &mut skia_safe::gpu::DirectContext,
+        pan: [f32; 2],
+        zoom: f32,
+        correction: [f32; 2],
+        camera_view: bool,
+    ) -> Result<(), String> {
+        let plan = canvas_plan_for(scene, entity)?;
+        let dependencies = plan
+            .order
+            .iter()
+            .copied()
+            .filter(|candidate| *candidate != entity)
+            .collect::<Vec<_>>();
+        self.render_targets(scene, &dependencies, &plan.sources, skia)?;
+        for key in &self.used_geometries {
+            self.geometry_usage.insert(*key, self.frame);
+        }
+
+        let world = scene.get_world();
+        let settings = world
+            .get::<&CanvasSettings>(entity)
+            .map_err(|_| "Selected canvas is unavailable.")?;
+        if settings.dimension != CanvasDimension::Two {
+            return Err("Selected canvas is not two-dimensional.".into());
+        }
+
+        self.images.clear();
+        for source in &plan.sources[&entity] {
+            let image = self
+                .targets
+                .get(source)
+                .ok_or("Projection source texture is unavailable.")?
+                .image(skia)?;
+            self.images.insert(*source, image);
+        }
+        let target_size = target.size;
+        target.draw_skia(skia, |canvas| {
+            crate::core::objects::draw_canvas2d_editor_with_images(
+                &world,
+                entity,
+                canvas,
+                &self.images,
+                target_size,
+                pan,
+                zoom,
+                correction,
+                camera_view,
+            )
+        });
+        Ok(())
+    }
+
+    pub fn render_editor_3d(
+        &mut self,
+        scene: &Scene,
+        entity: hecs::Entity,
+        target: &mut Target,
+        skia: &mut skia_safe::gpu::DirectContext,
+        camera_component: &Camera3D,
+        guides: &EditorGuides3D,
+    ) -> Result<(), String> {
+        let plan = canvas_plan_for(scene, entity)?;
+        let dependencies = plan
+            .order
+            .iter()
+            .copied()
+            .filter(|candidate| *candidate != entity)
+            .collect::<Vec<_>>();
+        self.render_targets(scene, &dependencies, &plan.sources, skia)?;
+
+        let world = scene.get_world();
+        let settings = world
+            .get::<&CanvasSettings>(entity)
+            .map_err(|_| "Selected canvas is unavailable.")?;
+        if settings.dimension != CanvasDimension::Three {
+            return Err("Selected canvas is not three-dimensional.".into());
+        }
+        reset_gl(&self.gl, target.size);
+        let camera = camera_from_component(camera_component, target.size)?;
+        unsafe {
+            self.gl
+                .bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(target.framebuffer()));
+        }
+        let [r, g, b, a] = settings.clear.rgba();
+        let pass = FramebufferPass::new(&self.context, target);
+        pass.target().clear(three_d::ClearState::color_and_depth(
+            r * a,
+            g * a,
+            b * a,
+            a,
+            1.0,
+        ));
+        let textures = &self.targets;
+        let resolve_texture = |texture: CanvasTexture| textures.get(&texture).map(Target::texture);
+        visible_subtree_3d(&world, entity, &mut self.visible);
+        pass.target()
+            .write(|| {
+                let mut render = RenderContext3D::new(
+                    &camera,
+                    pass.target(),
+                    &self.context,
+                    &mut self.geometries,
+                    &mut self.used_geometries,
+                    &mut self.physical,
+                    &self.ambient,
+                    &self.sun,
+                    &resolve_texture,
+                );
+                for child in &self.visible {
+                    if let Ok(draw) = world.get::<&Draw3D>(*child) {
+                        (draw.on_draw)(&world, *child, &mut render)
+                            .map_err(std::io::Error::other)?;
+                    }
+                }
+                Ok::<_, std::io::Error>(())
+            })
+            .map_err(|error| error.to_string())?;
+        pass.target()
+            .write(|| {
+                self.editor_guides
+                    .render(&self.context, &camera, camera_component, guides)
+                    .map_err(std::io::Error::other)
+            })
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    fn render_targets(
+        &mut self,
+        scene: &Scene,
+        order: &[hecs::Entity],
+        sources: &HashMap<hecs::Entity, Vec<CanvasTexture>>,
+        skia: &mut skia_safe::gpu::DirectContext,
+    ) -> Result<(), String> {
         let world = scene.get_world();
         let scene_id = world
             .get::<&SceneIdentity>(scene.get_root().get_id())
@@ -92,12 +275,11 @@ impl Canvases {
             }
 
             self.target_usage.insert(key, self.frame);
-
             match settings.dimension {
                 CanvasDimension::Two => {
                     skia.reset(None);
                     self.images.clear();
-                    for source in &plan.sources[entity] {
+                    for source in &sources[entity] {
                         let image = self
                             .targets
                             .get(source)
@@ -163,41 +345,6 @@ impl Canvases {
                 }
             }
         }
-
-        self.images.clear();
-        for key in &self.used_geometries {
-            self.geometry_usage.insert(*key, self.frame);
-        }
-        // Retain recently used resources across scene switches; reclaim at most one of each per render.
-        let target_bytes: u64 = self
-            .targets
-            .values()
-            .map(|target| u64::from(target.size.0) * u64::from(target.size.1) * 8)
-            .sum();
-        evict_oldest(
-            &mut self.targets,
-            &mut self.target_usage,
-            self.frame,
-            target_bytes > 256 * 1024 * 1024,
-        );
-        let over_budget = self.geometries.len() > 256;
-        evict_oldest(
-            &mut self.geometries,
-            &mut self.geometry_usage,
-            self.frame,
-            over_budget,
-        );
-        let output = scene.get_view();
-        if order.contains(&output.entity) {
-            self.targets
-                .get(&output)
-                .ok_or("Output canvas is unavailable.")?
-                .present_to(final_target);
-        } else {
-            final_target.draw_skia(skia, |canvas| {
-                canvas.clear(skia_safe::colors::BLACK);
-            });
-        }
         Ok(())
     }
 }
@@ -222,6 +369,13 @@ fn camera(
     let camera_component = world
         .get::<&Camera3D>(entity)
         .map_err(|_| "Camera3D lens is missing.")?;
+    camera_from_component(&camera_component, size)
+}
+
+fn camera_from_component(
+    camera_component: &Camera3D,
+    size: (u32, u32),
+) -> Result<three_d::Camera, String> {
     camera_component.validate()?;
     let matrix = camera_component.matrix();
     let rotation = crate::core::normalized_quaternion(camera_component.camera_rotation);
