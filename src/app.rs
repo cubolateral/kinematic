@@ -130,6 +130,8 @@ impl App {
         );
 
         let mut events = self.sdl.event_pump().unwrap();
+        let dev_reload = crate::dev_reload::DevReload::new();
+        let mut restart = false;
 
         'running: loop {
             for event in events.poll_iter() {
@@ -192,6 +194,14 @@ impl App {
 
             self.imgui_renderer.render(self.imgui.render()).unwrap();
             self.window.gl_swap_window();
+
+            if dev_reload
+                .as_ref()
+                .is_some_and(crate::dev_reload::DevReload::should_restart)
+            {
+                restart = true;
+                break 'running;
+            }
         }
 
         editor.shutdown(&self.gl);
@@ -204,5 +214,11 @@ impl App {
         self.imgui_renderer
             .texture_map_mut()
             .remove(editor.get_editor_3d_texture_id());
+
+        if restart {
+            dev_reload
+                .expect("Automatic reload must be active before restarting.")
+                .restart();
+        }
     }
 }
