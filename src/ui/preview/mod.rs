@@ -235,7 +235,7 @@ fn camera_button(ui: &dear_imgui_rs::Ui, camera_view: bool) -> bool {
     ui.set_next_item_allow_overlap();
     let clicked = controls::text_button_colored(
         ui,
-        icons::CAMERA,
+        icons::VIDEO_CAMERA,
         [ui.frame_height(); 2],
         if camera_view {
             dear_imgui_rs::StyleColor::Text

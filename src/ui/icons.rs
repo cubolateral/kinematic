@@ -6,6 +6,7 @@ pub(super) const DIAMOND: &str = "\u{25c6}";
 pub(super) const EXPAND: &str = "\u{f065}";
 pub(super) const EYE: &str = "\u{f06e}";
 pub(super) const EYE_SLASH: &str = "\u{f070}";
+pub(super) const VIDEO_CAMERA: &str = "\u{f03d}";
 pub(super) const FORWARD: &str = "\u{f04e}";
 pub(super) const FORWARD_FAST: &str = "\u{f050}";
 pub(super) const PAUSE: &str = "\u{f04c}";
