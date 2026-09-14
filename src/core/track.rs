@@ -1048,7 +1048,7 @@ pub struct TrackableInfo {
 /// Trait implemented by types that expose animatable fields.
 pub trait Trackable {
     /// Internal field layer added to generated object handlers.
-    type HandlerFields<Next: HandlerContext>;
+    type HandlerFields<Next: HandlerContext>: HandlerContext<Object = Next::Object>;
 
     /// Builds this component's tracked fields around the next handler layer.
     fn handler_fields<Next: HandlerContext>(

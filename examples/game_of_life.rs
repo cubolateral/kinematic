@@ -20,7 +20,7 @@ impl Life {
 }
 
 impl SimulationState for Life {
-    fn on_update(&mut self, _dt: f32) {
+    fn on_update(&mut self, _context: &SimulationContext<'_>) {
         let previous = self.cells;
         for y in 0..SIZE {
             for x in 0..SIZE {
@@ -66,7 +66,7 @@ impl SimulationState2D for Life {
         }
     }
 
-    fn get_box(&self) -> Vector2 {
+    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector2 {
         Vector2::splat(SIZE as f32 * CELL_2D)
     }
 }
@@ -111,7 +111,7 @@ impl SimulationState3D for Life {
         Ok(())
     }
 
-    fn get_box(&self) -> Vector3 {
+    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector3 {
         vec3(SIZE as f32 * CELL_3D, SIZE as f32 * CELL_3D, CELL_3D)
     }
 }
@@ -156,99 +156,12 @@ impl Default for Life3DAppearance {
     }
 }
 
-#[derive(Object, hecs::Bundle)]
-#[object(spatial = "2d", builder = "life_2d")]
-struct Life2D {
-    #[trackable]
-    simulation: Simulation,
-    #[trackable]
-    appearance: Life2DAppearance,
-    #[trackable]
-    transform: Transform2D,
-    #[trackable]
-    draw: Draw2D,
-}
-
-impl Default for Life2D {
-    fn default() -> Self {
-        Self {
-            simulation: Simulation::new_2d(Life::glider()),
-            appearance: Life2DAppearance::default(),
-            transform: Transform2D::default(),
-            draw: Draw2D {
-                on_draw: |world, entity, canvas, _opacity| {
-                    world
-                        .get::<&mut Simulation>(entity)
-                        .unwrap()
-                        .draw_2d(world, entity, canvas);
-                },
-                get_box: |world, entity| world.get::<&Simulation>(entity).unwrap().box_2d(),
-                ..Draw2D::default()
-            },
-        }
-    }
-}
-
-impl Life2DHandler {
-    fn update(&self) {
-        schedule_simulation_update(self);
-    }
-}
-
-#[derive(Object, hecs::Bundle)]
-#[object(spatial = "3d", builder = "life_3d")]
-struct Life3D {
-    #[trackable]
-    simulation: Simulation,
-    #[trackable]
-    appearance: Life3DAppearance,
-    #[trackable]
-    transform: Transform3D,
-    #[trackable]
-    draw: Draw3D,
-}
-
-impl Default for Life3D {
-    fn default() -> Self {
-        Self {
-            simulation: Simulation::new_3d(Life::glider()),
-            appearance: Life3DAppearance::default(),
-            transform: Transform3D::default(),
-            draw: Draw3D {
-                on_draw: draw_life_3d,
-                get_box: |world, entity| world.get::<&Simulation>(entity).unwrap().box_3d(),
-                ..Draw3D::default()
-            },
-        }
-    }
-}
-
-impl Life3DHandler {
-    fn update(&self) {
-        schedule_simulation_update(self);
-    }
-}
-
-fn draw_life_3d(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    context: &mut RenderContext3D<'_>,
-) -> Result<(), String> {
-    let previous = context.set_current_transform(global_matrix3d(world, entity));
-    let result = world
-        .get::<&mut Simulation>(entity)
-        .unwrap()
-        .draw_3d(world, entity, context);
-    context.set_current_transform(previous);
-    result
-}
-
 #[scene]
 fn game_of_life_2d(s: &mut Scene) {
-    let life = life_2d()
+    let life = simulation_2d()
+        .state(Life::glider())
         .auto_update(false)
-        .color(Color::CYAN)
-        .cell_scale(0.9)
+        .add_trackable(Life2DAppearance::default())
         .build(s);
     s.get_world_2d().add(&life);
 
@@ -257,22 +170,17 @@ fn game_of_life_2d(s: &mut Scene) {
         s.wait(0.1);
     }
 
-    life.color(Color::MAGENTA)
-        .cell_scale(0.65)
-        .duration(1.0)
-        .play();
+    life.color(Color::MAGENTA).duration(1.0).play();
 }
 
 #[scene]
 fn game_of_life_3d(s: &mut Scene) {
     s.get_root().view_2d(false).immediate();
-    let life = life_3d()
+    let life = simulation_3d()
+        .state(Life::glider())
         .auto_update(false)
-        .color(Color::CYAN)
-        .cell_scale(0.84)
-        .metallic(0.15)
-        .roughness(0.45)
         .rotation(Quaternion::from_rotation_y(0.35))
+        .add_trackable(Life3DAppearance::default())
         .build(s);
     s.get_world_3d().add(&life);
 
@@ -281,12 +189,7 @@ fn game_of_life_3d(s: &mut Scene) {
         s.wait(0.1);
     }
 
-    life.color(Color::MAGENTA)
-        .cell_scale(0.65)
-        .metallic(0.8)
-        .roughness(0.2)
-        .duration(1.0)
-        .play();
+    life.color(Color::MAGENTA).duration(1.0).play();
 }
 
 fn main() {

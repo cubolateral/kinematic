@@ -10,7 +10,7 @@ struct Appearance {
 struct State;
 
 impl SimulationState for State {
-    fn on_update(&mut self, _dt: f32) {}
+    fn on_update(&mut self, _context: &SimulationContext<'_>) {}
 }
 
 impl SimulationState2D for State {
@@ -19,7 +19,7 @@ impl SimulationState2D for State {
         canvas.clear(skia_safe::Color4f::new(color.r, color.g, color.b, color.a));
     }
 
-    fn get_box(&self) -> Vector2 {
+    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector2 {
         Vector2::ONE
     }
 }
@@ -52,7 +52,12 @@ impl Default for CustomSimulation {
                         .unwrap()
                         .draw_2d(world, entity, canvas);
                 },
-                get_box: |world, entity| world.get::<&Simulation>(entity).unwrap().box_2d(),
+                get_box: |world, entity| {
+                    world
+                        .get::<&Simulation>(entity)
+                        .unwrap()
+                        .box_2d(world, entity)
+                },
                 ..Draw2D::default()
             },
         }

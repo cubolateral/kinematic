@@ -105,7 +105,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         }
 
         let mut edits = Vec::new();
-        for trackable in (inspection.get)(&world, entity) {
+        for trackable in inspection.trackables(&world, entity) {
             ui.separator_with_text(trackable.name);
 
             for track in (trackable.get)() {

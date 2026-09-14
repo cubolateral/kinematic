@@ -189,9 +189,9 @@ The state implements `SimulationState` for updates and the dimension-specific
 trait for read-only drawing. Drawing receives the scene `World` and the
 simulation `Entity`, so it can read trackable appearance components from the
 object. It must be `Clone + Send + Sync + 'static` because complete state clones
-are used as runtime checkpoints and stored in the ECS. Every value that affects
-future updates must remain in the simulation state so seeking can replay it
-deterministically. The example below is Conway's Game of Life: a generation
+are used as runtime checkpoints and stored in the ECS. Evolving values belong
+in the simulation state; timeline-controlled inputs can be additional trackable
+components read through `SimulationContext`. The example below is Conway's Game of Life: a generation
 cannot be sampled from an isolated keyframe because every cell depends on the
 preceding generation.
 
@@ -201,7 +201,13 @@ of the simulation.
 
 ```rust
 #[derive(Clone, Trackable)]
-struct LifeAppearance {
+struct Parameters {
+    #[track]
+    rule: u32,
+}
+
+#[derive(Clone, Trackable)]
+struct Appearance {
     #[track]
     color: Color,
 }
@@ -212,7 +218,8 @@ struct Life {
 }
 
 impl SimulationState for Life {
-    fn on_update(&mut self, _dt: f32) {
+    fn on_update(&mut self, context: &SimulationContext<'_>) {
+        let _rule = context.get::<Parameters>().rule;
         let previous = self.cells;
         for y in 0..8 {
             for x in 0..8 {
@@ -234,12 +241,12 @@ impl SimulationState for Life {
 
 impl SimulationState2D for Life {
     fn on_draw(
-        &self,
+        &mut self,
         world: &hecs::World,
         entity: hecs::Entity,
         canvas: &skia_safe::Canvas,
     ) {
-        let color = world.get::<&LifeAppearance>(entity).unwrap().color;
+        let color = world.get::<&Appearance>(entity).unwrap().color;
         let paint = skia_safe::Paint::new(
             skia_safe::Color4f::new(color.r, color.g, color.b, color.a),
             None,
@@ -261,67 +268,24 @@ impl SimulationState2D for Life {
         }
     }
 
-    fn get_box(&self) -> Vector2 {
+    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector2 {
         vec2(160.0, 160.0)
-    }
-}
-
-#[derive(Object, hecs::Bundle)]
-#[object(spatial = "2d", builder = "game_of_life")]
-struct GameOfLife {
-    #[trackable]
-    simulation: Simulation,
-    #[trackable]
-    appearance: LifeAppearance,
-    #[trackable]
-    transform: Transform2D,
-    #[trackable]
-    draw: Draw2D,
-}
-
-impl Default for GameOfLife {
-    fn default() -> Self {
-        Self {
-            simulation: Simulation::default(),
-            appearance: LifeAppearance { color: Color::WHITE },
-            transform: Transform2D::default(),
-            draw: Draw2D {
-                on_draw: |world, entity, canvas, _opacity| {
-                    world
-                        .get::<&Simulation>(entity)
-                        .unwrap()
-                        .draw_2d(world, entity, canvas);
-                },
-                get_box: |world, entity| {
-                    world.get::<&Simulation>(entity).unwrap().box_2d()
-                },
-                ..Draw2D::default()
-            },
-        }
-    }
-}
-
-impl GameOfLifeBuilder {
-    fn state(mut self, state: Life) -> Self {
-        self.object.simulation = Simulation::new_2d(state);
-        self
-    }
-}
-
-impl GameOfLifeHandler {
-    fn update(&self) {
-        schedule_simulation_update(self);
     }
 }
 
 let mut cells = [[false; 8]; 8];
 cells[3][2..5].fill(true);
-let simulation = game_of_life()
+let simulation = simulation_2d()
     .state(Life { cells })
-    .color(Color::CYAN)
+    .add_trackable(Parameters { rule: 30 })
+    .add_trackable(Appearance { color: Color::CYAN })
     .position(vec2(100.0, 0.0))
     .build(s);
 s.get_world_2d().add(&simulation);
+
+s.wait(1.0);
+simulation.rule(90).immediate();
+s.wait(3.0);
 ```
 
 `auto_update` is a discrete boolean track. Setting it to `false` disables the
@@ -348,9 +312,11 @@ number of steps in one frame is `max(auto_update as u32, explicit_updates)`:
 | Either | N, where N > 1 | N |
 
 On a backward seek or a jump, Kinematic restores the nearest cached checkpoint
-and replays each project frame, sampling the historical `auto_update` value and
-the explicit updates without reevaluating the whole scene. Checkpoints are
-runtime-only and are not written to the project.
+and replays each project frame. `SimulationContext` exposes the frame's absolute
+`time`, local `frame`, fixed `dt`, and `get::<T>()`; the latter samples every
+additional trackable component at that intermediate frame. The historical
+`auto_update` value and explicit updates are sampled the same way. Checkpoints
+are runtime-only and are not written to the project.
 
 Simulation drawing is local, like drawing inside a group. `Simulation2D`
 applies its inherited `Transform2D` and composites inherited opacity outside

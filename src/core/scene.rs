@@ -88,10 +88,7 @@ impl Scene {
                 .add(SceneIdentity(id, std::sync::atomic::AtomicU64::new(0)))
                 .add(Animation::default())
                 .add(Draw2D::default())
-                .add(Inspection {
-                    object_name: "Root",
-                    get: root_trackables,
-                })
+                .add(Inspection::new("Root", root_trackables))
                 .add(Name::new("Root"))
                 .add(Node::default())
                 .add(View::default())
@@ -224,19 +221,26 @@ impl Scene {
                     .map_or(true, |simulation| simulation.auto_update);
                 let track_info = <Simulation as crate::core::Trackable>::track(0);
                 if let Ok(mut simulation) = world.get::<&mut Simulation>(*entity) {
-                    simulation.seek(target_frame, self.fps, start_time, |sample_time| {
-                        animation
-                            .as_ref()
-                            .and_then(|animation| {
-                                animation.sample(
-                                    std::any::TypeId::of::<Simulation>(),
-                                    track_info,
-                                    sample_time,
-                                )
-                            })
-                            .and_then(bool::from_track_value)
-                            .unwrap_or(fallback)
-                    });
+                    simulation.seek(
+                        &world,
+                        *entity,
+                        target_frame,
+                        self.fps,
+                        start_time,
+                        |sample_time| {
+                            animation
+                                .as_ref()
+                                .and_then(|animation| {
+                                    animation.sample(
+                                        std::any::TypeId::of::<Simulation>(),
+                                        track_info,
+                                        sample_time,
+                                    )
+                                })
+                                .and_then(bool::from_track_value)
+                                .unwrap_or(fallback)
+                        },
+                    );
                 }
             }
         }
@@ -567,7 +571,7 @@ impl Scene {
             let world = self.world.borrow();
             let mut values = Vec::new();
             for (entity, inspection) in world.query::<(hecs::Entity, &Inspection)>().iter() {
-                for component in (inspection.get)(&world, entity) {
+                for component in inspection.trackables(&world, entity) {
                     for info in (component.get)() {
                         values.push((entity, info, (info.get)(&world, entity)));
                     }

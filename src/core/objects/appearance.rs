@@ -46,7 +46,7 @@ impl AppearanceSnapshot {
 
     fn collect(world: &hecs::World, entity: hecs::Entity, values: &mut Vec<AppearanceValue>) {
         if let Ok(inspection) = world.get::<&Inspection>(entity) {
-            let mut components = (inspection.get)(world, entity).to_vec();
+            let mut components: Vec<_> = inspection.trackables(world, entity).copied().collect();
             if world.get::<&Morph>(entity).is_ok() {
                 components.push(Morph::INFO);
             }
@@ -156,8 +156,8 @@ mod tests {
     fn edit(scene: &Scene, entity: hecs::Entity, name: &str, value: TrackValue) {
         let world = scene.get_world();
         let inspection = world.get::<&Inspection>(entity).unwrap();
-        let (component, track) = (inspection.get)(&world, entity)
-            .iter()
+        let (component, track) = inspection
+            .trackables(&world, entity)
             .find_map(|component| {
                 (component.get)()
                     .iter()

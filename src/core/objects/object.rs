@@ -182,13 +182,14 @@ pub fn save_object(world: &SceneWorld, entity: hecs::Entity) {
 
 fn snapshot_values(world: &SceneWorld, entity: hecs::Entity) -> Vec<SnapshotValue> {
     let world = world.borrow();
-    let inspection = *world
+    let inspection = world
         .get::<&Inspection>(entity)
-        .expect("Object handler must contain Inspection metadata.");
+        .expect("Object handler must contain Inspection metadata.")
+        .clone();
 
     let mut values = Vec::new();
 
-    for trackable in (inspection.get)(&world, entity) {
+    for trackable in inspection.trackables(&world, entity) {
         let type_id = (trackable.type_id)();
 
         for track_info in (trackable.get)() {
