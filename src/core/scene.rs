@@ -398,24 +398,7 @@ impl Scene {
         canvas: hecs::Entity,
         camera_view: bool,
     ) -> Option<[skia_safe::Point; 4]> {
-        let world = self.world.borrow();
-        let settings = world
-            .get::<&crate::core::objects::CanvasSettings>(canvas)
-            .ok()?;
-        let camera = crate::core::objects::camera_matrix2d(&world, canvas)?;
-        let half_width = settings.resolution.0 as f32 * 0.5;
-        let half_height = settings.resolution.1 as f32 * 0.5;
-        let mut points = [
-            skia_safe::Point::new(-half_width, -half_height),
-            skia_safe::Point::new(half_width, -half_height),
-            skia_safe::Point::new(half_width, half_height),
-            skia_safe::Point::new(-half_width, half_height),
-        ];
-        camera.map_points_inplace(&mut points);
-        if camera_view {
-            camera.invert()?.map_points_inplace(&mut points);
-        }
-        Some(points)
+        crate::core::objects::camera_outline_points2d(&self.world.borrow(), canvas, camera_view)
     }
 
     pub(crate) fn pick_editor_2d(
@@ -817,6 +800,30 @@ mod tests {
             .unwrap();
         assert_eq!(locked_selection[0], skia_safe::Point::new(-170.0, -10.0));
         assert_eq!(locked_selection[2], skia_safe::Point::new(-150.0, 10.0));
+    }
+
+    #[test]
+    fn free_editor_2d_shades_the_world_outside_the_camera() {
+        let scene = Scene::new_with_resolution((100, 80));
+        let canvas = scene.get_world_2d().get_id();
+        let world = scene.get_world();
+        let mut surface = skia_safe::surfaces::raster_n32_premul((200, 160)).unwrap();
+
+        draw_canvas2d_editor_with_images(
+            &world,
+            canvas,
+            surface.canvas(),
+            &std::collections::HashMap::new(),
+            (200, 160),
+            [0.0; 2],
+            1.0,
+            [1.0; 2],
+            false,
+        );
+
+        let pixels = surface.peek_pixels().unwrap();
+        assert_eq!(pixels.get_color((100, 80)).a(), 0);
+        assert!((63..=64).contains(&pixels.get_color((10, 10)).a()));
     }
 
     #[test]

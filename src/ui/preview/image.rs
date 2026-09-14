@@ -3,6 +3,8 @@ use crate::{
     editor::Editor,
 };
 
+const CANVAS_OUTLINE: [f32; 4] = [0.7, 0.7, 0.7, 1.0];
+
 #[derive(Clone, Copy)]
 pub(super) struct PreviewImage {
     size: [f32; 2],
@@ -30,11 +32,15 @@ fn image(canvas: &mut crate::editor::Canvas) -> PreviewImage {
 }
 
 pub(super) fn draw(ui: &dear_imgui_rs::Ui, preview: PreviewImage, available: [f32; 2]) {
-    let (_, size, min, _) = placement(ui.cursor_screen_pos(), available, preview.size);
+    let (_, size, min, max) = placement(ui.cursor_screen_pos(), available, preview.size);
     ui.set_cursor_screen_pos(min);
     ui.image_config(preview.texture, size)
         .uv0([0.0, 1.0])
         .uv1([1.0, 0.0])
+        .build();
+    ui.get_window_draw_list()
+        .add_rect(min, max, CANVAS_OUTLINE)
+        .thickness(1.0)
         .build();
 }
 
@@ -105,7 +111,7 @@ pub(super) fn draw_editor(
             display_scale,
             pan,
             zoom,
-            [0.7, 0.7, 0.7, 1.0],
+            CANVAS_OUTLINE,
             1.0,
         );
     }

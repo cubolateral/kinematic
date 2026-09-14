@@ -479,6 +479,13 @@ pub(crate) fn draw_canvas2d_editor_with_images(
             Some(images),
         );
     }
+    if !camera_view && let Some(points) = camera_outline_points2d(world, entity, false) {
+        let mask =
+            skia_safe::Path::polygon(&points, true, skia_safe::PathFillType::InverseEvenOdd, None);
+        let mut paint = skia_safe::Paint::new(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.25), None);
+        paint.set_anti_alias(true);
+        canvas.draw_path(&mask, &paint);
+    }
     canvas.restore_to_count(saved);
 }
 
@@ -815,4 +822,26 @@ pub(crate) fn camera_matrix2d(
 ) -> Option<skia_safe::Matrix> {
     let camera = world.get::<&Camera2D>(canvas).ok()?;
     Some(transform_matrix(camera.transform()))
+}
+
+pub(crate) fn camera_outline_points2d(
+    world: &hecs::World,
+    canvas: hecs::Entity,
+    camera_view: bool,
+) -> Option<[skia_safe::Point; 4]> {
+    let settings = world.get::<&CanvasSettings>(canvas).ok()?;
+    let camera = camera_matrix2d(world, canvas)?;
+    let half_width = settings.resolution.0 as f32 * 0.5;
+    let half_height = settings.resolution.1 as f32 * 0.5;
+    let mut points = [
+        skia_safe::Point::new(-half_width, -half_height),
+        skia_safe::Point::new(half_width, -half_height),
+        skia_safe::Point::new(half_width, half_height),
+        skia_safe::Point::new(-half_width, half_height),
+    ];
+    camera.map_points_inplace(&mut points);
+    if camera_view {
+        camera.invert()?.map_points_inplace(&mut points);
+    }
+    Some(points)
 }
