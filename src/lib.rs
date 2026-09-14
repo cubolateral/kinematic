@@ -12,6 +12,7 @@ mod dev_reload;
 mod window_cache;
 
 pub use app::*;
+pub use glam;
 pub use hecs;
 pub use kinematic_macros::scene;
 pub use skia_safe;
