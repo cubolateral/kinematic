@@ -1,11 +1,47 @@
 use crate::core::{
     AnimatorHandle, SceneWorld, Tween,
-    components::{Node, View},
+    components::{Inspection, Node, ObjectType, View},
     objects::{Object, ObjectHandler},
 };
 
 /// Marker trait for objects whose handlers can own child objects.
 pub trait Container: Object {}
+
+/// Failure to retrieve a typed direct child from a container.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChildError {
+    /// The container has no child at the requested index.
+    NotFound { index: usize, len: usize },
+    /// The child exists, but has a different concrete object type.
+    TypeMismatch {
+        index: usize,
+        expected: &'static str,
+        actual: &'static str,
+    },
+}
+
+impl std::fmt::Display for ChildError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound { index, len } => {
+                write!(
+                    formatter,
+                    "Child index {index} is out of bounds for {len} children."
+                )
+            }
+            Self::TypeMismatch {
+                index,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "Child at index {index} is {actual}, not {expected}."
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ChildError {}
 
 /// Common child-management behavior for scene containers.
 pub trait ContainerHandler {
@@ -17,6 +53,9 @@ pub trait ContainerHandler {
 
     #[doc(hidden)]
     fn container_time(&self) -> f32;
+
+    #[doc(hidden)]
+    fn container_animator(&self) -> AnimatorHandle;
 
     /// Adds an object subtree to this container at the current scheduling time.
     fn add(&self, handler: &impl ObjectHandler) {
@@ -30,6 +69,53 @@ pub trait ContainerHandler {
             handler.get_id(),
             self.container_time(),
         );
+    }
+
+    /// Returns the entity ids of all direct children in insertion order.
+    fn get_children(&self) -> Vec<hecs::Entity> {
+        let scene_world = self.container_world();
+        let world = scene_world.borrow();
+
+        children(&world, self.container_entity())
+    }
+
+    /// Returns the entity id of the direct child at `index`.
+    fn get_child_entity(&self, index: usize) -> Result<hecs::Entity, ChildError> {
+        let children = self.get_children();
+
+        children.get(index).copied().ok_or(ChildError::NotFound {
+            index,
+            len: children.len(),
+        })
+    }
+
+    /// Returns the typed handler for a direct child at `index`.
+    fn get_child<T: Object + 'static>(&self, index: usize) -> Result<T::Handler, ChildError> {
+        let scene_world = self.container_world();
+        let expected_name = T::inspection().object_name;
+        let expected_type = std::any::TypeId::of::<T>();
+        let entity = self.get_child_entity(index)?;
+        let (actual_type, actual_name) = {
+            let world = scene_world.borrow();
+            let object_type = world
+                .get::<&ObjectType>(entity)
+                .expect("Child must contain an ObjectType component.");
+            let inspection = world
+                .get::<&Inspection>(entity)
+                .expect("Child must contain an Inspection component.");
+
+            (object_type.0, inspection.object_name)
+        };
+
+        if actual_type != expected_type {
+            return Err(ChildError::TypeMismatch {
+                index,
+                expected: expected_name,
+                actual: actual_name,
+            });
+        }
+
+        Ok(T::handler(scene_world, entity, self.container_animator()))
     }
 }
 

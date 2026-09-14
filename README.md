@@ -571,6 +571,22 @@ scene.get_world_2d().add(&child_group);
 ```
 
 The `Container` derive gives an object's generated handler the `add` method.
+It also provides typed access to direct children in insertion order:
+
+```rust
+let circle = child_group
+    .get_child::<Circle>(0)
+    .expect("First child must be a Circle.");
+let first_entity = child_group
+    .get_child_entity(0)
+    .expect("First child must exist.");
+let child_entities = child_group.get_children();
+```
+
+`get_child` returns `ChildError::NotFound` when the index is absent and
+`ChildError::TypeMismatch` when the child is a different object type.
+`get_child_entity` returns one untyped entity id, while `get_children` returns
+all direct child ids in insertion order.
 `Group2D` uses it to organize transformable subtrees, but hierarchy traversal is
 not coupled to that concrete type. Container transforms are inherited through
 the tree, and container opacity is composited once over its complete subtree at

@@ -1,7 +1,9 @@
 use crate::core::{
     AnimatorHandle, SceneWorld, SignalHandle, TrackInfo, TrackProperty, TrackValue, TrackValueType,
     Trackable, Tween,
-    components::{Animation, Draw2D, Draw3D, Inspection, Morph, Name, Node, Transform2D},
+    components::{
+        Animation, Draw2D, Draw3D, Inspection, Morph, Name, Node, ObjectType, Transform2D,
+    },
     objects::{deactivate_subtree, is_attached},
     types::Vector2,
 };
@@ -27,7 +29,7 @@ struct SnapshotStack(Vec<Vec<SnapshotValue>>);
 ///
 /// The derive macro generates a lowercase builder function and the typed handler
 /// returned by that builder.
-pub trait Object: hecs::DynamicBundle + Sized {
+pub trait Object: hecs::DynamicBundle + Sized + 'static {
     /// Handler type returned after spawning the object into the ECS world.
     type Handler;
 
@@ -54,6 +56,7 @@ pub trait Object: hecs::DynamicBundle + Sized {
             .add_bundle(object)
             .add(Animation::default())
             .add(Node::default())
+            .add(ObjectType(std::any::TypeId::of::<Self>()))
             .add(SnapshotStack::default())
             .add(name)
             .add(Self::inspection());

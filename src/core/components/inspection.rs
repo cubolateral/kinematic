@@ -1,5 +1,8 @@
 use crate::core::TrackableInfo;
 
+/// Concrete Rust type of a spawned scene object.
+pub(crate) struct ObjectType(pub(crate) std::any::TypeId);
+
 /// Entity-level metadata used by the inspector UI.
 #[derive(Clone, Copy)]
 pub struct Inspection {
