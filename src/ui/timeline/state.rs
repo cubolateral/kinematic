@@ -186,6 +186,13 @@ impl State {
         self.event_drag.take()
     }
 
+    pub(super) fn cancel_interactions(&mut self) {
+        self.interaction = Interaction::None;
+        self.pressed_entity = None;
+        self.pressed_toggle = false;
+        self.event_drag = None;
+    }
+
     fn set_view(&mut self, start: f32, end: f32) {
         let span = (end - start).clamp(0.0, self.duration);
         self.view_start = start.clamp(0.0, self.duration - span);

@@ -310,6 +310,7 @@ impl Editor {
         self.evaluated = None;
         self.update_active_scene(0.0);
         self.pending_export_time = None;
+        self.pending_project_settings = None;
         self.is_exporting = true;
         self.accumulator = 0.0;
     }
@@ -361,6 +362,9 @@ impl Editor {
     }
 
     pub(crate) fn request_project_settings(&mut self, settings: ProjectSettings) {
+        if self.is_exporting {
+            return;
+        }
         settings.save();
         self.pending_project_settings = Some(settings);
     }
@@ -376,7 +380,7 @@ impl Editor {
         skia_context: &mut skia_safe::gpu::DirectContext,
         gl: &std::rc::Rc<glow::Context>,
     ) {
-        if settings == self.project.settings {
+        if self.is_exporting || settings == self.project.settings {
             return;
         }
 
@@ -449,6 +453,10 @@ impl Editor {
         event_index: usize,
         duration: f32,
     ) {
+        if self.is_exporting {
+            return;
+        }
+
         self.scenes[scene_index]
             .scene
             .set_event_duration(event_index, duration);

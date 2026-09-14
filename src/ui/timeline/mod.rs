@@ -22,6 +22,10 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
     let is_exporting = editor.is_exporting();
     let mut toggle_fullscreen = false;
 
+    if is_exporting {
+        state.cancel_interactions();
+    }
+
     shortcuts(editor.get_timeline(), ui, !is_exporting);
     hide_single_window_tab(ui);
 
@@ -70,8 +74,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 let playhead_x = time.x(layout, time.current);
 
                 ruler::draw_time_grid_lines(ui, &draw_list, layout, time);
-                scene::draw(editor, ui, &draw_list, layout, time, state);
-                objects::draw(editor, ui, &draw_list, layout, time, state);
+                scene::draw(editor, ui, &draw_list, layout, time, state, !is_exporting);
+                objects::draw(editor, ui, &draw_list, layout, time, state, !is_exporting);
                 ruler::draw_panel_divider(
                     ui,
                     &draw_list,

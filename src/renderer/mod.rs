@@ -65,8 +65,12 @@ impl Renderer {
     }
 
     pub fn cancel(&mut self) {
-        self.export.take();
-        self.message = Some("Export canceled.".to_owned());
+        self.message = Some(match self.discard_export() {
+            Ok(()) => "Export canceled.".to_owned(),
+            Err(error) => {
+                format!("Export canceled, but its incomplete file could not be removed: {error}.")
+            }
+        });
     }
 
     pub fn screenshot(
@@ -134,18 +138,19 @@ impl Renderer {
             .export
             .take()
             .expect("An export must remain active until encoding finishes.");
-        export.encoder.finish()?;
+        let output_path = export.output_path;
+        if let Err(error) = export.encoder.finish() {
+            let _ = remove_output_file(&output_path);
+            return Err(error);
+        }
 
-        self.message = Some(format!(
-            "Export completed: {}.",
-            export.output_path.display()
-        ));
+        self.message = Some(format!("Export completed: {}.", output_path.display()));
 
         Ok(FrameResult::Finished)
     }
 
     pub fn fail(&mut self, error: &RenderError) {
-        self.export.take();
+        let _ = self.discard_export();
         self.message = Some(error.to_string());
     }
 
@@ -158,7 +163,7 @@ impl Renderer {
     }
 
     pub fn shutdown(&mut self, gl: &glow::Context) {
-        self.export.take();
+        let _ = self.discard_export();
 
         if let Some(buffers) = self.readback_buffers.take() {
             unsafe {
@@ -228,6 +233,15 @@ impl Renderer {
         self.readback_buffers = Some([first, second]);
 
         Ok(())
+    }
+
+    fn discard_export(&mut self) -> std::io::Result<()> {
+        let Some(export) = self.export.take() else {
+            return Ok(());
+        };
+        let output_path = export.output_path.clone();
+        drop(export);
+        remove_output_file(&output_path)
     }
 }
 
@@ -329,6 +343,14 @@ fn available_path(directory: &std::path::Path, name: &str, extension: &str) -> s
     }
 
     unreachable!("A free output file name must exist.")
+}
+
+fn remove_output_file(path: &std::path::Path) -> std::io::Result<()> {
+    match std::fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 fn save_screenshot(
@@ -527,6 +549,20 @@ mod tests {
         );
 
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn incomplete_output_removal_accepts_existing_and_missing_files() {
+        let path = std::env::temp_dir().join(format!(
+            "kinematic-incomplete-export-{}-{:?}.mp4",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::write(&path, b"incomplete").unwrap();
+
+        remove_output_file(&path).unwrap();
+        assert!(!path.exists());
+        remove_output_file(&path).unwrap();
     }
 
     #[test]

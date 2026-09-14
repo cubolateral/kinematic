@@ -18,6 +18,7 @@ pub(super) fn draw(
     layout: Layout,
     time: TimeRange,
     state: &mut State,
+    interactive: bool,
 ) {
     ui.dummy([0.0, TRACK_SPACING]);
 
@@ -165,6 +166,10 @@ pub(super) fn draw(
     }
 
     drop(clip);
+
+    if !interactive {
+        return;
+    }
 
     let left = dear_imgui_rs::MouseButton::Left;
     let mouse_global_time = time.start

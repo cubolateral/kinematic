@@ -61,6 +61,11 @@ impl State {
         };
     }
 
+    pub(in crate::ui) fn show_preview(&mut self) {
+        self.mode = Mode::Preview;
+        self.requested_mode = Some(Mode::Preview);
+    }
+
     pub(super) fn take_requested_mode(&mut self) -> Option<Mode> {
         self.requested_mode.take()
     }
@@ -115,5 +120,16 @@ mod tests {
         assert_eq!(state.mode(), Mode::Three);
         assert_eq!(state.take_requested_mode(), Some(Mode::Three));
         assert_eq!(state.cached_mode(), crate::editor::EditorMode::Three);
+    }
+
+    #[test]
+    fn show_preview_selects_the_preview_tab() {
+        let mut state = State::new(crate::editor::EditorMode::Three);
+        state.take_requested_mode();
+
+        state.show_preview();
+
+        assert_eq!(state.mode(), Mode::Preview);
+        assert_eq!(state.take_requested_mode(), Some(Mode::Preview));
     }
 }

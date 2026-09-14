@@ -29,6 +29,7 @@ pub(super) fn draw(
     layout: Layout,
     time: TimeRange,
     state: &mut State,
+    interactive: bool,
 ) {
     let origin = ui.cursor_screen_pos();
     let selected = editor.get_selected_entity();
@@ -216,6 +217,10 @@ pub(super) fn draw(
 
     drop(clip);
     drop(world);
+
+    if !interactive {
+        return;
+    }
 
     let left = dear_imgui_rs::MouseButton::Left;
 

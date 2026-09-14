@@ -14,7 +14,8 @@ impl Default for State {
     }
 }
 
-pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
+pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) -> bool {
+    let mut started = false;
     hide_single_window_tab(ui);
 
     ui.window(WINDOW_NAME).build(|| {
@@ -30,6 +31,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
         if ui.button_with_size(label, [button_width, 0.0]) {
             editor.toggle_export(state.silent);
+            started = !is_exporting && editor.is_exporting();
         }
 
         ui.same_line();
@@ -52,4 +54,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             ui.text_wrapped(message);
         }
     });
+
+    started
 }
