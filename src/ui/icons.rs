@@ -11,3 +11,4 @@ pub(super) const FORWARD_FAST: &str = "\u{f050}";
 pub(super) const PAUSE: &str = "\u{f04c}";
 pub(super) const PENCIL: &str = "\u{f040}";
 pub(super) const PLAY: &str = "\u{f04b}";
+pub(super) const RESET: &str = "\u{f2f1}";

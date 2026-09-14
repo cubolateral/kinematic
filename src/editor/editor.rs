@@ -508,6 +508,14 @@ impl Editor {
         self.editor_3d_rendered = None;
     }
 
+    pub(crate) fn reset_editor_3d_camera_transform(&mut self) {
+        let default = EditorView3D::default();
+        self.editor_view_3d.position = default.position;
+        self.editor_view_3d.yaw = default.yaw;
+        self.editor_view_3d.pitch = default.pitch;
+        self.editor_3d_rendered = None;
+    }
+
     pub(crate) fn toggle_editor_3d_camera_view(&mut self) {
         self.editor_view_3d.canvas_view = !self.editor_view_3d.canvas_view;
         self.editor_3d_rendered = None;
@@ -608,6 +616,12 @@ impl Editor {
         self.editor_view_2d.pan = [0.0; 2];
         self.editor_view_2d.zoom = 1.0;
         self.editor_view_2d.canvas_view = false;
+        self.editor_rendered = None;
+    }
+
+    pub(crate) fn reset_editor_2d_camera_transform(&mut self) {
+        self.editor_view_2d.pan = [0.0; 2];
+        self.editor_view_2d.zoom = 1.0;
         self.editor_rendered = None;
     }
 

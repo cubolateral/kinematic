@@ -39,6 +39,14 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 Mode::Preview => {}
             }
         }
+        let reset_camera = plain_keyboard_input && ui.is_key_pressed(dear_imgui_rs::Key::R);
+        if reset_camera {
+            match state.mode() {
+                Mode::Two => editor.reset_editor_2d_camera_transform(),
+                Mode::Three => editor.reset_editor_3d_camera_transform(),
+                Mode::Preview => {}
+            }
+        }
         let Some(_tabs) = ui.tab_bar("Preview modes") else {
             return;
         };
@@ -134,6 +142,10 @@ fn draw_editor_3d(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
     if camera_button(ui, editor.editor_3d_camera_view()) {
         editor.toggle_editor_3d_camera_view();
     }
+    ui.same_line();
+    if reset_camera_button(ui) {
+        editor.reset_editor_3d_camera_transform();
+    }
 
     ui.set_cursor_screen_pos([min[0] + available[0] - 112.0, min[1] + 8.0]);
     for (axis, label, color) in [
@@ -210,6 +222,10 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     if camera_button(ui, editor.editor_2d_camera_view()) {
         editor.toggle_editor_2d_camera_view();
     }
+    ui.same_line();
+    if reset_camera_button(ui) {
+        editor.reset_editor_2d_camera_transform();
+    }
     if let Some(error) = editor.get_render_error() {
         ui.text_wrapped(error);
     }
@@ -233,6 +249,14 @@ fn camera_button(ui: &dear_imgui_rs::Ui, camera_view: bool) -> bool {
         } else {
             "Use the canvas camera [0]"
         });
+    }
+    clicked
+}
+
+fn reset_camera_button(ui: &dear_imgui_rs::Ui) -> bool {
+    let clicked = controls::text_button(ui, icons::RESET, [ui.frame_height(); 2]);
+    if ui.is_item_hovered() {
+        ui.tooltip_text("Reset camera transform [R]");
     }
     clicked
 }
