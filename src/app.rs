@@ -4,6 +4,7 @@ use crate::{
     core::{Project, SceneFactory},
     editor::Editor,
     ui::Ui,
+    window_cache::WindowCache,
 };
 
 pub struct App {
@@ -17,6 +18,7 @@ pub struct App {
     window: sdl3::video::Window,
     sdl: sdl3::Sdl,
     project: Option<Project>,
+    window_cache: WindowCache,
 }
 
 /// Creates a new application.
@@ -33,12 +35,18 @@ impl App {
         gl_attributes.set_context_version(3, 3);
         gl_attributes.set_context_profile(sdl3::video::GLProfile::Core);
 
-        let window = video_subsystem
-            .window("Kinematic", 1280, 720)
-            .position_centered()
-            .opengl()
-            .build()
-            .unwrap();
+        let window_cache = WindowCache::load();
+        let mut window_builder =
+            video_subsystem.window("Kinematic", window_cache.size.0, window_cache.size.1);
+        if let Some((x, y)) = window_cache.position {
+            window_builder.position(x, y);
+        } else {
+            window_builder.position_centered();
+        }
+        if window_cache.maximized {
+            window_builder.maximized();
+        }
+        let window = window_builder.resizable().opengl().build().unwrap();
 
         let gl_context = window.gl_create_context().unwrap();
         window.gl_make_current(&gl_context).unwrap();
@@ -94,6 +102,7 @@ impl App {
             gl,
             skia_context,
             project: None,
+            window_cache,
         }
     }
 
@@ -194,6 +203,7 @@ impl App {
 
             self.imgui_renderer.render(self.imgui.render()).unwrap();
             self.window.gl_swap_window();
+            self.window_cache.update(&self.window);
 
             if dev_reload
                 .as_ref()
@@ -204,7 +214,9 @@ impl App {
             }
         }
 
-        editor.shutdown(&self.gl);
+        editor.shutdown(&self.gl, self.ui.editor_mode());
+        self.window_cache.update(&self.window);
+        self.window_cache.save();
         self.imgui_renderer
             .texture_map_mut()
             .remove(editor.get_preview().get_imgui_texture_id());

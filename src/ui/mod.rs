@@ -39,7 +39,7 @@ impl Ui {
             appearance: settings::load(),
             export: export::State::default(),
             is_fullscreen: false,
-            preview: preview::State::default(),
+            preview: preview::State::new(crate::editor::load_editor_mode()),
             inspector: inspector::State::default(),
             settings: settings::State::default(),
             timeline: timeline::State::default(),
@@ -95,5 +95,9 @@ impl Ui {
 
     pub fn apply_scale(&self, context: &mut dear_imgui_rs::Context) {
         self.appearance.apply_scale(context);
+    }
+
+    pub(crate) fn editor_mode(&self) -> crate::editor::EditorMode {
+        self.preview.cached_mode()
     }
 }

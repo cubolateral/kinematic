@@ -14,16 +14,33 @@ pub(in crate::ui) struct State {
 
 impl Default for State {
     fn default() -> Self {
-        Self {
-            mode: Mode::Preview,
-            requested_mode: None,
-            canvas_2d: None,
-            canvas_3d: None,
-        }
+        Self::new(crate::editor::EditorMode::Preview)
     }
 }
 
 impl State {
+    pub(in crate::ui) fn new(mode: crate::editor::EditorMode) -> Self {
+        let mode = match mode {
+            crate::editor::EditorMode::Preview => Mode::Preview,
+            crate::editor::EditorMode::Two => Mode::Two,
+            crate::editor::EditorMode::Three => Mode::Three,
+        };
+        Self {
+            mode,
+            requested_mode: Some(mode),
+            canvas_2d: None,
+            canvas_3d: None,
+        }
+    }
+
+    pub(in crate::ui) fn cached_mode(&self) -> crate::editor::EditorMode {
+        match self.mode {
+            Mode::Preview => crate::editor::EditorMode::Preview,
+            Mode::Two => crate::editor::EditorMode::Two,
+            Mode::Three => crate::editor::EditorMode::Three,
+        }
+    }
+
     pub(super) fn mode(&self) -> Mode {
         self.mode
     }
@@ -49,19 +66,19 @@ impl State {
     }
 
     pub(super) fn sync_canvas_2d(&mut self, scene: usize, canvas: hecs::Entity) -> bool {
-        if self.canvas_2d == Some((scene, canvas)) {
-            return false;
-        }
+        let changed = self
+            .canvas_2d
+            .is_some_and(|current| current != (scene, canvas));
         self.canvas_2d = Some((scene, canvas));
-        true
+        changed
     }
 
     pub(super) fn sync_canvas_3d(&mut self, scene: usize, canvas: hecs::Entity) -> bool {
-        if self.canvas_3d == Some((scene, canvas)) {
-            return false;
-        }
+        let changed = self
+            .canvas_3d
+            .is_some_and(|current| current != (scene, canvas));
         self.canvas_3d = Some((scene, canvas));
-        true
+        changed
     }
 }
 
@@ -76,5 +93,27 @@ mod tests {
         assert!(state.set_mode(Mode::Two));
         assert_eq!(state.mode(), Mode::Two);
         assert!(!state.set_mode(Mode::Two));
+    }
+
+    #[test]
+    fn first_canvas_sync_preserves_the_cached_camera() {
+        let mut state = State::default();
+        let canvas = hecs::Entity::DANGLING;
+
+        assert!(!state.sync_canvas_2d(0, canvas));
+        assert!(!state.sync_canvas_3d(0, canvas));
+        assert!(!state.sync_canvas_2d(0, canvas));
+        assert!(!state.sync_canvas_3d(0, canvas));
+        assert!(state.sync_canvas_2d(1, canvas));
+        assert!(state.sync_canvas_3d(1, canvas));
+    }
+
+    #[test]
+    fn cached_mode_is_requested_for_the_first_frame() {
+        let mut state = State::new(crate::editor::EditorMode::Three);
+
+        assert_eq!(state.mode(), Mode::Three);
+        assert_eq!(state.take_requested_mode(), Some(Mode::Three));
+        assert_eq!(state.cached_mode(), crate::editor::EditorMode::Three);
     }
 }

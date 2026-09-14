@@ -1,6 +1,9 @@
 use crate::{
     core::{Project, ProjectSettings, Scene, objects::ObjectHandler, types::Vector2},
-    editor::{Canvas, Selection, Timeline},
+    editor::{
+        Canvas, Selection, Timeline,
+        cache::{Camera2DCache, Camera3DCache, EditorCache, EditorMode},
+    },
     renderer::{FrameResult, Renderer},
     utilities::FrameTimer,
 };
@@ -113,7 +116,10 @@ impl Editor {
             project.settings.fps,
         );
         let duration = scenes.last().map_or(0.0, |scene| scene.end);
-        let timeline = Timeline::new(duration, project.settings.fps);
+        let cache = EditorCache::load();
+        let mut timeline = Timeline::new(duration, project.settings.fps);
+        let timeline_time = cache.timeline_time(duration);
+        timeline.go_to(timeline_time);
 
         let preview = Canvas::new(
             project.settings.resolution,
@@ -143,10 +149,19 @@ impl Editor {
             timeline,
             preview,
             editor_2d,
-            editor_view_2d: EditorView2D::default(),
+            editor_view_2d: EditorView2D {
+                pan: cache.camera_2d.pan,
+                zoom: cache.camera_2d.zoom,
+                ..EditorView2D::default()
+            },
             editor_rendered: None,
             editor_3d,
-            editor_view_3d: EditorView3D::default(),
+            editor_view_3d: EditorView3D {
+                position: glam::Vec3::from_array(cache.camera_3d.position),
+                yaw: cache.camera_3d.yaw,
+                pitch: cache.camera_3d.pitch,
+                ..EditorView3D::default()
+            },
             editor_3d_rendered: None,
             pending_editor_3d_size: None,
             pending_mouse_warp: None,
@@ -164,7 +179,7 @@ impl Editor {
             performance: Performance::default(),
             pending_project_settings: None,
         };
-        editor.update_active_scene(0.0);
+        editor.update_active_scene(timeline_time);
         editor
     }
 
@@ -294,7 +309,21 @@ impl Editor {
         self.render_error.as_deref()
     }
 
-    pub fn shutdown(&mut self, gl: &glow::Context) {
+    pub fn shutdown(&mut self, gl: &glow::Context, mode: EditorMode) {
+        EditorCache {
+            camera_2d: Camera2DCache {
+                pan: self.editor_view_2d.pan,
+                zoom: self.editor_view_2d.zoom,
+            },
+            camera_3d: Camera3DCache {
+                position: self.editor_view_3d.position.to_array(),
+                yaw: self.editor_view_3d.yaw,
+                pitch: self.editor_view_3d.pitch,
+            },
+            timeline_time: self.timeline.get_time(),
+            mode,
+        }
+        .save();
         self.renderer.shutdown(gl);
     }
 

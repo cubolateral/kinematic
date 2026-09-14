@@ -14,7 +14,7 @@ pub(crate) const OBJECT_FADE_START: f32 = PARTICLE_FADE_START;
 const MAX_ATLAS_DIMENSION: f32 = 2048.0;
 const MAX_CACHE_ENTRIES: usize = 64;
 const MAX_GRID_OVERSAMPLING: usize = 64;
-const MAX_PARTICLE_COUNT: usize = 20_000;
+const MAX_PARTICLE_COUNT: usize = 4_096;
 const PARTICLE_SPACING: f32 = 2.0;
 const PARTICLE_SPRITE_RADIUS: f32 = 14.0;
 const PARTICLE_SPRITE_SIZE: i32 = 32;
@@ -152,6 +152,8 @@ fn valid_bounds(bounds: skia_safe::Rect) -> bool {
         && bounds.top.is_finite()
         && bounds.right.is_finite()
         && bounds.bottom.is_finite()
+        && bounds.width().is_finite()
+        && bounds.height().is_finite()
         && bounds.width() > 0.0
         && bounds.height() > 0.0
 }
@@ -297,7 +299,7 @@ pub(crate) fn silhouette_grid(
 
 fn grid_spacing(bounds: skia_safe::Rect, cell_count: usize) -> f32 {
     let aspect = bounds.width() / bounds.height();
-    let columns = ((cell_count as f32 * aspect).sqrt().ceil() as usize).max(1);
+    let columns = ((cell_count as f32 * aspect).sqrt().ceil() as usize).clamp(1, cell_count);
     let rows = cell_count.div_ceil(columns).max(1);
 
     (bounds.width() / columns as f32).max(bounds.height() / rows as f32)
@@ -312,12 +314,20 @@ fn collect_grid_targets(
     bounds: skia_safe::Rect,
     spacing: f32,
 ) {
-    let mut y = bounds.top + spacing * 0.5;
+    let columns = (bounds.width() / spacing).ceil() as usize;
+    let rows = (bounds.height() / spacing).ceil() as usize;
 
-    while y < bounds.bottom {
-        let mut x = bounds.left + spacing * 0.5;
+    for row in 0..rows {
+        let y = bounds.top + (row as f32 + 0.5) * spacing;
+        if y >= bounds.bottom {
+            break;
+        }
 
-        while x < bounds.right {
+        for column in 0..columns {
+            let x = bounds.left + (column as f32 + 0.5) * spacing;
+            if x >= bounds.right {
+                break;
+            }
             let pixel_x = ((x - origin.x) * density).floor() as i32;
             let pixel_y = ((y - origin.y) * density).floor() as i32;
             let inside_mask = pixel_x >= 0
@@ -329,11 +339,7 @@ fn collect_grid_targets(
             if inside_mask {
                 samples.push(Vector2::new(x, y));
             }
-
-            x += spacing;
         }
-
-        y += spacing;
     }
 }
 
@@ -696,6 +702,24 @@ mod tests {
             particle_count_for_bounds(skia_safe::Rect::from_wh(1_000.0, 1_000.0)),
             MAX_PARTICLE_COUNT
         );
+    }
+
+    #[test]
+    fn silhouette_sampling_terminates_for_large_local_coordinates() {
+        let left = 1.0e10_f32;
+        let bounds = skia_safe::Rect::new(left, 0.0, left + 1_024.0, 100.0);
+        let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
+        surface.canvas().clear(skia_safe::colors::WHITE);
+
+        let targets = silhouette_grid(
+            &mut surface,
+            16,
+            Vector2::new(bounds.left, bounds.top),
+            1.0,
+            bounds,
+        );
+
+        assert!(targets.len() <= 16);
     }
 
     #[test]

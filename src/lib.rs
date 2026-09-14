@@ -9,6 +9,7 @@ extern crate self as kinematic;
 
 mod app;
 mod dev_reload;
+mod window_cache;
 
 pub use app::*;
 pub use hecs;

@@ -26,11 +26,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             && !ui.io().key_super();
         let requested =
             shortcut_mode(ui, plain_keyboard_input).or_else(|| state.take_requested_mode());
-        if let Some(mode) = requested
-            && state.set_mode(mode)
-            && mode == Mode::Two
-        {
-            editor.reset_editor_2d_view();
+        if let Some(mode) = requested {
+            state.set_mode(mode);
         }
         let reset = plain_keyboard_input
             && (ui.is_key_pressed(dear_imgui_rs::Key::Key0)
@@ -66,9 +63,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         if let Some(_tab) = editor_2d_tab
             && requested.is_none_or(|mode| mode == Mode::Two)
         {
-            if state.set_mode(Mode::Two) {
-                editor.reset_editor_2d_view();
-            }
+            state.set_mode(Mode::Two);
             let canvas = editor.editor_2d_canvas();
             if state.sync_canvas_2d(editor.get_active_scene_index(), canvas) {
                 editor.reset_editor_2d_view();
@@ -84,9 +79,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         if let Some(_tab) = editor_3d_tab
             && requested.is_none_or(|mode| mode == Mode::Three)
         {
-            if state.set_mode(Mode::Three) {
-                editor.reset_editor_3d_view();
-            }
+            state.set_mode(Mode::Three);
             let canvas = editor.editor_3d_canvas();
             if state.sync_canvas_3d(editor.get_active_scene_index(), canvas) {
                 editor.reset_editor_3d_view();
