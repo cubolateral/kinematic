@@ -22,6 +22,7 @@ Kinematic is in early development, so its API may change.
 - Sequential and parallel animation tasks.
 - Named, editable event waits persisted per scene.
 - Reactive signals that run after tracks and can temporarily override properties.
+- Deterministic random generation with state-independent keyed forks.
 - Deterministic frame-dependent simulations with seekable runtime checkpoints.
 - Sequential multi-scene projects.
 - Built-in easing functions.
@@ -147,6 +148,36 @@ The axis-angle path preserves direction and full turns; `object.rotation(q)`
 interpolates orientations along the shortest quaternion path. Match the cycle's
 end and start for a seamless loop; repetition does not automatically close it.
 
+## Deterministic random values
+
+`Random` is a clonable generator independent of `Scene`. `Random::new(seed)`
+uses a stable xoshiro256++ sequence with SplitMix64 seed mixing. A clone resumes
+from the same state. `fork(key)` instead derives a child from the generator's
+original seed, so consuming values from the parent does not change the child:
+
+```rust
+let mut random = Random::new(42);
+let radius = random.range_f32(24.0..96.0);
+let fill = *random.choose(&[Color::RED, Color::GREEN, Color::BLUE]).unwrap();
+
+let first = random.fork(7).u64();
+random.u64();
+let replayed = random.fork(7).u64();
+assert_eq!(first, replayed);
+```
+
+Primitive methods are named after their result type: `bool`, `u8`, `u16`,
+`u32`, `u64`, `u128`, `usize`, `i8`, `i16`, `i32`, `i64`, `i128`, `isize`,
+`f32`, and `f64`. Integer and floating-point ranges use the explicit
+`range_u32`, `range_u64`, `range_usize`, `range_i32`, `range_i64`,
+`range_f32`, and `range_f64` methods. Ranges are half-open.
+
+`chance`, `choose`, `choose_mut`, `choose_weighted`, `choose_multiple`,
+`shuffle`, and `normal` cover common sampling operations. `choose_weighted`
+receives a values slice and a matching `f64` weights slice. Invalid weights or
+an empty input return `None`. The zero-argument `random()` convenience function
+creates `Random::new(0)`.
+
 ## Simulations
 
 Use `Simulation2D` or `Simulation3D` when the next state depends on the previous
@@ -163,6 +194,10 @@ future updates must remain in the simulation state so seeking can replay it
 deterministically. The example below is Conway's Game of Life: a generation
 cannot be sampled from an isolated keyframe because every cell depends on the
 preceding generation.
+
+`Random` can be stored directly in a simulation state. Because checkpoints clone
+the complete state, seeking restores the generator position along with the rest
+of the simulation.
 
 ```rust
 #[derive(Clone, Trackable)]
@@ -334,8 +369,9 @@ cargo run --example game_of_life
 ## Signals
 
 Use `signal` to run logic after the scene's tracks have been evaluated. The
-callback receives a fresh clone of the object handler on every evaluation, and
-direct `set_*` methods temporarily override track values until the next update:
+callback receives a fresh clone of the object handler and a `SignalFrame` on
+every evaluation. Direct `set_*` methods temporarily override track values until
+the next update:
 
 ```rust
 #[scene]
@@ -343,10 +379,23 @@ fn follow_camera(s: &mut Scene) {
     let circle = circle().build(s);
     s.get_world_2d().add(&circle);
 
-    s.get_world_2d().signal(move |handler| {
+    s.get_world_2d().signal(move |handler, _frame| {
         handler.set_camera_position(circle.get_global_position());
     });
 }
+```
+
+`SignalFrame` exposes the current scene `time`, the project-frame `index`, and
+the fixed frame duration `dt`. Its index uses the scene FPS, making a keyed fork
+stable when the timeline seeks or evaluates the same frame again:
+
+```rust
+let random = Random::new(42);
+
+object.signal(move |object, frame| {
+    let mut random = random.fork(frame.index);
+    object.set_opacity(random.range_f32(0.5..1.0));
+});
 ```
 
 Signals begin at the current animator time and do not extend the scene
@@ -361,7 +410,7 @@ stored callback because signals outlive the builder closure:
 let circle = circle().build(s);
 let circle_for_signal = circle.clone();
 
-canvas.signal(move |handler| {
+canvas.signal(move |handler, _frame| {
     handler.set_camera_position(circle_for_signal.get_global_position());
 });
 ```

@@ -1,6 +1,19 @@
-use crate::core::{AnimatorHandle, SceneWorld, TrackInfo, TrackValue, components::Node};
+use crate::core::{
+    AnimatorHandle, SceneWorld, TrackInfo, TrackValue, components::Node, frame_dt, frame_index,
+};
 
-type SignalCallback = std::rc::Rc<std::cell::RefCell<Box<dyn FnMut()>>>;
+type SignalCallback = std::rc::Rc<std::cell::RefCell<Box<dyn FnMut(SignalFrame)>>>;
+
+/// Timing information supplied to a signal callback.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SignalFrame {
+    /// Current scene time in seconds.
+    pub time: f32,
+    /// Current project frame index.
+    pub index: u64,
+    /// Duration of one project frame in seconds.
+    pub dt: f32,
+}
 
 struct ScheduledSignal {
     id: u64,
@@ -30,7 +43,7 @@ impl SignalContext {
         self: &std::rc::Rc<Self>,
         target: hecs::Entity,
         start: f32,
-        callback: impl FnMut() + 'static,
+        callback: impl FnMut(SignalFrame) + 'static,
         animator: AnimatorHandle,
     ) -> SignalHandle {
         let id = self.next_id.get();
@@ -98,7 +111,7 @@ impl SignalContext {
         }
     }
 
-    pub(crate) fn evaluate(&self, world: &SceneWorld, time: f32) {
+    pub(crate) fn evaluate(&self, world: &SceneWorld, time: f32, fps: u32) {
         let callbacks = {
             let world = world.borrow();
             self.signals
@@ -115,13 +128,18 @@ impl SignalContext {
                 .collect::<Vec<_>>()
         };
 
+        let frame = SignalFrame {
+            time,
+            index: frame_index(time, fps),
+            dt: frame_dt(fps),
+        };
         for callback in callbacks {
             assert!(
                 !self.evaluating.replace(true),
                 "Signals cannot be evaluated recursively."
             );
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                callback.borrow_mut()();
+                callback.borrow_mut()(frame);
             }));
             self.evaluating.set(false);
             if let Err(error) = result {

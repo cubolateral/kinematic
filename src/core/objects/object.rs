@@ -1,6 +1,6 @@
 use crate::core::{
-    AnimatorHandle, SceneWorld, SignalHandle, TrackInfo, TrackProperty, TrackValue, TrackValueType,
-    Trackable, Tween,
+    AnimatorHandle, SceneWorld, SignalFrame, SignalHandle, TrackInfo, TrackProperty, TrackValue,
+    TrackValueType, Trackable, Tween,
     components::{
         Animation, Draw2D, Draw3D, Inspection, Morph, Name, Node, ObjectType, Transform2D,
     },
@@ -94,15 +94,16 @@ pub trait ObjectHandler: Clone {
 
     /// Runs a callback after animation tracks while this object is active.
     ///
-    /// The callback receives a fresh typed clone of this handler on every evaluation.
-    fn signal(&self, callback: impl FnMut(Self) + 'static) -> SignalHandle
+    /// The callback receives a fresh typed clone of this handler and the current
+    /// project frame on every evaluation.
+    fn signal(&self, callback: impl FnMut(Self, SignalFrame) + 'static) -> SignalHandle
     where
         Self: Sized + 'static,
     {
         let handler = self.clone();
         let mut callback = callback;
         self.object_animator()
-            .signal(self.get_id(), move || callback(handler.clone()))
+            .signal(self.get_id(), move |frame| callback(handler.clone(), frame))
     }
 
     /// Reads a typed trackable property from the object.

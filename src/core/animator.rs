@@ -1,5 +1,5 @@
 use crate::core::{
-    Easing, Scene, SignalContext, SignalHandle, Task, TrackInfo, TrackValue,
+    Easing, Scene, SignalContext, SignalFrame, SignalHandle, Task, TrackInfo, TrackValue,
     components::Animation,
     normalized_quaternion,
     track::TrackRepeat,
@@ -389,7 +389,7 @@ impl AnimatorHandle {
     pub(crate) fn signal(
         &self,
         target: hecs::Entity,
-        callback: impl FnMut() + 'static,
+        callback: impl FnMut(SignalFrame) + 'static,
     ) -> SignalHandle {
         let active = self.active();
         active.assert_finite_scope();

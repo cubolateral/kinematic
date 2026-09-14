@@ -2,6 +2,7 @@ use crate::core::scene_file::{SceneFile, ScheduledEvent, TimeEvent};
 use crate::core::{
     Animator, Scheduling, Task, TrackValueType, TrackableInfo, Tween,
     components::{Animation, Draw2D, Inspection, Name, Node, Simulation, View},
+    frame_index,
     objects::{
         Canvas2D, Canvas2DHandler, Canvas3D, Canvas3DHandler, Object, ObjectHandler, RootHandler,
         camera_matrix2d, canvas_2d, canvas_3d, children_by_z_index, draw_entity,
@@ -216,8 +217,7 @@ impl Scene {
                 drop(node);
 
                 let local_time = (time - start_time).max(0.0);
-                let frames = local_time * self.fps.max(1) as f32;
-                let target_frame = (frames + f32::EPSILON * frames.abs() * 4.0).floor() as u64;
+                let target_frame = frame_index(local_time, self.fps);
                 let animation = world.get::<&Animation>(*entity).ok();
                 let fallback = world
                     .get::<&Simulation>(*entity)
@@ -243,7 +243,7 @@ impl Scene {
         drop(runtime);
         drop(world);
 
-        signals.evaluate(&self.world, time);
+        signals.evaluate(&self.world, time, self.fps);
         self.revision.set(self.revision.get().wrapping_add(1));
     }
 
@@ -924,7 +924,7 @@ mod tests {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
         scene.get_world_2d().add(&object);
-        object.signal(|handler| handler.set_position(vec2(25.0, 0.0)));
+        object.signal(|handler, _| handler.set_position(vec2(25.0, 0.0)));
         object
             .position_x(100.0)
             .duration(2.0)
@@ -938,13 +938,32 @@ mod tests {
     }
 
     #[test]
+    fn signal_receives_project_frame_timing() {
+        let mut scene = Scene::new();
+        scene.set_fps(24);
+        let object = circle().build(&mut scene);
+        scene.get_world_2d().add(&object);
+        let observed = std::rc::Rc::new(std::cell::Cell::new(None));
+        let callback_observed = std::rc::Rc::clone(&observed);
+        object.signal(move |_, frame| callback_observed.set(Some(frame)));
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.5);
+
+        let frame = observed.get().unwrap();
+        assert_eq!(frame.time, 0.5);
+        assert_eq!(frame.index, 12);
+        assert_eq!(frame.dt, 1.0 / 24.0);
+    }
+
+    #[test]
     fn signal_interval_supports_forward_and_backward_seeks() {
         let mut scene = Scene::new();
         let object = circle().position(vec2(3.0, 0.0)).build(&mut scene);
         scene.get_world_2d().add(&object);
         scene.wait(1.0);
         let signaled = object.clone();
-        let signal = object.signal(move |_| signaled.set_position(vec2(9.0, 0.0)));
+        let signal = object.signal(move |_, _| signaled.set_position(vec2(9.0, 0.0)));
         scene.wait(1.0);
         signal.stop();
         scene.animator.take_schedule().compile(&scene);
@@ -967,7 +986,7 @@ mod tests {
         let object = circle().build(&mut scene);
         scene.get_world_2d().add(&object);
         let signaled = object.clone();
-        let signal = object.signal(move |_| signaled.set_position(vec2(4.0, 0.0)));
+        let signal = object.signal(move |_, _| signaled.set_position(vec2(4.0, 0.0)));
         scene.wait(1.0);
         signal.stop();
         scene.animator.take_schedule().compile(&scene);
@@ -984,9 +1003,9 @@ mod tests {
         let object = circle().position(vec2(3.0, 0.0)).build(&mut scene);
         scene.get_world_2d().add(&object);
         let first = object.clone();
-        let first_signal = object.signal(move |_| first.set_position(vec2(10.0, 0.0)));
+        let first_signal = object.signal(move |_, _| first.set_position(vec2(10.0, 0.0)));
         let second = object.clone();
-        let second_signal = object.signal(move |_| second.set_position(vec2(20.0, 0.0)));
+        let second_signal = object.signal(move |_, _| second.set_position(vec2(20.0, 0.0)));
         scene.wait(1.0);
         first_signal.stop();
         second_signal.stop();
@@ -1004,7 +1023,7 @@ mod tests {
         let object = circle().build(&mut scene);
         let calls = std::rc::Rc::new(std::cell::Cell::new(0));
         let callback_calls = std::rc::Rc::clone(&calls);
-        object.signal(move |_| callback_calls.set(callback_calls.get() + 1));
+        object.signal(move |_, _| callback_calls.set(callback_calls.get() + 1));
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(0.0);
@@ -1020,7 +1039,8 @@ mod tests {
         let canvas = scene.get_world_2d();
         let signaled_canvas = canvas.clone();
         let tracked = tracked.clone();
-        canvas.signal(move |_| signaled_canvas.set_camera_position(tracked.get_global_position()));
+        canvas
+            .signal(move |_, _| signaled_canvas.set_camera_position(tracked.get_global_position()));
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(0.0);
@@ -1033,7 +1053,7 @@ mod tests {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
         scene.get_world_2d().add(&object);
-        object.signal(|_| {});
+        object.signal(|_, _| {});
 
         assert_eq!(scene.animator.take_schedule().compile(&scene), 0.0);
     }
@@ -1046,7 +1066,7 @@ mod tests {
         scene.get_world_2d().add(&object);
 
         scene.repeat(|_| {
-            object.signal(|_| {});
+            object.signal(|_, _| {});
         });
     }
 
@@ -1057,7 +1077,7 @@ mod tests {
         let object = circle().build(&mut scene);
         scene.get_world_2d().add(&object);
         let signaled = object.clone();
-        object.signal(move |_| {
+        object.signal(move |_, _| {
             let _ = signaled.position(vec2(1.0, 2.0));
         });
         scene.animator.take_schedule().compile(&scene);
@@ -1072,7 +1092,7 @@ mod tests {
         let object = circle().build(&mut scene);
         scene.get_world_2d().add(&object);
         let signaled = object.clone();
-        object.signal(move |_| signaled.remove());
+        object.signal(move |_, _| signaled.remove());
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(0.0);
@@ -1085,7 +1105,7 @@ mod tests {
         let canvas = scene.get_world_2d();
         let child = circle().build(&mut scene);
         let parent = canvas.clone();
-        canvas.signal(move |_| parent.add(&child));
+        canvas.signal(move |_, _| parent.add(&child));
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(0.0);
@@ -1100,7 +1120,7 @@ mod tests {
         let queued = object.position(vec2(1.0, 2.0));
         object.set_position(Vector2::ZERO);
         let mut queued = Some(queued);
-        object.signal(move |_| queued.take().unwrap().play());
+        object.signal(move |_, _| queued.take().unwrap().play());
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(0.0);

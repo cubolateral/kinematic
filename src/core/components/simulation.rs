@@ -1,6 +1,6 @@
 use kinematic_macros::Trackable;
 
-use crate::core::components::RenderContext3D;
+use crate::core::{components::RenderContext3D, frame_dt};
 
 const CHECKPOINT_INTERVAL_SECONDS: u64 = 2;
 
@@ -250,7 +250,7 @@ impl Simulation {
             }
         }
 
-        let dt = 1.0 / fps.max(1) as f32;
+        let dt = frame_dt(fps);
         let checkpoint_interval = u64::from(fps.max(1)) * CHECKPOINT_INTERVAL_SECONDS;
         if !self.initial_frame_processed {
             let manual = self.manual_steps(0, dt, start_time);
@@ -341,6 +341,12 @@ mod tests {
         observed: Arc<Mutex<(u64, f32)>>,
     }
 
+    #[derive(Clone)]
+    struct RandomCounter {
+        random: crate::core::Random,
+        observed: Arc<Mutex<u64>>,
+    }
+
     struct DrawSetting(u32);
 
     #[derive(Clone)]
@@ -371,6 +377,22 @@ mod tests {
             _canvas: &skia_safe::Canvas,
         ) {
             *self.observed.lock().unwrap() = (self.steps, self.elapsed);
+        }
+    }
+
+    impl SimulationState for RandomCounter {
+        fn on_update(&mut self, _dt: f32) {
+            *self.observed.lock().unwrap() = self.random.u64();
+        }
+    }
+
+    impl SimulationState2D for RandomCounter {
+        fn on_draw(
+            &self,
+            _world: &hecs::World,
+            _entity: hecs::Entity,
+            _canvas: &skia_safe::Canvas,
+        ) {
         }
     }
 
@@ -425,6 +447,23 @@ mod tests {
         assert_eq!(replayed.0, 111);
         assert!((replayed.1 - 5.55).abs() < 1e-5);
         assert_eq!(first, replayed);
+    }
+
+    #[test]
+    fn seek_restores_random_state_from_checkpoints() {
+        let value = Arc::new(Mutex::new(0));
+        let mut simulation = Simulation::new_2d(RandomCounter {
+            random: crate::core::Random::new(42),
+            observed: Arc::clone(&value),
+        });
+
+        simulation.seek(110, 20, 0.0, |_| true);
+        let first = *value.lock().unwrap();
+        simulation.seek(3, 20, 0.0, |_| true);
+        assert_ne!(*value.lock().unwrap(), first);
+        simulation.seek(110, 20, 0.0, |_| true);
+
+        assert_eq!(*value.lock().unwrap(), first);
     }
 
     #[test]

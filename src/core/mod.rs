@@ -5,7 +5,9 @@ pub mod types;
 
 mod animator;
 mod easing;
+mod frame;
 mod project;
+mod random;
 mod scene;
 pub(crate) mod scene_file;
 mod signal;
@@ -15,7 +17,9 @@ mod tween;
 
 pub use animator::*;
 pub use easing::*;
+pub(crate) use frame::*;
 pub use project::*;
+pub use random::*;
 pub use scene::*;
 pub use signal::*;
 pub use task::*;
