@@ -706,13 +706,13 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     });
                 }
             }
-            Some("Quaternion") if field_ident == "rotation" => {
-                for (method, axis) in [
-                    ("rotate_x", quote!(#vector3_type::X)),
-                    ("rotate_y", quote!(#vector3_type::Y)),
-                    ("rotate_z", quote!(#vector3_type::Z)),
+            Some("Quaternion") => {
+                for (axis_name, axis) in [
+                    ("x", quote!(#vector3_type::X)),
+                    ("y", quote!(#vector3_type::Y)),
+                    ("z", quote!(#vector3_type::Z)),
                 ] {
-                    let method_name = format_ident!("{}", method);
+                    let method_name = format_ident!("{}_in_{}", field_ident, axis_name);
 
                     tween_fns.push(quote! {
                         pub fn #method_name(
@@ -735,8 +735,9 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     });
                 }
 
+                let method_name = format_ident!("{}_in_axis", field_ident);
                 tween_fns.push(quote! {
-                    pub fn rotate_axis(
+                    pub fn #method_name(
                         &self,
                         axis: #vector3_type,
                         angle: f32,
@@ -748,10 +749,10 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     }
                 });
                 tween_trait_fns.push(quote! {
-                    fn rotate_axis(self, axis: #vector3_type, angle: f32) -> Self;
+                    fn #method_name(self, axis: #vector3_type, angle: f32) -> Self;
                 });
                 tween_impl_fns.push(quote! {
-                    fn rotate_axis(self, axis: #vector3_type, angle: f32) -> Self {
+                    fn #method_name(self, axis: #vector3_type, angle: f32) -> Self {
                         self.rotate_track(#struct_name::#property_name(), axis, angle)
                     }
                 });

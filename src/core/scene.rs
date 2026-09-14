@@ -1321,7 +1321,7 @@ mod tests {
         scene.get_world_3d().add(&object);
         scene.repeat(|_| {
             object
-                .rotate_y(-2.0 * std::f32::consts::TAU)
+                .rotation_in_y(-2.0 * std::f32::consts::TAU)
                 .duration(4.0)
                 .easing(Easing::Linear)
                 .play();
@@ -1667,7 +1667,7 @@ mod tests {
         let cube = cube().build(&mut scene);
         scene.get_world_3d().add(&cube);
 
-        cube.rotate_y(std::f32::consts::TAU)
+        cube.rotation_in_y(std::f32::consts::TAU)
             .duration(2.0)
             .easing(Easing::Linear)
             .play();
