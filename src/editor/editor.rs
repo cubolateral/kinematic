@@ -216,6 +216,7 @@ impl Editor {
         skia_context: &mut skia_safe::gpu::DirectContext,
         gl: &glow::Context,
         window_size: (u32, u32),
+        mode: EditorMode,
     ) {
         let scene = &self.scenes[self.active_scene].scene;
         let key = scene.render_key();
@@ -256,8 +257,11 @@ impl Editor {
         }
 
         if !self.is_exporting {
-            self.draw_editor_2d(skia_context, gl, window_size, key);
-            self.draw_editor_3d(skia_context, gl, window_size, key);
+            match mode {
+                EditorMode::Preview => {}
+                EditorMode::Two => self.draw_editor_2d(skia_context, gl, window_size, key),
+                EditorMode::Three => self.draw_editor_3d(skia_context, gl, window_size, key),
+            }
         }
     }
 

@@ -190,7 +190,12 @@ impl App {
                 self.gl.clear(glow::COLOR_BUFFER_BIT);
             }
 
-            editor.draw(&mut self.skia_context, &self.gl, self.window.size());
+            editor.draw(
+                &mut self.skia_context,
+                &self.gl,
+                self.window.size(),
+                self.ui.render_mode(),
+            );
 
             self.ui.apply_scale(&mut self.imgui);
             self.imgui_sdl.new_frame(&mut self.imgui);

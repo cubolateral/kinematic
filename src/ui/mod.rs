@@ -100,4 +100,12 @@ impl Ui {
     pub(crate) fn editor_mode(&self) -> crate::editor::EditorMode {
         self.preview.cached_mode()
     }
+
+    pub(crate) fn render_mode(&self) -> crate::editor::EditorMode {
+        if self.is_fullscreen {
+            crate::editor::EditorMode::Preview
+        } else {
+            self.editor_mode()
+        }
+    }
 }

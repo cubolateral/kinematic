@@ -14,7 +14,7 @@ pub(crate) const OBJECT_FADE_START: f32 = PARTICLE_FADE_START;
 const MAX_ATLAS_DIMENSION: f32 = 2048.0;
 const MAX_CACHE_ENTRIES: usize = 64;
 const MAX_GRID_OVERSAMPLING: usize = 64;
-const MAX_PARTICLE_COUNT: usize = 4_096;
+const MAX_PARTICLE_COUNT: usize = 4_096 * 4;
 const PARTICLE_SPACING: f32 = 2.0;
 const PARTICLE_SPRITE_RADIUS: f32 = 14.0;
 const PARTICLE_SPRITE_SIZE: i32 = 32;
@@ -105,7 +105,7 @@ impl CreationDraw<'_> {
             return false;
         }
 
-        let density = mask_density(canvas, bounds);
+        let density = mask_density(bounds);
         let particle_count = particle_count_for_bounds(bounds);
         let fingerprint = cache_fingerprint(visual_key, bounds, density, particle_count);
         let entity_key = entity
@@ -169,12 +169,8 @@ pub(crate) fn particle_count_for_bounds(bounds: skia_safe::Rect) -> usize {
     columns.saturating_mul(rows).clamp(1, MAX_PARTICLE_COUNT)
 }
 
-fn mask_density(canvas: &skia_safe::Canvas, bounds: skia_safe::Rect) -> f32 {
-    let matrix = canvas.local_to_device_as_3x3();
-    let scale_x = matrix.scale_x().hypot(matrix.skew_y());
-    let scale_y = matrix.skew_x().hypot(matrix.scale_y());
-    let desired = ((scale_x.max(scale_y).max(1.0) * 2.0).ceil() * 0.5).min(2.0);
-    (MAX_ATLAS_DIMENSION / bounds.width().max(bounds.height())).min(desired)
+fn mask_density(bounds: skia_safe::Rect) -> f32 {
+    (MAX_ATLAS_DIMENSION / bounds.width().max(bounds.height()).max(1.0)).min(2.0)
 }
 
 fn cache_fingerprint(
@@ -629,12 +625,10 @@ fn particle_sprite() -> skia_safe::Image {
     let mut paint = skia_safe::Paint::default();
     paint.set_anti_alias(true);
     paint.set_color(skia_safe::Color::WHITE);
-    canvas.draw_circle(
-        (
-            PARTICLE_SPRITE_SIZE as f32 * 0.5,
-            PARTICLE_SPRITE_SIZE as f32 * 0.5,
-        ),
-        PARTICLE_SPRITE_RADIUS,
+    let diameter = PARTICLE_SPRITE_RADIUS * 2.0;
+    let origin = (PARTICLE_SPRITE_SIZE as f32 - diameter) * 0.5;
+    canvas.draw_rect(
+        skia_safe::Rect::from_xywh(origin, origin, diameter, diameter),
         &paint,
     );
     surface.image_snapshot()
@@ -701,6 +695,15 @@ mod tests {
         assert_eq!(
             particle_count_for_bounds(skia_safe::Rect::from_wh(1_000.0, 1_000.0)),
             MAX_PARTICLE_COUNT
+        );
+    }
+
+    #[test]
+    fn mask_density_depends_only_on_local_bounds() {
+        assert_eq!(mask_density(skia_safe::Rect::from_wh(256.0, 256.0)), 2.0);
+        assert_eq!(
+            mask_density(skia_safe::Rect::from_wh(4_096.0, 1_024.0)),
+            0.5
         );
     }
 
