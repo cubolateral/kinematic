@@ -10,8 +10,8 @@ const CHECKPOINT_INTERVAL_SECONDS: u64 = 2;
 /// `dt` of `1.0 / fps`. The complete value is cloned for seek checkpoints, so
 /// every value that influences future updates must live in this state.
 ///
-/// Use [`SimulationState2D`] or [`SimulationState3D`] to provide read-only
-/// drawing for the corresponding simulation object.
+/// Use [`SimulationState2D`] or [`SimulationState3D`] to draw the corresponding
+/// simulation object.
 pub trait SimulationState: Clone + Send + Sync + 'static {
     /// Advances the state by one project frame.
     fn on_update(&mut self, dt: f32);
@@ -21,11 +21,12 @@ pub trait SimulationState: Clone + Send + Sync + 'static {
 ///
 /// Drawing receives the scene world, simulation entity, and object's local Skia
 /// canvas. The scene renderer applies [`crate::core::components::Transform2D`]
-/// and composites opacity before this callback. It must not mutate simulation
-/// state.
+/// and composites opacity before this callback. Mutations made while drawing
+/// are visual runtime state: they are not synchronized to the timeline and may
+/// be discarded when seeking rebuilds the simulation.
 pub trait SimulationState2D: SimulationState {
     /// Draws the current state in the simulation object's local coordinates.
-    fn on_draw(&self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas);
+    fn on_draw(&mut self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas);
 
     /// Returns the simulation's local bounding-box size.
     fn get_box(&self) -> glam::Vec2 {
@@ -37,12 +38,13 @@ pub trait SimulationState2D: SimulationState {
 ///
 /// Drawing receives the scene world and simulation entity. Submit geometry with
 /// transforms local to the simulation. [`RenderContext3D`] combines them with
-/// the simulation object's global transform. Drawing must not mutate simulation
-/// state.
+/// the simulation object's global transform. Mutations made while drawing are
+/// visual runtime state: they are not synchronized to the timeline and may be
+/// discarded when seeking rebuilds the simulation.
 pub trait SimulationState3D: SimulationState {
     /// Draws the current state using the supplied global object transform.
     fn on_draw(
-        &self,
+        &mut self,
         world: &hecs::World,
         entity: hecs::Entity,
         context: &mut RenderContext3D<'_>,
@@ -57,12 +59,18 @@ pub trait SimulationState3D: SimulationState {
 trait ErasedSimulation: Send + Sync {
     fn clone_box(&self) -> Box<dyn ErasedSimulation>;
     fn on_update(&mut self, dt: f32);
-    fn draw_2d(&self, _world: &hecs::World, _entity: hecs::Entity, _canvas: &skia_safe::Canvas) {}
+    fn draw_2d(
+        &mut self,
+        _world: &hecs::World,
+        _entity: hecs::Entity,
+        _canvas: &skia_safe::Canvas,
+    ) {
+    }
     fn box_2d(&self) -> glam::Vec2 {
         glam::Vec2::ZERO
     }
     fn draw_3d(
-        &self,
+        &mut self,
         _world: &hecs::World,
         _entity: hecs::Entity,
         _context: &mut RenderContext3D<'_>,
@@ -92,7 +100,7 @@ impl<S: SimulationState2D> ErasedSimulation for State2D<S> {
         self.0.on_update(dt);
     }
 
-    fn draw_2d(&self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+    fn draw_2d(&mut self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
         self.0.on_draw(world, entity, canvas);
     }
 
@@ -114,7 +122,7 @@ impl<S: SimulationState3D> ErasedSimulation for State3D<S> {
     }
 
     fn draw_3d(
-        &self,
+        &mut self,
         world: &hecs::World,
         entity: hecs::Entity,
         context: &mut RenderContext3D<'_>,
@@ -303,7 +311,12 @@ impl Simulation {
     }
 
     /// Draws the current 2D state with access to its owning scene entity.
-    pub fn draw_2d(&self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+    pub fn draw_2d(
+        &mut self,
+        world: &hecs::World,
+        entity: hecs::Entity,
+        canvas: &skia_safe::Canvas,
+    ) {
         self.current.draw_2d(world, entity, canvas);
     }
 
@@ -314,7 +327,7 @@ impl Simulation {
 
     /// Draws the current 3D state with access to its owning scene entity.
     pub fn draw_3d(
-        &self,
+        &mut self,
         world: &hecs::World,
         entity: hecs::Entity,
         context: &mut RenderContext3D<'_>,
@@ -347,6 +360,12 @@ mod tests {
         observed: Arc<Mutex<u64>>,
     }
 
+    #[derive(Clone)]
+    struct DrawCounter {
+        draws: u64,
+        observed: Arc<Mutex<u64>>,
+    }
+
     struct DrawSetting(u32);
 
     #[derive(Clone)]
@@ -357,7 +376,12 @@ mod tests {
     }
 
     impl SimulationState2D for ComponentReader {
-        fn on_draw(&self, world: &hecs::World, entity: hecs::Entity, _canvas: &skia_safe::Canvas) {
+        fn on_draw(
+            &mut self,
+            world: &hecs::World,
+            entity: hecs::Entity,
+            _canvas: &skia_safe::Canvas,
+        ) {
             *self.0.lock().unwrap() = Some(world.get::<&DrawSetting>(entity).unwrap().0);
         }
     }
@@ -371,7 +395,7 @@ mod tests {
 
     impl SimulationState2D for Counter {
         fn on_draw(
-            &self,
+            &mut self,
             _world: &hecs::World,
             _entity: hecs::Entity,
             _canvas: &skia_safe::Canvas,
@@ -388,7 +412,7 @@ mod tests {
 
     impl SimulationState2D for RandomCounter {
         fn on_draw(
-            &self,
+            &mut self,
             _world: &hecs::World,
             _entity: hecs::Entity,
             _canvas: &skia_safe::Canvas,
@@ -396,7 +420,23 @@ mod tests {
         }
     }
 
-    fn observed(simulation: &Simulation, value: &Arc<Mutex<(u64, f32)>>) -> (u64, f32) {
+    impl SimulationState for DrawCounter {
+        fn on_update(&mut self, _dt: f32) {}
+    }
+
+    impl SimulationState2D for DrawCounter {
+        fn on_draw(
+            &mut self,
+            _world: &hecs::World,
+            _entity: hecs::Entity,
+            _canvas: &skia_safe::Canvas,
+        ) {
+            self.draws += 1;
+            *self.observed.lock().unwrap() = self.draws;
+        }
+    }
+
+    fn observed(simulation: &mut Simulation, value: &Arc<Mutex<(u64, f32)>>) -> (u64, f32) {
         let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
         let mut world = hecs::World::new();
         let entity = world.spawn(());
@@ -415,11 +455,28 @@ mod tests {
         let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
 
         world
-            .get::<&Simulation>(entity)
+            .get::<&mut Simulation>(entity)
             .unwrap()
             .draw_2d(&world, entity, surface.canvas());
 
         assert_eq!(*observed.lock().unwrap(), Some(42));
+    }
+
+    #[test]
+    fn drawing_can_mutate_visual_runtime_state() {
+        let observed = Arc::new(Mutex::new(0));
+        let mut simulation = Simulation::new_2d(DrawCounter {
+            draws: 0,
+            observed: Arc::clone(&observed),
+        });
+        let mut world = hecs::World::new();
+        let entity = world.spawn(());
+        let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
+
+        simulation.draw_2d(&world, entity, surface.canvas());
+        simulation.draw_2d(&world, entity, surface.canvas());
+
+        assert_eq!(*observed.lock().unwrap(), 2);
     }
 
     #[test]
@@ -432,7 +489,7 @@ mod tests {
         });
 
         simulation.seek(110, 20, 0.0, |_| true);
-        let first = observed(&simulation, &value);
+        let first = observed(&mut simulation, &value);
         assert!(
             simulation
                 .checkpoints
@@ -440,10 +497,10 @@ mod tests {
                 .any(|checkpoint| checkpoint.frame == 20 * CHECKPOINT_INTERVAL_SECONDS)
         );
         simulation.seek(3, 20, 0.0, |_| true);
-        assert_eq!(observed(&simulation, &value).0, 4);
+        assert_eq!(observed(&mut simulation, &value).0, 4);
         simulation.seek(110, 20, 0.0, |_| true);
 
-        let replayed = observed(&simulation, &value);
+        let replayed = observed(&mut simulation, &value);
         assert_eq!(replayed.0, 111);
         assert!((replayed.1 - 5.55).abs() < 1e-5);
         assert_eq!(first, replayed);
@@ -477,7 +534,7 @@ mod tests {
 
         simulation.seek(6, 10, 0.0, |time| time < 0.3 || time > 0.5);
 
-        assert_eq!(observed(&simulation, &value).0, 4);
+        assert_eq!(observed(&mut simulation, &value).0, 4);
     }
 
     fn steps(auto_update: bool, manual_updates: u32) -> u64 {
@@ -491,7 +548,7 @@ mod tests {
             simulation.schedule_update(0.0);
         }
         simulation.seek(0, 10, 0.0, |_| auto_update);
-        observed(&simulation, &value).0
+        observed(&mut simulation, &value).0
     }
 
     #[test]

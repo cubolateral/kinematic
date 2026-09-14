@@ -31,7 +31,7 @@ impl Default for Simulation2D {
             draw: Draw2D {
                 on_draw: |world, entity, canvas, _opacity| {
                     world
-                        .get::<&Simulation>(entity)
+                        .get::<&mut Simulation>(entity)
                         .unwrap()
                         .draw_2d(world, entity, canvas);
                 },
@@ -131,7 +131,7 @@ fn draw_simulation_3d(
 ) -> Result<(), String> {
     let previous = context.set_current_transform(global_matrix3d(world, entity));
     let result = world
-        .get::<&Simulation>(entity)
+        .get::<&mut Simulation>(entity)
         .unwrap()
         .draw_3d(world, entity, context);
     context.set_current_transform(previous);
@@ -158,7 +158,12 @@ mod tests {
     }
 
     impl SimulationState2D for Solid {
-        fn on_draw(&self, _world: &hecs::World, _entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+        fn on_draw(
+            &mut self,
+            _world: &hecs::World,
+            _entity: hecs::Entity,
+            canvas: &skia_safe::Canvas,
+        ) {
             canvas.draw_rect(
                 skia_safe::Rect::from_xywh(-4.0, -4.0, 8.0, 8.0),
                 &skia_safe::Paint::new(skia_safe::colors::WHITE, None),
@@ -179,7 +184,7 @@ mod tests {
 
     impl SimulationState2D for Counter {
         fn on_draw(
-            &self,
+            &mut self,
             _world: &hecs::World,
             _entity: hecs::Entity,
             _canvas: &skia_safe::Canvas,

@@ -14,7 +14,7 @@ impl SimulationState for State {
 }
 
 impl SimulationState2D for State {
-    fn on_draw(&self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+    fn on_draw(&mut self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
         let color = world.get::<&Appearance>(entity).unwrap().color;
         canvas.clear(skia_safe::Color4f::new(color.r, color.g, color.b, color.a));
     }
@@ -48,7 +48,7 @@ impl Default for CustomSimulation {
             draw: Draw2D {
                 on_draw: |world, entity, canvas, _opacity| {
                     world
-                        .get::<&Simulation>(entity)
+                        .get::<&mut Simulation>(entity)
                         .unwrap()
                         .draw_2d(world, entity, canvas);
                 },

@@ -42,7 +42,7 @@ impl SimulationState for Life {
 }
 
 impl SimulationState2D for Life {
-    fn on_draw(&self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+    fn on_draw(&mut self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
         let appearance = world.get::<&Life2DAppearance>(entity).unwrap();
         let origin = -(SIZE as f32 * CELL_2D) / 2.0;
         let [r, g, b, a] = appearance.color.rgba();
@@ -73,7 +73,7 @@ impl SimulationState2D for Life {
 
 impl SimulationState3D for Life {
     fn on_draw(
-        &self,
+        &mut self,
         world: &hecs::World,
         entity: hecs::Entity,
         context: &mut RenderContext3D<'_>,
@@ -178,7 +178,7 @@ impl Default for Life2D {
             draw: Draw2D {
                 on_draw: |world, entity, canvas, _opacity| {
                     world
-                        .get::<&Simulation>(entity)
+                        .get::<&mut Simulation>(entity)
                         .unwrap()
                         .draw_2d(world, entity, canvas);
                 },
@@ -236,7 +236,7 @@ fn draw_life_3d(
 ) -> Result<(), String> {
     let previous = context.set_current_transform(global_matrix3d(world, entity));
     let result = world
-        .get::<&Simulation>(entity)
+        .get::<&mut Simulation>(entity)
         .unwrap()
         .draw_3d(world, entity, context);
     context.set_current_transform(previous);
