@@ -89,6 +89,7 @@ pub(crate) struct Editor {
     render_error: Option<String>,
     renderer: Renderer,
     pending_export_time: Option<f32>,
+    pending_screenshot: bool,
     is_exporting: bool,
     accumulator: f32,
     window_timer: FrameTimer,
@@ -170,6 +171,7 @@ impl Editor {
             render_error: None,
             renderer,
             pending_export_time: None,
+            pending_screenshot: false,
             is_exporting: false,
             accumulator: 0.0,
             window_timer: FrameTimer::new(),
@@ -185,6 +187,12 @@ impl Editor {
 
     pub fn update(&mut self) {
         self.window_timer.tick();
+
+        if self.pending_screenshot {
+            self.canvas_timer.tick();
+            self.accumulator = 0.0;
+            return;
+        }
 
         if self.is_exporting {
             if let Some(time) = self.pending_export_time.take() {
@@ -234,6 +242,7 @@ impl Editor {
             if let Err(error) = result {
                 self.rendered = None;
                 self.render_error = Some(error);
+                self.pending_screenshot = false;
                 if self.is_exporting {
                     self.renderer.cancel();
                     self.is_exporting = false;
@@ -254,6 +263,16 @@ impl Editor {
             if self.is_exporting {
                 self.process_export_frame(gl);
             }
+        }
+
+        if self.pending_screenshot {
+            self.renderer.screenshot(
+                gl,
+                self.preview.get_framebuffer(),
+                self.project.name,
+                self.project.settings.resolution,
+            );
+            self.pending_screenshot = false;
         }
 
         if !self.is_exporting {
@@ -297,6 +316,12 @@ impl Editor {
 
     pub fn is_exporting(&self) -> bool {
         self.is_exporting
+    }
+
+    pub fn request_screenshot(&mut self) {
+        if !self.is_exporting {
+            self.pending_screenshot = true;
+        }
     }
 
     pub fn get_export_progress(&self) -> f32 {
@@ -385,6 +410,7 @@ impl Editor {
         self.selection.clear();
         self.render_error = None;
         self.pending_export_time = None;
+        self.pending_screenshot = false;
         self.is_exporting = false;
         self.accumulator = 0.0;
         self.update_active_scene(0.0);

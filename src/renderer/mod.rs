@@ -69,6 +69,21 @@ impl Renderer {
         self.message = Some("Export canceled.".to_owned());
     }
 
+    pub fn screenshot(
+        &mut self,
+        gl: &glow::Context,
+        framebuffer: glow::NativeFramebuffer,
+        project_name: &str,
+        resolution: (u32, u32),
+    ) {
+        match save_screenshot(gl, framebuffer, project_name, resolution) {
+            Ok(path) => {
+                self.message = Some(format!("Screenshot saved: {}.", path.display()));
+            }
+            Err(error) => self.message = Some(error.to_string()),
+        }
+    }
+
     pub fn process_frame(
         &mut self,
         gl: &glow::Context,
@@ -166,10 +181,10 @@ impl Renderer {
     ) -> Result<Export, RenderError> {
         validate_project(project_name, resolution, fps, duration)?;
 
-        let output_path = output_path(project_name);
         let frame_size = frame_size(resolution)?;
 
         std::fs::create_dir_all("output")?;
+        let output_path = available_output_path(project_name, "mp4");
 
         let encoder = Encoder::new(&output_path, resolution, fps, silent)?;
         let frame_count = frame_count(duration, fps);
@@ -228,7 +243,7 @@ impl std::fmt::Display for RenderError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidProject(message) | Self::Graphics(message) => formatter.write_str(message),
-            Self::Io(error) => write!(formatter, "Export I/O failed: {error}."),
+            Self::Io(error) => write!(formatter, "Output I/O failed: {error}."),
             Self::FfmpegFailed(status) => {
                 write!(
                     formatter,
@@ -296,8 +311,83 @@ fn validate_project(
     Ok(())
 }
 
-fn output_path(name: &str) -> std::path::PathBuf {
-    std::path::Path::new("output").join(format!("{name}.mp4"))
+fn available_output_path(name: &str, extension: &str) -> std::path::PathBuf {
+    available_path(std::path::Path::new("output"), name, extension)
+}
+
+fn available_path(directory: &std::path::Path, name: &str, extension: &str) -> std::path::PathBuf {
+    let initial = directory.join(format!("{name}.{extension}"));
+    if !initial.exists() {
+        return initial;
+    }
+
+    for index in 0_u64.. {
+        let candidate = directory.join(format!("{name}-{index}.{extension}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+
+    unreachable!("A free output file name must exist.")
+}
+
+fn save_screenshot(
+    gl: &glow::Context,
+    framebuffer: glow::NativeFramebuffer,
+    project_name: &str,
+    resolution: (u32, u32),
+) -> Result<std::path::PathBuf, RenderError> {
+    validate_project(project_name, resolution, 1, 0.0)?;
+    let size = frame_size(resolution)?;
+    let row_bytes = usize::try_from(resolution.0).unwrap() * 4;
+    let mut pixels = vec![0; size];
+
+    unsafe {
+        gl.bind_buffer(glow::PIXEL_PACK_BUFFER, None);
+        gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(framebuffer));
+        gl.read_buffer(glow::COLOR_ATTACHMENT0);
+        gl.pixel_store_i32(glow::PACK_ALIGNMENT, 1);
+        gl.read_pixels(
+            0,
+            0,
+            resolution.0 as i32,
+            resolution.1 as i32,
+            glow::RGBA,
+            glow::UNSIGNED_BYTE,
+            glow::PixelPackData::Slice(Some(&mut pixels)),
+        );
+        gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
+    }
+
+    let height = usize::try_from(resolution.1).unwrap();
+    for row in 0..height / 2 {
+        let opposite = height - row - 1;
+        let (top, bottom) = pixels.split_at_mut(opposite * row_bytes);
+        top[row * row_bytes..(row + 1) * row_bytes].swap_with_slice(&mut bottom[..row_bytes]);
+    }
+
+    let info = skia_safe::ImageInfo::new(
+        (resolution.0 as i32, resolution.1 as i32),
+        skia_safe::ColorType::RGBA8888,
+        skia_safe::AlphaType::Opaque,
+        None,
+    );
+    let image =
+        skia_safe::images::raster_from_data(&info, skia_safe::Data::new_copy(&pixels), row_bytes)
+            .ok_or_else(|| RenderError::Graphics("Screenshot image creation failed.".to_owned()))?;
+    let png = image
+        .encode(None, skia_safe::EncodedImageFormat::PNG, None)
+        .ok_or_else(|| RenderError::Graphics("Screenshot PNG encoding failed.".to_owned()))?;
+
+    std::fs::create_dir_all("output")?;
+    let path = available_output_path(&format!("{project_name}-screenshot"), "png");
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
+    std::io::Write::write_all(&mut file, png.as_bytes())?;
+
+    Ok(path)
 }
 
 fn frame_count(duration: f32, fps: u32) -> u64 {
@@ -410,11 +500,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn output_path_uses_the_project_name() {
+    fn available_path_adds_an_incrementing_suffix_for_existing_files() {
+        let directory = std::env::temp_dir().join(format!(
+            "kinematic-output-path-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+
+        let initial = directory.join("Example project.mp4");
         assert_eq!(
-            output_path("Example project"),
-            std::path::Path::new("output/Example project.mp4"),
+            available_path(&directory, "Example project", "mp4"),
+            initial,
         );
+        std::fs::write(&initial, []).unwrap();
+
+        let first_suffix = directory.join("Example project-0.mp4");
+        assert_eq!(
+            available_path(&directory, "Example project", "mp4"),
+            first_suffix,
+        );
+        std::fs::write(&first_suffix, []).unwrap();
+        assert_eq!(
+            available_path(&directory, "Example project", "mp4"),
+            directory.join("Example project-1.mp4"),
+        );
+
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

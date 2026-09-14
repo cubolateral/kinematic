@@ -16,7 +16,7 @@ impl Encoder {
         let fps = fps.to_string();
         let mut child = std::process::Command::new("ffmpeg")
             .args([
-                "-y",
+                "-n",
                 "-f",
                 "rawvideo",
                 "-pixel_format",
