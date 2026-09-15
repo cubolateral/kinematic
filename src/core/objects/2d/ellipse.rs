@@ -98,7 +98,7 @@ impl Default for Ellipse {
 
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
-                get_box: |world, entity| {
+                box_size: |world, entity| {
                     world.get::<&EllipseShape>(entity).unwrap().radius.abs() * 2.0
                 },
                 ..Default::default()
@@ -116,7 +116,7 @@ mod tests {
         let mut scene = Scene::new();
         let ellipse = ellipse().radius(vec2(160.0, 80.0)).build(&mut scene);
 
-        assert_eq!(ellipse.get_box(), vec2(320.0, 160.0));
+        assert_eq!(ellipse.box_size(), vec2(320.0, 160.0));
         assert_eq!(
             ellipse.get(EllipseShape::radius_property()),
             vec2(160.0, 80.0)

@@ -52,7 +52,7 @@ fn example(s: &mut Scene) {
         .fill(Color::RED)
         .build(s);
 
-    s.get_world_2d().add(&circle);
+    s.world_2d().add(&circle);
 
     circle
         .position_x(256.0)
@@ -118,7 +118,7 @@ stored cycle directly. For example, this scene levitates for ten seconds:
 #[scene]
 fn levitation(s: &mut Scene) {
     let object = circle().build(s);
-    s.get_world_2d().add(&object);
+    s.world_2d().add(&object);
 
     s.repeat(|_| {
         object.position_y(-40.0).duration(1.0).easing(Easing::InOutSine).play();
@@ -221,7 +221,7 @@ impl Default for LifeObject {
             transform: Transform2D::default(),
             draw: Draw2D {
                 on_draw: Simulation::draw_2d,
-                get_box: Simulation::box_2d,
+                box_size: Simulation::box_2d,
                 ..Draw2D::default()
             },
         }
@@ -235,7 +235,7 @@ replayed through seeks and checkpoints:
 
 ```rust
 let life = life().auto_update(false).build(s);
-s.get_world_2d().add(&life);
+s.world_2d().add(&life);
 
 life.write_simulation(|state| state.cells[2] = true);
 life.update();
@@ -288,10 +288,10 @@ the next update:
 #[scene]
 fn follow_camera(s: &mut Scene) {
     let circle = circle().build(s);
-    s.get_world_2d().add(&circle);
+    s.world_2d().add(&circle);
 
-    s.get_world_2d().signal(move |handler, _frame| {
-        handler.set_camera_position(circle.get_global_position());
+    s.world_2d().signal(move |handler, _frame| {
+        handler.set_camera_position(circle.global_position());
     });
 }
 ```
@@ -322,7 +322,7 @@ let circle = circle().build(s);
 let circle_for_signal = circle.clone();
 
 canvas.signal(move |handler, _frame| {
-    handler.set_camera_position(circle_for_signal.get_global_position());
+    handler.set_camera_position(circle_for_signal.global_position());
 });
 ```
 
@@ -346,10 +346,10 @@ starts at `(0, 0, 3)`:
 ```rust
 #[scene]
 fn scene_3d(s: &mut Scene) {
-    s.get_root().view_2d(false).immediate();
+    s.root().view_2d(false).immediate();
 
     let group = group_3d().build(s);
-    s.get_world_3d().add(&group);
+    s.world_3d().add(&group);
 
     group.add(
         &cube()
@@ -410,7 +410,7 @@ impl Default for CustomCube {
             shape: CustomShape,
             draw: Draw3D {
                 on_draw: draw_custom,
-                get_box: |_, _| Vector3::ONE,
+                box_size: |_, _| Vector3::ONE,
             },
         }
     }
@@ -453,7 +453,7 @@ let projection = projection_2d()
     .stroke(Color::WHITE)
     .stroke_width(4.0)
     .build(s);
-s.get_world_2d().add(&projection);
+s.world_2d().add(&projection);
 ```
 
 `Projection2D` uses a transparent fill by default, so its source remains
@@ -471,7 +471,7 @@ let formula = latex_2d()
     .text(r"\frac{1}{2}")
     .size(64.0)
     .build(s);
-s.get_world_2d().add(&formula);
+s.world_2d().add(&formula);
 creation().play(&formula);
 formula.morph(r"\sqrt{2}").duration(2.0).play();
 ```
@@ -494,7 +494,7 @@ let target = text_2d()
     .position(vec2(240.0, 0.0))
     .fill(Color::BLUE)
     .build(s);
-s.get_world_2d().add(&source);
+s.world_2d().add(&source);
 
 morph()
     .duration(2.5)
@@ -529,7 +529,7 @@ let circle = circle().build(&mut scene);
 let child_group = group_2d().build(&mut scene);
 
 child_group.add(&circle);
-scene.get_world_2d().add(&child_group);
+scene.world_2d().add(&child_group);
 ```
 
 The `Container` derive gives an object's generated handler the `add` method.
@@ -542,12 +542,12 @@ let circle = child_group
 let first_entity = child_group
     .get_child_entity(0)
     .expect("First child must exist.");
-let child_entities = child_group.get_children();
+let child_entities = child_group.children();
 ```
 
 `get_child` returns `ChildError::NotFound` when the index is absent and
 `ChildError::TypeMismatch` when the child is a different object type.
-`get_child_entity` returns one untyped entity id, while `get_children` returns
+`get_child_entity` returns one untyped entity id, while `children` returns
 all direct child ids in insertion order.
 `Group2D` uses it to organize transformable subtrees, but hierarchy traversal is
 not coupled to that concrete type. Container transforms are inherited through
@@ -560,7 +560,7 @@ Camera tracks are exposed directly by the canvas handler. Their names use the
 `camera_` prefix so they do not conflict with object transform tracks:
 
 ```rust
-let world = scene.get_world_2d();
+let world = scene.world_2d();
 world
     .camera_position(vec2(200.0, 0.0))
     .camera_zoom(2.0)
@@ -590,10 +590,10 @@ canvas camera never affects another canvas.
 `ObjectHandler::remove()` ends the object's lifetime and the lifetimes of all
 its descendants. The stored tree remains intact so seeking to an earlier time
 restores the subtree. A typed handler exposes its underlying ECS entity through
-`ObjectHandler::get_id()` when direct identification is needed. Every object
+`ObjectHandler::entity()` when direct identification is needed. Every object
 also has a user-facing name. It defaults to its Rust object type, can be set by
 the generated builder's `.name(...)` method, and can later be read or changed
-through `ObjectHandler::get_name()` and `ObjectHandler::set_name()`. The scene
+through `ObjectHandler::name()` and `ObjectHandler::set_name()`. The scene
 root is named `Root`.
 
 ## Development

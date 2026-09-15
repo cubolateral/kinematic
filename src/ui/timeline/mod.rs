@@ -26,14 +26,14 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         state.cancel_interactions();
     }
 
-    shortcuts(editor.get_timeline(), ui, !is_exporting);
+    shortcuts(editor.timeline_mut(), ui, !is_exporting);
     hide_single_window_tab(ui);
 
     ui.window(WINDOW_NAME).build(|| {
-        let fps = editor.get_preview_fps();
+        let fps = editor.preview_fps();
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
 
-        let response = controls::draw(editor.get_timeline(), ui, fps, !is_exporting, false);
+        let response = controls::draw(editor.timeline_mut(), ui, fps, !is_exporting, false);
         toggle_fullscreen = response.toggle_fullscreen;
         if response.screenshot {
             editor.request_screenshot();
@@ -42,11 +42,11 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         ui.separator();
 
         let time = {
-            let timeline = editor.get_timeline();
-            state.sync_duration(timeline.get_duration());
+            let timeline = editor.timeline_mut();
+            state.sync_duration(timeline.duration());
             let (start, end) = state.view_range();
             TimeRange {
-                current: timeline.get_time(),
+                current: timeline.time(),
                 start,
                 end,
             }
@@ -102,9 +102,9 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
         if is_exporting {
             state.interaction = Interaction::None;
-            editor.get_timeline().is_controlling = false;
+            editor.timeline_mut().is_controlling = false;
         } else {
-            interaction::update(editor.get_timeline(), ui, layout, state, timeline_hovered);
+            interaction::update(editor.timeline_mut(), ui, layout, state, timeline_hovered);
         }
     });
 

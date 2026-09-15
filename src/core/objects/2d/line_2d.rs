@@ -220,7 +220,7 @@ impl Default for Line2D {
 
                     draw_styled_path(&geometry.path, &style, transform.scale, opacity, canvas);
                 },
-                get_box: |world, entity| line_box(&world.get::<&Line2DShape>(entity).unwrap()),
+                box_size: |world, entity| line_box(&world.get::<&Line2DShape>(entity).unwrap()),
                 ..Default::default()
             },
         }
@@ -242,8 +242,8 @@ mod tests {
             .from_arrow_size(10.0)
             .to_arrow_size(40.0)
             .build(&mut scene);
-        let world = scene.get_world();
-        let shape = world.get::<&Line2DShape>(line.get_id()).unwrap();
+        let world = scene.world();
+        let shape = world.get::<&Line2DShape>(line.entity()).unwrap();
 
         assert_eq!(shape.from, vec2(-100.0, 20.0));
         assert_eq!(shape.to, vec2(100.0, 20.0));

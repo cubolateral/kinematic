@@ -32,9 +32,9 @@ pub(super) struct State {
 }
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
-    let selected = editor.get_selected_object();
+    let selected = editor.selected_object();
     let is_exporting = editor.is_exporting();
-    let is_playing = editor.get_timeline().is_playing();
+    let is_playing = editor.timeline_mut().is_playing();
 
     ui.window(WINDOW_NAME).build(|| {
         let Some((scene_index, entity)) = selected else {
@@ -42,8 +42,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             return;
         };
 
-        let scene = editor.get_scene_at(scene_index);
-        let world = scene.get_world();
+        let scene = editor.scene_at_mut(scene_index);
+        let world = scene.world();
         let Ok(inspection) = world.get::<&Inspection>(entity) else {
             ui.text_disabled("The selected object is unavailable.");
             return;

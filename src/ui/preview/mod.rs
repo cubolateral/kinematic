@@ -73,7 +73,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         {
             state.set_mode(Mode::Two);
             let canvas = editor.editor_2d_canvas();
-            if state.sync_canvas_2d(editor.get_active_scene_index(), canvas) {
+            if state.sync_canvas_2d(editor.active_scene_index(), canvas) {
                 editor.reset_editor_2d_view();
             }
             draw_editor_2d(editor, ui);
@@ -89,7 +89,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         {
             state.set_mode(Mode::Three);
             let canvas = editor.editor_3d_canvas();
-            if state.sync_canvas_3d(editor.get_active_scene_index(), canvas) {
+            if state.sync_canvas_3d(editor.active_scene_index(), canvas) {
                 editor.reset_editor_3d_view();
             }
             draw_editor_3d(editor, ui, plain_keyboard_input);
@@ -226,7 +226,7 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     if reset_camera_button(ui) {
         editor.reset_editor_2d_camera_transform();
     }
-    if let Some(error) = editor.get_render_error() {
+    if let Some(error) = editor.render_error() {
         ui.text_wrapped(error);
     }
 }

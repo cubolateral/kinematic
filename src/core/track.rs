@@ -635,11 +635,11 @@ impl<T: TrackValueType> TrackProperty<T> {
         }
     }
 
-    pub(crate) const fn get_type_id(&self) -> std::any::TypeId {
+    pub(crate) const fn type_id(&self) -> std::any::TypeId {
         self.type_id
     }
 
-    pub(crate) const fn get_info(&self) -> &'static TrackInfo {
+    pub(crate) const fn info(&self) -> &'static TrackInfo {
         self.info
     }
 

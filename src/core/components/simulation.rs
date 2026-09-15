@@ -71,7 +71,7 @@ pub trait SimulationState2D: SimulationState {
     fn on_draw(&mut self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas);
 
     /// Returns the simulation's local bounding-box size.
-    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> glam::Vec2 {
+    fn box_size(&self, _world: &hecs::World, _entity: hecs::Entity) -> glam::Vec2 {
         glam::Vec2::ZERO
     }
 }
@@ -93,7 +93,7 @@ pub trait SimulationState3D: SimulationState {
     ) -> Result<(), String>;
 
     /// Returns the simulation's local bounding-box size.
-    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> glam::Vec3 {
+    fn box_size(&self, _world: &hecs::World, _entity: hecs::Entity) -> glam::Vec3 {
         glam::Vec3::ZERO
     }
 }
@@ -178,7 +178,7 @@ impl<S: SimulationState2D> ErasedSimulation for State2D<S> {
     }
 
     fn box_2d(&self, world: &hecs::World, entity: hecs::Entity) -> glam::Vec2 {
-        self.0.get_box(world, entity)
+        self.0.box_size(world, entity)
     }
 }
 
@@ -212,7 +212,7 @@ impl<S: SimulationState3D> ErasedSimulation for State3D<S> {
     }
 
     fn box_3d(&self, world: &hecs::World, entity: hecs::Entity) -> glam::Vec3 {
-        self.0.get_box(world, entity)
+        self.0.box_size(world, entity)
     }
 }
 

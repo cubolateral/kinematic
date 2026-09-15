@@ -32,10 +32,10 @@ pub(super) fn draw(
     interactive: bool,
 ) {
     let origin = ui.cursor_screen_pos();
-    let selected = editor.get_selected_entity();
-    let scene_range = editor.get_scene_range();
-    let root = editor.get_scene().get_root().get_id();
-    let world = editor.get_scene().get_world();
+    let selected = editor.selected_entity();
+    let scene_range = editor.scene_range();
+    let root = editor.scene_mut().root().entity();
+    let world = editor.scene_mut().world();
     let (root_lifetime, root_name) = {
         let root_node = world
             .get::<&Node>(root)

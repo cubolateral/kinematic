@@ -94,7 +94,7 @@ impl Canvases {
             self.frame,
             over_budget,
         );
-        let output = scene.get_view();
+        let output = scene.view_texture();
         if order.contains(&output.entity) {
             self.targets
                 .get(&output)
@@ -131,7 +131,7 @@ impl Canvases {
             self.geometry_usage.insert(*key, self.frame);
         }
 
-        let world = scene.get_world();
+        let world = scene.world();
         let settings = world
             .get::<&CanvasSettings>(entity)
             .map_err(|_| "Selected canvas is unavailable.")?;
@@ -183,7 +183,7 @@ impl Canvases {
             .collect::<Vec<_>>();
         self.render_targets(scene, &dependencies, &plan.sources, skia)?;
 
-        let world = scene.get_world();
+        let world = scene.world();
         let settings = world
             .get::<&CanvasSettings>(entity)
             .map_err(|_| "Selected canvas is unavailable.")?;
@@ -247,9 +247,9 @@ impl Canvases {
         sources: &HashMap<hecs::Entity, Vec<CanvasTexture>>,
         skia: &mut skia_safe::gpu::DirectContext,
     ) -> Result<(), String> {
-        let world = scene.get_world();
+        let world = scene.world();
         let scene_id = world
-            .get::<&SceneIdentity>(scene.get_root().get_id())
+            .get::<&SceneIdentity>(scene.root().entity())
             .unwrap()
             .0;
         self.used_geometries.clear();
@@ -451,9 +451,9 @@ mod tests {
     #[test]
     fn perspective_aspect_follows_canvas_resolution() {
         let scene = Scene::new();
-        let handler = scene.get_world_3d();
+        let handler = scene.world_3d();
         for resolution in [(1920, 1080), (512, 1024)] {
-            let view = camera(&scene.get_world(), handler.get_id(), resolution).unwrap();
+            let view = camera(&scene.world(), handler.entity(), resolution).unwrap();
             let projection = view.projection();
             let aspect = projection.y.y / projection.x.x;
             assert!((aspect - resolution.0 as f32 / resolution.1 as f32).abs() < 1e-5);

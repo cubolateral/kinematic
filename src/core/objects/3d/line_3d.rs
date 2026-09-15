@@ -232,7 +232,7 @@ impl Default for Line3D {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_line_3d,
-                get_box: |world, entity| line_box(&world.get::<&Line3DShape>(entity).unwrap()),
+                box_size: |world, entity| line_box(&world.get::<&Line3DShape>(entity).unwrap()),
                 ..Default::default()
             },
         }
@@ -315,8 +315,8 @@ mod tests {
             .line_sides(12)
             .arrow_sides(8)
             .build(&mut scene);
-        let world = scene.get_world();
-        let shape = world.get::<&Line3DShape>(line.get_id()).unwrap();
+        let world = scene.world();
+        let shape = world.get::<&Line3DShape>(line.entity()).unwrap();
 
         assert_eq!(shape.from, vec3(-1.0, 2.0, 3.0));
         assert_eq!(shape.to, vec3(4.0, 5.0, 6.0));

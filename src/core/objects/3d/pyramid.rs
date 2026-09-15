@@ -49,7 +49,7 @@ impl Default for Pyramid {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_pyramid,
-                get_box: |world, entity| world.get::<&PyramidShape>(entity).unwrap().size.abs(),
+                box_size: |world, entity| world.get::<&PyramidShape>(entity).unwrap().size.abs(),
                 ..Default::default()
             },
         }
@@ -133,13 +133,13 @@ mod tests {
             .sides(3)
             .build(&mut scene);
 
-        assert_eq!(pyramid.get_box(), vec3(2.0, 3.0, 4.0));
+        assert_eq!(pyramid.box_size(), vec3(2.0, 3.0, 4.0));
         assert_eq!(pyramid.get(PyramidShape::sides_property()), 3);
         assert!(pyramid.get(PyramidShape::cap_property()));
         assert_eq!(
             scene
-                .get_world()
-                .get::<&PyramidShape>(pyramid.get_id())
+                .world()
+                .get::<&PyramidShape>(pyramid.entity())
                 .unwrap()
                 .sides,
             3

@@ -972,7 +972,7 @@ impl Default for Text2D {
             transform: Default::default(),
             draw: Draw2D {
                 on_draw: draw_text,
-                get_box: |world, entity| text_box(&world.get::<&TextShape>(entity).unwrap()),
+                box_size: |world, entity| text_box(&world.get::<&TextShape>(entity).unwrap()),
                 ..Default::default()
             },
         }
@@ -985,7 +985,7 @@ impl Text2DHandler {
         let from = self.get(TextShape::text_property());
         let to = text.into();
         let tween = self.text(to.clone());
-        fade_string(tween, self.get_id(), from, to)
+        fade_string(tween, self.entity(), from, to)
     }
 
     /// Morphs this text into `text` through particle silhouettes.
@@ -996,7 +996,7 @@ impl Text2DHandler {
         let text = text.into();
         let from_text = self.get(TextShape::text_property());
         let tween = self.text(text.clone());
-        morph_text(tween, self.get_id(), from_text, text, prepare_text_morph)
+        morph_text(tween, self.entity(), from_text, text, prepare_text_morph)
     }
 
     pub(crate) fn play_write(&self, duration: f32, easing: Easing, reverse: bool) {
@@ -1006,9 +1006,9 @@ impl Text2DHandler {
         let plan = {
             let world = world.borrow();
             prepare_write_plan(
-                &world.get::<&TextShape>(self.get_id()).unwrap(),
-                &world.get::<&Style>(self.get_id()).unwrap(),
-                &world.get::<&Transform2D>(self.get_id()).unwrap(),
+                &world.get::<&TextShape>(self.entity()).unwrap(),
+                &world.get::<&Style>(self.entity()).unwrap(),
+                &world.get::<&Transform2D>(self.entity()).unwrap(),
                 duration,
                 easing,
                 reverse,
@@ -1020,36 +1020,36 @@ impl Text2DHandler {
         let total_duration = duration;
         let transition = {
             let mut world = world.borrow_mut();
-            if world.get::<&WriteState>(self.get_id()).is_err() {
+            if world.get::<&WriteState>(self.entity()).is_err() {
                 world
-                    .insert_one(self.get_id(), WriteState::default())
+                    .insert_one(self.entity(), WriteState::default())
                     .unwrap();
             }
-            let mut state = world.get::<&mut WriteState>(self.get_id()).unwrap();
+            let mut state = world.get::<&mut WriteState>(self.entity()).unwrap();
             let transition = state.plans.len() as u32;
             state.plans.push(plan);
             transition
         };
         let progress = WriteState::progress_property()
-            .handle(world.clone(), self.get_id(), animator.clone())
+            .handle(world.clone(), self.entity(), animator.clone())
             .animate_from::<Text2D>(0.0, total_duration)
             .duration(total_duration)
             .easing(Easing::Linear)
             .task();
         let transition = WriteState::transition_property()
-            .handle(world.clone(), self.get_id(), animator.clone())
+            .handle(world.clone(), self.entity(), animator.clone())
             .animate_from::<Text2D>(transition, transition)
             .duration(total_duration)
             .easing(Easing::Linear)
             .task();
         let activate = WriteState::active_property()
-            .handle(world.clone(), self.get_id(), animator.clone())
+            .handle(world.clone(), self.entity(), animator.clone())
             .animate_from::<Text2D>(false, true)
             .duration(0.0)
             .easing(Easing::Linear)
             .task();
         let active = WriteState::active_property()
-            .handle(world.clone(), self.get_id(), animator.clone())
+            .handle(world.clone(), self.entity(), animator.clone())
             .animate_from::<Text2D>(true, false)
             .duration(total_duration)
             .easing(Easing::Linear)
@@ -1057,7 +1057,7 @@ impl Text2DHandler {
         let animation = Task::All(vec![activate, progress, transition, active]);
         if reverse {
             let hide = Draw2D::opacity_property()
-                .handle(world, self.get_id(), animator.clone())
+                .handle(world, self.entity(), animator.clone())
                 .animate_from::<Text2D>(opacity, 0.0)
                 .duration(0.0)
                 .task();
@@ -1102,21 +1102,21 @@ mod tests {
             .build(&mut scene);
         let custom_path = std::path::PathBuf::from(fonts::CASKAYDIA_MONO);
         let custom = text_2d().font(custom_path.clone()).build(&mut scene);
-        let world = scene.get_world();
+        let world = scene.world();
 
         assert_eq!(
-            world.get::<&TextShape>(bundled.get_id()).unwrap().font,
+            world.get::<&TextShape>(bundled.entity()).unwrap().font,
             Font::new(fonts::HACK_MONO)
         );
         assert_eq!(
-            world.get::<&TextShape>(custom.get_id()).unwrap().font,
+            world.get::<&TextShape>(custom.entity()).unwrap().font,
             Font::new(custom_path)
         );
         assert_eq!(
-            world.get::<&TextShape>(bundled.get_id()).unwrap().thickness,
+            world.get::<&TextShape>(bundled.entity()).unwrap().thickness,
             3.0
         );
-        assert_eq!(TextShape::thickness_property().get_info().name, "thickness");
+        assert_eq!(TextShape::thickness_property().info().name, "thickness");
     }
 
     #[test]
@@ -1139,17 +1139,17 @@ mod tests {
         impl SceneBuilder for FadingText {
             fn build(&mut self, scene: &mut Scene) {
                 let label = text_2d().text("From").build(scene);
-                scene.get_world_2d().add(&label);
+                scene.world_2d().add(&label);
                 label.fade("To").duration(2.0).easing(Easing::Linear).play();
             }
         }
 
         let mut scene = Scene::new();
         assert_eq!(scene.build(&mut FadingText), 2.0);
-        assert_eq!(scene.get_world().query::<&TextShape>().iter().count(), 1);
+        assert_eq!(scene.world().query::<&TextShape>().iter().count(), 1);
 
         let state = |scene: &Scene| {
-            let world = scene.get_world();
+            let world = scene.world();
             let mut query = world.query::<(&TextShape, &Draw2D)>();
             let (shape, draw) = query.iter().next().unwrap();
             (shape.text.clone(), draw.opacity)
@@ -1174,7 +1174,7 @@ mod tests {
         impl SceneBuilder for ConsecutiveMorphs {
             fn build(&mut self, scene: &mut Scene) {
                 let text = text_2d().text("Kinematic").build(scene);
-                scene.get_world_2d().add(&text);
+                scene.world_2d().add(&text);
                 text.morph("Is").play();
                 text.morph("Awesome.").play();
             }
@@ -1183,12 +1183,12 @@ mod tests {
         let mut scene = Scene::new();
         assert_eq!(scene.build(&mut ConsecutiveMorphs), 2.0);
 
-        assert_eq!(scene.get_world().len(), 4);
+        assert_eq!(scene.world().len(), 4);
         scene.update(0.5);
         let first_morph = pixels(&scene);
         assert!(first_morph.iter().any(|color| color.a() > 0));
         {
-            let world = scene.get_world();
+            let world = scene.world();
             let mut query = world.query::<(&TextShape, &ContentMorph)>();
             let (shape, morph) = query.iter().next().unwrap();
 
@@ -1205,7 +1205,7 @@ mod tests {
 
         scene.update(1.5);
         {
-            let world = scene.get_world();
+            let world = scene.world();
             let mut query = world.query::<(&TextShape, &ContentMorph)>();
             let (shape, morph) = query.iter().next().unwrap();
 
@@ -1218,7 +1218,7 @@ mod tests {
         scene.update(0.5);
         assert_eq!(pixels(&scene), first_morph);
         scene.update(2.0);
-        let world = scene.get_world();
+        let world = scene.world();
         let mut query = world.query::<&TextShape>();
         assert_eq!(query.iter().next().unwrap().text, "Awesome.");
     }
@@ -1326,7 +1326,7 @@ mod tests {
         impl SceneBuilder for WrittenText {
             fn build(&mut self, scene: &mut Scene) {
                 let label = text_2d().text("ABC").build(scene);
-                scene.get_world_2d().add(&label);
+                scene.world_2d().add(&label);
                 write().duration(2.0).play(&label);
             }
         }
@@ -1335,7 +1335,7 @@ mod tests {
         assert_eq!(scene.build(&mut WrittenText), 2.0);
 
         scene.update(0.5);
-        let world = scene.get_world();
+        let world = scene.world();
         let mut query = world.query::<(&TextShape, &WriteState)>();
         let (shape, state) = query.iter().next().unwrap();
         assert_eq!(shape.text, "ABC");
@@ -1352,7 +1352,7 @@ mod tests {
         drop(query);
         drop(world);
         scene.update(2.0);
-        let world = scene.get_world();
+        let world = scene.world();
         assert!(!world.query::<&WriteState>().iter().next().unwrap().active);
     }
 
@@ -1363,7 +1363,7 @@ mod tests {
         impl SceneBuilder for DelayedWrite {
             fn build(&mut self, scene: &mut Scene) {
                 let label = text_2d().text("AB").build(scene);
-                scene.get_world_2d().add(&label);
+                scene.world_2d().add(&label);
                 scene.wait(1.0);
                 write().duration(1.0).play(&label);
             }
@@ -1374,7 +1374,7 @@ mod tests {
         scene.update(0.5);
         assert!(
             !scene
-                .get_world()
+                .world()
                 .query::<&WriteState>()
                 .iter()
                 .next()
@@ -1384,7 +1384,7 @@ mod tests {
         scene.update(1.0);
         assert!(
             scene
-                .get_world()
+                .world()
                 .query::<&WriteState>()
                 .iter()
                 .next()
@@ -1400,7 +1400,7 @@ mod tests {
         impl SceneBuilder for UnwrittenText {
             fn build(&mut self, scene: &mut Scene) {
                 let label = text_2d().text("ABC").build(scene);
-                scene.get_world_2d().add(&label);
+                scene.world_2d().add(&label);
                 unwrite().duration(2.0).play(&label);
             }
         }
@@ -1409,7 +1409,7 @@ mod tests {
         assert_eq!(scene.build(&mut UnwrittenText), 2.0);
         scene.update(0.0);
         {
-            let world = scene.get_world();
+            let world = scene.world();
             let mut query = world.query::<&WriteState>();
             let state = query.iter().next().unwrap();
             assert!(state.plans[state.transition as usize].reverse);
@@ -1417,11 +1417,11 @@ mod tests {
         }
 
         scene.update(1.0);
-        let world = scene.get_world();
+        let world = scene.world();
         assert!(world.query::<&WriteState>().iter().next().unwrap().active);
         drop(world);
         scene.update(2.0);
-        let world = scene.get_world();
+        let world = scene.world();
         assert!(!world.query::<&WriteState>().iter().next().unwrap().active);
         assert_eq!(
             world

@@ -59,7 +59,7 @@ impl Default for Image3D {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_image_3d,
-                get_box: |world, entity| {
+                box_size: |world, entity| {
                     world
                         .get::<&PlaneShape>(entity)
                         .unwrap()
@@ -166,7 +166,7 @@ mod tests {
             .build(&mut scene);
         std::fs::remove_file(path).unwrap();
 
-        assert_eq!(image.get_box(), vec3(1.0, 0.5, 0.0));
+        assert_eq!(image.box_size(), vec3(1.0, 0.5, 0.0));
         assert_eq!(image.get_pixel_color(vec2(-0.25, 0.0)), Color::RED);
         assert_eq!(image.get_pixel_color(vec2(0.25, 0.0)), Color::BLUE);
         assert_eq!(image.get_pixel_color(vec2(1.0, 0.0)), Color::TRANSPARENT);

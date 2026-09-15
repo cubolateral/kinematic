@@ -30,9 +30,9 @@ pub(super) fn draw(
         [layout.timeline_right(), layout.bottom],
         true,
     );
-    let active_scene = editor.get_active_scene_index();
+    let active_scene = editor.active_scene_index();
     let scenes = editor
-        .get_scenes()
+        .scenes()
         .map(|(name, range, events)| {
             (
                 name,

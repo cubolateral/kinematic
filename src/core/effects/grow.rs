@@ -138,7 +138,7 @@ where
         let rotation = handler.get(Transform2D::rotation_property());
         let start_position = self
             .from
-            .resolve(position, handler.get_box(), scale, rotation);
+            .resolve(position, handler.box_size(), scale, rotation);
 
         play_grow(
             handler,
@@ -212,7 +212,7 @@ where
         let rotation = handler.get(Transform2D::rotation_property());
         let end_position = self
             .from
-            .resolve(position, handler.get_box(), scale, rotation);
+            .resolve(position, handler.box_size(), scale, rotation);
 
         play_grow(
             handler,

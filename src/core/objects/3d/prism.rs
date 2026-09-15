@@ -52,7 +52,7 @@ impl Default for Prism {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_prism,
-                get_box: |world, entity| world.get::<&PrismShape>(entity).unwrap().size.abs(),
+                box_size: |world, entity| world.get::<&PrismShape>(entity).unwrap().size.abs(),
                 ..Default::default()
             },
         }
@@ -161,7 +161,7 @@ mod tests {
         let mut scene = Scene::new();
         let prism = prism().size(vec3(2.0, 3.0, 4.0)).sides(3).build(&mut scene);
 
-        assert_eq!(prism.get_box(), vec3(2.0, 3.0, 4.0));
+        assert_eq!(prism.box_size(), vec3(2.0, 3.0, 4.0));
         assert_eq!(prism.get(PrismShape::sides_property()), 3);
         assert!(prism.get(PrismShape::top_cap_property()));
         assert!(prism.get(PrismShape::bottom_cap_property()));

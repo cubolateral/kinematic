@@ -154,7 +154,7 @@ mod tests {
     }
 
     fn edit(scene: &Scene, entity: hecs::Entity, name: &str, value: TrackValue) {
-        let world = scene.get_world();
+        let world = scene.world();
         let inspection = world.get::<&Inspection>(entity).unwrap();
         let (component, track) = inspection
             .trackables(&world, entity)
@@ -199,16 +199,16 @@ mod tests {
             scene.build(&mut Build(|scene: &mut Scene| {
                 entity = Some(if use_latex {
                     let object = latex_2d().text("A").size(32.0).build(scene);
-                    scene.get_world_2d().add(&object);
+                    scene.world_2d().add(&object);
                     object.morph("B").easing(Easing::Linear).play();
                     object.morph("C").easing(Easing::Linear).play();
-                    object.get_id()
+                    object.entity()
                 } else {
                     let object = text_2d().text("A").size(32.0).build(scene);
-                    scene.get_world_2d().add(&object);
+                    scene.world_2d().add(&object);
                     object.morph("B").easing(Easing::Linear).play();
                     object.morph("C").easing(Easing::Linear).play();
-                    object.get_id()
+                    object.entity()
                 });
             }));
             let entity = entity.unwrap();
@@ -249,7 +249,7 @@ mod tests {
                 captures,
                 "Translation must reuse local silhouettes."
             );
-            let world = scene.get_world();
+            let world = scene.world();
             let morph = world
                 .get::<&super::super::string_morph::ContentMorph>(entity)
                 .unwrap();
@@ -267,7 +267,7 @@ mod tests {
                 before != pixels(&scene),
                 "Editing after seeking must refresh the same endpoint."
             );
-            let world = scene.get_world();
+            let world = scene.world();
             let morph = world
                 .get::<&super::super::string_morph::ContentMorph>(entity)
                 .unwrap();
@@ -283,13 +283,13 @@ mod tests {
             let group = group_2d().build(scene);
             let source = text_2d().text("A").size(32.0).build(scene);
             group.add(&source);
-            scene.get_world_2d().add(&group);
+            scene.world_2d().add(&group);
             let target = circle().radius(20.0).build(scene);
             morph()
                 .duration(2.0)
                 .easing(Easing::Linear)
                 .play(&group, &target);
-            ids = Some((group.get_id(), source.get_id()));
+            ids = Some((group.entity(), source.entity()));
         }));
         let (group, source) = ids.unwrap();
         scene.update(1.0);
@@ -309,7 +309,7 @@ mod tests {
             let after = pixels(&scene);
             assert!(before != after, "Editing {name} must update particles.");
             let opacity = scene
-                .get_world()
+                .world()
                 .get::<&crate::core::components::Draw2D>(group)
                 .unwrap()
                 .opacity;
@@ -340,16 +340,16 @@ mod tests {
             scene.build(&mut Build(|scene: &mut Scene| {
                 if use_latex {
                     let object = latex_2d().text(from).size(32.0).build(scene);
-                    entity = Some(object.get_id());
-                    scene.get_world_2d().add(&object);
+                    entity = Some(object.entity());
+                    scene.world_2d().add(&object);
                     creation().duration(1.0).play(&object);
                     object.morph(to).easing(Easing::Linear).play();
                     scene.wait(1.0);
                     uncreation().duration(1.0).play(&object);
                 } else {
                     let object = text_2d().text(from).size(32.0).build(scene);
-                    entity = Some(object.get_id());
-                    scene.get_world_2d().add(&object);
+                    entity = Some(object.entity());
+                    scene.world_2d().add(&object);
                     if use_write {
                         write().duration(1.0).play(&object);
                     } else {
@@ -415,7 +415,7 @@ mod tests {
             scene.build(&mut Build(|scene: &mut Scene| {
                 let source = text_2d().text(from).size(32.0).build(scene);
                 let target = text_2d().text(to).size(32.0).build(scene);
-                scene.get_world_2d().add(&source);
+                scene.world_2d().add(&source);
                 write().duration(1.0).play(&source);
                 morph()
                     .duration(2.0)
@@ -423,7 +423,7 @@ mod tests {
                     .play(&source, &target);
                 // This adds WriteState after the morph has captured its destination.
                 unwrite().duration(1.0).play(&target);
-                ids = Some((source.get_id(), target.get_id()));
+                ids = Some((source.entity(), target.entity()));
             }));
             let (source, target) = ids.unwrap();
             (scene, source, target)
@@ -468,8 +468,8 @@ mod tests {
             let mut entity = None;
             scene.build(&mut Build(|scene: &mut Scene| {
                 let object = text_2d().text("A").size(32.0).build(scene);
-                entity = Some(object.get_id());
-                scene.get_world_2d().add(&object);
+                entity = Some(object.entity());
+                scene.world_2d().add(&object);
                 if use_write && reverse {
                     unwrite().duration(2.0).play(&object);
                 } else if use_write {

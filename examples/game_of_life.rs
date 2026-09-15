@@ -66,7 +66,7 @@ impl SimulationState2D for Life {
         }
     }
 
-    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector2 {
+    fn box_size(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector2 {
         Vector2::splat(SIZE as f32 * CELL_2D)
     }
 }
@@ -111,7 +111,7 @@ impl SimulationState3D for Life {
         Ok(())
     }
 
-    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector3 {
+    fn box_size(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector3 {
         vec3(SIZE as f32 * CELL_3D, SIZE as f32 * CELL_3D, CELL_3D)
     }
 }
@@ -177,7 +177,7 @@ impl Default for Life2D {
             transform: Transform2D::default(),
             draw: Draw2D {
                 on_draw: Simulation::draw_2d,
-                get_box: Simulation::box_2d,
+                box_size: Simulation::box_2d,
                 ..Draw2D::default()
             },
         }
@@ -205,7 +205,7 @@ impl Default for Life3D {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: Simulation::draw_3d,
-                get_box: Simulation::box_3d,
+                box_size: Simulation::box_3d,
                 ..Draw3D::default()
             },
         }
@@ -215,7 +215,7 @@ impl Default for Life3D {
 #[scene]
 fn game_of_life_2d(s: &mut Scene) {
     let life = life_2d().auto_update(false).build(s);
-    s.get_world_2d().add(&life);
+    s.world_2d().add(&life);
 
     for _ in 0..32 {
         life.update();
@@ -227,12 +227,12 @@ fn game_of_life_2d(s: &mut Scene) {
 
 #[scene]
 fn game_of_life_3d(s: &mut Scene) {
-    s.get_root().view_2d(false).immediate();
+    s.root().view_2d(false).immediate();
     let life = life_3d()
         .auto_update(false)
         .rotation(Quaternion::from_rotation_y(0.35))
         .build(s);
-    s.get_world_3d().add(&life);
+    s.world_3d().add(&life);
 
     for _ in 0..32 {
         life.update();

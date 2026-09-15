@@ -352,7 +352,7 @@ mod tests {
                     .stroke(self.style.stroke)
                     .stroke_width(self.style.stroke_width)
                     .build(scene);
-                scene.get_world_2d().add(&object);
+                scene.world_2d().add(&object);
                 let tween = object.morph(r"\frac{1}{2}");
                 if self.animate {
                     tween
@@ -373,7 +373,7 @@ mod tests {
                     .stroke(self.style.stroke)
                     .stroke_width(self.style.stroke_width)
                     .build(scene);
-                scene.get_world_2d().add(&object);
+                scene.world_2d().add(&object);
                 let tween = object.morph("DE\nF");
                 if self.animate {
                     tween

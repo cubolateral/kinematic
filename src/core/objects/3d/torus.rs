@@ -64,7 +64,7 @@ impl Default for Torus {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_torus,
-                get_box: |world, entity| {
+                box_size: |world, entity| {
                     let shape = world.get::<&TorusShape>(entity).unwrap();
                     glam::vec3(
                         2.0 * (shape.major_radius + shape.minor_radius),
@@ -184,7 +184,7 @@ mod tests {
         assert_eq!(torus.get(TorusShape::minor_radius_property()), 0.25);
         assert_eq!(torus.get(TorusShape::major_segments_property()), 12);
         assert_eq!(torus.get(TorusShape::minor_segments_property()), 8);
-        assert_eq!(torus.get_box(), glam::vec3(2.5, 0.5, 2.5));
+        assert_eq!(torus.box_size(), glam::vec3(2.5, 0.5, 2.5));
     }
 
     #[test]
@@ -202,7 +202,7 @@ mod tests {
         let mut scene = Scene::new();
         let torus = torus().build(&mut scene);
 
-        assert_eq!(torus.get_box(), glam::vec3(1.0, 0.25, 1.0));
+        assert_eq!(torus.box_size(), glam::vec3(1.0, 0.25, 1.0));
     }
 
     #[test]

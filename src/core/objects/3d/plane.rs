@@ -41,7 +41,7 @@ impl Default for Plane {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_plane,
-                get_box: |world, entity| {
+                box_size: |world, entity| {
                     world
                         .get::<&PlaneShape>(entity)
                         .unwrap()

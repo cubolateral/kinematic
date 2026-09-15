@@ -14,9 +14,9 @@ pub(super) const WINDOW_NAME: &str = "Scene Tree";
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     let is_exporting = editor.is_exporting();
-    let selected = editor.get_selected_entity();
-    let root = editor.get_scene().get_root().get_id();
-    let world = editor.get_scene().get_world();
+    let selected = editor.selected_entity();
+    let root = editor.scene_mut().root().entity();
+    let world = editor.scene_mut().world();
     let mut clicked = None;
     let mut edit_clicked = None;
     let mut empty_clicked = false;
@@ -82,7 +82,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     drop(world);
 
     if visibility_changed {
-        editor.get_scene().invalidate();
+        editor.scene_mut().invalidate();
     }
 
     if let Some(entity) = edit_clicked {

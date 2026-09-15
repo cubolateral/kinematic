@@ -32,18 +32,18 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     }
 
     let is_exporting = editor.is_exporting();
-    let fps = editor.get_preview_fps();
+    let fps = editor.preview_fps();
 
-    timeline::shortcuts(editor.get_timeline(), ui, !is_exporting);
+    timeline::shortcuts(editor.timeline_mut(), ui, !is_exporting);
 
-    let is_controlling = editor.get_timeline().is_controlling;
+    let is_controlling = editor.timeline_mut().is_controlling;
     if !controls_visible(
         ui.io().mouse_pos(),
         viewport_pos,
         viewport_size,
         is_controlling,
     ) {
-        editor.get_timeline().is_controlling = false;
+        editor.timeline_mut().is_controlling = false;
         return false;
     }
 
@@ -60,7 +60,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
         .flags(window_flags)
         .build(|| {
             let response =
-                timeline::fullscreen_controls(editor.get_timeline(), ui, fps, !is_exporting);
+                timeline::fullscreen_controls(editor.timeline_mut(), ui, fps, !is_exporting);
             toggle_fullscreen = response.toggle_fullscreen;
             if response.screenshot {
                 editor.request_screenshot();

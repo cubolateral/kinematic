@@ -66,13 +66,13 @@ pub trait ContainerHandler {
         attach_child(
             &self.container_world(),
             self.container_entity(),
-            handler.get_id(),
+            handler.entity(),
             self.container_time(),
         );
     }
 
     /// Returns the entity ids of all direct children in insertion order.
-    fn get_children(&self) -> Vec<hecs::Entity> {
+    fn children(&self) -> Vec<hecs::Entity> {
         let scene_world = self.container_world();
         let world = scene_world.borrow();
 
@@ -81,7 +81,7 @@ pub trait ContainerHandler {
 
     /// Returns the entity id of the direct child at `index`.
     fn get_child_entity(&self, index: usize) -> Result<hecs::Entity, ChildError> {
-        let children = self.get_children();
+        let children = self.children();
 
         children.get(index).copied().ok_or(ChildError::NotFound {
             index,
@@ -138,12 +138,12 @@ impl Clone for RootHandler {
 
 impl RootHandler {
     /// Returns the ECS entity represented by the root.
-    pub fn get_id(&self) -> hecs::Entity {
+    pub fn entity(&self) -> hecs::Entity {
         self.entity
     }
 
     /// Returns the root's user-facing name.
-    pub fn get_name(&self) -> String {
+    pub fn name(&self) -> String {
         self.world
             .borrow()
             .get::<&crate::core::components::Name>(self.entity)
@@ -193,7 +193,7 @@ impl RootHandler {
         attach_child(
             &self.world,
             self.entity,
-            handler.get_id(),
+            handler.entity(),
             self.animator.time(),
         );
     }
@@ -370,8 +370,8 @@ mod tests {
 
         assert!(
             scene
-                .get_world()
-                .get::<&Node>(container.get_id())
+                .world()
+                .get::<&Node>(container.entity())
                 .unwrap()
                 .children
                 .is_none()
@@ -381,12 +381,12 @@ mod tests {
 
         assert_eq!(
             scene
-                .get_world()
-                .get::<&Node>(container.get_id())
+                .world()
+                .get::<&Node>(container.entity())
                 .unwrap()
                 .children
                 .as_deref(),
-            Some([child.get_id()].as_slice())
+            Some([child.entity()].as_slice())
         );
     }
 
@@ -400,7 +400,7 @@ mod tests {
             .build(&mut scene);
 
         container.add(&child);
-        scene.get_world_2d().add(&container);
+        scene.world_2d().add(&container);
 
         let image_info = skia_safe::ImageInfo::new(
             (16, 16),
@@ -445,17 +445,17 @@ mod tests {
         let child = rect().build(&mut scene);
 
         container.add(&child);
-        scene.get_world_2d().add(&container);
+        scene.world_2d().add(&container);
         scene.wait(2.0);
         container.remove();
 
-        let world = scene.get_world();
+        let world = scene.world();
         assert_eq!(
-            world.get::<&Node>(container.get_id()).unwrap().lifetime,
+            world.get::<&Node>(container.entity()).unwrap().lifetime,
             [0.0, 2.0]
         );
         assert_eq!(
-            world.get::<&Node>(child.get_id()).unwrap().lifetime,
+            world.get::<&Node>(child.entity()).unwrap().lifetime,
             [0.0, 2.0]
         );
     }
@@ -473,7 +473,7 @@ mod tests {
 
         container.add(&child);
 
-        let size = container.get_box();
+        let size = container.box_size();
         assert!((size.x - 20.0).abs() < 0.001);
         assert!((size.y - 20.0).abs() < 0.001);
     }
@@ -493,7 +493,7 @@ mod tests {
 
         container.add(&first);
         container.add(&second);
-        scene.get_world_2d().add(&container);
+        scene.world_2d().add(&container);
 
         let image_info = skia_safe::ImageInfo::new(
             (16, 16),
@@ -527,8 +527,8 @@ mod tests {
             .z_index(-1)
             .build(&mut scene);
 
-        scene.get_world_2d().add(&front);
-        scene.get_world_2d().add(&back);
+        scene.world_2d().add(&front);
+        scene.world_2d().add(&back);
 
         let image_info = skia_safe::ImageInfo::new(
             (16, 16),
@@ -544,7 +544,7 @@ mod tests {
         let center = surface.peek_pixels().unwrap().get_color((8, 8));
         assert_eq!(center.r(), 255);
         assert_eq!(center.b(), 0);
-        assert_eq!(scene.pick(vec2(0.0, 0.0)), Some(front.get_id()));
+        assert_eq!(scene.pick(vec2(0.0, 0.0)), Some(front.entity()));
     }
 
     #[test]
@@ -571,7 +571,7 @@ mod tests {
 
         inner.add(&child);
         outer.add(&inner);
-        scene.get_world_2d().add(&outer);
+        scene.world_2d().add(&outer);
 
         let inner_position = vec2(-5.0, 28.0);
         let scaled_child_position = vec2(10.0, 42.0);
@@ -585,18 +585,12 @@ mod tests {
 
         assert!(
             child
-                .get_global_position()
+                .global_position()
                 .abs_diff_eq(expected_position, 0.0001)
         );
-        assert!(
-            (child.get_global_rotation() - (std::f32::consts::FRAC_PI_2 + 0.375)).abs() < 0.0001
-        );
-        assert!(
-            child
-                .get_global_scale()
-                .abs_diff_eq(vec2(5.0, 5.25), 0.0001)
-        );
-        assert!((child.get_global_opacity() - 0.1).abs() < 0.0001);
-        assert_eq!(scene.pick(expected_position), Some(child.get_id()));
+        assert!((child.global_rotation() - (std::f32::consts::FRAC_PI_2 + 0.375)).abs() < 0.0001);
+        assert!(child.global_scale().abs_diff_eq(vec2(5.0, 5.25), 0.0001));
+        assert!((child.global_opacity() - 0.1).abs() < 0.0001);
+        assert_eq!(scene.pick(expected_position), Some(child.entity()));
     }
 }

@@ -28,22 +28,22 @@ fn custom_container_returns_typed_direct_children() {
     container.add(&circle);
 
     assert_eq!(
-        container.get_children(),
-        vec![rectangle.get_id(), circle.get_id()]
+        container.children(),
+        vec![rectangle.entity(), circle.entity()]
     );
-    assert_eq!(container.get_child_entity(0), Ok(rectangle.get_id()));
+    assert_eq!(container.get_child_entity(0), Ok(rectangle.entity()));
     assert_eq!(
         container.get_child_entity(2),
         Err(ChildError::NotFound { index: 2, len: 2 })
     );
 
     assert_eq!(
-        container.get_child::<Rect>(0).unwrap().get_id(),
-        rectangle.get_id()
+        container.get_child::<Rect>(0).unwrap().entity(),
+        rectangle.entity()
     );
     assert_eq!(
-        container.get_child::<Circle>(1).unwrap().get_id(),
-        circle.get_id()
+        container.get_child::<Circle>(1).unwrap().entity(),
+        circle.entity()
     );
 
     assert!(matches!(

@@ -25,11 +25,11 @@ impl FrameTimer {
         }
     }
 
-    pub fn get_fps(&self) -> f32 {
+    pub fn fps(&self) -> f32 {
         self.fps
     }
 
-    pub fn get_delta_time(&self) -> f32 {
+    pub fn delta_time(&self) -> f32 {
         self.delta_time
     }
 }

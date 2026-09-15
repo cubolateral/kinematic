@@ -517,7 +517,7 @@ pub struct Draw3D {
     pub on_draw: fn(&hecs::World, hecs::Entity, &mut RenderContext3D<'_>) -> Result<(), String>,
 
     /// Returns the object's local bounding-box size.
-    pub get_box: fn(&hecs::World, hecs::Entity) -> glam::Vec3,
+    pub box_size: fn(&hecs::World, hecs::Entity) -> glam::Vec3,
 }
 
 impl Default for Draw3D {
@@ -525,7 +525,7 @@ impl Default for Draw3D {
         Self {
             visibility: true,
             on_draw: |_, _, _| Ok(()),
-            get_box: |_, _| glam::Vec3::ZERO,
+            box_size: |_, _| glam::Vec3::ZERO,
         }
     }
 }

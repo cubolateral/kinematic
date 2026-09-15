@@ -68,7 +68,7 @@ pub(super) fn draw(
 
     ui.window(WINDOW_NAME).build(|| {
         if !state.initialized {
-            let (_, settings) = editor.get_project_info();
+            let (_, settings) = editor.project_info();
             state.resolution = [settings.resolution.0 as i32, settings.resolution.1 as i32];
             state.fps = settings.fps as i32;
             state.initialized = true;
@@ -99,7 +99,7 @@ pub(super) fn draw(
                 resolution: (state.resolution[0] as u32, state.resolution[1] as u32),
                 fps: state.fps as u32,
             };
-            if editor.get_project_info().1 != settings {
+            if editor.project_info().1 != settings {
                 editor.request_project_settings(settings);
             }
         }

@@ -132,7 +132,7 @@ impl Default for Rect {
 
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
-                get_box: |world, entity| world.get::<&RectShape>(entity).unwrap().size,
+                box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size,
                 ..Default::default()
             },
         }
@@ -159,10 +159,10 @@ mod tests {
             Quad::new(10.0, 20.0, 30.0, 40.0),
         ];
         {
-            let world = scene.get_world();
+            let world = scene.world();
             for (rect, expected) in values.iter().zip(expected) {
                 assert_eq!(
-                    world.get::<&RectShape>(rect.get_id()).unwrap().round,
+                    world.get::<&RectShape>(rect.entity()).unwrap().round,
                     expected
                 );
             }
@@ -184,7 +184,7 @@ mod tests {
             .position(vec2(32.0, 32.0))
             .fill(Color::RED)
             .build(&mut scene);
-        scene.get_world_2d().add(&rect);
+        scene.world_2d().add(&rect);
         scene.update(0.0);
         let mut surface = skia_safe::surfaces::raster_n32_premul((64, 64)).unwrap();
 

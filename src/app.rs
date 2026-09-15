@@ -224,13 +224,13 @@ impl App {
         self.window_cache.save();
         self.imgui_renderer
             .texture_map_mut()
-            .remove(editor.get_preview().get_imgui_texture_id());
+            .remove(editor.preview_mut().imgui_texture_id());
         self.imgui_renderer
             .texture_map_mut()
-            .remove(editor.get_editor_2d_texture_id());
+            .remove(editor.editor_2d_texture_id());
         self.imgui_renderer
             .texture_map_mut()
-            .remove(editor.get_editor_3d_texture_id());
+            .remove(editor.editor_3d_texture_id());
 
         if restart {
             dev_reload

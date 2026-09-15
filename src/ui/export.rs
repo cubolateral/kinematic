@@ -42,7 +42,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         ui.spacing();
 
         if is_exporting {
-            let progress = editor.get_export_progress();
+            let progress = editor.export_progress();
             let percentage = format!("{:.0}%", progress * 100.0);
 
             ui.progress_bar_with_overlay(progress, &percentage)
@@ -50,7 +50,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 .build();
         }
 
-        if let Some(message) = editor.get_export_message() {
+        if let Some(message) = editor.export_message() {
             ui.text_wrapped(message);
         }
     });

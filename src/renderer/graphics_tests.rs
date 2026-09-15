@@ -42,7 +42,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     let mut renderer = Canvases::new(three, &gl);
     let mut output = Target::new((64, 64), false, &mut skia, &gl).unwrap();
     let mut scene = Scene::new_with_resolution((64, 64));
-    let overlay = scene.get_world_2d();
+    let overlay = scene.world_2d();
     let top = rect()
         .size(vec2(64.0, 32.0))
         .position(vec2(0.0, -16.0))
@@ -55,7 +55,7 @@ fn graphics_canvas_projection_alpha_orientation() {
         .build(&mut scene);
     overlay.add(&top);
     overlay.add(&bottom);
-    let world = scene.get_world_3d();
+    let world = scene.world_3d();
     world
         .camera_position(vec3(0.0, 0.0, 2.0))
         .camera_fov(std::f32::consts::FRAC_PI_2)
@@ -65,14 +65,14 @@ fn graphics_canvas_projection_alpha_orientation() {
         .size(vec2(4.0, 4.0))
         .build(&mut scene);
     world.add(&screen);
-    scene.get_root().view_2d(false).immediate();
+    scene.root().view_2d(false).immediate();
     scene.update(0.0);
     renderer.render(&scene, &mut output, &mut skia).unwrap();
-    let source_texture = renderer.targets[&overlay.get_texture()].texture();
+    let source_texture = renderer.targets[&overlay.texture()].texture();
     let first = read(&gl, &output);
     assert_pixel(&first, 32, 48, [64, 32, 0, 255]);
     assert_pixel(
-        &read(&gl, &renderer.targets[&world.get_texture()]),
+        &read(&gl, &renderer.targets[&world.texture()]),
         32,
         48,
         [64, 32, 0, 128],
@@ -82,7 +82,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     assert_eq!(read(&gl, &output), first);
     verify_export(&gl, &output, &first);
     assert_eq!(
-        renderer.targets[&overlay.get_texture()].texture(),
+        renderer.targets[&overlay.texture()].texture(),
         source_texture
     );
     world.clear(Color::BLUE).play();
@@ -122,19 +122,19 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     let projection = projection_2d().source(&world).build(&mut scene);
     overlay.add(&projection);
-    scene.get_root().view_2d(true).immediate();
+    scene.root().view_2d(true).immediate();
     scene.update(1.0);
     renderer.render(&scene, &mut output, &mut skia).unwrap();
     assert_eq!(read(&gl, &output), pixels);
 
-    let target_texture = renderer.targets[&overlay.get_texture()].texture();
+    let target_texture = renderer.targets[&overlay.texture()].texture();
     let geometries: Vec<_> = renderer.geometries.keys().copied().collect();
     assert!(!geometries.is_empty());
     let second = Scene::new_with_resolution((64, 64));
     second.update(0.0);
     renderer.render(&second, &mut output, &mut skia).unwrap();
     assert_eq!(
-        renderer.targets[&overlay.get_texture()].texture(),
+        renderer.targets[&overlay.texture()].texture(),
         target_texture
     );
     assert!(
@@ -144,7 +144,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     );
     renderer.render(&scene, &mut output, &mut skia).unwrap();
     assert_eq!(
-        renderer.targets[&overlay.get_texture()].texture(),
+        renderer.targets[&overlay.texture()].texture(),
         target_texture
     );
     assert_eq!(read(&gl, &output), pixels);

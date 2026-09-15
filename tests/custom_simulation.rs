@@ -52,7 +52,7 @@ impl SimulationState2D for State {
         canvas.clear(skia_safe::colors::WHITE);
     }
 
-    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector2 {
+    fn box_size(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector2 {
         Vector2::ONE
     }
 }
@@ -68,7 +68,7 @@ impl SimulationState3D for State {
         Ok(())
     }
 
-    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector3 {
+    fn box_size(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector3 {
         Vector3::ONE
     }
 }
@@ -96,7 +96,7 @@ impl CA2D {
             transform: Transform2D::default(),
             draw: Draw2D {
                 on_draw: Simulation::draw_2d,
-                get_box: Simulation::box_2d,
+                box_size: Simulation::box_2d,
                 ..Draw2D::default()
             },
         }
@@ -136,7 +136,7 @@ impl Default for CA3D {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: Simulation::draw_3d,
-                get_box: Simulation::box_3d,
+                box_size: Simulation::box_3d,
                 ..Draw3D::default()
             },
         }
@@ -163,7 +163,7 @@ impl Default for CustomDraw {
                 on_draw: |_world, _entity, canvas, _opacity| {
                     canvas.clear(skia_safe::colors::CYAN);
                 },
-                get_box: |_, _| Vector2::ONE,
+                box_size: |_, _| Vector2::ONE,
                 ..Draw2D::default()
             },
         }
@@ -180,7 +180,7 @@ fn custom_object_preserves_mutation_update_order_and_seek() {
     let observed = Arc::new(Mutex::new((Vec::new(), Vec::new())));
     let mut scene = Scene::new();
     let ca = scene.spawn_object(CA2D::new(Arc::clone(&observed)), "CA");
-    scene.get_world_2d().add(&ca);
+    scene.world_2d().add(&ca);
     ca.set_auto_update(false);
     ca.set_color(Color::CYAN);
 
@@ -197,7 +197,7 @@ fn custom_object_preserves_mutation_update_order_and_seek() {
     let expected = observed.lock().unwrap().clone();
     assert_eq!(cells, vec![true, true, true, false]);
     assert_eq!(ca.get_color(), Color::CYAN);
-    assert_eq!(ca.get_box(), Vector2::ONE);
+    assert_eq!(ca.box_size(), Vector2::ONE);
     assert_eq!(
         expected.1,
         vec![
@@ -223,8 +223,8 @@ fn auto_update_runs_after_same_frame_mutations() {
     let mut scene = Scene::new();
     let ca = scene.spawn_object(CA2D::new(Arc::clone(&observed)), "CA");
     let label = text_2d().build(&mut scene);
-    scene.get_world_2d().add(&ca);
-    scene.get_world_2d().add(&label);
+    scene.world_2d().add(&ca);
+    scene.world_2d().add(&label);
     ca.set_cell(0, true);
     let signal_label = label.clone();
     ca.signal(move |ca, _frame| {
@@ -254,10 +254,10 @@ fn simulation_drawing_is_opt_in_for_2d_3d_and_custom_callbacks() {
     assert_eq!(ca_2d.get_color(), Color::MAGENTA);
 
     let ca_3d = ca_3d().build(&mut scene);
-    assert_eq!(ca_3d.get_box(), Vector3::ONE);
+    assert_eq!(ca_3d.box_size(), Vector3::ONE);
 
     let custom = custom_draw().build(&mut scene);
-    scene.get_world_2d().add(&custom);
+    scene.world_2d().add(&custom);
     scene.update(0.0);
     let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
     scene.draw(surface.canvas());

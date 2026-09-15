@@ -74,7 +74,7 @@ impl Default for RegularPolygon3D {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_regular_polygon_3d,
-                get_box: |world, entity| {
+                box_size: |world, entity| {
                     world
                         .get::<&RegularPolygon3DShape>(entity)
                         .unwrap()
@@ -139,7 +139,7 @@ mod tests {
             .sides(3)
             .build(&mut scene);
 
-        assert_eq!(polygon.get_box(), vec2(2.0, 3.0).extend(0.0));
+        assert_eq!(polygon.box_size(), vec2(2.0, 3.0).extend(0.0));
         assert_eq!(polygon.get(RegularPolygon3DShape::sides_property()), 3);
         assert_eq!(polygon_mesh(3).triangle_count(), 1);
     }

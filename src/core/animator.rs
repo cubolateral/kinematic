@@ -220,7 +220,7 @@ impl Schedule {
     pub(crate) fn compile(mut self, scene: &Scene) -> f32 {
         // Stable ordering preserves instantaneous changes at shared endpoints.
         self.tweens.sort_by(|a, b| a.start.total_cmp(&b.start));
-        let world = scene.get_world();
+        let world = scene.world();
         for tween in self.tweens {
             let mut animation = world.get::<&mut Animation>(tween.entity).unwrap();
             tween.append(&mut animation, 0.0);

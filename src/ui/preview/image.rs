@@ -12,22 +12,22 @@ pub(super) struct PreviewImage {
 }
 
 pub(super) fn preview(editor: &mut Editor) -> PreviewImage {
-    image(editor.get_preview())
+    image(editor.preview_mut())
 }
 
 pub(super) fn editor(editor: &mut Editor) -> PreviewImage {
-    image(editor.get_editor_2d())
+    image(editor.editor_2d_mut())
 }
 
 pub(super) fn editor_3d(editor: &mut Editor) -> PreviewImage {
-    image(editor.get_editor_3d())
+    image(editor.editor_3d_mut())
 }
 
 fn image(canvas: &mut crate::editor::Canvas) -> PreviewImage {
-    let (width, height) = canvas.get_size();
+    let (width, height) = canvas.size();
     PreviewImage {
         size: [width.max(1) as f32, height.max(1) as f32],
-        texture: canvas.get_imgui_texture_id(),
+        texture: canvas.imgui_texture_id(),
     }
 }
 

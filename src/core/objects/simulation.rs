@@ -18,7 +18,7 @@ pub fn schedule_simulation_update(handler: &impl ObjectHandler) {
     handler
         .object_world()
         .borrow()
-        .get::<&mut Simulation>(handler.get_id())
+        .get::<&mut Simulation>(handler.entity())
         .expect("Simulated object must contain a Simulation component.")
         .schedule_update(animator.time());
 }
@@ -36,7 +36,7 @@ where
     let world = handler.object_world();
     let world = world.borrow();
     world
-        .get::<&Simulation>(handler.get_id())
+        .get::<&Simulation>(handler.entity())
         .expect("Simulated object must contain a Simulation component.")
         .read_state(read)
 }
@@ -55,7 +55,7 @@ pub fn schedule_simulation_write<H>(
     handler
         .object_world()
         .borrow()
-        .get::<&mut Simulation>(handler.get_id())
+        .get::<&mut Simulation>(handler.entity())
         .expect("Simulated object must contain a Simulation component.")
         .schedule_mutation(animator.time(), mutation);
 }

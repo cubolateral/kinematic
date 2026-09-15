@@ -44,7 +44,7 @@ impl Default for Projection3D {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_projection_3d,
-                get_box: |world, entity| {
+                box_size: |world, entity| {
                     world
                         .get::<&PlaneShape>(entity)
                         .unwrap()

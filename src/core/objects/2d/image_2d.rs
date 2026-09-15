@@ -36,7 +36,7 @@ impl Default for Image2D {
             transform: Transform2D::default(),
             draw: Draw2D {
                 on_draw: draw_image_2d,
-                get_box: |world, entity| world.get::<&RectShape>(entity).unwrap().size.abs(),
+                box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size.abs(),
                 ..Default::default()
             },
             source: ImageSource::default(),
@@ -145,7 +145,7 @@ mod tests {
         let image = image_2d().source(&path).build(&mut scene);
         std::fs::remove_file(path).unwrap();
 
-        assert_eq!(image.get_box(), vec2(2.0, 1.0));
+        assert_eq!(image.box_size(), vec2(2.0, 1.0));
         assert_eq!(image.get_pixel_color(vec2(-0.5, 0.0)), Color::RED);
         assert_eq!(image.get_pixel_color(vec2(0.5, 0.0)), Color::BLUE);
         assert_eq!(image.get_pixel_color(vec2(2.0, 0.0)), Color::TRANSPARENT);

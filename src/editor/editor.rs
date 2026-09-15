@@ -205,7 +205,7 @@ impl Editor {
             return;
         }
 
-        self.accumulator += self.window_timer.get_delta_time();
+        self.accumulator += self.window_timer.delta_time();
 
         let delta = 1.0 / self.project.settings.fps.max(1) as f32;
 
@@ -268,7 +268,7 @@ impl Editor {
         if self.pending_screenshot {
             self.renderer.screenshot(
                 gl,
-                self.preview.get_framebuffer(),
+                self.preview.framebuffer(),
                 self.project.name,
                 self.project.settings.resolution,
             );
@@ -298,7 +298,7 @@ impl Editor {
             self.project.name,
             self.project.settings.resolution,
             self.project.settings.fps,
-            self.timeline.get_duration(),
+            self.timeline.duration(),
             silent,
         );
         if !started {
@@ -325,17 +325,17 @@ impl Editor {
         }
     }
 
-    pub fn get_export_progress(&self) -> f32 {
+    pub fn export_progress(&self) -> f32 {
         self.renderer.progress()
     }
 
-    pub fn get_export_message(&self) -> Option<&str> {
+    pub fn export_message(&self) -> Option<&str> {
         self.render_error
             .as_deref()
             .or_else(|| self.renderer.message())
     }
 
-    pub fn get_render_error(&self) -> Option<&str> {
+    pub fn render_error(&self) -> Option<&str> {
         self.render_error.as_deref()
     }
 
@@ -350,14 +350,14 @@ impl Editor {
                 yaw: self.editor_view_3d.yaw,
                 pitch: self.editor_view_3d.pitch,
             },
-            timeline_time: self.timeline.get_time(),
+            timeline_time: self.timeline.time(),
             mode,
         }
         .save();
         self.renderer.shutdown(gl);
     }
 
-    pub(crate) fn get_project_info(&self) -> (&'static str, ProjectSettings) {
+    pub(crate) fn project_info(&self) -> (&'static str, ProjectSettings) {
         (self.project.name, self.project.settings)
     }
 
@@ -390,13 +390,13 @@ impl Editor {
         let editor_3d = Canvas::new_3d(settings.resolution, imgui_renderer, skia_context, gl);
         imgui_renderer
             .texture_map_mut()
-            .remove(self.preview.get_imgui_texture_id());
+            .remove(self.preview.imgui_texture_id());
         imgui_renderer
             .texture_map_mut()
-            .remove(self.editor_2d.get_imgui_texture_id());
+            .remove(self.editor_2d.imgui_texture_id());
         imgui_renderer
             .texture_map_mut()
-            .remove(self.editor_3d.get_imgui_texture_id());
+            .remove(self.editor_3d.imgui_texture_id());
         self.preview = preview;
         self.editor_2d = editor_2d;
         self.editor_view_2d = EditorView2D::default();
@@ -420,16 +420,16 @@ impl Editor {
         self.update_active_scene(0.0);
     }
 
-    pub fn get_scene(&mut self) -> &mut Scene {
+    pub fn scene_mut(&mut self) -> &mut Scene {
         &mut self.scenes[self.active_scene].scene
     }
 
-    pub fn get_scene_range(&self) -> [f32; 2] {
+    pub fn scene_range(&self) -> [f32; 2] {
         let scene = &self.scenes[self.active_scene];
         [scene.start, scene.end]
     }
 
-    pub(crate) fn get_scenes(
+    pub(crate) fn scenes(
         &self,
     ) -> impl Iterator<
         Item = (
@@ -440,9 +440,9 @@ impl Editor {
     > + '_ {
         self.scenes.iter().map(|scene| {
             (
-                scene.scene.get_name(),
+                scene.scene.name(),
                 [scene.start, scene.end],
-                scene.scene.get_events(),
+                scene.scene.events(),
             )
         })
     }
@@ -470,31 +470,31 @@ impl Editor {
 
         self.selection.clear();
         self.timeline.set_duration(duration);
-        self.update_active_scene(self.timeline.get_time());
+        self.update_active_scene(self.timeline.time());
     }
 
-    pub fn get_active_scene_index(&self) -> usize {
+    pub fn active_scene_index(&self) -> usize {
         self.active_scene
     }
 
-    pub fn get_selected_entity(&self) -> Option<hecs::Entity> {
+    pub fn selected_entity(&self) -> Option<hecs::Entity> {
         self.selection
             .get()
             .filter(|(scene, _)| *scene == self.active_scene)
             .map(|(_, entity)| entity)
     }
 
-    pub(crate) fn get_selected_object(&self) -> Option<(usize, hecs::Entity)> {
+    pub(crate) fn selected_object(&self) -> Option<(usize, hecs::Entity)> {
         self.selection.get()
     }
 
-    pub(crate) fn get_scene_at(&mut self, index: usize) -> &mut Scene {
+    pub(crate) fn scene_at_mut(&mut self, index: usize) -> &mut Scene {
         &mut self.scenes[index].scene
     }
 
     pub fn select_entity(&mut self, entity: hecs::Entity) {
         assert!(
-            self.get_scene().get_world().contains(entity),
+            self.scene_mut().world().contains(entity),
             "Selected object must belong to this scene."
         );
         self.selection.select(self.active_scene, entity);
@@ -505,7 +505,7 @@ impl Editor {
     }
 
     pub(crate) fn selected_canvas(&self) -> SelectedCanvas {
-        let Some(entity) = self.get_selected_entity() else {
+        let Some(entity) = self.selected_entity() else {
             return SelectedCanvas::None;
         };
         match self.scenes[self.active_scene].scene.nearest_canvas(entity) {
@@ -523,7 +523,7 @@ impl Editor {
         match self.selected_canvas() {
             SelectedCanvas::Two(entity) => entity,
             SelectedCanvas::None | SelectedCanvas::Three(_) => {
-                self.scenes[self.active_scene].scene.get_world_2d().get_id()
+                self.scenes[self.active_scene].scene.world_2d().entity()
             }
         }
     }
@@ -532,7 +532,7 @@ impl Editor {
         match self.selected_canvas() {
             SelectedCanvas::Three(entity) => entity,
             SelectedCanvas::None | SelectedCanvas::Two(_) => {
-                self.scenes[self.active_scene].scene.get_world_3d().get_id()
+                self.scenes[self.active_scene].scene.world_3d().entity()
             }
         }
     }
@@ -595,12 +595,12 @@ impl Editor {
         if self.editor_view_3d.canvas_view {
             let mut camera = self.scenes[self.active_scene]
                 .scene
-                .get_world()
+                .world()
                 .get::<&crate::core::components::Camera3D>(canvas)
                 .map(|camera| (*camera).clone())
                 .unwrap_or_default();
             let (_, canvas_size) = self.editor_3d_canvas_camera();
-            let editor_size = self.editor_3d.get_size();
+            let editor_size = self.editor_3d.size();
             let canvas_aspect = canvas_size.0.max(1) as f32 / canvas_size.1.max(1) as f32;
             let editor_aspect = editor_size.0.max(1) as f32 / editor_size.1.max(1) as f32;
             if editor_aspect < canvas_aspect {
@@ -621,7 +621,7 @@ impl Editor {
         &self,
     ) -> (crate::core::components::Camera3D, (u32, u32)) {
         let canvas = self.editor_3d_canvas();
-        let world = self.scenes[self.active_scene].scene.get_world();
+        let world = self.scenes[self.active_scene].scene.world();
         let camera = world
             .get::<&crate::core::components::Camera3D>(canvas)
             .map(|camera| (*camera).clone())
@@ -636,7 +636,7 @@ impl Editor {
     pub(crate) fn select_at_editor_3d(&mut self, point: Vector2) {
         let canvas = self.editor_3d_canvas();
         let camera = self.editor_3d_camera();
-        let size = self.editor_3d.get_size();
+        let size = self.editor_3d.size();
         match self.scenes[self.active_scene]
             .scene
             .pick_editor_3d(canvas, &camera, size, point)
@@ -672,14 +672,14 @@ impl Editor {
         let canvas = self.editor_2d_canvas();
         self.scenes[self.active_scene]
             .scene
-            .get_world()
+            .world()
             .get::<&crate::core::objects::CanvasSettings>(canvas)
             .map(|settings| settings.resolution())
             .unwrap_or((1, 1))
     }
 
     pub(crate) fn set_editor_2d_viewport(&mut self, display_size: [f32; 2]) {
-        let target_size = self.editor_2d.get_size();
+        let target_size = self.editor_2d.size();
         let content_size = if self.editor_view_2d.canvas_view {
             self.editor_2d_canvas_size()
         } else {
@@ -744,7 +744,7 @@ impl Editor {
     }
 
     pub(crate) fn editor_2d_selection_outline(&self) -> Option<[skia_safe::Point; 4]> {
-        let entity = self.get_selected_entity()?;
+        let entity = self.selected_entity()?;
         let SelectedCanvas::Two(canvas) = self.selected_canvas() else {
             return None;
         };
@@ -759,33 +759,33 @@ impl Editor {
         let canvas = self.editor_2d_canvas();
         self.scenes[self.active_scene]
             .scene
-            .get_world()
+            .world()
             .get::<&crate::core::objects::CanvasSettings>(canvas)
             .map_or(Color::TRANSPARENT.rgba(), |settings| settings.clear.rgba())
     }
 
-    pub fn get_timeline(&mut self) -> &mut Timeline {
+    pub fn timeline_mut(&mut self) -> &mut Timeline {
         &mut self.timeline
     }
 
-    pub fn get_preview(&mut self) -> &mut Canvas {
+    pub fn preview_mut(&mut self) -> &mut Canvas {
         &mut self.preview
     }
 
-    pub(crate) fn get_editor_2d(&mut self) -> &mut Canvas {
+    pub(crate) fn editor_2d_mut(&mut self) -> &mut Canvas {
         &mut self.editor_2d
     }
 
-    pub(crate) fn get_editor_2d_texture_id(&self) -> dear_imgui_rs::TextureId {
-        self.editor_2d.get_imgui_texture_id()
+    pub(crate) fn editor_2d_texture_id(&self) -> dear_imgui_rs::TextureId {
+        self.editor_2d.imgui_texture_id()
     }
 
-    pub(crate) fn get_editor_3d(&mut self) -> &mut Canvas {
+    pub(crate) fn editor_3d_mut(&mut self) -> &mut Canvas {
         &mut self.editor_3d
     }
 
-    pub(crate) fn get_editor_3d_texture_id(&self) -> dear_imgui_rs::TextureId {
-        self.editor_3d.get_imgui_texture_id()
+    pub(crate) fn editor_3d_texture_id(&self) -> dear_imgui_rs::TextureId {
+        self.editor_3d.imgui_texture_id()
     }
 
     pub(crate) fn request_editor_3d_size(&mut self, size: [f32; 2]) {
@@ -793,7 +793,7 @@ impl Editor {
             size[0].max(1.0).round() as u32,
             size[1].max(1.0).round() as u32,
         );
-        if self.editor_3d.get_size() != size {
+        if self.editor_3d.size() != size {
             self.pending_editor_3d_size = Some(size);
         }
     }
@@ -826,25 +826,25 @@ impl Editor {
         skia_context: &mut skia_safe::gpu::DirectContext,
         gl: &std::rc::Rc<glow::Context>,
     ) {
-        if self.editor_3d.get_size() == size {
+        if self.editor_3d.size() == size {
             return;
         }
         let replacement = Canvas::new_3d(size, imgui_renderer, skia_context, gl);
         imgui_renderer
             .texture_map_mut()
-            .remove(self.editor_3d.get_imgui_texture_id());
+            .remove(self.editor_3d.imgui_texture_id());
         self.editor_3d = replacement;
         self.editor_3d_rendered = None;
     }
 
-    pub fn get_preview_fps(&self) -> f32 {
-        self.canvas_timer.get_fps()
+    pub fn preview_fps(&self) -> f32 {
+        self.canvas_timer.fps()
     }
 
     fn process_export_frame(&mut self, gl: &glow::Context) {
         let result = self.renderer.process_frame(
             gl,
-            self.preview.get_framebuffer(),
+            self.preview.framebuffer(),
             self.project.settings.resolution,
         );
 
@@ -916,9 +916,9 @@ impl Editor {
     ) {
         let canvas = self.editor_3d_canvas();
         let camera = self.editor_3d_camera();
-        let size = self.editor_3d.get_size();
+        let size = self.editor_3d.size();
         let view = self.editor_view_3d;
-        let selection = self.get_selected_entity();
+        let selection = self.selected_entity();
         let key = (
             scene_key,
             canvas,
@@ -1001,7 +1001,7 @@ fn create_scenes(
         .map(|create_scene| {
             let mut scene = create_scene(resolution);
             scene.set_fps(fps);
-            let end = start + scene.get_duration();
+            let end = start + scene.duration();
             let editor_scene = EditorScene { scene, start, end };
             start = end;
             editor_scene
@@ -1013,7 +1013,7 @@ fn recalculate_scene_ranges(scenes: &mut [EditorScene]) -> f32 {
     let mut start = 0.0;
     for scene in scenes {
         scene.start = start;
-        scene.end = start + scene.scene.get_duration();
+        scene.end = start + scene.scene.duration();
         start = scene.end;
     }
     start
@@ -1039,20 +1039,18 @@ mod tests {
         let factories: [crate::core::SceneFactory; 2] = [opening, ending];
         let scenes = create_scenes(&factories, (1280, 720), 60);
 
-        assert_eq!(scenes[0].scene.get_name(), "opening");
+        assert_eq!(scenes[0].scene.name(), "opening");
         assert_eq!([scenes[0].start, scenes[0].end], [0.0, 2.0]);
         assert_eq!(
             scenes[0]
                 .scene
-                .get_world()
-                .get::<&crate::core::objects::CanvasSettings>(
-                    scenes[0].scene.get_world_2d().get_id(),
-                )
+                .world()
+                .get::<&crate::core::objects::CanvasSettings>(scenes[0].scene.world_2d().entity(),)
                 .unwrap()
                 .resolution,
             (1280, 720)
         );
-        assert_eq!(scenes[1].scene.get_name(), "ending");
+        assert_eq!(scenes[1].scene.name(), "ending");
         assert_eq!([scenes[1].start, scenes[1].end], [2.0, 5.0]);
     }
 

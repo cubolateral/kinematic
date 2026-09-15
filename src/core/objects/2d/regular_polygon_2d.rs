@@ -118,7 +118,7 @@ impl Default for RegularPolygon2D {
 
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
-                get_box: |world, entity| {
+                box_size: |world, entity| {
                     world
                         .get::<&RegularPolygon2DShape>(entity)
                         .unwrap()
@@ -154,12 +154,12 @@ mod tests {
             .sides(3)
             .build(&mut scene);
 
-        assert_eq!(polygon.get_box(), vec2(320.0, 180.0));
+        assert_eq!(polygon.box_size(), vec2(320.0, 180.0));
         assert_eq!(polygon.get(RegularPolygon2DShape::sides_property()), 3);
         assert_eq!(
             scene
-                .get_world()
-                .get::<&RegularPolygon2DShape>(polygon.get_id())
+                .world()
+                .get::<&RegularPolygon2DShape>(polygon.entity())
                 .unwrap()
                 .size,
             vec2(320.0, 180.0)

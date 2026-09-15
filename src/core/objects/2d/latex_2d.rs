@@ -53,7 +53,7 @@ impl Default for Latex2DShape {
 ///     .text(r"\frac{1}{2}")
 ///     .size(64.0)
 ///     .build(&mut scene);
-/// scene.get_world_2d().add(&formula);
+/// scene.world_2d().add(&formula);
 /// formula.morph(r"\sqrt{2}").duration(2.0).play();
 /// ```
 #[derive(Object)]
@@ -203,7 +203,7 @@ impl Default for Latex2D {
             transform: Default::default(),
             draw: Draw2D {
                 on_draw: draw_latex,
-                get_box: |world, entity| latex_box(&world.get::<&Latex2DShape>(entity).unwrap()),
+                box_size: |world, entity| latex_box(&world.get::<&Latex2DShape>(entity).unwrap()),
                 ..Default::default()
             },
         }
@@ -216,7 +216,7 @@ impl Latex2DHandler {
         let from = self.get(Latex2DShape::text_property());
         let to = text.into();
         let tween = self.text(to.clone());
-        fade_string(tween, self.get_id(), from, to)
+        fade_string(tween, self.entity(), from, to)
     }
 
     /// Morphs this formula into `text` through particle silhouettes.
@@ -229,7 +229,7 @@ impl Latex2DHandler {
         let tween = self.text(text.clone());
         morph_string(
             tween,
-            self.get_id(),
+            self.entity(),
             from_text,
             text,
             latex_morph_silhouette,
@@ -261,7 +261,7 @@ mod tests {
         impl SceneBuilder for FadingFormula {
             fn build(&mut self, scene: &mut Scene) {
                 let formula = latex_2d().text("x").build(scene);
-                scene.get_world_2d().add(&formula);
+                scene.world_2d().add(&formula);
                 formula
                     .fade(r"\frac{1}{2}")
                     .duration(2.0)
@@ -272,10 +272,10 @@ mod tests {
 
         let mut scene = Scene::new();
         assert_eq!(scene.build(&mut FadingFormula), 2.0);
-        assert_eq!(scene.get_world().query::<&Latex2DShape>().iter().count(), 1);
+        assert_eq!(scene.world().query::<&Latex2DShape>().iter().count(), 1);
 
         let state = |scene: &Scene| {
-            let world = scene.get_world();
+            let world = scene.world();
             let mut query = world.query::<(&Latex2DShape, &Draw2D)>();
             let (shape, draw) = query.iter().next().unwrap();
             (shape.text.clone(), draw.opacity)
@@ -297,8 +297,8 @@ mod tests {
         impl SceneBuilder for FormulaScene {
             fn build(&mut self, scene: &mut Scene) {
                 let formula = latex_2d().text(r"\frac{1}{2}").build(scene);
-                assert_eq!(formula.get_name(), "Latex2D");
-                scene.get_world_2d().add(&formula);
+                assert_eq!(formula.name(), "Latex2D");
+                scene.world_2d().add(&formula);
                 creation().duration(1.0).play(&formula);
                 formula.morph(r"\sqrt{2}").play();
                 formula.morph(r"e^{i\pi}+1=0").play();
@@ -306,7 +306,7 @@ mod tests {
         }
         let mut scene = Scene::new();
         assert_eq!(scene.build(&mut FormulaScene), 3.0);
-        assert_eq!(scene.get_world().len(), 4);
+        assert_eq!(scene.world().len(), 4);
         scene.update(0.0);
         assert!(pixels(&scene).iter().all(|color| color.a() == 0));
         scene.update(0.5);
@@ -321,7 +321,7 @@ mod tests {
         assert_eq!(boundary, pixels(&scene));
         scene.update(2.5);
         {
-            let world = scene.get_world();
+            let world = scene.world();
             let mut query = world.query::<(&Latex2DShape, &ContentMorph)>();
             let (shape, morph) = query.iter().next().unwrap();
             assert_eq!(shape.text, r"\sqrt{2}");
@@ -332,7 +332,7 @@ mod tests {
         scene.update(1.5);
         assert_eq!(first_morph, pixels(&scene));
         scene.update(3.0);
-        let world = scene.get_world();
+        let world = scene.world();
         assert_eq!(
             world.query::<&Latex2DShape>().iter().next().unwrap().text,
             r"e^{i\pi}+1=0"
@@ -348,8 +348,8 @@ mod tests {
             .fill(Color::BLUE)
             .build(&mut scene);
         assert!(pixels(&scene).iter().all(|color| color.a() == 0));
-        scene.get_world_2d().add(&formula);
-        let bounds = formula.get_box();
+        scene.world_2d().add(&formula);
+        let bounds = formula.box_size();
         let rendered = pixels(&scene);
         assert!(
             rendered
@@ -374,7 +374,7 @@ mod tests {
             );
         }
         formula.size(96.0).play();
-        let doubled = formula.get_box();
+        let doubled = formula.box_size();
         assert!((doubled.x - bounds.x * 2.0).abs() < 0.001);
         assert!((doubled.y - bounds.y * 2.0).abs() < 0.001);
     }

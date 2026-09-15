@@ -54,13 +54,13 @@ impl Canvas {
         self.target.draw_skia(skia_context, f);
         reset_gl(gl, window_size);
     }
-    pub fn get_size(&self) -> (u32, u32) {
+    pub fn size(&self) -> (u32, u32) {
         self.target.size
     }
-    pub fn get_imgui_texture_id(&self) -> dear_imgui_rs::TextureId {
+    pub fn imgui_texture_id(&self) -> dear_imgui_rs::TextureId {
         self.imgui_texture_id
     }
-    pub fn get_framebuffer(&self) -> glow::NativeFramebuffer {
+    pub fn framebuffer(&self) -> glow::NativeFramebuffer {
         self.target.framebuffer()
     }
 }

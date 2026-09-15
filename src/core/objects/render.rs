@@ -76,7 +76,7 @@ fn draw_entity_with_parent(
     canvas.restore_to_count(save_count);
 }
 
-// Effect and text bounds can extend beyond get_box; retain Skia's clip in those cases.
+// Effect and text bounds can extend beyond box_size; retain Skia's clip in those cases.
 fn visual_bounds(
     world: &hecs::World,
     entity: hecs::Entity,
@@ -96,7 +96,7 @@ fn visual_bounds(
         return None;
     }
     let draw = world.get::<&Draw2D>(entity).ok()?;
-    let size = (draw.get_box)(world, entity);
+    let size = (draw.box_size)(world, entity);
     let mut bounds = if size.x > 0.0 && size.y > 0.0 {
         let padding = world.get::<&Style>(entity).map_or(0.0, |style| {
             let scale = world
@@ -305,7 +305,7 @@ fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::
         return None;
     }
     let draw = world.get::<&Draw2D>(entity).ok()?;
-    let size = (draw.get_box)(world, entity);
+    let size = (draw.box_size)(world, entity);
     let own = (size.x > 0.0 && size.y > 0.0)
         .then(|| skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y));
     let child_bounds = crate::core::objects::child_iter(world, entity)

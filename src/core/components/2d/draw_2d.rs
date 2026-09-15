@@ -21,7 +21,7 @@ pub struct Draw2D {
     pub on_draw: fn(&hecs::World, hecs::Entity, &skia_safe::Canvas, f32),
 
     /// Returns the object's local bounding-box size.
-    pub get_box: fn(&hecs::World, hecs::Entity) -> Vector2,
+    pub box_size: fn(&hecs::World, hecs::Entity) -> Vector2,
 }
 
 impl Default for Draw2D {
@@ -31,7 +31,7 @@ impl Default for Draw2D {
             opacity: 1.0,
             z_index: 0,
             on_draw: |_, _, _, _| {},
-            get_box: |_, _| Vector2::ZERO,
+            box_size: |_, _| Vector2::ZERO,
         }
     }
 }

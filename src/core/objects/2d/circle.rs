@@ -89,7 +89,7 @@ impl Default for Circle {
 
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
-                get_box: |world, entity| {
+                box_size: |world, entity| {
                     let shape = world.get::<&CircleShape>(entity).unwrap();
                     Vector2::splat(shape.radius * 2.0)
                 },

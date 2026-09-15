@@ -31,7 +31,7 @@ impl Default for Projection2D {
             },
             transform: Transform2D::default(),
             draw: Draw2D {
-                get_box: |world, entity| world.get::<&RectShape>(entity).unwrap().size.abs(),
+                box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size.abs(),
                 ..Default::default()
             },
             source: ProjectionSource::default(),
@@ -98,8 +98,8 @@ mod tests {
         target.canvas().translate((32.0, 32.0));
 
         draw_projection_2d(
-            &scene.get_world(),
-            projection.get_id(),
+            &scene.world(),
+            projection.entity(),
             &image,
             target.canvas(),
             1.0,

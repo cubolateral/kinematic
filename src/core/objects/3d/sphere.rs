@@ -44,7 +44,7 @@ impl Default for Sphere {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_sphere,
-                get_box: |world, entity| {
+                box_size: |world, entity| {
                     glam::Vec3::splat(world.get::<&SphereShape>(entity).unwrap().radius.abs() * 2.0)
                 },
                 ..Default::default()

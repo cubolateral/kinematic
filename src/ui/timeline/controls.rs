@@ -107,7 +107,7 @@ pub(in crate::ui) fn fullscreen_controls(
                 ui.io().mouse_pos()[0],
                 scrubber_min[0],
                 scrubber_width,
-                timeline.get_duration(),
+                timeline.duration(),
             ));
         }
 
@@ -192,9 +192,9 @@ fn draw_fullscreen_scrubber(
     min: [f32; 2],
     width: f32,
 ) {
-    let duration = timeline.get_duration();
+    let duration = timeline.duration();
     let ratio = if duration > 0.0 {
-        (timeline.get_time() / duration).clamp(0.0, 1.0)
+        (timeline.time() / duration).clamp(0.0, 1.0)
     } else {
         0.0
     };

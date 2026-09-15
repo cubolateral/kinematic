@@ -36,7 +36,7 @@ impl Canvas2DBuilder {
 
 impl Canvas2DHandler {
     /// Returns the render output produced with this canvas's camera.
-    pub fn get_texture(&self) -> CanvasTexture {
+    pub fn texture(&self) -> CanvasTexture {
         CanvasTexture {
             scene: scene_identity(&self.world),
             entity: self.entity,

@@ -83,12 +83,12 @@ pub(crate) fn active_subtree(world: &hecs::World, root: hecs::Entity) -> Vec<hec
 
 #[cfg(test)]
 pub(crate) fn canvas_order(scene: &Scene) -> Result<Vec<hecs::Entity>, String> {
-    Ok(canvas_plan_for(scene, scene.get_view().entity)?.order)
+    Ok(canvas_plan_for(scene, scene.view_texture().entity)?.order)
 }
 
 pub(crate) fn canvas_plan_for(scene: &Scene, output: hecs::Entity) -> Result<RenderPlan, String> {
-    let world = scene.get_world();
-    let root = scene.get_root().get_id();
+    let world = scene.world();
+    let root = scene.root().entity();
     let scene_id = world.get::<&SceneIdentity>(root).unwrap().0;
     let mut graph = HashMap::new();
     for entity in active_subtree(&world, root) {
@@ -176,7 +176,7 @@ impl PlanCache {
     pub fn get(&mut self, scene: &Scene, frame: u64) -> Result<&RenderPlan, String> {
         let identity = scene.render_key().0;
         let revision = scene.plan_revision();
-        let output = scene.get_view().entity;
+        let output = scene.view_texture().entity;
         if self
             .entries
             .get(&identity)
@@ -219,16 +219,14 @@ mod tests {
     fn plans_survive_frames_and_scene_switches_and_follow_lifetimes() {
         let mut first = Scene::new();
         first.wait(1.0);
-        let projection = projection_2d()
-            .source(&first.get_world_3d())
-            .build(&mut first);
-        first.get_world_2d().add(&projection);
+        let projection = projection_2d().source(&first.world_3d()).build(&mut first);
+        first.world_2d().add(&projection);
         first.update(0.0);
         let second = Scene::new();
         second.update(0.0);
         let mut cache = PlanCache::default();
         let initial = cache.get(&first, 1).unwrap();
-        assert_eq!(initial.order, vec![first.get_world_2d().get_id()]);
+        assert_eq!(initial.order, vec![first.world_2d().entity()]);
         let allocation = initial.order.as_ptr();
         cache.get(&second, 2).unwrap();
         first.update(0.5);
@@ -237,12 +235,12 @@ mod tests {
         first.update(1.0);
         assert_eq!(
             cache.get(&first, 4).unwrap().order,
-            vec![first.get_world_3d().get_id(), first.get_world_2d().get_id()]
+            vec![first.world_3d().entity(), first.world_2d().entity()]
         );
         first.update(0.0);
         assert_eq!(
             cache.get(&first, 5).unwrap().order,
-            vec![first.get_world_2d().get_id()]
+            vec![first.world_2d().entity()]
         );
         first.invalidate();
         cache.get(&first, 6).unwrap();

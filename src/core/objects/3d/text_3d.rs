@@ -107,7 +107,7 @@ impl Default for Text3D {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_text_3d,
-                get_box: text_3d_box,
+                box_size: text_3d_box,
                 ..Default::default()
             },
         }
@@ -128,7 +128,7 @@ impl Text3DHandler {
         let from = self.get(Text3DShape::text_property());
         let to = text.into();
         let tween = self.text(to.clone());
-        fade_string(tween, self.get_id(), from, to)
+        fade_string(tween, self.entity(), from, to)
     }
 }
 
@@ -382,15 +382,15 @@ mod tests {
         let text = text_3d().text("A").depth(2.5).build(&mut scene);
 
         assert_eq!(text.depth.get(), 2.5);
-        assert_eq!(text.get_box().z, 2.5);
-        assert_eq!(text.get_global_position(), vec3(0.0, 0.0, 0.0));
+        assert_eq!(text.box_size().z, 2.5);
+        assert_eq!(text.global_position(), vec3(0.0, 0.0, 0.0));
     }
 
     #[test]
     fn default_size_matches_other_3d_objects() {
         let mut scene = Scene::new();
         let text = text_3d().text("Text").build(&mut scene);
-        let bounds = text.get_box();
+        let bounds = text.box_size();
 
         assert!(bounds.x <= 4.0, "Unexpected text width: {}.", bounds.x);
         assert!(bounds.y <= 2.0, "Unexpected text height: {}.", bounds.y);
@@ -426,12 +426,12 @@ mod tests {
     fn fade_keeps_the_same_text_object() {
         let mut scene = Scene::new();
         let text = text_3d().text("From").build(&mut scene);
-        let entity = text.get_id();
+        let entity = text.entity();
 
         text.fade("To").play();
 
-        assert_eq!(text.get_id(), entity);
-        assert_eq!(scene.get_world().query::<&Text3DShape>().iter().count(), 1);
+        assert_eq!(text.entity(), entity);
+        assert_eq!(scene.world().query::<&Text3DShape>().iter().count(), 1);
         scene.update(1.0);
         assert_eq!(text.text.get(), "To");
     }

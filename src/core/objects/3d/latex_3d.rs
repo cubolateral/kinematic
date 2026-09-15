@@ -81,7 +81,7 @@ impl Default for Latex3D {
             transform: Transform3D::default(),
             draw: Draw3D {
                 on_draw: draw_latex_3d,
-                get_box: latex_3d_box,
+                box_size: latex_3d_box,
                 ..Default::default()
             },
         }
@@ -94,7 +94,7 @@ impl Latex3DHandler {
         let from = self.get(Latex3DShape::text_property());
         let to = text.into();
         let tween = self.text(to.clone());
-        fade_string(tween, self.get_id(), from, to)
+        fade_string(tween, self.entity(), from, to)
     }
 }
 
@@ -184,7 +184,7 @@ mod tests {
         let formula = latex_3d().text("x").depth(0.25).build(&mut scene);
 
         assert_eq!(formula.depth.get(), 0.25);
-        assert_eq!(formula.get_box().z, 0.25);
+        assert_eq!(formula.box_size().z, 0.25);
     }
 
     #[test]
@@ -202,11 +202,11 @@ mod tests {
     fn fade_keeps_the_same_formula_object() {
         let mut scene = Scene::new();
         let formula = latex_3d().text("x").build(&mut scene);
-        let entity = formula.get_id();
+        let entity = formula.entity();
 
         formula.fade("y").play();
 
-        assert_eq!(formula.get_id(), entity);
+        assert_eq!(formula.entity(), entity);
         scene.update(1.0);
         assert_eq!(formula.text.get(), "y");
     }

@@ -175,27 +175,27 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let spatial_impl = match spatial.as_str() {
         "2d" => quote! {
         impl kinematic::core::objects::Object2DHandler for #handler_name {
-            fn get_box(&self) -> #vector_type {
+            fn box_size(&self) -> #vector_type {
                 let world = self.world.borrow();
                 #object_box_fn(&world, self.entity)
             }
 
-            fn get_global_position(&self) -> #vector_type {
+            fn global_position(&self) -> #vector_type {
                 let world = self.world.borrow();
                 #object_global_position_fn(&world, self.entity)
             }
 
-            fn get_global_rotation(&self) -> f32 {
+            fn global_rotation(&self) -> f32 {
                 let world = self.world.borrow();
                 #object_global_rotation_fn(&world, self.entity)
             }
 
-            fn get_global_scale(&self) -> #vector_type {
+            fn global_scale(&self) -> #vector_type {
                 let world = self.world.borrow();
                 #object_global_scale_fn(&world, self.entity)
             }
 
-            fn get_global_opacity(&self) -> f32 {
+            fn global_opacity(&self) -> f32 {
                 let world = self.world.borrow();
                 #object_global_opacity_fn(&world, self.entity)
             }
@@ -399,11 +399,11 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 self.animator.clone()
             }
 
-            fn get_id(&self) -> hecs::Entity {
+            fn entity(&self) -> hecs::Entity {
                 self.entity
             }
 
-            fn get_name(&self) -> std::string::String {
+            fn name(&self) -> std::string::String {
                 self.world
                     .borrow()
                     .get::<&#name_type>(self.entity)
@@ -484,7 +484,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                             .expect("Object handler must contain its object fields.")).clone(),)*
                     };
 
-                    (object, <Self as #object_handler_trait>::get_name(self))
+                    (object, <Self as #object_handler_trait>::name(self))
                 };
 
                 #builder_name {

@@ -16,8 +16,8 @@ pub fn derive_container(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             }
 
             /// Returns the entity ids of all direct children in insertion order.
-            pub fn get_children(&self) -> Vec<hecs::Entity> {
-                <Self as kinematic::core::objects::ContainerHandler>::get_children(self)
+            pub fn children(&self) -> Vec<hecs::Entity> {
+                <Self as kinematic::core::objects::ContainerHandler>::children(self)
             }
 
             /// Returns the entity id of the direct child at `index`.

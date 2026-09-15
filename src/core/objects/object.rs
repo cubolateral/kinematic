@@ -81,10 +81,10 @@ pub trait ObjectHandler: Clone {
     fn object_animator(&self) -> AnimatorHandle;
 
     /// Returns the ECS entity represented by this handler.
-    fn get_id(&self) -> hecs::Entity;
+    fn entity(&self) -> hecs::Entity;
 
     /// Returns the object's user-facing name.
-    fn get_name(&self) -> String;
+    fn name(&self) -> String;
 
     /// Replaces the object's user-facing name.
     fn set_name(&self, name: impl Into<String>);
@@ -103,7 +103,7 @@ pub trait ObjectHandler: Clone {
         let handler = self.clone();
         let mut callback = callback;
         self.object_animator()
-            .signal(self.get_id(), move |frame| callback(handler.clone(), frame))
+            .signal(self.entity(), move |frame| callback(handler.clone(), frame))
     }
 
     /// Reads a typed trackable property from the object.
@@ -121,25 +121,25 @@ pub trait ObjectHandler: Clone {
     ) -> Tween<Self::Object>;
 
     /// Captures the current values of every tracked property.
-    fn get_state(&self) -> Snapshot<Self>
+    fn snapshot(&self) -> Snapshot<Self>
     where
         Self: Sized,
     {
         Snapshot {
-            values: snapshot_values(&self.object_world(), self.get_id()),
+            values: snapshot_values(&self.object_world(), self.entity()),
             handler: std::marker::PhantomData,
         }
     }
 
     /// Creates a tween from the current values to a compatible snapshot.
-    fn set_state(&self, state: Snapshot<Self>) -> Tween<Self::Object>
+    fn restore_snapshot(&self, state: Snapshot<Self>) -> Tween<Self::Object>
     where
         Self: Sized,
     {
         let world = self.object_world();
         let animator = self.object_animator();
         animator.assert_timeline_mutation();
-        tween_to_values(&world, self.get_id(), state.values, animator)
+        tween_to_values(&world, self.entity(), state.values, animator)
     }
 
     /// Saves all tracked property values on this object's snapshot stack.
@@ -152,19 +152,19 @@ pub trait ObjectHandler: Clone {
 /// Spatial access for objects in a two-dimensional scene.
 pub trait Object2DHandler: ObjectHandler {
     /// Returns the object's local bounding-box size.
-    fn get_box(&self) -> Vector2;
+    fn box_size(&self) -> Vector2;
 
     /// Returns the object's position in scene coordinates.
-    fn get_global_position(&self) -> Vector2;
+    fn global_position(&self) -> Vector2;
 
     /// Returns the object's accumulated rotation in radians.
-    fn get_global_rotation(&self) -> f32;
+    fn global_rotation(&self) -> f32;
 
     /// Returns the object's accumulated scale without introducing skew.
-    fn get_global_scale(&self) -> Vector2;
+    fn global_scale(&self) -> Vector2;
 
     /// Returns the object's opacity combined with its ancestor opacities.
-    fn get_global_opacity(&self) -> f32;
+    fn global_opacity(&self) -> f32;
 }
 
 /// Pushes the current tracked values onto an object's snapshot stack.
@@ -404,21 +404,21 @@ pub trait Morphable: Object {}
 
 /// Spatial access for three-dimensional objects. Bounds are local extents.
 pub trait Object3DHandler: ObjectHandler {
-    fn get_box(&self) -> crate::core::types::Vector3 {
-        object_box3d(&self.object_world().borrow(), self.get_id())
+    fn box_size(&self) -> crate::core::types::Vector3 {
+        object_box3d(&self.object_world().borrow(), self.entity())
     }
-    fn get_global_position(&self) -> crate::core::types::Vector3 {
-        global_matrix3d(&self.object_world().borrow(), self.get_id())
+    fn global_position(&self) -> crate::core::types::Vector3 {
+        global_matrix3d(&self.object_world().borrow(), self.entity())
             .transform_point3(glam::Vec3::ZERO)
     }
-    fn get_global_rotation(&self) -> crate::core::types::Quaternion {
-        global_rotation3d(&self.object_world().borrow(), self.get_id())
+    fn global_rotation(&self) -> crate::core::types::Quaternion {
+        global_rotation3d(&self.object_world().borrow(), self.entity())
     }
-    fn get_global_scale(&self) -> crate::core::types::Vector3 {
+    fn global_scale(&self) -> crate::core::types::Vector3 {
         let world = self.object_world();
         let world = world.borrow();
         let mut scale = glam::Vec3::ONE;
-        let mut current = Some(self.get_id());
+        let mut current = Some(self.entity());
         while let Some(entity) = current {
             if let Ok(transform) = world.get::<&crate::core::components::Transform3D>(entity) {
                 scale *= transform.scale;
@@ -464,7 +464,7 @@ pub(crate) fn bounds3d(
     let size = world
         .get::<&Draw3D>(entity)
         .ok()
-        .map(|draw| (draw.get_box)(world, entity));
+        .map(|draw| (draw.box_size)(world, entity));
     let (mut min, mut max) = size.map_or(
         (
             glam::Vec3::splat(f32::INFINITY),

@@ -71,7 +71,7 @@ pub trait ProjectionCanvas: ObjectHandler + sealed::Sealed {
     fn projection_resolution(&self) -> (u32, u32) {
         self.object_world()
             .borrow()
-            .get::<&CanvasSettings>(self.get_id())
+            .get::<&CanvasSettings>(self.entity())
             .expect("Canvas handler must contain CanvasSettings.")
             .resolution
     }
@@ -80,14 +80,14 @@ pub trait ProjectionCanvas: ObjectHandler + sealed::Sealed {
 impl sealed::Sealed for Canvas2DHandler {}
 impl ProjectionCanvas for Canvas2DHandler {
     fn projection_texture(&self) -> CanvasTexture {
-        self.get_texture()
+        self.texture()
     }
 }
 
 impl sealed::Sealed for Canvas3DHandler {}
 impl ProjectionCanvas for Canvas3DHandler {
     fn projection_texture(&self) -> CanvasTexture {
-        self.get_texture()
+        self.texture()
     }
 }
 

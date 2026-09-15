@@ -24,7 +24,7 @@ impl Default for CustomMesh {
             },
             draw: Draw3D {
                 on_draw: draw_custom_mesh,
-                get_box: |world, entity| world.get::<&CustomShape>(entity).unwrap().size,
+                box_size: |world, entity| world.get::<&CustomShape>(entity).unwrap().size,
                 ..Default::default()
             },
         }
@@ -55,12 +55,12 @@ fn custom_3d_object_uses_the_public_draw_contract() {
     let custom = custom_mesh()
         .position(vec3(1.0, 2.0, 3.0))
         .build(&mut scene);
-    scene.get_world_3d().add(&custom);
+    scene.world_3d().add(&custom);
 
     assert_eq!(custom.get_position_z(), 3.0);
     custom.set_position_z(4.0);
     assert_eq!(custom.get_position_z(), 4.0);
-    assert_eq!(custom.get_box(), vec3(2.0, 3.0, 4.0));
-    assert_eq!(custom.get_global_position(), vec3(1.0, 2.0, 4.0));
-    assert!(scene.get_world().get::<&Draw3D>(custom.get_id()).is_ok());
+    assert_eq!(custom.box_size(), vec3(2.0, 3.0, 4.0));
+    assert_eq!(custom.global_position(), vec3(1.0, 2.0, 4.0));
+    assert!(scene.world().get::<&Draw3D>(custom.entity()).is_ok());
 }

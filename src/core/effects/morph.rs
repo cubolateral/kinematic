@@ -76,8 +76,8 @@ impl MorphEffect {
                 from.get(Draw2D::opacity_property()),
             )
             .context();
-        let source_opacity = stored_opacity(&world, from.get_id());
-        let target_opacity = stored_opacity(&world, to.get_id());
+        let source_opacity = stored_opacity(&world, from.entity());
+        let target_opacity = stored_opacity(&world, to.entity());
         let (target_world, _) = to
             .animate(Draw2D::opacity_property(), target_opacity)
             .context();
@@ -86,34 +86,34 @@ impl MorphEffect {
             "Morph objects must belong to the same scene."
         );
         assert_ne!(
-            from.get_id(),
-            to.get_id(),
+            from.entity(),
+            to.entity(),
             "Morph requires distinct objects."
         );
         let start = animator.time();
         let end = start + self.duration;
         let (parent, from_silhouette, to_silhouette) = {
             let world = world.borrow();
-            let node = world.get::<&Node>(from.get_id()).unwrap();
+            let node = world.get::<&Node>(from.entity()).unwrap();
             let parent = node.parent.expect("Morph source must be attached.");
             assert!(
                 node.lifetime[0] <= start && start < node.lifetime[1],
                 "Morph source must be alive at the scheduled time."
             );
-            let target_parent = world.get::<&Node>(to.get_id()).unwrap().parent;
+            let target_parent = world.get::<&Node>(to.entity()).unwrap().parent;
             assert!(
                 target_parent.is_none() || target_parent == Some(parent),
                 "Morph objects must share the same parent."
             );
-            let from_silhouette = capture(&world, from.get_id(), parent, start, source_opacity);
-            let to_silhouette = capture(&world, to.get_id(), parent, start, target_opacity);
+            let from_silhouette = capture(&world, from.entity(), parent, start, source_opacity);
+            let to_silhouette = capture(&world, to.entity(), parent, start, target_opacity);
             (parent, from_silhouette, to_silhouette)
         };
         let data = ParticleTransform::new(from_silhouette, to_silhouette, self.easing);
         let object = Rect {
             draw: Draw2D {
                 on_draw: draw_transform,
-                get_box: |world, entity| {
+                box_size: |world, entity| {
                     let data = world.get::<&ParticleTransform>(entity).unwrap();
                     let bounds = union(data.from.bounds, data.to.bounds);
                     Vector2::new(
@@ -134,46 +134,46 @@ impl MorphEffect {
         let endpoints = {
             let world = world.borrow();
             MorphEndpoints {
-                from: from.get_id(),
-                to: to.get_id(),
+                from: from.entity(),
+                to: to.entity(),
                 parent,
                 time: start,
                 from_opacity: source_opacity,
                 to_opacity: target_opacity,
-                from_values: AppearanceSnapshot::capture(&world, from.get_id()),
-                to_values: AppearanceSnapshot::capture(&world, to.get_id()),
+                from_values: AppearanceSnapshot::capture(&world, from.entity()),
+                to_values: AppearanceSnapshot::capture(&world, to.entity()),
             }
         };
         world
             .borrow_mut()
-            .insert(carrier.get_id(), (data, endpoints))
+            .insert(carrier.entity(), (data, endpoints))
             .unwrap();
-        attach_child(&world, parent, carrier.get_id(), start);
+        attach_child(&world, parent, carrier.entity(), start);
         if world
             .borrow()
-            .get::<&Node>(to.get_id())
+            .get::<&Node>(to.entity())
             .unwrap()
             .parent
             .is_none()
         {
-            attach_child(&world, parent, to.get_id(), start);
+            attach_child(&world, parent, to.entity(), start);
         }
         {
             let world = world.borrow();
             let mut node = world.get::<&mut Node>(parent).unwrap();
             let children = node.children.as_mut().unwrap();
-            children.retain(|entity| *entity != carrier.get_id() && *entity != to.get_id());
+            children.retain(|entity| *entity != carrier.entity() && *entity != to.entity());
             let index = children
                 .iter()
-                .position(|entity| *entity == from.get_id())
+                .position(|entity| *entity == from.entity())
                 .unwrap()
                 + 1;
-            children.splice(index..index, [carrier.get_id(), to.get_id()]);
+            children.splice(index..index, [carrier.entity(), to.entity()]);
             drop(node);
-            deactivate_subtree(&world, carrier.get_id(), end);
+            deactivate_subtree(&world, carrier.entity(), end);
         }
         let progress = MorphState::progress_property()
-            .handle(world.clone(), carrier.get_id(), animator.clone())
+            .handle(world.clone(), carrier.entity(), animator.clone())
             .animate_from::<Rect>(0.0, 1.0)
             .duration(self.duration)
             .easing(Easing::Linear)
@@ -317,7 +317,7 @@ fn record(
     let global = parent.append(local);
     let relative = skia_safe::Matrix::concat(basis, &matrix(global));
     let draw = world.get::<&Draw2D>(entity).unwrap();
-    let size = (draw.get_box)(world, entity);
+    let size = (draw.box_size)(world, entity);
     let padding = world
         .get::<&Style>(entity)
         .map(|style| stroke_width_for_scale(style.stroke_width.max(0.0), local.scale))
@@ -443,7 +443,7 @@ mod tests {
                 .position(vec2(30.0, 0.0))
                 .fill(Color::BLUE)
                 .build(scene);
-            scene.get_world_2d().add(&source);
+            scene.world_2d().add(&source);
             scene.wait(1.0);
             morph()
                 .duration(2.0)
@@ -470,7 +470,7 @@ mod tests {
         assert_eq!(end[40 * 160 + 50].a(), 0);
         assert_eq!(pixels(&scene, 2.0), middle);
         assert_eq!(pixels(&scene, 0.5), before);
-        let world = scene.get_world();
+        let world = scene.world();
         let mut nodes = world.query::<(hecs::Entity, &Node)>();
         assert_eq!(
             nodes
@@ -496,7 +496,7 @@ mod tests {
                 let child = rect().size(vec2(12.0, 12.0)).fill(Color::RED).build(scene);
                 source.add(&child);
                 parent.add(&source);
-                scene.get_world_2d().add(&parent);
+                scene.world_2d().add(&parent);
                 let target = text_2d().text("A").size(20.0).build(scene);
                 morph().duration(1.0).play(&source, &target);
                 let next = circle().radius(8.0).build(scene);
@@ -520,7 +520,7 @@ mod tests {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().radius(10.0).fill(Color::RED).build(scene);
                 let rect = rect().size(vec2(20.0, 20.0)).fill(Color::BLUE).build(scene);
-                scene.get_world_2d().add(&circle);
+                scene.world_2d().add(&circle);
 
                 morph().duration(1.0).play(&circle, &rect);
                 morph().duration(1.0).play(&rect, &circle);
@@ -550,7 +550,7 @@ mod tests {
                     .position(vec2(30.0, 0.0))
                     .fill(Color::BLUE)
                     .build(scene);
-                scene.get_world_2d().add(&source);
+                scene.world_2d().add(&source);
 
                 morph()
                     .duration(1.0)
@@ -578,8 +578,8 @@ mod tests {
                     .fill(Color::GREEN)
                     .build(scene);
                 let target = circle().radius(15.0).fill(Color::BLUE).build(scene);
-                scene.get_world_2d().add(&source);
-                scene.get_world_2d().add(&overlay);
+                scene.world_2d().add(&source);
+                scene.world_2d().add(&overlay);
                 morph().duration(1.0).play(&source, &target);
             }
         }
@@ -605,7 +605,7 @@ mod tests {
                 let child = circle().radius(10.0).build(scene);
                 target.add(&child);
                 parent.add(&source);
-                scene.get_world_2d().add(&parent);
+                scene.world_2d().add(&parent);
                 scene.wait(1.0);
                 morph().duration(1.0).play(&source, &target);
             }
@@ -630,7 +630,7 @@ mod tests {
         let mut other = Scene::new();
         let source = rect().build(&mut scene);
         let target = circle().build(&mut other);
-        scene.get_world_2d().add(&source);
+        scene.world_2d().add(&source);
         morph().play(&source, &target);
     }
 
@@ -640,7 +640,7 @@ mod tests {
         scene.build(&mut MorphScene);
         let first = pixels(&scene, 2.0);
         let before = {
-            let world = scene.get_world();
+            let world = scene.world();
             world
                 .query::<(&Node, &MorphState)>()
                 .iter()
@@ -650,7 +650,7 @@ mod tests {
         let mut surface = skia_safe::surfaces::raster_n32_premul((160, 80)).unwrap();
         scene.draw(surface.canvas());
         let after = {
-            let world = scene.get_world();
+            let world = scene.world();
             world
                 .query::<(&Node, &MorphState)>()
                 .iter()

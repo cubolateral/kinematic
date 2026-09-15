@@ -179,8 +179,8 @@ impl<Object> Tween<Object> {
         from: T,
         to: T,
     ) -> Self {
-        let type_id = property.get_type_id();
-        let track_info = property.get_info();
+        let type_id = property.type_id();
+        let track_info = property.info();
         let from = track_info.clamp(from.into_track_value());
         let to = track_info.clamp(to.into_track_value());
 
@@ -238,8 +238,8 @@ impl<Object> Tween<Object> {
     ) -> Self {
         validate_rotation(axis, angle);
         let axis = axis.normalize();
-        let type_id = property.get_type_id();
-        let track_info = property.get_info();
+        let type_id = property.type_id();
+        let track_info = property.info();
         let from = normalized_quaternion(
             property
                 .handle(
