@@ -1,14 +1,16 @@
 use kinematic_macros::Trackable;
+use std::{any::Any, sync::Arc};
 
 use crate::core::{
     Trackable,
     components::{Animation, RenderContext3D},
     frame_dt,
+    objects::global_matrix3d,
 };
 
 const CHECKPOINT_INTERVAL_SECONDS: u64 = 2;
 
-/// Frame-dependent state owned by a simulation object.
+/// Frame-dependent state owned by an object with a [`Simulation`] component.
 ///
 /// [`Self::on_update`] runs with a fixed
 /// `dt` of `1.0 / fps`. The complete value is cloned for seek checkpoints.
@@ -16,7 +18,7 @@ const CHECKPOINT_INTERVAL_SECONDS: u64 = 2;
 /// through [`SimulationContext::get`].
 ///
 /// Use [`SimulationState2D`] or [`SimulationState3D`] to draw the corresponding
-/// simulation object.
+/// object.
 pub trait SimulationState: Clone + Send + Sync + 'static {
     /// Advances the state by one project frame.
     fn on_update(&mut self, context: &SimulationContext<'_>);
@@ -28,7 +30,7 @@ pub struct SimulationContext<'a> {
     entity: hecs::Entity,
     /// Absolute project time of this simulation step.
     pub time: f32,
-    /// Zero-based frame within the simulation object's lifetime.
+    /// Zero-based frame within the object's lifetime.
     pub frame: u64,
     /// Fixed duration of one project frame.
     pub dt: f32,
@@ -65,7 +67,7 @@ impl SimulationContext<'_> {
 /// are visual runtime state: they are not synchronized to the timeline and may
 /// be discarded when seeking rebuilds the simulation.
 pub trait SimulationState2D: SimulationState {
-    /// Draws the current state in the simulation object's local coordinates.
+    /// Draws the current state in the object's local coordinates.
     fn on_draw(&mut self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas);
 
     /// Returns the simulation's local bounding-box size.
@@ -78,7 +80,7 @@ pub trait SimulationState2D: SimulationState {
 ///
 /// Drawing receives the scene world and simulation entity. Submit geometry with
 /// transforms local to the simulation. [`RenderContext3D`] combines them with
-/// the simulation object's global transform. Mutations made while drawing are
+/// the object's global transform. Mutations made while drawing are
 /// visual runtime state: they are not synchronized to the timeline and may be
 /// discarded when seeking rebuilds the simulation.
 pub trait SimulationState3D: SimulationState {
@@ -99,6 +101,8 @@ pub trait SimulationState3D: SimulationState {
 trait ErasedSimulation: Send + Sync {
     fn clone_box(&self) -> Box<dyn ErasedSimulation>;
     fn on_update(&mut self, context: &SimulationContext<'_>);
+    fn state(&self) -> &dyn Any;
+    fn state_mut(&mut self) -> &mut dyn Any;
     fn draw_2d(
         &mut self,
         _world: &hecs::World,
@@ -129,6 +133,27 @@ impl Clone for Box<dyn ErasedSimulation> {
 }
 
 #[derive(Clone)]
+struct State<S>(S);
+
+impl<S: SimulationState> ErasedSimulation for State<S> {
+    fn clone_box(&self) -> Box<dyn ErasedSimulation> {
+        Box::new(self.clone())
+    }
+
+    fn on_update(&mut self, context: &SimulationContext<'_>) {
+        self.0.on_update(context);
+    }
+
+    fn state(&self) -> &dyn Any {
+        &self.0
+    }
+
+    fn state_mut(&mut self) -> &mut dyn Any {
+        &mut self.0
+    }
+}
+
+#[derive(Clone)]
 struct State2D<S>(S);
 
 impl<S: SimulationState2D> ErasedSimulation for State2D<S> {
@@ -138,6 +163,14 @@ impl<S: SimulationState2D> ErasedSimulation for State2D<S> {
 
     fn on_update(&mut self, context: &SimulationContext<'_>) {
         self.0.on_update(context);
+    }
+
+    fn state(&self) -> &dyn Any {
+        &self.0
+    }
+
+    fn state_mut(&mut self) -> &mut dyn Any {
+        &mut self.0
     }
 
     fn draw_2d(&mut self, world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
@@ -159,6 +192,14 @@ impl<S: SimulationState3D> ErasedSimulation for State3D<S> {
 
     fn on_update(&mut self, context: &SimulationContext<'_>) {
         self.0.on_update(context);
+    }
+
+    fn state(&self) -> &dyn Any {
+        &self.0
+    }
+
+    fn state_mut(&mut self) -> &mut dyn Any {
+        &mut self.0
     }
 
     fn draw_3d(
@@ -184,6 +225,14 @@ impl ErasedSimulation for EmptyState {
     }
 
     fn on_update(&mut self, _context: &SimulationContext<'_>) {}
+
+    fn state(&self) -> &dyn Any {
+        self
+    }
+
+    fn state_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 #[derive(Clone)]
@@ -192,7 +241,26 @@ struct Checkpoint {
     state: Box<dyn ErasedSimulation>,
 }
 
-/// Runtime state and timeline controls shared by 2D and 3D simulations.
+#[derive(Clone)]
+enum SimulationOperation {
+    Update {
+        time: f32,
+    },
+    Mutation {
+        time: f32,
+        apply: Arc<dyn Fn(&mut dyn Any) + Send + Sync>,
+    },
+}
+
+impl SimulationOperation {
+    fn time(&self) -> f32 {
+        match self {
+            Self::Update { time } | Self::Mutation { time, .. } => *time,
+        }
+    }
+}
+
+/// Type-erased runtime state and timeline controls for a scene object.
 ///
 /// Only [`Self::auto_update`] is trackable. Current state, frame position, and
 /// checkpoints are transient runtime data and are not persisted with a project.
@@ -211,7 +279,7 @@ pub struct Simulation {
     initial: Box<dyn ErasedSimulation>,
     current: Box<dyn ErasedSimulation>,
     checkpoints: Vec<Checkpoint>,
-    manual_updates: Vec<f32>,
+    operations: Vec<SimulationOperation>,
 }
 
 impl Clone for Simulation {
@@ -223,7 +291,7 @@ impl Clone for Simulation {
             initial: self.initial.clone(),
             current: self.current.clone(),
             checkpoints: self.checkpoints.clone(),
-            manual_updates: self.manual_updates.clone(),
+            operations: self.operations.clone(),
         }
     }
 }
@@ -238,23 +306,28 @@ impl Default for Simulation {
             initial: state.clone(),
             current: state.clone(),
             checkpoints: vec![Checkpoint { frame: 0, state }],
-            manual_updates: Vec::new(),
+            operations: Vec::new(),
         }
     }
 }
 
 impl Simulation {
-    /// Creates runtime storage for a custom two-dimensional simulation object.
+    /// Creates runtime storage for a simulation with custom drawing.
+    pub fn new<S: SimulationState>(state: S) -> Self {
+        Self::from_erased(Box::new(State(state)))
+    }
+
+    /// Creates runtime storage whose state supplies two-dimensional drawing.
     pub fn new_2d<S: SimulationState2D>(state: S) -> Self {
-        Self::new(Box::new(State2D(state)))
+        Self::from_erased(Box::new(State2D(state)))
     }
 
-    /// Creates runtime storage for a custom three-dimensional simulation object.
+    /// Creates runtime storage whose state supplies three-dimensional drawing.
     pub fn new_3d<S: SimulationState3D>(state: S) -> Self {
-        Self::new(Box::new(State3D(state)))
+        Self::from_erased(Box::new(State3D(state)))
     }
 
-    fn new(state: Box<dyn ErasedSimulation>) -> Self {
+    fn from_erased(state: Box<dyn ErasedSimulation>) -> Self {
         Self {
             auto_update: true,
             current_frame: 0,
@@ -262,12 +335,51 @@ impl Simulation {
             initial: state.clone(),
             current: state.clone(),
             checkpoints: vec![Checkpoint { frame: 0, state }],
-            manual_updates: Vec::new(),
+            operations: Vec::new(),
         }
     }
 
+    pub(crate) fn read_state<S: SimulationState, R>(&self, read: impl FnOnce(&S) -> R) -> R {
+        read(
+            self.current
+                .state()
+                .downcast_ref::<S>()
+                .expect("Simulation state must match the state associated with its object."),
+        )
+    }
+
     pub(crate) fn schedule_update(&mut self, time: f32) {
-        self.manual_updates.push(time);
+        self.operations.push(SimulationOperation::Update { time });
+        self.reset_replay();
+    }
+
+    pub(crate) fn schedule_mutation<S: SimulationState>(
+        &mut self,
+        time: f32,
+        mutation: impl Fn(&mut S) + Send + Sync + 'static,
+    ) {
+        assert!(
+            self.initial.state_mut().is::<S>(),
+            "Simulation state must match the state associated with its object."
+        );
+        self.operations.push(SimulationOperation::Mutation {
+            time,
+            apply: Arc::new(move |state| {
+                mutation(
+                    state
+                        .downcast_mut::<S>()
+                        .expect("Simulation mutation state type must remain stable."),
+                );
+            }),
+        });
+        self.reset_replay();
+    }
+
+    fn reset_replay(&mut self) {
+        self.current_frame = 0;
+        self.initial_frame_processed = false;
+        self.current = self.initial.clone();
+        self.checkpoints.truncate(1);
     }
 
     pub(crate) fn seek(
@@ -303,10 +415,9 @@ impl Simulation {
         let dt = frame_dt(fps);
         let checkpoint_interval = u64::from(fps.max(1)) * CHECKPOINT_INTERVAL_SECONDS;
         if !self.initial_frame_processed {
-            let manual = self.manual_steps(0, dt, start_time);
-            let steps = manual.max(u32::from(auto_update_at(start_time)));
-            self.run_steps(
-                steps,
+            self.run_frame(
+                self.frame_operations(0, dt, start_time),
+                auto_update_at(start_time),
                 SimulationContext {
                     world,
                     entity,
@@ -320,10 +431,9 @@ impl Simulation {
         while self.current_frame < target_frame {
             self.current_frame += 1;
             let time = start_time + self.current_frame as f32 * dt;
-            let manual = self.manual_steps(self.current_frame, dt, start_time);
-            let steps = manual.max(u32::from(auto_update_at(time)));
-            self.run_steps(
-                steps,
+            self.run_frame(
+                self.frame_operations(self.current_frame, dt, start_time),
+                auto_update_at(time),
                 SimulationContext {
                     world,
                     entity,
@@ -346,58 +456,96 @@ impl Simulation {
         }
     }
 
-    fn manual_steps(&self, frame: u64, dt: f32, start_time: f32) -> u32 {
+    fn frame_operations(&self, frame: u64, dt: f32, start_time: f32) -> Vec<SimulationOperation> {
         let epsilon = f32::EPSILON * (start_time.abs() + frame as f32 * dt + 1.0) * 4.0;
         if frame == 0 {
             return self
-                .manual_updates
+                .operations
                 .iter()
-                .filter(|time| (**time - start_time).abs() <= epsilon)
-                .count() as u32;
+                .filter(|operation| (operation.time() - start_time).abs() <= epsilon)
+                .cloned()
+                .collect();
         }
 
         let previous = start_time + (frame - 1) as f32 * dt;
         let current = start_time + frame as f32 * dt;
-        self.manual_updates
+        self.operations
             .iter()
-            .filter(|time| **time > previous + epsilon && **time <= current + epsilon)
-            .count() as u32
+            .filter(|operation| {
+                operation.time() > previous + epsilon && operation.time() <= current + epsilon
+            })
+            .cloned()
+            .collect()
     }
 
-    fn run_steps(&mut self, steps: u32, context: SimulationContext<'_>) {
-        for _ in 0..steps {
+    fn run_frame(
+        &mut self,
+        operations: Vec<SimulationOperation>,
+        auto_update: bool,
+        context: SimulationContext<'_>,
+    ) {
+        let has_update = operations
+            .iter()
+            .any(|operation| matches!(operation, SimulationOperation::Update { .. }));
+        for operation in operations {
+            match operation {
+                SimulationOperation::Update { .. } => self.current.on_update(&context),
+                SimulationOperation::Mutation { apply, .. } => {
+                    apply(self.current.state_mut());
+                }
+            }
+        }
+        if auto_update && !has_update {
             self.current.on_update(&context);
         }
     }
 
-    /// Draws the current 2D state with access to its owning scene entity.
+    /// Draws the current 2D state as a [`Draw2D`](super::Draw2D) callback.
     pub fn draw_2d(
-        &mut self,
         world: &hecs::World,
         entity: hecs::Entity,
         canvas: &skia_safe::Canvas,
+        _opacity: f32,
     ) {
-        self.current.draw_2d(world, entity, canvas);
+        world
+            .get::<&mut Self>(entity)
+            .expect("Simulated object must contain a Simulation component.")
+            .current
+            .draw_2d(world, entity, canvas);
     }
 
-    /// Returns the current 2D state's local bounding-box size.
-    pub fn box_2d(&self, world: &hecs::World, entity: hecs::Entity) -> glam::Vec2 {
-        self.current.box_2d(world, entity)
+    /// Returns the current 2D state's bounds as a [`Draw2D`](super::Draw2D) callback.
+    pub fn box_2d(world: &hecs::World, entity: hecs::Entity) -> glam::Vec2 {
+        world
+            .get::<&Self>(entity)
+            .expect("Simulated object must contain a Simulation component.")
+            .current
+            .box_2d(world, entity)
     }
 
-    /// Draws the current 3D state with access to its owning scene entity.
+    /// Draws the current 3D state as a [`Draw3D`](super::Draw3D) callback.
     pub fn draw_3d(
-        &mut self,
         world: &hecs::World,
         entity: hecs::Entity,
         context: &mut RenderContext3D<'_>,
     ) -> Result<(), String> {
-        self.current.draw_3d(world, entity, context)
+        let previous = context.set_current_transform(global_matrix3d(world, entity));
+        let result = world
+            .get::<&mut Self>(entity)
+            .expect("Simulated object must contain a Simulation component.")
+            .current
+            .draw_3d(world, entity, context);
+        context.set_current_transform(previous);
+        result
     }
 
-    /// Returns the current 3D state's local bounding-box size.
-    pub fn box_3d(&self, world: &hecs::World, entity: hecs::Entity) -> glam::Vec3 {
-        self.current.box_3d(world, entity)
+    /// Returns the current 3D state's bounds as a [`Draw3D`](super::Draw3D) callback.
+    pub fn box_3d(world: &hecs::World, entity: hecs::Entity) -> glam::Vec3 {
+        world
+            .get::<&Self>(entity)
+            .expect("Simulated object must contain a Simulation component.")
+            .current
+            .box_3d(world, entity)
     }
 }
 
@@ -500,7 +648,7 @@ mod tests {
         let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
         let mut world = hecs::World::new();
         let entity = world.spawn(());
-        simulation.draw_2d(&world, entity, surface.canvas());
+        simulation.current.draw_2d(&world, entity, surface.canvas());
         *value.lock().unwrap()
     }
 
@@ -525,10 +673,7 @@ mod tests {
         ));
         let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
 
-        world
-            .get::<&mut Simulation>(entity)
-            .unwrap()
-            .draw_2d(&world, entity, surface.canvas());
+        Simulation::draw_2d(&world, entity, surface.canvas(), 1.0);
 
         assert_eq!(*observed.lock().unwrap(), Some(42));
     }
@@ -544,8 +689,8 @@ mod tests {
         let entity = world.spawn(());
         let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
 
-        simulation.draw_2d(&world, entity, surface.canvas());
-        simulation.draw_2d(&world, entity, surface.canvas());
+        simulation.current.draw_2d(&world, entity, surface.canvas());
+        simulation.current.draw_2d(&world, entity, surface.canvas());
 
         assert_eq!(*observed.lock().unwrap(), 2);
     }

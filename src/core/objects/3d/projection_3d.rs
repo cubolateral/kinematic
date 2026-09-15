@@ -24,7 +24,7 @@ impl Default for Projection3DSettings {
 }
 
 /// Unlit 3D plane sampling the premultiplied output of a canvas.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "projection_3d")]
 pub struct Projection3D {
     #[trackable]

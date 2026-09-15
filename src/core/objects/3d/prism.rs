@@ -31,7 +31,7 @@ impl Default for PrismShape {
 }
 
 /// Regular-base prism centered on its local origin.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "prism")]
 pub struct Prism {
     #[trackable]

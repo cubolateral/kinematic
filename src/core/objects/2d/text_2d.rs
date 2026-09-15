@@ -151,7 +151,7 @@ impl Default for TextShape {
 }
 
 /// Built-in text scene object.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "2d", builder = "text_2d")]
 #[morph]
 pub struct Text2D {

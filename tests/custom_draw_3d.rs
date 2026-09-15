@@ -5,7 +5,7 @@ struct CustomShape {
     size: Vector3,
 }
 
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "custom_mesh")]
 struct CustomMesh {
     #[trackable]

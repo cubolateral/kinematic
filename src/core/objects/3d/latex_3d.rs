@@ -60,7 +60,7 @@ impl Latex3DShape {
 ///
 /// Supports mathematical LaTeX accepted by RaTeX in display style.
 /// Invalid or unsupported source panics when its geometry is first requested.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "latex_3d")]
 pub struct Latex3D {
     #[trackable]

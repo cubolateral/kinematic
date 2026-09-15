@@ -3,7 +3,7 @@ use kinematic_macros::{Container, Object};
 use crate::core::components::{Draw2D, Transform2D};
 
 /// Transformable scene object that groups an ordered set of child objects.
-#[derive(Object, Container, hecs::Bundle)]
+#[derive(Object, Container)]
 #[object(spatial = "2d", builder = "group_2d")]
 #[morph]
 pub struct Group2D {

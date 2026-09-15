@@ -22,7 +22,7 @@ impl Default for CircleShape {
     }
 }
 
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "2d", builder = "circle")]
 #[morph]
 /// Built-in circular scene object.

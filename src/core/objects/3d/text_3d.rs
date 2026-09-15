@@ -86,7 +86,7 @@ impl Text3DShape {
 }
 
 /// Built-in extruded text scene object.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "text_3d")]
 pub struct Text3D {
     #[trackable]

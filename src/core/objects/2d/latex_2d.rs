@@ -56,7 +56,7 @@ impl Default for Latex2DShape {
 /// scene.get_world_2d().add(&formula);
 /// formula.morph(r"\sqrt{2}").duration(2.0).play();
 /// ```
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "2d", builder = "latex_2d")]
 #[morph]
 pub struct Latex2D {

@@ -136,7 +136,7 @@ fn line_box(shape: &Line2DShape) -> Vector2 {
     vec2(horizontal_extent * 2.0, vertical_extent * 2.0)
 }
 
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "2d", builder = "line_2d")]
 #[morph]
 /// Built-in line scene object with independently animatable arrowheads.

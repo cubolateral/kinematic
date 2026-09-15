@@ -43,7 +43,7 @@ impl TorusShape {
 }
 
 /// Torus centered on its local origin with its ring around the Y axis.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "torus")]
 pub struct Torus {
     #[trackable]

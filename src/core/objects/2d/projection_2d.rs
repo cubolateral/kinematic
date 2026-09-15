@@ -6,7 +6,7 @@ use crate::core::{
 use kinematic_macros::Object;
 
 /// 2D rectangle sampling the premultiplied output of a canvas.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "2d", builder = "projection_2d")]
 pub struct Projection2D {
     #[trackable]

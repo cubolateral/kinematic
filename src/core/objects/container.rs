@@ -344,7 +344,7 @@ mod tests {
         types::{Color, vec2},
     };
 
-    #[derive(Object, Container, hecs::Bundle)]
+    #[derive(Object, Container)]
     #[object(spatial = "2d", builder = "test_container")]
     struct TestContainer {
         #[trackable]

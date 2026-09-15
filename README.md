@@ -180,149 +180,94 @@ creates `Random::new(0)`.
 
 ## Simulations
 
-Use `Simulation2D` or `Simulation3D` when the next state depends on the previous
-frame, as in physics, particle systems, cellular automata, and procedural
-processes. Unlike a tween, a simulation owns mutable state and advances it in
-fixed steps with `dt = 1.0 / fps`.
-
-The state implements `SimulationState` for updates and the dimension-specific
-trait for read-only drawing. Drawing receives the scene `World` and the
-simulation `Entity`, so it can read trackable appearance components from the
-object. It must be `Clone + Send + Sync + 'static` because complete state clones
-are used as runtime checkpoints and stored in the ECS. Evolving values belong
-in the simulation state; timeline-controlled inputs can be additional trackable
-components read through `SimulationContext`. The example below is Conway's Game of Life: a generation
-cannot be sampled from an isolated keyframe because every cell depends on the
-preceding generation.
-
-`Random` can be stored directly in a simulation state. Because checkpoints clone
-the complete state, seeking restores the generator position along with the rest
-of the simulation.
+`Simulation` is a component that any custom `Object` can own. Use it when the
+next state depends on the previous frame, as in physics, cellular automata, and
+procedural systems. The state advances in fixed steps with `dt = 1.0 / fps` and
+must be `Clone + Send + Sync + 'static` so checkpoints can restore it on seek.
 
 ```rust
-#[derive(Clone, Trackable)]
-struct Parameters {
-    #[track]
-    rule: u32,
-}
-
-#[derive(Clone, Trackable)]
-struct Appearance {
-    #[track]
-    color: Color,
-}
-
 #[derive(Clone)]
 struct Life {
-    cells: [[bool; 8]; 8],
+    cells: [bool; 8],
 }
 
 impl SimulationState for Life {
-    fn on_update(&mut self, context: &SimulationContext<'_>) {
-        let _rule = context.get::<Parameters>().rule;
-        let previous = self.cells;
-        for y in 0..8 {
-            for x in 0..8 {
-                let mut neighbors = 0;
-                for dy in [-1, 0, 1] {
-                    for dx in [-1, 0, 1] {
-                        if (dx, dy) != (0, 0) {
-                            let nx = (x as i32 + dx).rem_euclid(8) as usize;
-                            let ny = (y as i32 + dy).rem_euclid(8) as usize;
-                            neighbors += previous[ny][nx] as u8;
-                        }
-                    }
-                }
-                self.cells[y][x] = neighbors == 3 || (previous[y][x] && neighbors == 2);
-            }
-        }
+    fn on_update(&mut self, _context: &SimulationContext<'_>) {
+        // Advance one frame.
     }
 }
 
 impl SimulationState2D for Life {
-    fn on_draw(
-        &mut self,
-        world: &hecs::World,
-        entity: hecs::Entity,
-        canvas: &skia_safe::Canvas,
-    ) {
-        let color = world.get::<&Appearance>(entity).unwrap().color;
-        let paint = skia_safe::Paint::new(
-            skia_safe::Color4f::new(color.r, color.g, color.b, color.a),
-            None,
-        );
-        for (y, row) in self.cells.iter().enumerate() {
-            for (x, alive) in row.iter().enumerate() {
-                if *alive {
-                    canvas.draw_rect(
-                        skia_safe::Rect::from_xywh(
-                            x as f32 * 20.0 - 80.0,
-                            y as f32 * 20.0 - 80.0,
-                            18.0,
-                            18.0,
-                        ),
-                        &paint,
-                    );
-                }
-            }
+    fn on_draw(&mut self, _world: &hecs::World, _entity: hecs::Entity, canvas: &skia_safe::Canvas) {
+        // Draw the current cells in local coordinates.
+    }
+}
+
+#[derive(Object)]
+#[object(spatial = "2d", builder = "life", simulation = Life)]
+struct LifeObject {
+    #[trackable]
+    simulation: Simulation,
+    #[trackable]
+    transform: Transform2D,
+    #[trackable]
+    draw: Draw2D,
+}
+
+impl Default for LifeObject {
+    fn default() -> Self {
+        Self {
+            simulation: Simulation::new_2d(Life { cells: [false; 8] }),
+            transform: Transform2D::default(),
+            draw: Draw2D {
+                on_draw: Simulation::draw_2d,
+                get_box: Simulation::box_2d,
+                ..Draw2D::default()
+            },
         }
     }
-
-    fn get_box(&self, _world: &hecs::World, _entity: hecs::Entity) -> Vector2 {
-        vec2(160.0, 160.0)
-    }
 }
-
-let mut cells = [[false; 8]; 8];
-cells[3][2..5].fill(true);
-let simulation = simulation_2d()
-    .state(Life { cells })
-    .add_trackable(Parameters { rule: 30 })
-    .add_trackable(Appearance { color: Color::CYAN })
-    .position(vec2(100.0, 0.0))
-    .build(s);
-s.get_world_2d().add(&simulation);
-
-s.wait(1.0);
-simulation.rule(90).immediate();
-s.wait(3.0);
 ```
 
-`auto_update` is a discrete boolean track. Setting it to `false` disables the
-automatic step; drawing continues with the last state. Call `simulation.update()`
-to schedule an explicit step at the current scene time. Repeated calls schedule
-multiple steps in that frame, which makes ordinary Rust loops useful:
+The generated handler exposes `update`, `write_simulation`, and
+`read_simulation`. Writes and explicit updates are stored in timeline order and
+replayed through seeks and checkpoints:
 
 ```rust
-simulation.auto_update(false).immediate();
-for _ in 0..4 {
-    simulation.update();
-}
+let life = life().auto_update(false).build(s);
+s.get_world_2d().add(&life);
+
+life.write_simulation(|state| state.cells[2] = true);
+life.update();
+s.wait(1.0);
+life.write_simulation(|state| state.cells[4] = false);
 ```
 
-Automatic and explicit updates do not accidentally double the first step. The
-number of steps in one frame is `max(auto_update as u32, explicit_updates)`:
+`read_simulation` reads the state produced by the latest `Scene::update` and
+returns an owned result, so no reference escapes the ECS borrow:
 
-| `auto_update` | Explicit `update()` calls | Steps |
-| --- | ---: | ---: |
-| `false` | 0 | 0 |
-| `false` | 1 | 1 |
-| `true` | 0 | 1 |
-| `true` | 1 | 1 |
-| Either | N, where N > 1 | N |
+```rust
+let alive = life.read_simulation(|state| state.cells[2]);
+```
 
-On a backward seek or a jump, Kinematic restores the nearest cached checkpoint
-and replays each project frame. `SimulationContext` exposes the frame's absolute
-`time`, local `frame`, fixed `dt`, and `get::<T>()`; the latter samples every
-additional trackable component at that intermediate frame. The historical
-`auto_update` value and explicit updates are sampled the same way. Checkpoints
-are runtime-only and are not written to the project.
+Use a signal to derive another object's displayed value on every evaluated
+frame. Signals run after simulations:
 
-Simulation drawing is local, like drawing inside a group. `Simulation2D`
-applies its inherited `Transform2D` and composites inherited opacity outside
-`on_draw`. `Simulation3D` installs its inherited `Transform3D` as the base of
-`RenderContext3D`; each transform passed to `render_material` is relative to
-that base.
+```rust
+let label = text_2d().text("Alive: 0").build(s);
+let label_for_signal = label.clone();
+
+life.signal(move |life, _frame| {
+    let alive = life.read_simulation(|state| state.cells.iter().filter(|cell| **cell).count());
+    label_for_signal.set_text(format!("Alive: {alive}"));
+});
+```
+
+Normal `#[trackable]` components can live beside `Simulation` and are available
+through their generated builder and handler fields. During `on_update`, sample
+their historical values with `SimulationContext::get::<T>()`. Use
+`Simulation::new` for fully custom drawing, or `new_2d`/`new_3d` with the
+optional `Simulation::draw_2d`/`draw_3d` callbacks.
 
 A complete runnable version contains equivalent 2D and 3D scenes, including a
 glider with automatic advancement disabled and a burst of explicit steps. It is in
@@ -438,7 +383,9 @@ Rendering callbacks are dimension-specific components: `Draw2D` receives a
 Skia canvas, while `Draw3D` receives a `RenderContext3D`. The 3D context exposes
 the active camera, render target, three-d context, canvas textures, and a mesh
 cache keyed by `GeometryKey`. This lets application-defined objects participate
-in the same scene tree and reuse GPU geometry across objects and frames:
+in the same scene tree and reuse GPU geometry across objects and frames.
+`#[derive(Object)]` also bundles the struct fields as ECS components; a separate
+`#[derive(hecs::Bundle)]` is not needed:
 
 ```rust
 use kinematic::{hecs, prelude::*, three_d};
@@ -446,7 +393,7 @@ use kinematic::{hecs, prelude::*, three_d};
 #[derive(Clone)]
 struct CustomShape;
 
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "custom_cube")]
 struct CustomCube {
     #[trackable]

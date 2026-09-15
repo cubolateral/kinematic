@@ -31,7 +31,7 @@ impl Default for Image3DSettings {
 }
 
 /// Textured plane in local XY with its front facing positive Z.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "image_3d")]
 pub struct Image3D {
     #[trackable]

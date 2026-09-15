@@ -6,7 +6,7 @@ use super::super::canvas::{
     CanvasDimension, CanvasSettings, CanvasTexture, scene_identity, validate_canvas,
 };
 /// Independent 3D perspective viewport with its own camera.
-#[derive(Object, Container, hecs::Bundle)]
+#[derive(Object, Container)]
 #[object(spatial = "none", builder = "canvas_3d")]
 pub struct Canvas3D {
     #[trackable]

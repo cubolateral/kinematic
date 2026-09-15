@@ -45,7 +45,7 @@ pub(crate) fn rect_path(shape: &RectShape) -> skia_safe::Path {
     skia_safe::Path::rrect(skia_safe::RRect::new_rect_radii(rect, &radii), None)
 }
 
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "2d", builder = "rect")]
 #[morph]
 /// Built-in rectangular scene object.

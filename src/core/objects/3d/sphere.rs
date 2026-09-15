@@ -23,7 +23,7 @@ impl Default for SphereShape {
 }
 
 /// Sphere centered on its local origin.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "sphere")]
 pub struct Sphere {
     #[trackable]

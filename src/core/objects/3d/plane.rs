@@ -20,7 +20,7 @@ impl Default for PlaneShape {
 }
 
 /// Plane in local XY with its front facing positive Z.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "plane")]
 pub struct Plane {
     #[trackable]

@@ -9,7 +9,7 @@ use crate::core::{
 };
 
 /// Image drawn inside a styled rectangular shape.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "2d", builder = "image_2d")]
 #[morph]
 pub struct Image2D {

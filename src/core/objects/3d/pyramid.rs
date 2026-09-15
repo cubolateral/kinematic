@@ -28,7 +28,7 @@ impl Default for PyramidShape {
 }
 
 /// Regular-base pyramid centered on its local origin with its apex facing positive Y.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "pyramid")]
 pub struct Pyramid {
     #[trackable]

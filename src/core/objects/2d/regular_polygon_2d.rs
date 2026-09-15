@@ -36,7 +36,7 @@ fn polygon_points(shape: &RegularPolygon2DShape) -> Option<Vec<skia_safe::Point>
     )
 }
 
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "2d", builder = "regular_polygon_2d")]
 #[morph]
 /// Built-in regular polygon scene object.

@@ -9,6 +9,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let handler_name = format_ident!("{}Handler", object_name);
     let mut alias = None;
     let mut spatial = None;
+    let mut simulation = None;
     let mut morph = false;
     for attr in &input.attrs {
         if attr.path().is_ident("morph") {
@@ -19,6 +20,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                     alias = Some(meta.value()?.parse::<syn::LitStr>()?.value());
                 } else if meta.path.is_ident("spatial") {
                     spatial = Some(meta.value()?.parse::<syn::LitStr>()?.value());
+                } else if meta.path.is_ident("simulation") {
+                    simulation = Some(meta.value()?.parse::<syn::Type>()?);
                 } else {
                     return Err(meta.error("Unknown object option."));
                 }
@@ -111,6 +114,11 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         .map(|field| field.ident.as_ref().unwrap())
         .collect();
     let field_types: Vec<_> = fields.iter().map(|field| &field.ty).collect();
+    let bundle_pointer_idents: Vec<_> = field_idents
+        .iter()
+        .map(|field| format_ident!("__hecs_{}", field))
+        .collect();
+    let field_count = field_types.len();
 
     for field in fields {
         let field_ident = field.ident.as_ref().unwrap();
@@ -205,8 +213,122 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     } else {
         quote! {}
     };
+    let simulation_impl = simulation.map_or_else(
+        || quote! {},
+        |state| {
+            quote! {
+                impl kinematic::core::objects::SimulationObject for #object_name {
+                    type State = #state;
+                }
+
+                impl #handler_name {
+                    /// Reads the simulation state currently evaluated by the scene.
+                    pub fn read_simulation<Result>(
+                        &self,
+                        read: impl FnOnce(&#state) -> Result,
+                    ) -> Result {
+                        kinematic::core::objects::read_simulation_state(self, read)
+                    }
+
+                    /// Schedules one explicit simulation update at the current timeline time.
+                    pub fn update(&self) {
+                        kinematic::core::objects::schedule_simulation_update(self);
+                    }
+
+                    /// Schedules a replayable state write at the current timeline time.
+                    pub fn write_simulation(
+                        &self,
+                        write: impl Fn(&mut #state) + Send + Sync + 'static,
+                    ) {
+                        kinematic::core::objects::schedule_simulation_write(self, write);
+                    }
+                }
+            }
+        },
+    );
 
     let expanded = quote! {
+        unsafe impl kinematic::hecs::DynamicBundle for #object_name {
+            fn has<T: kinematic::hecs::Component>(&self) -> bool {
+                false #(|| std::any::TypeId::of::<#field_types>() == std::any::TypeId::of::<T>())*
+            }
+
+            fn key(&self) -> Option<std::any::TypeId> {
+                Some(std::any::TypeId::of::<Self>())
+            }
+
+            fn with_ids<T>(&self, f: impl FnOnce(&[std::any::TypeId]) -> T) -> T {
+                <Self as kinematic::hecs::Bundle>::with_static_ids(f)
+            }
+
+            fn type_info(&self) -> Vec<kinematic::hecs::TypeInfo> {
+                <Self as kinematic::hecs::Bundle>::with_static_type_info(|info| info.to_vec())
+            }
+
+            unsafe fn put(
+                mut self,
+                mut f: impl FnMut(*mut u8, kinematic::hecs::TypeInfo),
+            ) {
+                #(
+                    f(
+                        (&mut self.#field_idents as *mut #field_types).cast::<u8>(),
+                        kinematic::hecs::TypeInfo::of::<#field_types>(),
+                    );
+                    std::mem::forget(self.#field_idents);
+                )*
+            }
+        }
+
+        unsafe impl kinematic::hecs::Bundle for #object_name {
+            fn with_static_ids<T>(f: impl FnOnce(&[std::any::TypeId]) -> T) -> T {
+                static ELEMENTS: kinematic::hecs::spin::Lazy<[std::any::TypeId; #field_count]> =
+                    kinematic::hecs::spin::Lazy::new(|| {
+                        let mut types = [#((
+                            std::mem::align_of::<#field_types>(),
+                            std::any::TypeId::of::<#field_types>(),
+                        )),*];
+                        types.sort_unstable_by(|left, right| {
+                            left.0
+                                .cmp(&right.0)
+                                .reverse()
+                                .then(left.1.cmp(&right.1))
+                        });
+                        let mut ids = [std::any::TypeId::of::<()>(); #field_count];
+                        for (id, info) in ids.iter_mut().zip(types.iter()) {
+                            *id = info.1;
+                        }
+                        ids
+                    });
+                f(&*ELEMENTS)
+            }
+
+            fn with_static_type_info<T>(f: impl FnOnce(&[kinematic::hecs::TypeInfo]) -> T) -> T {
+                let mut info = [#(kinematic::hecs::TypeInfo::of::<#field_types>()),*];
+                info.sort_unstable();
+                f(&info)
+            }
+
+            unsafe fn get(
+                mut f: impl FnMut(
+                    kinematic::hecs::TypeInfo,
+                ) -> Option<std::ptr::NonNull<u8>>,
+            ) -> Result<Self, kinematic::hecs::MissingComponent> {
+                #(
+                    let #bundle_pointer_idents = f(
+                        kinematic::hecs::TypeInfo::of::<#field_types>(),
+                    )
+                    .ok_or_else(kinematic::hecs::MissingComponent::new::<#field_types>)?
+                    .cast::<#field_types>()
+                    .as_ptr();
+                )*
+                Ok(Self {
+                    #(
+                        #field_idents: unsafe { #bundle_pointer_idents.read() },
+                    )*
+                })
+            }
+        }
+
         /// Builder generated for this scene object.
         #visibility struct #builder_name {
             object: #object_name,
@@ -349,6 +471,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         #spatial_impl
         #morph_impl
+        #simulation_impl
 
         impl #handler_name {
             /// Creates an identical object in the supplied scene.

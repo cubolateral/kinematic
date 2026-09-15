@@ -11,9 +11,6 @@ pub struct Inspection {
 
     /// Returns the static set of trackable components for this entity type.
     pub get: fn(&hecs::World, hecs::Entity) -> &'static [TrackableInfo],
-
-    /// Trackable components added dynamically while building the entity.
-    pub(crate) additional: Vec<TrackableInfo>,
 }
 
 impl Inspection {
@@ -22,26 +19,16 @@ impl Inspection {
         object_name: &'static str,
         get: fn(&hecs::World, hecs::Entity) -> &'static [TrackableInfo],
     ) -> Self {
-        Self {
-            object_name,
-            get,
-            additional: Vec::new(),
-        }
+        Self { object_name, get }
     }
 
-    pub(crate) fn add_trackable(&mut self, trackable: TrackableInfo) {
-        self.additional.push(trackable);
-    }
-
-    /// Iterates over every fixed and dynamically added trackable component.
+    /// Iterates over the object's trackable components.
     pub(crate) fn trackables<'a>(
         &'a self,
         world: &hecs::World,
         entity: hecs::Entity,
     ) -> impl Iterator<Item = &'a TrackableInfo> {
-        (self.get)(world, entity)
-            .iter()
-            .chain(self.additional.iter())
+        (self.get)(world, entity).iter()
     }
 }
 

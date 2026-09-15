@@ -1,4 +1,4 @@
-use kinematic::{prelude::*, three_d};
+use kinematic::{hecs, prelude::*, three_d};
 
 const SIZE: usize = 12;
 const CELL_2D: f32 = 24.0;
@@ -156,13 +156,65 @@ impl Default for Life3DAppearance {
     }
 }
 
+#[derive(Object)]
+#[object(spatial = "2d", builder = "life_2d", simulation = Life)]
+struct Life2D {
+    #[trackable]
+    appearance: Life2DAppearance,
+    #[trackable]
+    simulation: Simulation,
+    #[trackable]
+    transform: Transform2D,
+    #[trackable]
+    draw: Draw2D,
+}
+
+impl Default for Life2D {
+    fn default() -> Self {
+        Self {
+            appearance: Life2DAppearance::default(),
+            simulation: Simulation::new_2d(Life::glider()),
+            transform: Transform2D::default(),
+            draw: Draw2D {
+                on_draw: Simulation::draw_2d,
+                get_box: Simulation::box_2d,
+                ..Draw2D::default()
+            },
+        }
+    }
+}
+
+#[derive(Object)]
+#[object(spatial = "3d", builder = "life_3d", simulation = Life)]
+struct Life3D {
+    #[trackable]
+    appearance: Life3DAppearance,
+    #[trackable]
+    simulation: Simulation,
+    #[trackable]
+    transform: Transform3D,
+    #[trackable]
+    draw: Draw3D,
+}
+
+impl Default for Life3D {
+    fn default() -> Self {
+        Self {
+            appearance: Life3DAppearance::default(),
+            simulation: Simulation::new_3d(Life::glider()),
+            transform: Transform3D::default(),
+            draw: Draw3D {
+                on_draw: Simulation::draw_3d,
+                get_box: Simulation::box_3d,
+                ..Draw3D::default()
+            },
+        }
+    }
+}
+
 #[scene]
 fn game_of_life_2d(s: &mut Scene) {
-    let life = simulation_2d()
-        .state(Life::glider())
-        .auto_update(false)
-        .add_trackable(Life2DAppearance::default())
-        .build(s);
+    let life = life_2d().auto_update(false).build(s);
     s.get_world_2d().add(&life);
 
     for _ in 0..32 {
@@ -176,11 +228,9 @@ fn game_of_life_2d(s: &mut Scene) {
 #[scene]
 fn game_of_life_3d(s: &mut Scene) {
     s.get_root().view_2d(false).immediate();
-    let life = simulation_3d()
-        .state(Life::glider())
+    let life = life_3d()
         .auto_update(false)
         .rotation(Quaternion::from_rotation_y(0.35))
-        .add_trackable(Life3DAppearance::default())
         .build(s);
     s.get_world_3d().add(&life);
 

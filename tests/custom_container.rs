@@ -1,6 +1,6 @@
-use kinematic::{hecs, prelude::*};
+use kinematic::prelude::*;
 
-#[derive(Object, Container, hecs::Bundle)]
+#[derive(Object, Container)]
 #[object(spatial = "2d", builder = "custom_container")]
 struct CustomContainer {
     #[trackable]

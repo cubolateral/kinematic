@@ -53,7 +53,7 @@ fn polygon_mesh(sides: u32) -> three_d::CpuMesh {
 }
 
 /// Flat regular polygon with its front facing positive Z.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "regular_polygon_3d")]
 pub struct RegularPolygon3D {
     #[trackable]

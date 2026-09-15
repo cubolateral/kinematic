@@ -24,7 +24,7 @@ impl Default for EllipseShape {
     }
 }
 
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "2d", builder = "ellipse")]
 #[morph]
 /// Built-in elliptical scene object.

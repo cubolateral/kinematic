@@ -211,7 +211,7 @@ fn line_box(shape: &Line3DShape) -> Vector3 {
 }
 
 /// Built-in 3D line scene object with independently animatable arrowheads.
-#[derive(Object, hecs::Bundle)]
+#[derive(Object)]
 #[object(spatial = "3d", builder = "line_3d")]
 pub struct Line3D {
     #[trackable]
