@@ -35,6 +35,7 @@ impl FadeFrom {
 
 fn play_fade<T>(
     handler: &T,
+    delay: f32,
     duration: f32,
     easing: Easing,
     opacity: (f32, f32),
@@ -58,6 +59,7 @@ fn play_fade<T>(
             rotation.0,
             rotation.1,
         )
+        .delay(delay)
         .duration(duration)
         .easing(easing)
         .play();
@@ -65,6 +67,7 @@ fn play_fade<T>(
 
 /// Fades an object in from an optional scale and position.
 pub struct FadeIn {
+    delay: f32,
     duration: f32,
     easing: Easing,
     scale: f32,
@@ -77,6 +80,7 @@ impl FadeIn {
     /// Creates a fade-in with a one-second duration and linear easing.
     pub fn new() -> Self {
         Self {
+            delay: 0.0,
             duration: 1.0,
             easing: Easing::Linear,
             scale: 1.0,
@@ -84,6 +88,12 @@ impl FadeIn {
             from: None,
             offset: 100.0,
         }
+    }
+
+    /// Sets the effect delay in timeline seconds.
+    pub fn delay(mut self, delay: f32) -> Self {
+        self.delay = delay;
+        self
     }
 
     /// Sets the effect duration in timeline seconds.
@@ -148,6 +158,7 @@ where
 
         play_fade(
             handler,
+            self.delay,
             self.duration,
             self.easing,
             (0.0, 1.0),
@@ -160,6 +171,8 @@ where
 
 /// Fades an object out toward an optional scale and position.
 pub struct FadeOut {
+    delay: f32,
+
     duration: f32,
     easing: Easing,
     scale: f32,
@@ -172,6 +185,8 @@ impl FadeOut {
     /// Creates a fade-out with a one-second duration and linear easing.
     pub fn new() -> Self {
         Self {
+            delay: 0.0,
+
             duration: 1.0,
             easing: Easing::Linear,
             scale: 1.0,
@@ -179,6 +194,12 @@ impl FadeOut {
             from: None,
             offset: 100.0,
         }
+    }
+
+    /// Sets the effect delay in timeline seconds.
+    pub fn delay(mut self, delay: f32) -> Self {
+        self.delay = delay;
+        self
     }
 
     /// Sets the effect duration in timeline seconds.
@@ -244,6 +265,7 @@ where
 
         play_fade(
             handler,
+            self.delay,
             self.duration,
             self.easing,
             (1.0, 0.0),
