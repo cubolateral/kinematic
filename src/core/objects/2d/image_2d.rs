@@ -3,15 +3,14 @@ use std::path::Path;
 use kinematic_macros::Object;
 
 use crate::core::{
-    components::{Draw2D, Morph, Style, Transform2D, draw_styled_path, stroke_width_for_scale},
-    objects::{CreationDraw, ImageSource, RectShape, particle_visual_key, rect_path},
+    components::{Draw2D, Style, Transform2D, draw_styled_path, styled_bounds},
+    objects::{ImageSource, RectShape, rect_path},
     types::{Color, Vector2},
 };
 
 /// Image drawn inside a styled rectangular shape.
 #[derive(Object)]
 #[object(spatial = "2d", builder = "image_2d")]
-#[morph]
 pub struct Image2D {
     #[trackable]
     pub shape: RectShape,
@@ -37,6 +36,12 @@ impl Default for Image2D {
             draw: Draw2D {
                 on_draw: draw_image_2d,
                 box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size.abs(),
+                visual_bounds: |world, entity| {
+                    let shape = world.get::<&RectShape>(entity).unwrap();
+                    let style = world.get::<&Style>(entity).unwrap();
+                    let transform = world.get::<&Transform2D>(entity).unwrap();
+                    styled_bounds(*rect_path(&shape).bounds(), &style, transform.scale)
+                },
                 ..Default::default()
             },
             source: ImageSource::default(),
@@ -83,7 +88,6 @@ fn draw_image_2d(
     }
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
-    let morph = world.get::<&Morph>(entity).unwrap();
     let path = rect_path(&shape);
     let bounds = skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y);
     let draw_complete = |target: &skia_safe::Canvas, target_opacity: f32| {
@@ -95,38 +99,6 @@ fn draw_image_2d(
         target.restore_to_count(saved);
         draw_styled_path(&path, &style, transform.scale, target_opacity, target);
     };
-
-    if morph.particles_enabled && morph.progress < 1.0 {
-        let padding = stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5;
-        let particle_bounds = skia_safe::Rect::new(
-            bounds.left - padding,
-            bounds.top - padding,
-            bounds.right + padding,
-            bounds.bottom + padding,
-        );
-        let visual_key = particle_visual_key(
-            "Image2D",
-            &style,
-            &[size.x, size.y, transform.scale.x, transform.scale.y],
-            &[source.path()],
-        );
-        let pixel_color = |point| source.pixel_color(point, size);
-        if (CreationDraw {
-            entity,
-            cache_slot: 0,
-            bounds: particle_bounds,
-            visual_key,
-            style: &style,
-            pixel_color: Some(&pixel_color),
-            morph: &morph,
-            opacity,
-            canvas,
-        })
-        .render(draw_complete)
-        {
-            return;
-        }
-    }
 
     draw_complete(canvas, opacity);
 }

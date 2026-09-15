@@ -57,10 +57,6 @@ impl ImageSource {
         (self.width, self.height)
     }
 
-    pub(crate) fn path(&self) -> &str {
-        &self.path
-    }
-
     pub(crate) fn pixel_color(&self, point: Vector2, size: Vector2) -> Color {
         if !point.is_finite()
             || !size.is_finite()

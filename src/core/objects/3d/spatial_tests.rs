@@ -243,7 +243,7 @@ fn spatial_tracks_snapshots_and_lifetime_are_seekable_without_morph() {
     assert!(active_subtree(&scene.world(), scene.root().entity()).contains(&cube.entity()));
     let world = scene.world();
     assert!(world.get::<&Morph>(cube.entity()).is_err());
-    assert!(!<Prism as Object>::MORPHABLE);
+    assert!(!<Prism as Object>::SPATIAL_2D);
     let inspection = world.get::<&Inspection>(cube.entity()).unwrap();
     assert!(
         (inspection.get)(&world, cube.entity())

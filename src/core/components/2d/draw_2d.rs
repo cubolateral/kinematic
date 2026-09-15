@@ -1,6 +1,11 @@
+use crate::core::types::Vector2;
 use kinematic_macros::Trackable;
 
-use crate::core::types::Vector2;
+fn centered_box_bounds(world: &hecs::World, entity: hecs::Entity) -> skia_safe::Rect {
+    let draw = world.get::<&Draw2D>(entity).unwrap();
+    let size = (draw.box_size)(world, entity);
+    skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y)
+}
 
 /// Local two-dimensional rendering settings and callbacks for an entity.
 ///
@@ -20,8 +25,11 @@ pub struct Draw2D {
     /// Draws this entity in local coordinates with the supplied opacity.
     pub on_draw: fn(&hecs::World, hecs::Entity, &skia_safe::Canvas, f32),
 
-    /// Returns the object's local bounding-box size.
+    /// Returns the object's logical local bounding-box size.
     pub box_size: fn(&hecs::World, hecs::Entity) -> Vector2,
+
+    /// Returns the object's local visual bounds, including displaced ink and outlines.
+    pub visual_bounds: fn(&hecs::World, hecs::Entity) -> skia_safe::Rect,
 }
 
 impl Default for Draw2D {
@@ -32,6 +40,7 @@ impl Default for Draw2D {
             z_index: 0,
             on_draw: |_, _, _, _| {},
             box_size: |_, _| Vector2::ZERO,
+            visual_bounds: centered_box_bounds,
         }
     }
 }

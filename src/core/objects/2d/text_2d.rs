@@ -153,7 +153,6 @@ impl Default for TextShape {
 /// Built-in text scene object.
 #[derive(Object)]
 #[object(spatial = "2d", builder = "text_2d")]
-#[morph]
 pub struct Text2D {
     #[trackable]
     pub shape: TextShape,
@@ -695,39 +694,6 @@ pub(crate) fn refresh_write_plans(world: &hecs::World, edits: &[AppearanceEdit])
     }
 }
 
-// Capture complete text even when an unrelated write effect is currently active.
-pub(crate) fn without_write<R>(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    capture: impl FnOnce() -> R,
-) -> R {
-    let active = world
-        .get::<&mut WriteState>(entity)
-        .ok()
-        .map(|mut state| std::mem::replace(&mut state.active, false));
-    struct Restore<'a> {
-        world: &'a hecs::World,
-        entity: hecs::Entity,
-        active: Option<bool>,
-    }
-    impl Drop for Restore<'_> {
-        fn drop(&mut self) {
-            if let Some(active) = self.active {
-                self.world
-                    .get::<&mut WriteState>(self.entity)
-                    .unwrap()
-                    .active = active;
-            }
-        }
-    }
-    let _restore = Restore {
-        world,
-        entity,
-        active,
-    };
-    capture()
-}
-
 fn glyph_layer_bounds(
     shape: &TextShape,
     style: &Style,
@@ -890,17 +856,21 @@ pub(crate) fn weighted_path(path: &skia_safe::Path, thickness: f32) -> skia_safe
         .unwrap_or(combined)
 }
 
-fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
+pub(crate) fn draw_text_effect(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    canvas: &skia_safe::Canvas,
+    opacity: f32,
+) -> bool {
     let shape = world.get::<&TextShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
-    let morph_state = world.get::<&Morph>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
 
     if let Ok(write) = world.get::<&WriteState>(entity)
         && write.active
     {
         draw_write(entity, &write, &shape, &style, &transform, opacity, canvas);
-        return;
+        return true;
     }
 
     if let Ok(morph) = world.get::<&ContentMorph>(entity)
@@ -916,51 +886,16 @@ fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
             opacity,
             canvas,
         );
-        return;
+        return true;
     }
 
-    if morph_state.particles_enabled && morph_state.progress < 1.0 {
-        let size = text_box(&shape);
-        let stroke_padding =
-            stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5;
-        let bounds = skia_safe::Rect::new(
-            -size.x * 0.5 - stroke_padding,
-            -size.y * 0.5 - stroke_padding,
-            size.x * 0.5 + stroke_padding,
-            size.y * 0.5 + stroke_padding,
-        );
-        let font_path = shape.font.path().to_string_lossy();
-        let visual_key = particle_visual_key(
-            "Text2D",
-            &style,
-            &[
-                shape.size,
-                shape.align,
-                shape.thickness,
-                transform.scale.x,
-                transform.scale.y,
-            ],
-            &[&shape.text, &font_path],
-        );
+    false
+}
 
-        if (CreationDraw {
-            entity,
-            cache_slot: 0,
-            bounds,
-            visual_key,
-            style: &style,
-            pixel_color: None,
-            morph: &morph_state,
-            opacity,
-            canvas,
-        })
-        .render(|target, target_opacity| {
-            draw_complete_text(&shape, &style, target_opacity, transform.scale, target);
-        }) {
-            return;
-        }
-    }
-
+fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
+    let shape = world.get::<&TextShape>(entity).unwrap();
+    let style = world.get::<&Style>(entity).unwrap();
+    let transform = world.get::<&Transform2D>(entity).unwrap();
     draw_complete_text(&shape, &style, opacity, transform.scale, canvas);
 }
 
@@ -973,6 +908,16 @@ impl Default for Text2D {
             draw: Draw2D {
                 on_draw: draw_text,
                 box_size: |world, entity| text_box(&world.get::<&TextShape>(entity).unwrap()),
+                visual_bounds: |world, entity| {
+                    let shape = world.get::<&TextShape>(entity).unwrap();
+                    let style = world.get::<&Style>(entity).unwrap();
+                    let transform = world.get::<&Transform2D>(entity).unwrap();
+                    crate::core::components::styled_bounds(
+                        *text_path(&shape).bounds(),
+                        &style,
+                        transform.scale,
+                    )
+                },
                 ..Default::default()
             },
         }

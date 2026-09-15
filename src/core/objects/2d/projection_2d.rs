@@ -32,6 +32,16 @@ impl Default for Projection2D {
             transform: Transform2D::default(),
             draw: Draw2D {
                 box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size.abs(),
+                visual_bounds: |world, entity| {
+                    let shape = world.get::<&RectShape>(entity).unwrap();
+                    let style = world.get::<&Style>(entity).unwrap();
+                    let transform = world.get::<&Transform2D>(entity).unwrap();
+                    crate::core::components::styled_bounds(
+                        *rect_path(&shape).bounds(),
+                        &style,
+                        transform.scale,
+                    )
+                },
                 ..Default::default()
             },
             source: ProjectionSource::default(),

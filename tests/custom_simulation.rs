@@ -97,6 +97,7 @@ impl CA2D {
             draw: Draw2D {
                 on_draw: Simulation::draw_2d,
                 box_size: Simulation::box_2d,
+                visual_bounds: Simulation::visual_bounds_2d,
                 ..Draw2D::default()
             },
         }
@@ -164,6 +165,7 @@ impl Default for CustomDraw {
                     canvas.clear(skia_safe::colors::CYAN);
                 },
                 box_size: |_, _| Vector2::ONE,
+                visual_bounds: |_, _| skia_safe::Rect::from_wh(1.0, 1.0),
                 ..Draw2D::default()
             },
         }

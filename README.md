@@ -222,6 +222,7 @@ impl Default for LifeObject {
             draw: Draw2D {
                 on_draw: Simulation::draw_2d,
                 box_size: Simulation::box_2d,
+                visual_bounds: Simulation::visual_bounds_2d,
                 ..Draw2D::default()
             },
         }
@@ -486,6 +487,10 @@ Invalid or unsupported source panics when its geometry is first requested.
 `morph().play(&from, &to)` replaces an object through particle silhouettes.
 It first turns the source into a silhouette, interpolates particle positions and
 colors, and resolves the destination into its complete appearance.
+Every `spatial = "2d"` object participates automatically: `on_draw` renders only
+its normal appearance, while `Draw2D::visual_bounds` reports the local ink bounds.
+The default bounds are centered on `box_size`; override them for displaced drawing
+or outlines that extend beyond that box.
 
 ```rust
 let source = circle().radius(80.0).fill(Color::RED).build(s);

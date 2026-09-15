@@ -2,14 +2,11 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
     Tween,
-    components::{
-        Draw2D, Morph, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale,
-    },
+    components::{Draw2D, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale},
     objects::{
-        CreationDraw, ObjectHandler,
+        ObjectHandler,
         latex_geometry::geometry,
         particle::Silhouette,
-        particle_visual_key,
         string_morph::{ContentMorph, ContentMorphTransition, fade_string, morph_string},
         text_2d::weighted_path,
     },
@@ -58,7 +55,6 @@ impl Default for Latex2DShape {
 /// ```
 #[derive(Object)]
 #[object(spatial = "2d", builder = "latex_2d")]
-#[morph]
 pub struct Latex2D {
     #[trackable]
     pub shape: Latex2DShape,
@@ -135,10 +131,14 @@ fn draw_complete_latex(
     canvas.restore();
 }
 
-fn draw_latex(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
+pub(crate) fn draw_latex_effect(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    canvas: &skia_safe::Canvas,
+    opacity: f32,
+) -> bool {
     let shape = world.get::<&Latex2DShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
-    let morph_state = world.get::<&Morph>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
 
     if let Ok(morph) = world.get::<&ContentMorph>(entity)
@@ -154,44 +154,16 @@ fn draw_latex(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Can
             opacity,
             canvas,
         );
-        return;
+        return true;
     }
 
-    if morph_state.particles_enabled && morph_state.progress < 1.0 {
-        let size = latex_box(&shape);
-        let stroke_padding =
-            stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5;
-        let bounds = skia_safe::Rect::new(
-            -size.x * 0.5 - stroke_padding,
-            -size.y * 0.5 - stroke_padding,
-            size.x * 0.5 + stroke_padding,
-            size.y * 0.5 + stroke_padding,
-        );
-        let visual_key = particle_visual_key(
-            "Latex2D",
-            &style,
-            &[shape.size, transform.scale.x, transform.scale.y],
-            &[&shape.text],
-        );
+    false
+}
 
-        if (CreationDraw {
-            entity,
-            cache_slot: 0,
-            bounds,
-            visual_key,
-            style: &style,
-            pixel_color: None,
-            morph: &morph_state,
-            opacity,
-            canvas,
-        })
-        .render(|target, target_opacity| {
-            draw_complete_latex(&shape, &style, target_opacity, transform.scale, target);
-        }) {
-            return;
-        }
-    }
-
+fn draw_latex(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
+    let shape = world.get::<&Latex2DShape>(entity).unwrap();
+    let style = world.get::<&Style>(entity).unwrap();
+    let transform = world.get::<&Transform2D>(entity).unwrap();
     draw_complete_latex(&shape, &style, opacity, transform.scale, canvas);
 }
 
@@ -204,6 +176,17 @@ impl Default for Latex2D {
             draw: Draw2D {
                 on_draw: draw_latex,
                 box_size: |world, entity| latex_box(&world.get::<&Latex2DShape>(entity).unwrap()),
+                visual_bounds: |world, entity| {
+                    let shape = world.get::<&Latex2DShape>(entity).unwrap();
+                    let style = world.get::<&Style>(entity).unwrap();
+                    let transform = world.get::<&Transform2D>(entity).unwrap();
+                    let size = latex_box(&shape);
+                    crate::core::components::styled_bounds(
+                        skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y),
+                        &style,
+                        transform.scale,
+                    )
+                },
                 ..Default::default()
             },
         }

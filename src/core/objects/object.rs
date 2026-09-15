@@ -34,7 +34,7 @@ pub trait Object: hecs::DynamicBundle + Sized + 'static {
     type Handler;
 
     #[doc(hidden)]
-    const MORPHABLE: bool = false;
+    const SPATIAL_2D: bool = false;
 
     /// Builds the handler from the spawned entity.
     fn handler(world: SceneWorld, entity: hecs::Entity, animator: AnimatorHandle) -> Self::Handler;
@@ -60,7 +60,7 @@ pub trait Object: hecs::DynamicBundle + Sized + 'static {
             .add(SnapshotStack::default())
             .add(name)
             .add(Self::inspection());
-        if Self::MORPHABLE {
+        if Self::SPATIAL_2D {
             builder.add(Morph::default());
         }
         let entity = world.borrow_mut().spawn(builder.build());
@@ -398,9 +398,6 @@ impl<T: Object> HandlerContext for HandlerRoot<T> {
 pub trait ObjectBuilderComponent<T> {
     fn component_mut(&mut self) -> &mut T;
 }
-
-/// Explicit capability for objects supporting particle morph and creation.
-pub trait Morphable: Object {}
 
 /// Spatial access for three-dimensional objects. Bounds are local extents.
 pub trait Object3DHandler: ObjectHandler {

@@ -213,6 +213,6 @@ mod tests {
 
     #[test]
     fn latex_3d_is_not_morphable() {
-        assert!(!<Latex3D as crate::core::objects::Object>::MORPHABLE);
+        assert!(!<Latex3D as crate::core::objects::Object>::SPATIAL_2D);
     }
 }

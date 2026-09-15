@@ -2,7 +2,7 @@ use crate::core::{
     Easing, Task,
     components::{Draw2D, Morph},
     effects::Effect,
-    objects::{Morphable, ObjectHandler},
+    objects::{ObjectHandler, ObjectTrackable},
 };
 
 fn play_creation<T>(
@@ -13,7 +13,7 @@ fn play_creation<T>(
     hide_at_end: bool,
 ) where
     T: ObjectHandler,
-    T::Object: Morphable,
+    T::Object: ObjectTrackable<Draw2D>,
 {
     let anchor = handler.animate(
         Draw2D::opacity_property(),
@@ -86,7 +86,7 @@ impl Default for Creation {
 impl<T> Effect<T> for Creation
 where
     T: ObjectHandler,
-    T::Object: Morphable,
+    T::Object: ObjectTrackable<Draw2D>,
 {
     fn play(self, handler: &T) {
         play_creation(handler, self.duration, self.easing, (0.0, 1.0), false);
@@ -130,7 +130,7 @@ impl Default for Uncreation {
 impl<T> Effect<T> for Uncreation
 where
     T: ObjectHandler,
-    T::Object: Morphable,
+    T::Object: ObjectTrackable<Draw2D>,
 {
     fn play(self, handler: &T) {
         play_creation(handler, self.duration, self.easing, (1.0, 0.0), true);

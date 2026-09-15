@@ -10,11 +10,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let mut alias = None;
     let mut spatial = None;
     let mut simulation = None;
-    let mut morph = false;
     for attr in &input.attrs {
-        if attr.path().is_ident("morph") {
-            morph = true;
-        } else if attr.path().is_ident("object") {
+        if attr.path().is_ident("object") {
             if let Err(error) = attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("builder") {
                     alias = Some(meta.value()?.parse::<syn::LitStr>()?.value());
@@ -55,11 +52,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     };
     if !["2d", "3d", "none"].contains(&spatial.as_str()) {
         return syn::Error::new_spanned(object_name, "Spatial dimension must be 2d, 3d or none.")
-            .to_compile_error()
-            .into();
-    }
-    if morph && spatial != "2d" {
-        return syn::Error::new_spanned(object_name, "Morph requires a 2D object.")
             .to_compile_error()
             .into();
     }
@@ -208,11 +200,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         },
         _ => quote! {},
     };
-    let morph_impl = if morph {
-        quote! { impl kinematic::core::objects::Morphable for #object_name {} }
-    } else {
-        quote! {}
-    };
+    let morphable = spatial == "2d";
     let simulation_impl = simulation.map_or_else(
         || quote! {},
         |state| {
@@ -470,7 +458,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         }
 
         #spatial_impl
-        #morph_impl
         #simulation_impl
 
         impl #handler_name {
@@ -520,7 +507,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         impl #object_trait for #object_name {
             type Handler = #handler_name;
-            const MORPHABLE: bool = #morph;
+            const SPATIAL_2D: bool = #morphable;
 
             fn handler(world: #scene_world_type, entity: hecs::Entity, animator: #animator_handle_type) -> Self::Handler {
                 #object_name::handler(world, entity, animator)

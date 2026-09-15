@@ -523,6 +523,12 @@ impl Simulation {
             .box_2d(world, entity)
     }
 
+    /// Returns centered visual bounds for the current 2D simulation state.
+    pub fn visual_bounds_2d(world: &hecs::World, entity: hecs::Entity) -> skia_safe::Rect {
+        let size = Self::box_2d(world, entity);
+        skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y)
+    }
+
     /// Draws the current 3D state as a [`Draw3D`](super::Draw3D) callback.
     pub fn draw_3d(
         world: &hecs::World,

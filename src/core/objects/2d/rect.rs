@@ -1,11 +1,7 @@
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    components::{
-        Draw2D, Morph, Style, Transform2D, draw_complete_styled_path, draw_styled_path,
-        stroke_width_for_scale,
-    },
-    objects::{CreationDraw, particle_visual_key},
+    components::{Draw2D, Style, Transform2D, draw_styled_path, styled_bounds},
     types::{Quad, Vector2, vec2},
 };
 
@@ -47,7 +43,6 @@ pub(crate) fn rect_path(shape: &RectShape) -> skia_safe::Path {
 
 #[derive(Object)]
 #[object(spatial = "2d", builder = "rect")]
-#[morph]
 /// Built-in rectangular scene object.
 pub struct Rect {
     #[trackable]
@@ -70,69 +65,17 @@ impl Default for Rect {
                 on_draw: |world, entity, canvas, opacity| {
                     let shape = world.get::<&RectShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
-                    let morph = world.get::<&Morph>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
-
-                    let rect = skia_safe::Rect::from_xywh(
-                        -shape.size.x * 0.5,
-                        -shape.size.y * 0.5,
-                        shape.size.x,
-                        shape.size.y,
-                    );
                     let path = rect_path(&shape);
-                    if morph.particles_enabled && morph.progress < 1.0 {
-                        let stroke_padding =
-                            stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale)
-                                * 0.5;
-                        let bounds = skia_safe::Rect::new(
-                            rect.left - stroke_padding,
-                            rect.top - stroke_padding,
-                            rect.right + stroke_padding,
-                            rect.bottom + stroke_padding,
-                        );
-                        let visual_key = particle_visual_key(
-                            "Rect",
-                            &style,
-                            &[
-                                shape.size.x,
-                                shape.size.y,
-                                shape.round.a,
-                                shape.round.b,
-                                shape.round.c,
-                                shape.round.d,
-                                transform.scale.x,
-                                transform.scale.y,
-                            ],
-                            &[],
-                        );
-
-                        if (CreationDraw {
-                            entity,
-                            cache_slot: 0,
-                            bounds,
-                            visual_key,
-                            style: &style,
-                            pixel_color: None,
-                            morph: &morph,
-                            opacity,
-                            canvas,
-                        })
-                        .render(|target, target_opacity| {
-                            draw_complete_styled_path(
-                                &path,
-                                &style,
-                                transform.scale,
-                                target_opacity,
-                                target,
-                            );
-                        }) {
-                            return;
-                        }
-                    }
-
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
                 box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size,
+                visual_bounds: |world, entity| {
+                    let shape = world.get::<&RectShape>(entity).unwrap();
+                    let style = world.get::<&Style>(entity).unwrap();
+                    let transform = world.get::<&Transform2D>(entity).unwrap();
+                    styled_bounds(*rect_path(&shape).bounds(), &style, transform.scale)
+                },
                 ..Default::default()
             },
         }

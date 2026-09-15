@@ -438,6 +438,6 @@ mod tests {
 
     #[test]
     fn text_3d_is_not_morphable() {
-        assert!(!<Text3D as crate::core::objects::Object>::MORPHABLE);
+        assert!(!<Text3D as crate::core::objects::Object>::SPATIAL_2D);
     }
 }

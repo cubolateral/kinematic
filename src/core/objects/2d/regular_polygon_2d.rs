@@ -1,11 +1,8 @@
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    components::{
-        Draw2D, Morph, Style, Transform2D, draw_complete_styled_path, draw_styled_path,
-        stroke_width_for_scale,
-    },
-    objects::{CreationDraw, particle_visual_key, regular_polygon_vertices},
+    components::{Draw2D, Style, Transform2D, draw_styled_path, styled_bounds},
+    objects::regular_polygon_vertices,
     types::{Vector2, vec2},
 };
 
@@ -38,7 +35,6 @@ fn polygon_points(shape: &RegularPolygon2DShape) -> Option<Vec<skia_safe::Point>
 
 #[derive(Object)]
 #[object(spatial = "2d", builder = "regular_polygon_2d")]
-#[morph]
 /// Built-in regular polygon scene object.
 pub struct RegularPolygon2D {
     #[trackable]
@@ -61,61 +57,11 @@ impl Default for RegularPolygon2D {
                 on_draw: |world, entity, canvas, opacity| {
                     let shape = world.get::<&RegularPolygon2DShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
-                    let morph = world.get::<&Morph>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
                     let Some(points) = polygon_points(&shape) else {
                         return;
                     };
                     let path = skia_safe::Path::polygon(&points, true, None, None);
-                    let half_size = shape.size.abs() * 0.5;
-
-                    if morph.particles_enabled && morph.progress < 1.0 {
-                        let stroke_padding =
-                            stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale)
-                                * 0.5;
-                        let bounds = skia_safe::Rect::new(
-                            -half_size.x - stroke_padding,
-                            -half_size.y - stroke_padding,
-                            half_size.x + stroke_padding,
-                            half_size.y + stroke_padding,
-                        );
-                        let visual_key = particle_visual_key(
-                            "RegularPolygon2D",
-                            &style,
-                            &[
-                                shape.size.x,
-                                shape.size.y,
-                                shape.sides as f32,
-                                transform.scale.x,
-                                transform.scale.y,
-                            ],
-                            &[],
-                        );
-
-                        if (CreationDraw {
-                            entity,
-                            cache_slot: 0,
-                            bounds,
-                            visual_key,
-                            style: &style,
-                            pixel_color: None,
-                            morph: &morph,
-                            opacity,
-                            canvas,
-                        })
-                        .render(|target, target_opacity| {
-                            draw_complete_styled_path(
-                                &path,
-                                &style,
-                                transform.scale,
-                                target_opacity,
-                                target,
-                            );
-                        }) {
-                            return;
-                        }
-                    }
-
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
                 box_size: |world, entity| {
@@ -124,6 +70,19 @@ impl Default for RegularPolygon2D {
                         .unwrap()
                         .size
                         .abs()
+                },
+                visual_bounds: |world, entity| {
+                    let shape = world.get::<&RegularPolygon2DShape>(entity).unwrap();
+                    let style = world.get::<&Style>(entity).unwrap();
+                    let transform = world.get::<&Transform2D>(entity).unwrap();
+                    let Some(points) = polygon_points(&shape) else {
+                        return skia_safe::Rect::default();
+                    };
+                    styled_bounds(
+                        *skia_safe::Path::polygon(&points, true, None, None).bounds(),
+                        &style,
+                        transform.scale,
+                    )
                 },
                 ..Default::default()
             },

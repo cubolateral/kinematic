@@ -1,13 +1,6 @@
 use kinematic_macros::{Object, Trackable};
 
-use crate::core::{
-    components::{
-        Draw2D, Morph, Style, Transform2D, draw_complete_styled_path, draw_styled_path,
-        stroke_width_for_scale,
-    },
-    objects::{CreationDraw, particle_visual_key},
-    types::Vector2,
-};
+use crate::core::components::{Draw2D, Style, Transform2D, draw_styled_path, styled_bounds};
 
 #[derive(Clone, Trackable)]
 /// Geometry of a circular object.
@@ -24,7 +17,6 @@ impl Default for CircleShape {
 
 #[derive(Object)]
 #[object(spatial = "2d", builder = "circle")]
-#[morph]
 /// Built-in circular scene object.
 pub struct Circle {
     #[trackable]
@@ -47,51 +39,24 @@ impl Default for Circle {
                 on_draw: |world, entity, canvas, opacity| {
                     let shape = world.get::<&CircleShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
-                    let morph = world.get::<&Morph>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
                     let path = skia_safe::Path::circle((0.0, 0.0), shape.radius, None);
-                    if morph.particles_enabled && morph.progress < 1.0 {
-                        let stroke_padding =
-                            stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale)
-                                * 0.5;
-                        let extent = shape.radius + stroke_padding;
-                        let bounds = skia_safe::Rect::new(-extent, -extent, extent, extent);
-                        let visual_key = particle_visual_key(
-                            "Circle",
-                            &style,
-                            &[shape.radius, transform.scale.x, transform.scale.y],
-                            &[],
-                        );
-
-                        if (CreationDraw {
-                            entity,
-                            cache_slot: 0,
-                            bounds,
-                            visual_key,
-                            style: &style,
-                            pixel_color: None,
-                            morph: &morph,
-                            opacity,
-                            canvas,
-                        })
-                        .render(|target, target_opacity| {
-                            draw_complete_styled_path(
-                                &path,
-                                &style,
-                                transform.scale,
-                                target_opacity,
-                                target,
-                            );
-                        }) {
-                            return;
-                        }
-                    }
-
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
                 box_size: |world, entity| {
+                    let radius = world.get::<&CircleShape>(entity).unwrap().radius;
+                    glam::Vec2::splat(radius * 2.0)
+                },
+                visual_bounds: |world, entity| {
                     let shape = world.get::<&CircleShape>(entity).unwrap();
-                    Vector2::splat(shape.radius * 2.0)
+                    let style = world.get::<&Style>(entity).unwrap();
+                    let transform = world.get::<&Transform2D>(entity).unwrap();
+                    let radius = shape.radius.max(0.0);
+                    styled_bounds(
+                        skia_safe::Rect::new(-radius, -radius, radius, radius),
+                        &style,
+                        transform.scale,
+                    )
                 },
                 ..Default::default()
             },

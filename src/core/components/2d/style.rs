@@ -77,3 +77,13 @@ pub(crate) fn stroke_width_for_scale(stroke_width: f32, scale: Vector2) -> f32 {
         stroke_width
     }
 }
+
+pub(crate) fn styled_bounds(
+    mut bounds: skia_safe::Rect,
+    style: &Style,
+    scale: Vector2,
+) -> skia_safe::Rect {
+    let padding = stroke_width_for_scale(style.stroke_width.max(0.0), scale) * 0.5;
+    bounds.outset((padding, padding));
+    bounds
+}

@@ -32,7 +32,7 @@ pub(crate) use render::draw_canvas2d;
 pub(crate) use render::draw_canvas2d_editor_with_images;
 pub(crate) use render::draw_canvas2d_with_images;
 pub(crate) use render::{
-    camera_matrix2d, camera_outline_points2d, children_by_z_index, draw_entity,
+    camera_matrix2d, camera_outline_points2d, capture_appearance, children_by_z_index, draw_entity,
 };
 #[cfg(test)]
 pub(crate) use render::{outline_points, outline_segments3d, pick_canvas2d, pick_canvas3d};

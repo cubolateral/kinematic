@@ -1,11 +1,7 @@
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    components::{
-        Draw2D, Morph, Style, Transform2D, draw_complete_styled_path, draw_styled_path,
-        stroke_width_for_scale,
-    },
-    objects::{CreationDraw, particle_visual_key},
+    components::{Draw2D, Style, Transform2D, draw_styled_path, styled_bounds},
     types::{Vector2, vec2},
 };
 
@@ -130,15 +126,14 @@ fn line_box(shape: &Line2DShape) -> Vector2 {
     let Some(geometry) = line_geometry(shape) else {
         return Vector2::ZERO;
     };
-    let horizontal_extent = geometry.bounds.left.abs().max(geometry.bounds.right.abs());
-    let vertical_extent = geometry.bounds.top.abs().max(geometry.bounds.bottom.abs());
-
-    vec2(horizontal_extent * 2.0, vertical_extent * 2.0)
+    vec2(
+        geometry.bounds.left.abs().max(geometry.bounds.right.abs()) * 2.0,
+        geometry.bounds.top.abs().max(geometry.bounds.bottom.abs()) * 2.0,
+    )
 }
 
 #[derive(Object)]
 #[object(spatial = "2d", builder = "line_2d")]
-#[morph]
 /// Built-in line scene object with independently animatable arrowheads.
 pub struct Line2D {
     #[trackable]
@@ -161,66 +156,22 @@ impl Default for Line2D {
                 on_draw: |world, entity, canvas, opacity| {
                     let shape = world.get::<&Line2DShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
-                    let morph = world.get::<&Morph>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
                     let Some(geometry) = line_geometry(&shape) else {
                         return;
                     };
-
-                    if morph.particles_enabled && morph.progress < 1.0 {
-                        let stroke_padding =
-                            stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale)
-                                * 0.5;
-                        let bounds = skia_safe::Rect::new(
-                            geometry.bounds.left - stroke_padding,
-                            geometry.bounds.top - stroke_padding,
-                            geometry.bounds.right + stroke_padding,
-                            geometry.bounds.bottom + stroke_padding,
-                        );
-                        let visual_key = particle_visual_key(
-                            "Line2D",
-                            &style,
-                            &[
-                                shape.from.x,
-                                shape.from.y,
-                                shape.to.x,
-                                shape.to.y,
-                                shape.thickness,
-                                shape.from_arrow_size,
-                                shape.to_arrow_size,
-                                transform.scale.x,
-                                transform.scale.y,
-                            ],
-                            &[],
-                        );
-
-                        if (CreationDraw {
-                            entity,
-                            cache_slot: 0,
-                            bounds,
-                            visual_key,
-                            style: &style,
-                            pixel_color: None,
-                            morph: &morph,
-                            opacity,
-                            canvas,
-                        })
-                        .render(|target, target_opacity| {
-                            draw_complete_styled_path(
-                                &geometry.path,
-                                &style,
-                                transform.scale,
-                                target_opacity,
-                                target,
-                            );
-                        }) {
-                            return;
-                        }
-                    }
-
                     draw_styled_path(&geometry.path, &style, transform.scale, opacity, canvas);
                 },
                 box_size: |world, entity| line_box(&world.get::<&Line2DShape>(entity).unwrap()),
+                visual_bounds: |world, entity| {
+                    let shape = world.get::<&Line2DShape>(entity).unwrap();
+                    let Some(geometry) = line_geometry(&shape) else {
+                        return skia_safe::Rect::default();
+                    };
+                    let style = world.get::<&Style>(entity).unwrap();
+                    let transform = world.get::<&Transform2D>(entity).unwrap();
+                    styled_bounds(geometry.bounds, &style, transform.scale)
+                },
                 ..Default::default()
             },
         }

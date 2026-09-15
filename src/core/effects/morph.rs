@@ -1,15 +1,12 @@
 use crate::core::{
     Easing, Task,
-    components::{
-        Draw2D, Morph as MorphState, Node, PARTICLE_FADE_START, Style, stroke_width_for_scale,
-    },
+    components::{Draw2D, Morph as MorphState, Node, PARTICLE_FADE_START},
     objects::{
-        GlobalTransform, Morphable, Object, ObjectHandler, ObjectTrackable, Rect,
+        Object, ObjectHandler, ObjectTrackable, Rect,
         appearance::{AppearanceEdit, AppearanceSnapshot},
-        attach_child, deactivate_subtree, global_transform, local_transform,
-        particle::{ParticleTransform, Silhouette},
+        attach_child, capture_appearance, deactivate_subtree,
+        particle::ParticleTransform,
     },
-    types::Vector2,
 };
 
 /// Replaces an attached object with an unattached destination through particle silhouettes.
@@ -67,8 +64,8 @@ impl MorphEffect {
     where
         F: ObjectHandler,
         T: ObjectHandler,
-        F::Object: ObjectTrackable<Draw2D> + Morphable,
-        T::Object: ObjectTrackable<Draw2D> + Morphable,
+        F::Object: ObjectTrackable<Draw2D>,
+        T::Object: ObjectTrackable<Draw2D>,
     {
         let (world, animator) = from
             .animate(
@@ -105,8 +102,10 @@ impl MorphEffect {
                 target_parent.is_none() || target_parent == Some(parent),
                 "Morph objects must share the same parent."
             );
-            let from_silhouette = capture(&world, from.entity(), parent, start, source_opacity);
-            let to_silhouette = capture(&world, to.entity(), parent, start, target_opacity);
+            let from_silhouette =
+                capture_appearance(&world, from.entity(), parent, start, source_opacity);
+            let to_silhouette =
+                capture_appearance(&world, to.entity(), parent, start, target_opacity);
             (parent, from_silhouette, to_silhouette)
         };
         let data = ParticleTransform::new(from_silhouette, to_silhouette, self.easing);
@@ -116,10 +115,14 @@ impl MorphEffect {
                 box_size: |world, entity| {
                     let data = world.get::<&ParticleTransform>(entity).unwrap();
                     let bounds = union(data.from.bounds, data.to.bounds);
-                    Vector2::new(
+                    glam::vec2(
                         bounds.left.abs().max(bounds.right.abs()) * 2.0,
                         bounds.top.abs().max(bounds.bottom.abs()) * 2.0,
                     )
+                },
+                visual_bounds: |world, entity| {
+                    let data = world.get::<&ParticleTransform>(entity).unwrap();
+                    union(data.from.bounds, data.to.bounds)
                 },
                 ..Default::default()
             },
@@ -231,7 +234,7 @@ pub(crate) fn refresh_morphs(world: &hecs::World, edits: &[AppearanceEdit]) {
         }
         let from = from_changed.then(|| {
             endpoints.from_values.with_values(world, || {
-                capture(
+                capture_appearance(
                     world,
                     endpoints.from,
                     endpoints.parent,
@@ -242,7 +245,7 @@ pub(crate) fn refresh_morphs(world: &hecs::World, edits: &[AppearanceEdit]) {
         });
         let to = to_changed.then(|| {
             endpoints.to_values.with_values(world, || {
-                capture(
+                capture_appearance(
                     world,
                     endpoints.to,
                     endpoints.parent,
@@ -278,21 +281,6 @@ fn stored_opacity(world: &crate::core::SceneWorld, entity: hecs::Entity) -> f32 
     opacity
 }
 
-fn matrix(transform: GlobalTransform) -> skia_safe::Matrix {
-    let (sin, cos) = transform.rotation.sin_cos();
-    skia_safe::Matrix::new_all(
-        cos * transform.scale.x,
-        -sin * transform.scale.y,
-        transform.position.x,
-        sin * transform.scale.x,
-        cos * transform.scale.y,
-        transform.position.y,
-        0.0,
-        0.0,
-        1.0,
-    )
-}
-
 fn union(a: skia_safe::Rect, b: skia_safe::Rect) -> skia_safe::Rect {
     skia_safe::Rect::new(
         a.left.min(b.left),
@@ -300,97 +288,6 @@ fn union(a: skia_safe::Rect, b: skia_safe::Rect) -> skia_safe::Rect {
         a.right.max(b.right),
         a.bottom.max(b.bottom),
     )
-}
-
-// Captures scheduled appearances without changing node activation or animation data.
-fn record(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    root: hecs::Entity,
-    root_opacity: f32,
-    parent: GlobalTransform,
-    canvas: &skia_safe::Canvas,
-    basis: &skia_safe::Matrix,
-    time: f32,
-) -> Option<skia_safe::Rect> {
-    let local = local_transform(world, entity);
-    let global = parent.append(local);
-    let relative = skia_safe::Matrix::concat(basis, &matrix(global));
-    let draw = world.get::<&Draw2D>(entity).unwrap();
-    let size = (draw.box_size)(world, entity);
-    let padding = world
-        .get::<&Style>(entity)
-        .map(|style| stroke_width_for_scale(style.stroke_width.max(0.0), local.scale))
-        .unwrap_or(0.0)
-        + 2.0;
-    let mut bounds = (size.x > 0.0 && size.y > 0.0).then(|| {
-        relative
-            .map_rect(skia_safe::Rect::from_xywh(
-                -size.x * 0.5 - padding,
-                -size.y * 0.5 - padding,
-                size.x + padding * 2.0,
-                size.y + padding * 2.0,
-            ))
-            .0
-    });
-    let draw_opacity = if entity == root {
-        root_opacity
-    } else {
-        draw.opacity
-    };
-    let layer = canvas.save_layer_alpha_f(None, draw_opacity.clamp(0.0, 1.0));
-    let saved = canvas.save();
-    canvas.concat(&relative);
-    crate::core::objects::without_write(world, entity, || {
-        (draw.on_draw)(world, entity, canvas, 1.0);
-    });
-    canvas.restore_to_count(saved);
-    for child in crate::core::objects::child_iter(world, entity) {
-        let node = world.get::<&Node>(child).unwrap();
-        if node.lifetime[1] <= time || (node.lifetime[0].is_finite() && node.lifetime[0] > time) {
-            continue;
-        }
-        if let Some(child_bounds) = record(
-            world,
-            child,
-            root,
-            root_opacity,
-            global,
-            canvas,
-            basis,
-            time,
-        ) {
-            bounds = Some(
-                bounds
-                    .map(|bounds| union(bounds, child_bounds))
-                    .unwrap_or(child_bounds),
-            );
-        }
-    }
-    canvas.restore_to_count(layer);
-    bounds
-}
-
-fn capture(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    parent: hecs::Entity,
-    time: f32,
-    opacity: f32,
-) -> Silhouette {
-    let parent = global_transform(world, parent);
-    let basis = matrix(parent)
-        .invert()
-        .expect("Morph parent must have an invertible transform.");
-    let mut recorder = skia_safe::PictureRecorder::new();
-    let canvas = recorder.begin_recording(skia_safe::Rect::from_xywh(-1e9, -1e9, 2e9, 2e9), false);
-    let bounds = record(world, entity, entity, opacity, parent, canvas, &basis, time)
-        .unwrap_or_else(|| skia_safe::Rect::from_xywh(0.0, 0.0, 1.0, 1.0));
-    let picture = recorder.finish_recording_as_picture(None).unwrap();
-    let silhouette = Silhouette::capture(bounds, |canvas| {
-        canvas.draw_picture(&picture, None, None);
-    });
-    silhouette
 }
 
 fn draw_transform(

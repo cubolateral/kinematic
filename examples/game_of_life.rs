@@ -178,6 +178,7 @@ impl Default for Life2D {
             draw: Draw2D {
                 on_draw: Simulation::draw_2d,
                 box_size: Simulation::box_2d,
+                visual_bounds: Simulation::visual_bounds_2d,
                 ..Draw2D::default()
             },
         }
