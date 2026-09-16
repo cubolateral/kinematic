@@ -143,7 +143,7 @@ For a finite number of repetitions, use a Rust `for` loop. This replaces the old
 `scene.repeat(count, ...)` API. The task equivalent is now `Task::Repeat(tasks)`.
 Each iteration of a `for` constructs fresh animations and can create objects.
 
-For continuous 3D spinning, repeat `object.rotation_in_y(TAU)` with linear easing.
+For continuous 3D spinning, repeat `object.rotation_y_by(TAU)` with linear easing.
 The axis-angle path preserves direction and full turns; `object.rotation(q)`
 interpolates orientations along the shortest quaternion path. Match the cycle's
 end and start for a seamless loop; repetition does not automatically close it.

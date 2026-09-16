@@ -579,6 +579,28 @@ impl<T: TrackValueType> TrackHandle<T> {
 }
 
 impl TrackHandle<Quaternion> {
+    /// Sets an absolute local axis-angle rotation.
+    #[doc(hidden)]
+    pub fn rotate_to_axis_for<Object>(&self, axis: Vector3, angle: f32) -> Tween<Object> {
+        self.animator.assert_timeline_mutation();
+        assert!(
+            axis.is_finite() && axis.length_squared() > f32::EPSILON,
+            "Rotation axis must be finite and non-zero."
+        );
+        assert!(angle.is_finite(), "Rotation angle must be finite.");
+        let from = normalized_quaternion(self.get());
+        let to = normalized_quaternion(Quaternion::from_axis_angle(axis.normalize(), angle));
+        let mut world = self.world.borrow_mut();
+        (self.replace)(&mut world, self.entity, to);
+        self.tween(from, to)
+    }
+
+    /// Sets one local XYZ Euler angle while preserving the other two.
+    #[doc(hidden)]
+    pub fn rotate_to_for<Object>(&self, axis: Vector3, angle: f32) -> Tween<Object> {
+        self.update_for(|rotation| quaternion_with_euler_axis(rotation, axis, angle))
+    }
+
     /// Creates a local axis-angle rotation that preserves direction and winding.
     #[doc(hidden)]
     pub fn rotate_for<Object>(&self, axis: Vector3, angle: f32) -> Tween<Object> {
@@ -1072,4 +1094,23 @@ pub(crate) fn normalized_quaternion(value: Quaternion) -> Quaternion {
     } else {
         Quaternion::IDENTITY
     }
+}
+
+pub(crate) fn quaternion_with_euler_axis(
+    value: Quaternion,
+    axis: Vector3,
+    angle: f32,
+) -> Quaternion {
+    assert!(angle.is_finite(), "Rotation angle must be finite.");
+    let (mut x, mut y, mut z) = normalized_quaternion(value).to_euler(glam::EulerRot::XYZ);
+    if axis == Vector3::X {
+        x = angle;
+    } else if axis == Vector3::Y {
+        y = angle;
+    } else if axis == Vector3::Z {
+        z = angle;
+    } else {
+        panic!("Euler rotation axis must be X, Y, or Z.");
+    }
+    normalized_quaternion(Quaternion::from_euler(glam::EulerRot::XYZ, x, y, z))
 }

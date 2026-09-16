@@ -1316,7 +1316,7 @@ mod tests {
         scene.world_3d().add(&object);
         scene.repeat(|_| {
             object
-                .rotation_in_y(-2.0 * std::f32::consts::TAU)
+                .rotation_y_by(-2.0 * std::f32::consts::TAU)
                 .duration(4.0)
                 .easing(Easing::Linear)
                 .play();
@@ -1658,7 +1658,7 @@ mod tests {
         let cube = cube().build(&mut scene);
         scene.world_3d().add(&cube);
 
-        cube.rotation_in_y(std::f32::consts::TAU)
+        cube.rotation_y_by(std::f32::consts::TAU)
             .duration(2.0)
             .easing(Easing::Linear)
             .play();
@@ -1682,6 +1682,77 @@ mod tests {
             .rotation
             * Vector3::X;
         assert!(complete.abs_diff_eq(Vector3::X, 1e-5));
+    }
+
+    #[test]
+    fn fixed_and_relative_euler_axes_combine_in_one_tween() {
+        let mut scene = Scene::new();
+        let initial = Quaternion::from_euler(glam::EulerRot::XYZ, 0.1, 0.2, 0.3);
+        let fixed = cube().rotation(initial).build(&mut scene);
+        let relative = cube().build(&mut scene);
+        scene.world_3d().add(&fixed);
+        scene.world_3d().add(&relative);
+
+        scene.all(|_| {
+            fixed
+                .rotation_x(0.4)
+                .rotation_y(0.5)
+                .duration(2.0)
+                .easing(Easing::Linear)
+                .play();
+            relative
+                .rotation_x_by(std::f32::consts::FRAC_PI_2)
+                .rotation_y_by(std::f32::consts::FRAC_PI_2)
+                .duration(2.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+
+        scene.animator.take_schedule().compile(&scene);
+        let fixed_target = Quaternion::from_euler(glam::EulerRot::XYZ, 0.4, 0.5, 0.3);
+        let relative_target = Quaternion::from_rotation_x(std::f32::consts::FRAC_PI_2)
+            * Quaternion::from_rotation_y(std::f32::consts::FRAC_PI_2);
+
+        scene.update(0.0);
+        assert!(
+            fixed
+                .get(Transform3D::rotation_property())
+                .abs_diff_eq(initial, 1e-5)
+        );
+        assert!(
+            relative
+                .get(Transform3D::rotation_property())
+                .abs_diff_eq(Quaternion::IDENTITY, 1e-5)
+        );
+        scene.update(2.0);
+        assert!(
+            fixed
+                .get(Transform3D::rotation_property())
+                .abs_diff_eq(fixed_target, 1e-5)
+        );
+        assert!(
+            relative
+                .get(Transform3D::rotation_property())
+                .abs_diff_eq(relative_target, 1e-5)
+        );
+    }
+
+    #[test]
+    fn absolute_axis_rotation_uses_the_requested_axis_and_angle() {
+        let mut scene = Scene::new();
+        let cube = cube().build(&mut scene);
+        scene.world_3d().add(&cube);
+        let axis = Vector3::new(1.0, 2.0, 3.0).normalize();
+        cube.rotation_axis(axis, 0.75)
+            .duration(1.0)
+            .easing(Easing::Linear)
+            .play();
+        scene.animator.take_schedule().compile(&scene);
+        scene.update(1.0);
+        assert!(
+            cube.get(Transform3D::rotation_property())
+                .abs_diff_eq(Quaternion::from_axis_angle(axis, 0.75), 1e-5)
+        );
     }
 
     #[test]

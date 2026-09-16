@@ -1,6 +1,6 @@
 use crate::core::{
     AnimatorHandle, Easing, SceneWorld, Task, TrackInfo, TrackProperty, TrackValue, TrackValueType,
-    normalized_quaternion,
+    normalized_quaternion, quaternion_with_euler_axis,
     types::{Quaternion, Vector3},
 };
 
@@ -261,9 +261,18 @@ impl<Object> Tween<Object> {
             .iter_mut()
             .find(|target| target.type_id == type_id && std::ptr::eq(target.track_info, track_info))
         {
-            target.from = TrackValue::Quaternion(from);
             target.to = TrackValue::Quaternion(to);
-            target.rotation = Some(RotationTarget { from, axis, angle });
+            target.rotation = match target.rotation.take() {
+                Some(mut rotation) if rotation.axis == axis => {
+                    rotation.angle += angle;
+                    Some(rotation)
+                }
+                Some(mut rotation) if rotation.axis == -axis => {
+                    rotation.angle -= angle;
+                    Some(rotation)
+                }
+                _ => None,
+            };
         } else {
             self.targets.push(TweenTarget {
                 type_id,
@@ -275,6 +284,34 @@ impl<Object> Tween<Object> {
         }
 
         self
+    }
+
+    /// Sets one local XYZ Euler angle while preserving the other two.
+    #[doc(hidden)]
+    pub fn set_euler_track(
+        self,
+        property: TrackProperty<Quaternion>,
+        axis: Vector3,
+        angle: f32,
+    ) -> Self {
+        self.update_track(
+            property.type_id(),
+            property.info(),
+            |rotation: Quaternion| quaternion_with_euler_axis(rotation, axis, angle),
+        )
+    }
+
+    /// Sets an absolute local axis-angle rotation.
+    #[doc(hidden)]
+    pub fn set_axis_track(
+        self,
+        property: TrackProperty<Quaternion>,
+        axis: Vector3,
+        angle: f32,
+    ) -> Self {
+        validate_rotation(axis, angle);
+        let to = normalized_quaternion(Quaternion::from_axis_angle(axis.normalize(), angle));
+        self.update_track(property.type_id(), property.info(), |_| to)
     }
 
     /// Immediately plays this tween as a shortcut for `.duration(0.0).play()`.

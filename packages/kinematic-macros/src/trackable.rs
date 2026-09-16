@@ -712,10 +712,21 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     ("y", quote!(#vector3_type::Y)),
                     ("z", quote!(#vector3_type::Z)),
                 ] {
-                    let method_name = format_ident!("{}_in_{}", field_ident, axis_name);
+                    let method_name = format_ident!("{}_{}", field_ident, axis_name);
+                    let by_method_name = format_ident!("{}_{}_by", field_ident, axis_name);
 
                     tween_fns.push(quote! {
                         pub fn #method_name(
+                            &self,
+                            angle: f32,
+                        ) -> #tween_type<<Next as #handler_context_trait>::Object> {
+                            self.#field_ident.rotate_to_for::< <Next as #handler_context_trait>::Object >(
+                                #axis,
+                                angle,
+                            )
+                        }
+
+                        pub fn #by_method_name(
                             &self,
                             angle: f32,
                         ) -> #tween_type<<Next as #handler_context_trait>::Object> {
@@ -727,15 +738,42 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     });
                     tween_trait_fns.push(quote! {
                         fn #method_name(self, angle: f32) -> Self;
+                        fn #by_method_name(self, angle: f32) -> Self;
                     });
                     tween_impl_fns.push(quote! {
                         fn #method_name(self, angle: f32) -> Self {
+                            self.set_euler_track(#struct_name::#property_name(), #axis, angle)
+                        }
+
+                        fn #by_method_name(self, angle: f32) -> Self {
                             self.rotate_track(#struct_name::#property_name(), #axis, angle)
                         }
                     });
                 }
 
-                let method_name = format_ident!("{}_in_axis", field_ident);
+                let method_name = format_ident!("{}_axis", field_ident);
+                tween_fns.push(quote! {
+                    pub fn #method_name(
+                        &self,
+                        axis: #vector3_type,
+                        angle: f32,
+                    ) -> #tween_type<<Next as #handler_context_trait>::Object> {
+                        self.#field_ident.rotate_to_axis_for::< <Next as #handler_context_trait>::Object >(
+                            axis,
+                            angle,
+                        )
+                    }
+                });
+                tween_trait_fns.push(quote! {
+                    fn #method_name(self, axis: #vector3_type, angle: f32) -> Self;
+                });
+                tween_impl_fns.push(quote! {
+                    fn #method_name(self, axis: #vector3_type, angle: f32) -> Self {
+                        self.set_axis_track(#struct_name::#property_name(), axis, angle)
+                    }
+                });
+
+                let method_name = format_ident!("{}_axis_by", field_ident);
                 tween_fns.push(quote! {
                     pub fn #method_name(
                         &self,
