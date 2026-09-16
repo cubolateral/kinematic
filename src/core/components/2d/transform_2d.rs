@@ -8,6 +8,9 @@ pub struct Transform2D {
     /// Position of the entity.
     #[track]
     pub position: Vector2,
+    /// Pivot relative to half the entity size. Values are not clamped.
+    #[track]
+    pub origin: Vector2,
     /// Scale of the entity on each axis.
     #[track]
     pub scale: Vector2,
@@ -20,6 +23,7 @@ impl Default for Transform2D {
     fn default() -> Self {
         Self {
             position: Vector2::ZERO,
+            origin: Vector2::ZERO,
             scale: Vector2::ONE,
             rotation: 0.0,
         }

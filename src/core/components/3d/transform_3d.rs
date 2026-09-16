@@ -10,6 +10,9 @@ use crate::core::{
 pub struct Transform3D {
     #[track]
     pub position: Vector3,
+    /// Pivot relative to half the entity size. Values are not clamped.
+    #[track]
+    pub origin: Vector3,
     #[track]
     pub rotation: Quaternion,
     #[track]
@@ -20,6 +23,7 @@ impl Default for Transform3D {
     fn default() -> Self {
         Self {
             position: Vector3::ZERO,
+            origin: Vector3::ZERO,
             rotation: Quaternion::IDENTITY,
             scale: Vector3::ONE,
         }
@@ -33,5 +37,9 @@ impl Transform3D {
             normalized_quaternion(self.rotation),
             self.position,
         )
+    }
+
+    pub(crate) fn matrix_with_origin(&self, size: Vector3) -> glam::Mat4 {
+        self.matrix() * glam::Mat4::from_translation(-self.origin * size * 0.5)
     }
 }

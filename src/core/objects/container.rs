@@ -479,6 +479,23 @@ mod tests {
     }
 
     #[test]
+    fn group_origin_moves_its_children_to_the_selected_edge() {
+        let mut scene = Scene::new();
+        let group = group_2d().origin(vec2(1.0, 0.0)).build(&mut scene);
+        let children = [-4.0, 0.0, 4.0].map(|x| {
+            let child = rect()
+                .size(vec2(4.0, 4.0))
+                .position(vec2(x, 0.0))
+                .build(&mut scene);
+            group.add(&child);
+            child
+        });
+
+        assert_eq!(children[2].global_position(), vec2(-2.0, 0.0));
+        assert_eq!(group.get(Transform2D::origin_property()), vec2(1.0, 0.0));
+    }
+
+    #[test]
     fn container_opacity_composites_the_subtree_once() {
         let mut scene = Scene::new();
         let first = rect()

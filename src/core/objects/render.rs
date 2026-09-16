@@ -1,5 +1,5 @@
 use crate::core::{
-    components::{Camera2D, Camera3D, Draw2D, Draw3D, Node, Simulation, Transform2D},
+    components::{Camera2D, Camera3D, Draw2D, Draw3D, Node, Simulation},
     objects::{
         CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, bounds3d,
         draw_projection_2d, global_matrix3d, global_transform, local_transform,
@@ -668,44 +668,11 @@ fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::
 
 fn transformed_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::Rect> {
     let bounds = local_bounds(world, entity)?;
-    let Ok(transform) = world.get::<&Transform2D>(entity) else {
-        return Some(bounds);
-    };
-    let sin = transform.rotation.sin();
-    let cos = transform.rotation.cos();
-    let points = [
-        Vector2::new(bounds.left, bounds.top),
-        Vector2::new(bounds.right, bounds.top),
-        Vector2::new(bounds.right, bounds.bottom),
-        Vector2::new(bounds.left, bounds.bottom),
-    ]
-    .map(|point| {
-        let scaled = point * transform.scale;
-
-        Vector2::new(
-            scaled.x * cos - scaled.y * sin,
-            scaled.x * sin + scaled.y * cos,
-        ) + transform.position
-    });
-
-    Some(skia_safe::Rect::new(
-        points
-            .iter()
-            .map(|point| point.x)
-            .fold(f32::INFINITY, f32::min),
-        points
-            .iter()
-            .map(|point| point.y)
-            .fold(f32::INFINITY, f32::min),
-        points
-            .iter()
-            .map(|point| point.x)
-            .fold(f32::NEG_INFINITY, f32::max),
-        points
-            .iter()
-            .map(|point| point.y)
-            .fold(f32::NEG_INFINITY, f32::max),
-    ))
+    Some(
+        transform_matrix(local_transform(world, entity))
+            .map_rect(bounds)
+            .0,
+    )
 }
 
 fn inverse_transform_point(transform: GlobalTransform, point: Vector2) -> Option<Vector2> {

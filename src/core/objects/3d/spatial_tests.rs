@@ -47,6 +47,30 @@ fn spatial_handlers_compose_transforms_and_bounds() {
 }
 
 #[test]
+fn group_origin_moves_3d_children_to_the_selected_edge() {
+    let mut scene = Scene::new();
+    let group = group_3d().origin(vec3(1.0, 0.0, 0.0)).build(&mut scene);
+    let children = [-2.0, 0.0, 2.0].map(|x| {
+        let child = cube()
+            .size(vec3(2.0, 2.0, 2.0))
+            .position(vec3(x, 0.0, 0.0))
+            .build(&mut scene);
+        group.add(&child);
+        child
+    });
+
+    assert!(
+        children[2]
+            .global_position()
+            .abs_diff_eq(vec3(-1.0, 0.0, 0.0), 1e-5)
+    );
+    assert_eq!(
+        group.get(Transform3D::origin_property()),
+        vec3(1.0, 0.0, 0.0)
+    );
+}
+
+#[test]
 fn container_visibility_hides_its_3d_subtree() {
     let mut scene = Scene::new();
     let canvas = canvas_3d().build(&mut scene);

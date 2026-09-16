@@ -346,8 +346,15 @@ impl GlobalTransform {
 
 pub(crate) fn local_transform(world: &hecs::World, entity: hecs::Entity) -> GlobalTransform {
     if let Ok(transform) = world.get::<&Transform2D>(entity) {
+        let origin = crate::core::objects::object_box(world, entity) * transform.origin * 0.5;
+        let origin = origin * transform.scale;
+        let (sin, cos) = transform.rotation.sin_cos();
+        let origin = Vector2::new(
+            origin.x * cos - origin.y * sin,
+            origin.x * sin + origin.y * cos,
+        );
         return GlobalTransform {
-            position: transform.position,
+            position: transform.position - origin,
             rotation: transform.rotation,
             scale: transform.scale,
         };
@@ -475,13 +482,19 @@ pub trait Object3DHandler: ObjectHandler {
 /// Returns an object's complete three-dimensional scene transform.
 #[doc(hidden)]
 pub fn global_matrix3d(world: &hecs::World, entity: hecs::Entity) -> glam::Mat4 {
-    let local = world
-        .get::<&crate::core::components::Transform3D>(entity)
-        .map_or(glam::Mat4::IDENTITY, |transform| transform.matrix());
+    let local = local_matrix3d(world, entity);
     match world.get::<&Node>(entity).ok().and_then(|node| node.parent) {
         Some(parent) => global_matrix3d(world, parent) * local,
         None => local,
     }
+}
+
+fn local_matrix3d(world: &hecs::World, entity: hecs::Entity) -> glam::Mat4 {
+    world
+        .get::<&crate::core::components::Transform3D>(entity)
+        .map_or(glam::Mat4::IDENTITY, |transform| {
+            transform.matrix_with_origin(object_box3d(world, entity))
+        })
 }
 
 pub(crate) fn global_rotation3d(world: &hecs::World, entity: hecs::Entity) -> glam::Quat {
@@ -522,9 +535,7 @@ pub(crate) fn bounds3d(
         let Some((child_min, child_max)) = bounds3d(world, child) else {
             continue;
         };
-        let matrix = world
-            .get::<&crate::core::components::Transform3D>(child)
-            .map_or(glam::Mat4::IDENTITY, |t| t.matrix());
+        let matrix = local_matrix3d(world, child);
         for x in [child_min.x, child_max.x] {
             for y in [child_min.y, child_max.y] {
                 for z in [child_min.z, child_max.z] {
