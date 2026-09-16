@@ -500,14 +500,14 @@ fn draw_text_morph(
         source.text = transition.from_text.clone();
         let mut target = shape.clone();
         target.text = transition.to_text.clone();
-        draw_complete_text(
+        draw_text_2d(
             &source,
             style,
-            opacity * (1.0 - progress),
             transform.scale,
+            opacity * (1.0 - progress),
             canvas,
         );
-        draw_complete_text(&target, style, opacity * progress, transform.scale, canvas);
+        draw_text_2d(&target, style, transform.scale, opacity * progress, canvas);
         return;
     }
     let plan = transition.text_plan();
@@ -805,11 +805,12 @@ fn draw_write(
     }
 }
 
-fn draw_complete_text(
+/// Draws text in local 2D coordinates from reusable rendering data.
+pub fn draw_text_2d(
     shape: &TextShape,
     style: &Style,
-    opacity: f32,
     scale: Vector2,
+    opacity: f32,
     canvas: &skia_safe::Canvas,
 ) {
     draw_complete_styled_path(&text_path(shape), style, scale, opacity, canvas);
@@ -892,11 +893,16 @@ pub(crate) fn draw_text_effect(
     false
 }
 
-fn draw_text(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
+fn draw_text_object(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    canvas: &skia_safe::Canvas,
+    opacity: f32,
+) {
     let shape = world.get::<&TextShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
-    draw_complete_text(&shape, &style, opacity, transform.scale, canvas);
+    draw_text_2d(&shape, &style, transform.scale, opacity, canvas);
 }
 
 impl Default for Text2D {
@@ -906,7 +912,7 @@ impl Default for Text2D {
             style: Default::default(),
             transform: Default::default(),
             draw: Draw2D {
-                on_draw: draw_text,
+                on_draw: draw_text_object,
                 box_size: |world, entity| text_box(&world.get::<&TextShape>(entity).unwrap()),
                 visual_bounds: |world, entity| {
                     let shape = world.get::<&TextShape>(entity).unwrap();

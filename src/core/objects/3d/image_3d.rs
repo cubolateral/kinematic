@@ -58,7 +58,7 @@ impl Default for Image3D {
             },
             transform: Transform3D::default(),
             draw: Draw3D {
-                on_draw: draw_image_3d,
+                on_draw: draw_image_object,
                 box_size: |world, entity| {
                     world
                         .get::<&PlaneShape>(entity)
@@ -113,20 +113,11 @@ impl Image3DHandler {
     }
 }
 
-fn draw_image_3d(
+fn draw_image_object(
     world: &hecs::World,
     entity: hecs::Entity,
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
-    let shape = world.get::<&PlaneShape>(entity).unwrap();
-    let size = (shape.size * 0.5).extend(1.0);
-    validate_dimensions(size)?;
-    let transformation = global_matrix3d(world, entity) * glam::Mat4::from_scale(size);
-    validate_transformation(transformation)?;
-    if transformation.determinant().abs() <= f32::EPSILON {
-        return Ok(());
-    }
-
     let source = world.get::<&ImageSource>(entity).unwrap();
     let texture = world.get::<&Image3DTexture>(entity).unwrap();
     let mut texture = texture.0.lock().unwrap();
@@ -140,12 +131,38 @@ fn draw_image_3d(
         ));
     }
     let texture = texture.as_ref().unwrap();
+    let shape = world.get::<&PlaneShape>(entity).unwrap();
+    let material = world.get::<&Material>(entity).unwrap();
+    draw_image_3d(
+        texture,
+        &shape,
+        &material,
+        global_matrix3d(world, entity),
+        context,
+    )
+}
+
+/// Draws a textured plane from reusable rendering data.
+pub fn draw_image_3d(
+    texture: &three_d::Texture2DRef,
+    shape: &PlaneShape,
+    material: &Material,
+    transform: glam::Mat4,
+    context: &mut RenderContext3D<'_>,
+) -> Result<(), String> {
+    let size = (shape.size * 0.5).extend(1.0);
+    validate_dimensions(size)?;
+    let transformation = transform * glam::Mat4::from_scale(size);
+    validate_transformation(transformation)?;
+    if transformation.determinant().abs() <= f32::EPSILON {
+        return Ok(());
+    }
     context.render_textured_material(
         GeometryKey::new::<Image3D>(0),
         three_d::CpuMesh::square,
         transformation,
         texture.clone(),
-        &world.get::<&Material>(entity).unwrap(),
+        material,
     )
 }
 

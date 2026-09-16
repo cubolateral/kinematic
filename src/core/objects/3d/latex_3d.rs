@@ -80,7 +80,7 @@ impl Default for Latex3D {
             material: Material::default(),
             transform: Transform3D::default(),
             draw: Draw3D {
-                on_draw: draw_latex_3d,
+                on_draw: draw_latex_object,
                 box_size: latex_3d_box,
                 ..Default::default()
             },
@@ -104,12 +104,7 @@ fn latex_3d_box(world: &hecs::World, entity: hecs::Entity) -> Vector3 {
         .extend(shape.depth.abs())
 }
 
-fn draw_latex_3d(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    context: &mut RenderContext3D<'_>,
-) -> Result<(), String> {
-    let shape = world.get::<&Latex3DShape>(entity).unwrap();
+fn validate_latex_shape(shape: &Latex3DShape) -> Result<(), String> {
     if !shape.size.is_finite()
         || !shape.thickness.is_finite()
         || !shape.depth.is_finite()
@@ -119,9 +114,18 @@ fn draw_latex_3d(
     {
         return Err("LaTeX dimensions must be finite and nonnegative.".into());
     }
+    Ok(())
+}
+
+fn draw_latex_object(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    context: &mut RenderContext3D<'_>,
+) -> Result<(), String> {
+    let shape = world.get::<&Latex3DShape>(entity).unwrap();
+    validate_latex_shape(&shape)?;
     let material = world.get::<&Material>(entity).unwrap();
-    let transform = global_matrix3d(world, entity)
-        * glam::Mat4::from_scale(glam::Vec3::new(shape.size, shape.size, shape.depth));
+    let transform = global_matrix3d(world, entity);
     let progress = world
         .get::<&ContentMorph>(entity)
         .ok()
@@ -131,13 +135,36 @@ fn draw_latex_3d(
         });
 
     if let Some(layers) = progress {
+        let transform = latex_transform(&shape, transform);
         for (text, opacity) in layers {
             draw_formula(&shape, &text, opacity, &material, transform, context)?;
         }
     } else {
-        draw_formula(&shape, &shape.text, 1.0, &material, transform, context)?;
+        draw_latex_3d(&shape, &material, transform, context)?;
     }
     Ok(())
+}
+
+fn latex_transform(shape: &Latex3DShape, transform: glam::Mat4) -> glam::Mat4 {
+    transform * glam::Mat4::from_scale(glam::Vec3::new(shape.size, shape.size, shape.depth))
+}
+
+/// Draws an extruded LaTeX formula from reusable rendering data.
+pub fn draw_latex_3d(
+    shape: &Latex3DShape,
+    material: &Material,
+    transform: glam::Mat4,
+    context: &mut RenderContext3D<'_>,
+) -> Result<(), String> {
+    validate_latex_shape(shape)?;
+    draw_formula(
+        shape,
+        &shape.text,
+        1.0,
+        material,
+        latex_transform(shape, transform),
+        context,
+    )
 }
 
 fn draw_formula(

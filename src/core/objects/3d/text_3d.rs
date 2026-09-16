@@ -106,7 +106,7 @@ impl Default for Text3D {
             material: Material::default(),
             transform: Transform3D::default(),
             draw: Draw3D {
-                on_draw: draw_text_3d,
+                on_draw: draw_text_object,
                 box_size: text_3d_box,
                 ..Default::default()
             },
@@ -137,12 +137,7 @@ fn text_3d_box(world: &hecs::World, entity: hecs::Entity) -> Vector3 {
     (text_box(&shape.text_shape(&shape.text)) / TEXT_GEOMETRY_SCALE).extend(shape.depth.abs())
 }
 
-fn draw_text_3d(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    context: &mut RenderContext3D<'_>,
-) -> Result<(), String> {
-    let shape = world.get::<&Text3DShape>(entity).unwrap();
+fn validate_text_shape(shape: &Text3DShape) -> Result<(), String> {
     if !shape.size.is_finite()
         || !shape.align.is_finite()
         || !shape.thickness.is_finite()
@@ -153,13 +148,18 @@ fn draw_text_3d(
     {
         return Err("Text dimensions must be finite and nonnegative.".into());
     }
+    Ok(())
+}
+
+fn draw_text_object(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    context: &mut RenderContext3D<'_>,
+) -> Result<(), String> {
+    let shape = world.get::<&Text3DShape>(entity).unwrap();
+    validate_text_shape(&shape)?;
     let material = world.get::<&Material>(entity).unwrap();
-    let transform = global_matrix3d(world, entity)
-        * glam::Mat4::from_scale(glam::Vec3::new(
-            1.0 / TEXT_GEOMETRY_SCALE,
-            1.0 / TEXT_GEOMETRY_SCALE,
-            shape.depth,
-        ));
+    let transform = global_matrix3d(world, entity);
     let progress = world
         .get::<&ContentMorph>(entity)
         .ok()
@@ -169,13 +169,41 @@ fn draw_text_3d(
         });
 
     if let Some(layers) = progress {
+        let transform = text_transform(&shape, transform);
         for (text, opacity) in layers {
             draw_text_geometry(&shape, &text, opacity, &material, transform, context)?;
         }
     } else {
-        draw_text_geometry(&shape, &shape.text, 1.0, &material, transform, context)?;
+        draw_text_3d(&shape, &material, transform, context)?;
     }
     Ok(())
+}
+
+fn text_transform(shape: &Text3DShape, transform: glam::Mat4) -> glam::Mat4 {
+    transform
+        * glam::Mat4::from_scale(glam::Vec3::new(
+            1.0 / TEXT_GEOMETRY_SCALE,
+            1.0 / TEXT_GEOMETRY_SCALE,
+            shape.depth,
+        ))
+}
+
+/// Draws extruded text from reusable rendering data.
+pub fn draw_text_3d(
+    shape: &Text3DShape,
+    material: &Material,
+    transform: glam::Mat4,
+    context: &mut RenderContext3D<'_>,
+) -> Result<(), String> {
+    validate_text_shape(shape)?;
+    draw_text_geometry(
+        shape,
+        &shape.text,
+        1.0,
+        material,
+        text_transform(shape, transform),
+        context,
+    )
 }
 
 fn draw_text_geometry(

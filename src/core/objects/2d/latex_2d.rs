@@ -84,7 +84,7 @@ fn latex_morph_silhouette(
         size.y * 0.5 + padding,
     );
     Silhouette::capture(bounds, |canvas| {
-        draw_complete_latex(shape, style, 1.0, transform.scale, canvas);
+        draw_latex_2d(shape, style, transform.scale, 1.0, canvas);
     })
 }
 
@@ -103,15 +103,16 @@ fn draw_latex_morph(
         shape
     };
     transition.draw(canvas, progress, opacity, |text, opacity| {
-        draw_complete_latex(&shape_for(text), style, opacity, transform.scale, canvas);
+        draw_latex_2d(&shape_for(text), style, transform.scale, opacity, canvas);
     });
 }
 
-fn draw_complete_latex(
+/// Draws a LaTeX formula in local 2D coordinates from reusable rendering data.
+pub fn draw_latex_2d(
     shape: &Latex2DShape,
     style: &Style,
-    opacity: f32,
     scale: Vector2,
+    opacity: f32,
     canvas: &skia_safe::Canvas,
 ) {
     let geometry = geometry(&shape.text);
@@ -160,11 +161,16 @@ pub(crate) fn draw_latex_effect(
     false
 }
 
-fn draw_latex(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas, opacity: f32) {
+fn draw_latex_object(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    canvas: &skia_safe::Canvas,
+    opacity: f32,
+) {
     let shape = world.get::<&Latex2DShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
-    draw_complete_latex(&shape, &style, opacity, transform.scale, canvas);
+    draw_latex_2d(&shape, &style, transform.scale, opacity, canvas);
 }
 
 impl Default for Latex2D {
@@ -174,7 +180,7 @@ impl Default for Latex2D {
             style: Default::default(),
             transform: Default::default(),
             draw: Draw2D {
-                on_draw: draw_latex,
+                on_draw: draw_latex_object,
                 box_size: |world, entity| latex_box(&world.get::<&Latex2DShape>(entity).unwrap()),
                 visual_bounds: |world, entity| {
                     let shape = world.get::<&Latex2DShape>(entity).unwrap();

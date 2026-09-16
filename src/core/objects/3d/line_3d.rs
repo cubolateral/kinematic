@@ -231,7 +231,7 @@ impl Default for Line3D {
             material: Material::default(),
             transform: Transform3D::default(),
             draw: Draw3D {
-                on_draw: draw_line_3d,
+                on_draw: draw_line_object,
                 box_size: |world, entity| line_box(&world.get::<&Line3DShape>(entity).unwrap()),
                 ..Default::default()
             },
@@ -239,59 +239,68 @@ impl Default for Line3D {
     }
 }
 
-fn draw_line_3d(
+fn draw_line_object(
     world: &hecs::World,
     entity: hecs::Entity,
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     let shape = world.get::<&Line3DShape>(entity).unwrap();
+    let material = world.get::<&Material>(entity).unwrap();
+    draw_line_3d(&shape, &material, global_matrix3d(world, entity), context)
+}
+
+/// Draws a 3D line and its optional arrowheads from reusable rendering data.
+pub fn draw_line_3d(
+    shape: &Line3DShape,
+    material: &Material,
+    transform: glam::Mat4,
+    context: &mut RenderContext3D<'_>,
+) -> Result<(), String> {
     let Some(geometry) = line_geometry(&shape)? else {
         return Ok(());
     };
-    let global = global_matrix3d(world, entity);
-    let material = world.get::<&Material>(entity).unwrap();
     let body_length = (geometry.body_to - geometry.body_from).length();
 
     if body_length > f32::EPSILON {
         context.render_material(
             GeometryKey::new::<Line3DShape>(geometry_variant(shape.line_sides, false)),
             || closed_cylinder_mesh(shape.line_sides),
-            global
+            transform
                 * segment_transform(
                     geometry.body_from,
                     geometry.direction,
                     body_length,
                     geometry.body_radius,
                 ),
-            &material,
+            material,
         )?;
     }
     if geometry.from_length > 0.0 {
         context.render_material(
             GeometryKey::new::<Line3DShape>(geometry_variant(shape.arrow_sides, true)),
             || closed_cone_mesh(shape.arrow_sides),
-            global
+            transform
                 * segment_transform(
                     geometry.body_from,
                     -geometry.direction,
                     geometry.from_length,
                     geometry.from_radius,
                 ),
-            &material,
+            material,
         )?;
     }
     if geometry.to_length > 0.0 {
         context.render_material(
             GeometryKey::new::<Line3DShape>(geometry_variant(shape.arrow_sides, true)),
             || closed_cone_mesh(shape.arrow_sides),
-            global
+            transform
                 * segment_transform(
                     geometry.body_to,
                     geometry.direction,
                     geometry.to_length,
                     geometry.to_radius,
                 ),
-            &material,
+            material,
         )?;
     }
 

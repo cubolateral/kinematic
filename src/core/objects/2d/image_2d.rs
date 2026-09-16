@@ -34,7 +34,7 @@ impl Default for Image2D {
             },
             transform: Transform2D::default(),
             draw: Draw2D {
-                on_draw: draw_image_2d,
+                on_draw: draw_image_object,
                 box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size.abs(),
                 visual_bounds: |world, entity| {
                     let shape = world.get::<&RectShape>(entity).unwrap();
@@ -71,7 +71,7 @@ impl Image2DHandler {
     }
 }
 
-fn draw_image_2d(
+fn draw_image_object(
     world: &hecs::World,
     entity: hecs::Entity,
     canvas: &skia_safe::Canvas,
@@ -82,25 +82,33 @@ fn draw_image_2d(
         return;
     };
     let shape = world.get::<&RectShape>(entity).unwrap();
+    let style = world.get::<&Style>(entity).unwrap();
+    let transform = world.get::<&Transform2D>(entity).unwrap();
+    draw_image_2d(image, &shape, &style, transform.scale, opacity, canvas);
+}
+
+/// Draws an image inside a styled rectangle in local 2D coordinates.
+pub fn draw_image_2d(
+    image: &skia_safe::Image,
+    shape: &RectShape,
+    style: &Style,
+    scale: Vector2,
+    opacity: f32,
+    canvas: &skia_safe::Canvas,
+) {
     let size = shape.size;
     if !size.is_finite() || size.x <= 0.0 || size.y <= 0.0 {
         return;
     }
-    let style = world.get::<&Style>(entity).unwrap();
-    let transform = world.get::<&Transform2D>(entity).unwrap();
-    let path = rect_path(&shape);
+    let path = rect_path(shape);
     let bounds = skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y);
-    let draw_complete = |target: &skia_safe::Canvas, target_opacity: f32| {
-        let mut paint = skia_safe::Paint::default();
-        paint.set_alpha_f(target_opacity);
-        let saved = target.save();
-        target.clip_path(&path, None, true);
-        target.draw_image_rect(image, None, bounds, &paint);
-        target.restore_to_count(saved);
-        draw_styled_path(&path, &style, transform.scale, target_opacity, target);
-    };
-
-    draw_complete(canvas, opacity);
+    let mut paint = skia_safe::Paint::default();
+    paint.set_alpha_f(opacity);
+    let saved = canvas.save();
+    canvas.clip_path(&path, None, true);
+    canvas.draw_image_rect(image, None, bounds, &paint);
+    canvas.restore_to_count(saved);
+    draw_styled_path(&path, style, scale, opacity, canvas);
 }
 
 #[cfg(test)]
