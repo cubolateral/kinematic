@@ -13,7 +13,7 @@ use crate::core::{
         particle_visual_key,
         string_morph::{
             ContentMorph, ContentMorphTransition, GlyphLayer, MovingGlyphLayer, TextMorphPlan,
-            fade_string, morph_text,
+            fade_string, match_items, morph_text,
         },
     },
     types::Vector2,
@@ -260,66 +260,15 @@ fn text_clusters(shape: &TextShape) -> Vec<LayoutCluster> {
 }
 
 fn match_clusters(from: &[LayoutCluster], to: &[LayoutCluster]) -> Vec<(usize, usize)> {
-    let columns = to.len() + 1;
-    let mut lengths = vec![0usize; (from.len() + 1) * columns];
-
-    for from_index in (0..from.len()).rev() {
-        for to_index in (0..to.len()).rev() {
-            let index = from_index * columns + to_index;
-            lengths[index] = if from[from_index].text == to[to_index].text {
-                1 + lengths[(from_index + 1) * columns + to_index + 1]
-            } else {
-                lengths[(from_index + 1) * columns + to_index]
-                    .max(lengths[from_index * columns + to_index + 1])
-            };
-        }
-    }
-
-    let mut matches = Vec::new();
-    let (mut from_index, mut to_index) = (0, 0);
-    while from_index < from.len() && to_index < to.len() {
-        if from[from_index].text == to[to_index].text {
-            matches.push((from_index, to_index));
-            from_index += 1;
-            to_index += 1;
-        } else if lengths[(from_index + 1) * columns + to_index]
-            >= lengths[from_index * columns + to_index + 1]
-        {
-            from_index += 1;
-        } else {
-            to_index += 1;
-        }
-    }
-
-    let mut matched_from = vec![false; from.len()];
-    let mut matched_to = vec![false; to.len()];
-    for &(from_index, to_index) in &matches {
-        matched_from[from_index] = true;
-        matched_to[to_index] = true;
-    }
-
-    for source in 0..from.len() {
-        if matched_from[source] {
-            continue;
-        }
-        let target = (0..to.len())
-            .filter(|&target| !matched_to[target] && from[source].text == to[target].text)
-            .min_by(|&left, &right| {
-                from[source]
-                    .origin
-                    .distance_squared(to[left].origin)
-                    .total_cmp(&from[source].origin.distance_squared(to[right].origin))
-                    .then_with(|| left.cmp(&right))
-            });
-        if let Some(target) = target {
-            matched_from[source] = true;
-            matched_to[target] = true;
-            matches.push((source, target));
-        }
-    }
-
-    matches.sort_unstable();
-    matches
+    match_items(
+        &from.iter().map(|cluster| &cluster.text).collect::<Vec<_>>(),
+        &from
+            .iter()
+            .map(|cluster| cluster.origin)
+            .collect::<Vec<_>>(),
+        &to.iter().map(|cluster| &cluster.text).collect::<Vec<_>>(),
+        &to.iter().map(|cluster| cluster.origin).collect::<Vec<_>>(),
+    )
 }
 
 fn glyph_layer(clusters: &[LayoutCluster], included: impl Fn(usize) -> bool) -> GlyphLayer {

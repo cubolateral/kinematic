@@ -1,13 +1,14 @@
 use kinematic_macros::Trackable;
 
 use crate::core::{
-    Easing, Tween,
+    Tween,
     components::{Style, Transform2D},
     objects::{
         Object,
         appearance::AppearanceEdit,
-        particle::{ParticleTransform, Silhouette, morph_opacities},
+        particle::{ParticleTransform, morph_opacities},
     },
+    types::{Color, Vector2},
 };
 
 type RefreshContentMorph = dyn Fn(&[AppearanceEdit]) -> Option<PreparedContentMorph> + Send + Sync;
@@ -20,9 +21,27 @@ pub(super) struct ContentMorphTransition {
 }
 
 pub(super) enum PreparedContentMorph {
-    Particles(ParticleTransform),
     Text(TextMorphPlan),
+    Paths(PathMorphPlan),
     Fade,
+}
+
+#[derive(Clone)]
+pub(super) struct MorphPath {
+    pub(super) path: std::sync::Arc<std::sync::Mutex<skia_safe::Path>>,
+    pub(super) color: Option<Color>,
+}
+
+pub(super) struct MovingMorphPath {
+    pub(super) from: MorphPath,
+    pub(super) to: MorphPath,
+}
+
+pub(super) struct PathMorphPlan {
+    pub(super) stable: Vec<MovingMorphPath>,
+    pub(super) source: Vec<MorphPath>,
+    pub(super) target: Vec<MorphPath>,
+    pub(super) particles: ParticleTransform,
 }
 
 pub(super) struct GlyphLayer {
@@ -44,13 +63,7 @@ pub(super) struct TextMorphPlan {
 }
 
 impl ContentMorphTransition {
-    pub(super) fn draw(
-        &self,
-        canvas: &skia_safe::Canvas,
-        progress: f32,
-        opacity: f32,
-        draw: impl Fn(&str, f32),
-    ) {
+    pub(super) fn draw(&self, progress: f32, opacity: f32, draw: impl Fn(&str, f32)) {
         let (source_opacity, target_opacity) =
             if matches!(self.prepared, Some(PreparedContentMorph::Fade)) {
                 (1.0 - progress, progress)
@@ -65,10 +78,6 @@ impl ContentMorphTransition {
                 draw(text, opacity * fade);
             }
         }
-        let Some(PreparedContentMorph::Particles(particles)) = self.prepared.as_ref() else {
-            return;
-        };
-        particles.draw(canvas, progress, opacity);
     }
 
     pub(super) fn is_fade(&self) -> bool {
@@ -95,6 +104,85 @@ impl ContentMorphTransition {
 
         plan
     }
+
+    pub(super) fn path_plan(&self) -> &PathMorphPlan {
+        let PreparedContentMorph::Paths(plan) = self
+            .prepared
+            .as_ref()
+            .expect("Morph must be prepared before drawing.")
+        else {
+            panic!("Path morph must use its path renderer.");
+        };
+
+        plan
+    }
+}
+
+pub(super) fn match_items<K: PartialEq>(
+    from: &[K],
+    from_origins: &[Vector2],
+    to: &[K],
+    to_origins: &[Vector2],
+) -> Vec<(usize, usize)> {
+    let columns = to.len() + 1;
+    let mut lengths = vec![0usize; (from.len() + 1) * columns];
+
+    for from_index in (0..from.len()).rev() {
+        for to_index in (0..to.len()).rev() {
+            let index = from_index * columns + to_index;
+            lengths[index] = if from[from_index] == to[to_index] {
+                1 + lengths[(from_index + 1) * columns + to_index + 1]
+            } else {
+                lengths[(from_index + 1) * columns + to_index]
+                    .max(lengths[from_index * columns + to_index + 1])
+            };
+        }
+    }
+
+    let mut matches = Vec::new();
+    let (mut from_index, mut to_index) = (0, 0);
+    while from_index < from.len() && to_index < to.len() {
+        if from[from_index] == to[to_index] {
+            matches.push((from_index, to_index));
+            from_index += 1;
+            to_index += 1;
+        } else if lengths[(from_index + 1) * columns + to_index]
+            >= lengths[from_index * columns + to_index + 1]
+        {
+            from_index += 1;
+        } else {
+            to_index += 1;
+        }
+    }
+
+    let mut matched_from = vec![false; from.len()];
+    let mut matched_to = vec![false; to.len()];
+    for &(from_index, to_index) in &matches {
+        matched_from[from_index] = true;
+        matched_to[to_index] = true;
+    }
+
+    for source in 0..from.len() {
+        if matched_from[source] {
+            continue;
+        }
+        let target = (0..to.len())
+            .filter(|&target| !matched_to[target] && from[source] == to[target])
+            .min_by(|&left, &right| {
+                from_origins[source]
+                    .distance_squared(to_origins[left])
+                    .total_cmp(&from_origins[source].distance_squared(to_origins[right]))
+                    .then_with(|| left.cmp(&right))
+            });
+        if let Some(target) = target {
+            matched_from[source] = true;
+            matched_to[target] = true;
+            matches.push((source, target));
+        }
+    }
+
+    matches.sort_unstable();
+    matches
 }
 
 #[derive(Default, Trackable)]
@@ -108,28 +196,6 @@ pub(super) struct ContentMorph {
     pub(super) active: bool,
 
     pub(super) transitions: Vec<ContentMorphTransition>,
-}
-
-pub(super) fn morph_string<T: Object, S: hecs::Component + Clone>(
-    tween: Tween<T>,
-    entity: hecs::Entity,
-    from_text: String,
-    text: String,
-    capture: fn(&S, &Style, &Transform2D) -> Silhouette,
-) -> Tween<T> {
-    morph_string_with(
-        tween,
-        entity,
-        from_text,
-        text,
-        move |from_shape, from_style, from_transform, to_shape, to_style, to_transform| {
-            PreparedContentMorph::Particles(ParticleTransform::new(
-                capture(&from_shape, &from_style, &from_transform),
-                capture(&to_shape, &to_style, &to_transform),
-                Easing::Linear,
-            ))
-        },
-    )
 }
 
 pub(super) fn morph_text<T: Object, S: hecs::Component + Clone>(
@@ -189,7 +255,7 @@ pub(super) fn fade_string<T: Object>(
         .animate_from(ContentMorph::progress_property(), 0.0, 1.0)
 }
 
-fn morph_string_with<T: Object, S: hecs::Component + Clone>(
+pub(super) fn morph_string_with<T: Object, S: hecs::Component + Clone>(
     tween: Tween<T>,
     entity: hecs::Entity,
     from_text: String,

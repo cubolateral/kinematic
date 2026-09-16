@@ -5,12 +5,15 @@ use crate::core::{
     components::{Draw2D, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale},
     objects::{
         ObjectHandler,
-        latex_geometry::geometry,
-        particle::Silhouette,
-        string_morph::{ContentMorph, ContentMorphTransition, fade_string, morph_string},
+        latex_geometry::{FormulaGlyph, geometry},
+        particle::{ParticleTransform, Silhouette, morph_opacities},
+        string_morph::{
+            ContentMorph, ContentMorphTransition, MorphPath, MovingMorphPath, PathMorphPlan,
+            PreparedContentMorph, fade_string, match_items, morph_string_with,
+        },
         text_2d::weighted_path,
     },
-    types::Vector2,
+    types::{Color, Vector2},
 };
 
 /// Mathematical source and size of a LaTeX object.
@@ -70,22 +73,181 @@ fn latex_box(shape: &Latex2DShape) -> Vector2 {
     geometry(&shape.text).size * shape.size.max(0.0) + Vector2::splat(shape.thickness.max(0.0))
 }
 
-fn latex_morph_silhouette(
+fn morph_parts(shape: &Latex2DShape) -> Vec<(Option<FormulaGlyph>, MorphPath)> {
+    let scale = shape.size.max(0.0);
+    geometry(&shape.text)
+        .parts
+        .iter()
+        .map(|part| {
+            (
+                part.glyph.clone(),
+                MorphPath {
+                    path: std::sync::Arc::new(std::sync::Mutex::new(
+                        part.path
+                            .with_transform(&skia_safe::Matrix::scale((scale, scale))),
+                    )),
+                    color: part.color,
+                },
+            )
+        })
+        .collect()
+}
+
+fn draw_morph_parts(
+    parts: &[MorphPath],
+    thickness: f32,
+    style: &Style,
+    transform: &Transform2D,
+    opacity: f32,
+    canvas: &skia_safe::Canvas,
+) {
+    let mut part_style = style.clone();
+    for part in parts {
+        part_style.fill = part.color.unwrap_or(style.fill);
+        draw_complete_styled_path(
+            &weighted_path(&part.path.lock().unwrap(), thickness),
+            &part_style,
+            transform.scale,
+            opacity,
+            canvas,
+        );
+    }
+}
+
+fn morph_silhouette(
+    parts: &[MorphPath],
     shape: &Latex2DShape,
     style: &Style,
     transform: &Transform2D,
 ) -> Silhouette {
-    let size = latex_box(shape);
+    let mut bounds: Option<skia_safe::Rect> = None;
+    for part in parts {
+        let path = weighted_path(&part.path.lock().unwrap(), shape.thickness.max(0.0));
+        let part_bounds = path.compute_tight_bounds();
+        match &mut bounds {
+            Some(bounds) => bounds.join(part_bounds),
+            None => bounds = Some(part_bounds),
+        }
+    }
+    let mut bounds = bounds.unwrap_or_default();
     let padding = stroke_width_for_scale(style.stroke_width.max(0.0), transform.scale) * 0.5 + 2.0;
-    let bounds = skia_safe::Rect::new(
-        -size.x * 0.5 - padding,
-        -size.y * 0.5 - padding,
-        size.x * 0.5 + padding,
-        size.y * 0.5 + padding,
-    );
+    bounds.outset((padding, padding));
     Silhouette::capture(bounds, |canvas| {
-        draw_latex_2d(shape, style, transform.scale, 1.0, canvas);
+        draw_morph_parts(
+            parts,
+            shape.thickness.max(0.0),
+            style,
+            transform,
+            1.0,
+            canvas,
+        );
     })
+}
+
+fn prepare_latex_morph(
+    from_shape: &Latex2DShape,
+    from_style: &Style,
+    from_transform: &Transform2D,
+    to_shape: &Latex2DShape,
+    to_style: &Style,
+    to_transform: &Transform2D,
+) -> PathMorphPlan {
+    let from = morph_parts(from_shape);
+    let to = morph_parts(to_shape);
+    let from_glyphs: Vec<_> = from
+        .iter()
+        .enumerate()
+        .filter_map(|(index, (glyph, part))| {
+            glyph.as_ref().map(|glyph| {
+                let center = part.path.lock().unwrap().compute_tight_bounds().center();
+                (index, glyph, Vector2::new(center.x, center.y))
+            })
+        })
+        .collect();
+    let to_glyphs: Vec<_> = to
+        .iter()
+        .enumerate()
+        .filter_map(|(index, (glyph, part))| {
+            glyph.as_ref().map(|glyph| {
+                let center = part.path.lock().unwrap().compute_tight_bounds().center();
+                (index, glyph, Vector2::new(center.x, center.y))
+            })
+        })
+        .collect();
+    let matches = match_items(
+        &from_glyphs
+            .iter()
+            .map(|(_, glyph, _)| *glyph)
+            .collect::<Vec<_>>(),
+        &from_glyphs
+            .iter()
+            .map(|(_, _, origin)| *origin)
+            .collect::<Vec<_>>(),
+        &to_glyphs
+            .iter()
+            .map(|(_, glyph, _)| *glyph)
+            .collect::<Vec<_>>(),
+        &to_glyphs
+            .iter()
+            .map(|(_, _, origin)| *origin)
+            .collect::<Vec<_>>(),
+    );
+    let mut matched_from = vec![false; from.len()];
+    let mut matched_to = vec![false; to.len()];
+    let mut stable = Vec::with_capacity(matches.len());
+    let mut from_anchors = Vec::with_capacity(matches.len());
+    let mut to_anchors = Vec::with_capacity(matches.len());
+
+    for (from_match, to_match) in matches {
+        let from_index = from_glyphs[from_match].0;
+        let to_index = to_glyphs[to_match].0;
+        matched_from[from_index] = true;
+        matched_to[to_index] = true;
+        from_anchors.push(from_glyphs[from_match].2);
+        to_anchors.push(to_glyphs[to_match].2);
+        stable.push(MovingMorphPath {
+            from: from[from_index].1.clone(),
+            to: to[to_index].1.clone(),
+        });
+    }
+
+    let source: Vec<_> = from
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, (_, part))| (!matched_from[index]).then_some(part))
+        .collect();
+    let target: Vec<_> = to
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, (_, part))| (!matched_to[index]).then_some(part))
+        .collect();
+    let mut from_silhouette = morph_silhouette(&source, from_shape, from_style, from_transform);
+    let mut to_silhouette = morph_silhouette(&target, to_shape, to_style, to_transform);
+    if from_silhouette.is_empty() && !to_silhouette.is_empty() {
+        from_silhouette = to_silhouette.collapsed_at(&from_anchors);
+    } else if to_silhouette.is_empty() && !from_silhouette.is_empty() {
+        to_silhouette = from_silhouette.collapsed_at(&to_anchors);
+    }
+
+    PathMorphPlan {
+        stable,
+        source,
+        target,
+        particles: ParticleTransform::sampled(
+            from_silhouette,
+            to_silhouette,
+            crate::core::Easing::Linear,
+        ),
+    }
+}
+
+fn mix_color(from: Color, to: Color, progress: f32) -> Color {
+    Color::new(
+        from.r + (to.r - from.r) * progress,
+        from.g + (to.g - from.g) * progress,
+        from.b + (to.b - from.b) * progress,
+        from.a + (to.a - from.a) * progress,
+    )
 }
 
 fn draw_latex_morph(
@@ -97,14 +259,58 @@ fn draw_latex_morph(
     opacity: f32,
     canvas: &skia_safe::Canvas,
 ) {
-    let shape_for = |text: &str| {
-        let mut shape = shape.clone();
-        shape.text = text.to_owned();
-        shape
-    };
-    transition.draw(canvas, progress, opacity, |text, opacity| {
-        draw_latex_2d(&shape_for(text), style, transform.scale, opacity, canvas);
-    });
+    if transition.is_fade() {
+        let shape_for = |text: &str| {
+            let mut shape = shape.clone();
+            shape.text = text.to_owned();
+            shape
+        };
+        transition.draw(progress, opacity, |text, opacity| {
+            draw_latex_2d(&shape_for(text), style, transform.scale, opacity, canvas);
+        });
+        return;
+    }
+    let plan = transition.path_plan();
+    let (source_opacity, target_opacity) = morph_opacities(progress);
+    draw_morph_parts(
+        &plan.source,
+        shape.thickness.max(0.0),
+        style,
+        transform,
+        opacity * source_opacity,
+        canvas,
+    );
+    draw_morph_parts(
+        &plan.target,
+        shape.thickness.max(0.0),
+        style,
+        transform,
+        opacity * target_opacity,
+        canvas,
+    );
+    plan.particles.draw(canvas, progress, opacity);
+
+    let movement = progress * progress * (3.0 - 2.0 * progress);
+    let mut part_style = style.clone();
+    for part in &plan.stable {
+        let from = part.from.path.lock().unwrap();
+        let to = part.to.path.lock().unwrap();
+        let path = from
+            .interpolate(&to, 1.0 - movement)
+            .expect("Matching LaTeX glyph paths must be interpolatable.");
+        part_style.fill = mix_color(
+            part.from.color.unwrap_or(style.fill),
+            part.to.color.unwrap_or(style.fill),
+            movement,
+        );
+        draw_complete_styled_path(
+            &weighted_path(&path, shape.thickness.max(0.0)),
+            &part_style,
+            transform.scale,
+            opacity,
+            canvas,
+        );
+    }
 }
 
 /// Draws a LaTeX formula in local 2D coordinates from reusable rendering data.
@@ -216,12 +422,21 @@ impl Latex2DHandler {
         let text = text.into();
         let from_text = self.get(Latex2DShape::text_property());
         let tween = self.text(text.clone());
-        morph_string(
+        morph_string_with(
             tween,
             self.entity(),
             from_text,
             text,
-            latex_morph_silhouette,
+            |from_shape, from_style, from_transform, to_shape, to_style, to_transform| {
+                PreparedContentMorph::Paths(prepare_latex_morph(
+                    &from_shape,
+                    &from_style,
+                    &from_transform,
+                    &to_shape,
+                    &to_style,
+                    &to_transform,
+                ))
+            },
         )
     }
 }
@@ -326,6 +541,30 @@ mod tests {
             world.query::<&Latex2DShape>().iter().next().unwrap().text,
             r"e^{i\pi}+1=0"
         );
+    }
+
+    #[test]
+    fn morph_keeps_shared_formula_glyphs_out_of_particle_silhouettes() {
+        let from = Latex2DShape {
+            text: "x+1".to_owned(),
+            ..Default::default()
+        };
+        let to = Latex2DShape {
+            text: "x+2".to_owned(),
+            ..Default::default()
+        };
+        let plan = prepare_latex_morph(
+            &from,
+            &Style::default(),
+            &Transform2D::default(),
+            &to,
+            &Style::default(),
+            &Transform2D::default(),
+        );
+
+        assert_eq!(plan.stable.len(), 2);
+        assert_eq!(plan.source.len(), 1);
+        assert_eq!(plan.target.len(), 1);
     }
 
     #[test]
