@@ -38,7 +38,7 @@ impl Ui {
             font: theme::initialize(context),
             appearance: settings::load(),
             export: export::State::default(),
-            is_fullscreen: false,
+            is_fullscreen: crate::editor::load_editor_fullscreen(),
             preview: preview::State::new(crate::editor::load_editor_mode()),
             inspector: inspector::State::default(),
             settings: settings::State::default(),
@@ -106,6 +106,10 @@ impl Ui {
 
     pub(crate) fn editor_mode(&self) -> crate::editor::EditorMode {
         self.preview.cached_mode()
+    }
+
+    pub(crate) fn is_fullscreen(&self) -> bool {
+        self.is_fullscreen
     }
 
     pub(crate) fn render_mode(&self) -> crate::editor::EditorMode {

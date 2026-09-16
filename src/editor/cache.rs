@@ -11,6 +11,7 @@ pub(super) struct EditorCache {
     pub(super) camera_3d: Camera3DCache,
     pub(super) timeline_time: f32,
     pub(super) mode: EditorMode,
+    pub(super) fullscreen: bool,
 }
 
 impl Default for EditorCache {
@@ -20,6 +21,7 @@ impl Default for EditorCache {
             camera_3d: Camera3DCache::default(),
             timeline_time: 0.0,
             mode: EditorMode::default(),
+            fullscreen: false,
         }
     }
 }
@@ -34,6 +36,10 @@ pub(crate) enum EditorMode {
 
 pub(crate) fn load_editor_mode() -> EditorMode {
     EditorCache::load().mode
+}
+
+pub(crate) fn load_editor_fullscreen() -> bool {
+    EditorCache::load().fullscreen
 }
 
 impl EditorCache {
@@ -94,6 +100,7 @@ impl EditorCache {
 pub(super) struct Camera2DCache {
     pub(super) pan: [f32; 2],
     pub(super) zoom: f32,
+    pub(super) camera_view: bool,
 }
 
 impl Default for Camera2DCache {
@@ -101,6 +108,7 @@ impl Default for Camera2DCache {
         Self {
             pan: [0.0; 2],
             zoom: 1.0,
+            camera_view: false,
         }
     }
 }
@@ -111,6 +119,7 @@ pub(super) struct Camera3DCache {
     pub(super) position: [f32; 3],
     pub(super) yaw: f32,
     pub(super) pitch: f32,
+    pub(super) camera_view: bool,
 }
 
 impl Default for Camera3DCache {
@@ -119,6 +128,7 @@ impl Default for Camera3DCache {
             position: [4.0, 3.0, 6.0],
             yaw: 0.588,
             pitch: -0.395,
+            camera_view: false,
         }
     }
 }
@@ -161,14 +171,17 @@ mod tests {
             camera_2d: Camera2DCache {
                 pan: [12.0, -8.0],
                 zoom: 2.0,
+                camera_view: true,
             },
             camera_3d: Camera3DCache {
                 position: [1.0, 2.0, 3.0],
                 yaw: 0.5,
                 pitch: -0.25,
+                camera_view: true,
             },
             timeline_time: 1.5,
             mode: EditorMode::Three,
+            fullscreen: true,
         };
 
         write(&cache, &path).unwrap();

@@ -153,6 +153,7 @@ impl Editor {
             editor_view_2d: EditorView2D {
                 pan: cache.camera_2d.pan,
                 zoom: cache.camera_2d.zoom,
+                canvas_view: cache.camera_2d.camera_view,
                 ..EditorView2D::default()
             },
             editor_rendered: None,
@@ -161,6 +162,7 @@ impl Editor {
                 position: glam::Vec3::from_array(cache.camera_3d.position),
                 yaw: cache.camera_3d.yaw,
                 pitch: cache.camera_3d.pitch,
+                canvas_view: cache.camera_3d.camera_view,
                 ..EditorView3D::default()
             },
             editor_3d_rendered: None,
@@ -339,19 +341,22 @@ impl Editor {
         self.render_error.as_deref()
     }
 
-    pub fn shutdown(&mut self, gl: &glow::Context, mode: EditorMode) {
+    pub fn shutdown(&mut self, gl: &glow::Context, mode: EditorMode, fullscreen: bool) {
         EditorCache {
             camera_2d: Camera2DCache {
                 pan: self.editor_view_2d.pan,
                 zoom: self.editor_view_2d.zoom,
+                camera_view: self.editor_view_2d.canvas_view,
             },
             camera_3d: Camera3DCache {
                 position: self.editor_view_3d.position.to_array(),
                 yaw: self.editor_view_3d.yaw,
                 pitch: self.editor_view_3d.pitch,
+                camera_view: self.editor_view_3d.canvas_view,
             },
             timeline_time: self.timeline.time(),
             mode,
+            fullscreen,
         }
         .save();
         self.renderer.shutdown(gl);

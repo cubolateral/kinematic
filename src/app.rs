@@ -219,7 +219,7 @@ impl App {
             }
         }
 
-        editor.shutdown(&self.gl, self.ui.editor_mode());
+        editor.shutdown(&self.gl, self.ui.editor_mode(), self.ui.is_fullscreen());
         self.window_cache.update(&self.window);
         self.window_cache.save();
         self.imgui_renderer
