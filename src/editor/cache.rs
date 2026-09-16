@@ -101,6 +101,8 @@ pub(super) struct Camera2DCache {
     pub(super) pan: [f32; 2],
     pub(super) zoom: f32,
     pub(super) camera_view: bool,
+    #[serde(default = "default_axes_2d")]
+    pub(super) axes: [bool; 2],
 }
 
 impl Default for Camera2DCache {
@@ -109,6 +111,7 @@ impl Default for Camera2DCache {
             pan: [0.0; 2],
             zoom: 1.0,
             camera_view: false,
+            axes: default_axes_2d(),
         }
     }
 }
@@ -120,6 +123,8 @@ pub(super) struct Camera3DCache {
     pub(super) yaw: f32,
     pub(super) pitch: f32,
     pub(super) camera_view: bool,
+    #[serde(default = "default_axes_3d")]
+    pub(super) axes: [bool; 3],
 }
 
 impl Default for Camera3DCache {
@@ -129,8 +134,17 @@ impl Default for Camera3DCache {
             yaw: 0.588,
             pitch: -0.395,
             camera_view: false,
+            axes: default_axes_3d(),
         }
     }
+}
+
+fn default_axes_2d() -> [bool; 2] {
+    [true; 2]
+}
+
+fn default_axes_3d() -> [bool; 3] {
+    [true; 3]
 }
 
 fn write(cache: &EditorCache, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -172,12 +186,14 @@ mod tests {
                 pan: [12.0, -8.0],
                 zoom: 2.0,
                 camera_view: true,
+                axes: [true, false],
             },
             camera_3d: Camera3DCache {
                 position: [1.0, 2.0, 3.0],
                 yaw: 0.5,
                 pitch: -0.25,
                 camera_view: true,
+                axes: [true, false, true],
             },
             timeline_time: 1.5,
             mode: EditorMode::Three,

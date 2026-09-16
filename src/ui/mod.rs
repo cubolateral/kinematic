@@ -72,7 +72,8 @@ impl Ui {
 
         let dock = ui.dockspace_over_main_viewport();
 
-        if self.needs_initial_layout {
+        let initial_layout = self.needs_initial_layout;
+        if initial_layout {
             workspace::apply_default_layout(ui, dock);
             self.needs_initial_layout = false;
         }
@@ -93,6 +94,10 @@ impl Ui {
 
         if export::draw(editor, ui, &mut self.export) {
             self.preview.show_preview();
+        }
+
+        if initial_layout {
+            ui.set_window_focus(Some(inspector::WINDOW_NAME));
         }
 
         if fullscreen_shortcut || fullscreen_button {

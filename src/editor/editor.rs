@@ -35,6 +35,7 @@ struct EditorView2D {
     zoom: f32,
     correction: [f32; 2],
     canvas_view: bool,
+    axes: [bool; 2],
 }
 
 #[derive(Clone, Copy)]
@@ -65,6 +66,7 @@ impl Default for EditorView2D {
             zoom: 1.0,
             correction: [1.0; 2],
             canvas_view: false,
+            axes: [true; 2],
         }
     }
 }
@@ -154,6 +156,7 @@ impl Editor {
                 pan: cache.camera_2d.pan,
                 zoom: cache.camera_2d.zoom,
                 canvas_view: cache.camera_2d.camera_view,
+                axes: cache.camera_2d.axes,
                 ..EditorView2D::default()
             },
             editor_rendered: None,
@@ -163,6 +166,7 @@ impl Editor {
                 yaw: cache.camera_3d.yaw,
                 pitch: cache.camera_3d.pitch,
                 canvas_view: cache.camera_3d.camera_view,
+                axes: cache.camera_3d.axes,
                 ..EditorView3D::default()
             },
             editor_3d_rendered: None,
@@ -347,12 +351,14 @@ impl Editor {
                 pan: self.editor_view_2d.pan,
                 zoom: self.editor_view_2d.zoom,
                 camera_view: self.editor_view_2d.canvas_view,
+                axes: self.editor_view_2d.axes,
             },
             camera_3d: Camera3DCache {
                 position: self.editor_view_3d.position.to_array(),
                 yaw: self.editor_view_3d.yaw,
                 pitch: self.editor_view_3d.pitch,
                 camera_view: self.editor_view_3d.canvas_view,
+                axes: self.editor_view_3d.axes,
             },
             timeline_time: self.timeline.time(),
             mode,
@@ -647,7 +653,7 @@ impl Editor {
             .pick_editor_3d(canvas, &camera, size, point)
         {
             Some(entity) => self.selection.select(self.active_scene, entity),
-            None => self.selection.select(self.active_scene, canvas),
+            None => self.clear_selection(),
         }
     }
 
@@ -671,6 +677,14 @@ impl Editor {
 
     pub(crate) fn editor_2d_camera_view(&self) -> bool {
         self.editor_view_2d.canvas_view
+    }
+
+    pub(crate) fn toggle_editor_2d_axis(&mut self, axis: usize) {
+        self.editor_view_2d.axes[axis] = !self.editor_view_2d.axes[axis];
+    }
+
+    pub(crate) fn editor_2d_axes(&self) -> [bool; 2] {
+        self.editor_view_2d.axes
     }
 
     pub(crate) fn editor_2d_canvas_size(&self) -> (u32, u32) {
@@ -737,7 +751,7 @@ impl Editor {
             self.editor_view_2d.canvas_view,
         ) {
             Some(entity) => self.selection.select(self.active_scene, entity),
-            None => self.selection.select(self.active_scene, canvas),
+            None => self.clear_selection(),
         }
     }
 
@@ -746,6 +760,18 @@ impl Editor {
         self.scenes[self.active_scene]
             .scene
             .editor_2d_camera_outline(canvas, self.editor_view_2d.canvas_view)
+    }
+
+    pub(crate) fn editor_2d_project_outline(&self) -> [skia_safe::Point; 4] {
+        let (width, height) = self.editor_2d_canvas_size();
+        let half_width = width as f32 * 0.5;
+        let half_height = height as f32 * 0.5;
+        [
+            skia_safe::Point::new(-half_width, -half_height),
+            skia_safe::Point::new(half_width, -half_height),
+            skia_safe::Point::new(half_width, half_height),
+            skia_safe::Point::new(-half_width, half_height),
+        ]
     }
 
     pub(crate) fn editor_2d_selection_outline(&self) -> Option<[skia_safe::Point; 4]> {

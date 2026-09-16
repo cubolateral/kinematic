@@ -217,6 +217,7 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         let canvas_size = editor.editor_2d_canvas_size();
         let canvas_aspect = canvas_size.0.max(1) as f32 / canvas_size.1.max(1) as f32;
         draw_camera_mask(ui, min, available, canvas_aspect);
+        draw_project_outline(ui, min, available, canvas_aspect);
     }
     ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + 8.0]);
     if camera_button(ui, editor.editor_2d_camera_view()) {
@@ -226,9 +227,39 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     if reset_camera_button(ui) {
         editor.reset_editor_2d_camera_transform();
     }
+    ui.set_cursor_screen_pos([min[0] + available[0] - 80.0, min[1] + 8.0]);
+    for (axis, label, color) in [
+        (0, "X", [1.0, 0.3, 0.3, 1.0]),
+        (1, "Y", [0.3, 1.0, 0.3, 1.0]),
+    ] {
+        if axis > 0 {
+            ui.same_line();
+        }
+        ui.set_next_item_allow_overlap();
+        let enabled = editor.editor_2d_axes()[axis];
+        let _color = ui.push_style_color(
+            dear_imgui_rs::StyleColor::Text,
+            if enabled {
+                color
+            } else {
+                [0.45, 0.45, 0.45, 1.0]
+            },
+        );
+        if ui.button_with_size(label, [32.0, ui.frame_height()]) {
+            editor.toggle_editor_2d_axis(axis);
+        }
+    }
     if let Some(error) = editor.render_error() {
         ui.text_wrapped(error);
     }
+}
+
+fn draw_project_outline(ui: &dear_imgui_rs::Ui, min: [f32; 2], size: [f32; 2], aspect: f32) {
+    let [rect_min, rect_max] = camera_frame(min, size, aspect);
+    ui.get_window_draw_list()
+        .add_rect(rect_min, rect_max, [0.5, 0.5, 0.5, 1.0])
+        .thickness(1.0)
+        .build();
 }
 
 fn camera_button(ui: &dear_imgui_rs::Ui, camera_view: bool) -> bool {

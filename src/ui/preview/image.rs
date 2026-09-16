@@ -103,6 +103,38 @@ pub(super) fn draw_editor(
         editor.editor_2d_view()
     };
     draw_list.add_image(preview.texture, min, max, [0.0, 1.0], [1.0, 0.0], [1.0; 4]);
+    let origin = [
+        center[0] + pan[0] * display_scale,
+        center[1] + pan[1] * display_scale,
+    ];
+    for (enabled, from, to, color) in [
+        (
+            editor.editor_2d_axes()[0],
+            [min[0], origin[1]],
+            [max[0], origin[1]],
+            [1.0, 0.3, 0.3, 1.0],
+        ),
+        (
+            editor.editor_2d_axes()[1],
+            [origin[0], min[1]],
+            [origin[0], max[1]],
+            [0.3, 1.0, 0.3, 1.0],
+        ),
+    ] {
+        if enabled {
+            draw_list.add_line(from, to, color).thickness(1.0).build();
+        }
+    }
+    draw_world_outline(
+        &draw_list,
+        Some(editor.editor_2d_project_outline()),
+        center,
+        display_scale,
+        pan,
+        zoom,
+        CANVAS_OUTLINE,
+        1.0,
+    );
     if !camera_view {
         draw_world_outline(
             &draw_list,
