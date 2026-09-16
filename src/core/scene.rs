@@ -326,6 +326,7 @@ impl Scene {
     pub fn draw(&self, canvas: &skia_safe::Canvas) {
         let world = self.world.borrow();
         let save_count = canvas.save();
+        let camera_base = canvas.local_to_device();
 
         if let Some(view) =
             camera_matrix2d(&world, self.world_2d).and_then(|camera| camera.invert())
@@ -334,7 +335,7 @@ impl Scene {
         }
 
         for child in children_by_z_index(&world, self.world_2d) {
-            draw_entity(&world, child, canvas);
+            draw_entity(&world, child, canvas, Some(&camera_base));
         }
         canvas.restore_to_count(save_count);
     }
@@ -389,7 +390,7 @@ impl Scene {
     ) -> Option<[skia_safe::Point; 4]> {
         let world = self.world.borrow();
         let mut points = crate::core::objects::outline_points_in_world(&world, canvas, entity)?;
-        if camera_view {
+        if camera_view && crate::core::objects::object_follows_camera(&world, canvas, entity) {
             crate::core::objects::camera_matrix2d(&world, canvas)?
                 .invert()?
                 .map_points_inplace(&mut points);
@@ -408,16 +409,11 @@ impl Scene {
     pub(crate) fn pick_editor_2d(
         &self,
         canvas: hecs::Entity,
-        mut point: Vector2,
+        point: Vector2,
         camera_view: bool,
     ) -> Option<hecs::Entity> {
         let world = self.world.borrow();
-        if camera_view {
-            let camera = crate::core::objects::camera_matrix2d(&world, canvas)?;
-            let mapped = camera.map_point((point.x, point.y));
-            point = Vector2::new(mapped.x, mapped.y);
-        }
-        crate::core::objects::pick_canvas2d_in_world(&world, canvas, point)
+        crate::core::objects::pick_canvas2d_in_world(&world, canvas, point, camera_view)
     }
 
     pub(crate) fn pick_editor_3d(

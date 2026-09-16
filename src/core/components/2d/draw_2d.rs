@@ -21,6 +21,9 @@ pub struct Draw2D {
     /// Stacking order among sibling objects. Higher values are drawn in front.
     #[track]
     pub z_index: i32,
+    /// Whether this entity and its subtree are affected by the canvas camera.
+    #[track]
+    pub follows_camera: bool,
 
     /// Draws this entity in local coordinates with the supplied opacity.
     pub on_draw: fn(&hecs::World, hecs::Entity, &skia_safe::Canvas, f32),
@@ -38,6 +41,7 @@ impl Default for Draw2D {
             visibility: true,
             opacity: 1.0,
             z_index: 0,
+            follows_camera: true,
             on_draw: |_, _, _, _| {},
             box_size: |_, _| Vector2::ZERO,
             visual_bounds: centered_box_bounds,

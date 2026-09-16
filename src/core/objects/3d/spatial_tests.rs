@@ -348,6 +348,43 @@ fn canvas2d_camera_is_scoped_to_its_canvas() {
 }
 
 #[test]
+fn objects_can_ignore_the_2d_camera_with_their_subtree() {
+    let mut scene = Scene::new_with_resolution((32, 32));
+    let canvas = scene.world_2d();
+    let parent = group_2d()
+        .position(vec2(4.0, 0.0))
+        .opacity(0.5)
+        .build(&mut scene);
+    let fixed = group_2d()
+        .position(vec2(2.0, 0.0))
+        .follows_camera(false)
+        .build(&mut scene);
+    let child = rect()
+        .size(vec2(4.0, 4.0))
+        .position(vec2(1.0, 0.0))
+        .fill(Color::RED)
+        .build(&mut scene);
+    fixed.add(&child);
+    parent.add(&fixed);
+    canvas.add(&parent);
+    canvas.camera_position(vec2(10.0, 0.0)).immediate();
+
+    let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
+    draw_canvas2d(&scene.world(), canvas.entity(), surface.canvas());
+    let pixels = surface.peek_pixels().unwrap();
+
+    assert_eq!(pixels.get_color((23, 16)).r(), 255);
+    assert!((127..=128).contains(&pixels.get_color((23, 16)).a()));
+    assert_eq!(pixels.get_color((13, 16)).a(), 0);
+    assert_eq!(scene.pick(vec2(7.0, 0.0)), Some(child.entity()));
+    assert_ne!(scene.pick(vec2(-3.0, 0.0)), Some(child.entity()));
+    assert_eq!(
+        scene.selection_outline(child.entity()).unwrap()[0][0][0],
+        0.65625
+    );
+}
+
+#[test]
 fn canvas_camera_tracks_use_the_camera_prefix() {
     let mut scene = Scene::new();
     let two = canvas_2d()

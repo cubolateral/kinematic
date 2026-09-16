@@ -21,8 +21,21 @@ struct AppearanceMode {
     root_opacity: f32,
 }
 
-pub(crate) fn draw_entity(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
-    draw_entity_with_parent(world, entity, GlobalTransform::default(), canvas, None);
+pub(crate) fn draw_entity(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    canvas: &skia_safe::Canvas,
+    camera_base: Option<&skia_safe::M44>,
+) {
+    draw_entity_with_parent(
+        world,
+        entity,
+        GlobalTransform::default(),
+        canvas,
+        None,
+        camera_base,
+        camera_base.is_some(),
+    );
 }
 
 fn draw_entity_with_parent(
@@ -31,8 +44,19 @@ fn draw_entity_with_parent(
     parent: GlobalTransform,
     canvas: &skia_safe::Canvas,
     images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
+    camera_base: Option<&skia_safe::M44>,
+    follows_camera: bool,
 ) {
-    draw_entity_with_mode(world, entity, parent, canvas, images, None);
+    draw_entity_with_mode(
+        world,
+        entity,
+        parent,
+        canvas,
+        images,
+        None,
+        camera_base,
+        follows_camera,
+    );
 }
 
 fn draw_entity_with_mode(
@@ -42,6 +66,8 @@ fn draw_entity_with_mode(
     canvas: &skia_safe::Canvas,
     images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
     appearance: Option<AppearanceMode>,
+    camera_base: Option<&skia_safe::M44>,
+    follows_camera: bool,
 ) {
     if world.get::<&CanvasSettings>(entity).is_ok() {
         return;
@@ -76,14 +102,26 @@ fn draw_entity_with_mode(
     let children = children_by_z_index(world, entity);
     let global = parent.append(local_transform(world, entity));
     let save_count = canvas.save();
-    apply_global_transform(parent, global, canvas);
+    let follows_camera = follows_camera && draw.follows_camera;
+    if !follows_camera && let Some(camera_base) = camera_base {
+        canvas.set_matrix(camera_base);
+        apply_global_transform(GlobalTransform::default(), global, canvas);
+    } else {
+        apply_global_transform(parent, global, canvas);
+    }
 
     if appearance.is_none() && draw_creation_appearance(world, entity, canvas, opacity) {
         canvas.restore_to_count(save_count);
         return;
     }
 
-    let bounds = if children.len() == 0 || opacity < 1.0 {
+    let mixes_camera_spaces = follows_camera
+        && camera_base.is_some()
+        && opacity < 1.0
+        && subtree_ignores_camera(world, entity);
+    let bounds = if mixes_camera_spaces {
+        None
+    } else if children.len() == 0 || opacity < 1.0 {
         appearance
             .and_then(|mode| appearance_bounds(world, entity, mode.activity))
             .or_else(|| visual_bounds(world, entity, global, transform_matrix(global).invert()))
@@ -100,20 +138,47 @@ fn draw_entity_with_mode(
         draw_object_appearance(world, entity, canvas, opacity, images, appearance.is_none());
 
         for child in children {
-            draw_entity_with_mode(world, child, global, canvas, images, appearance);
+            draw_entity_with_mode(
+                world,
+                child,
+                global,
+                canvas,
+                images,
+                appearance,
+                camera_base,
+                follows_camera,
+            );
         }
     } else {
         let layer_count = canvas.save_layer_alpha_f(bounds, opacity);
         draw_object_appearance(world, entity, canvas, 1.0, images, appearance.is_none());
 
         for child in children {
-            draw_entity_with_mode(world, child, global, canvas, images, appearance);
+            draw_entity_with_mode(
+                world,
+                child,
+                global,
+                canvas,
+                images,
+                appearance,
+                camera_base,
+                follows_camera,
+            );
         }
 
         canvas.restore_to_count(layer_count);
     }
 
     canvas.restore_to_count(save_count);
+}
+
+fn subtree_ignores_camera(world: &hecs::World, entity: hecs::Entity) -> bool {
+    crate::core::objects::child_iter(world, entity).any(|child| {
+        world
+            .get::<&Draw2D>(child)
+            .is_ok_and(|draw| !draw.follows_camera)
+            || subtree_ignores_camera(world, child)
+    })
 }
 
 fn draw_object_appearance(
@@ -210,6 +275,8 @@ fn draw_creation_appearance(
             activity: AppearanceActivity::Evaluated,
             root_opacity: 1.0,
         }),
+        None,
+        false,
     );
     let Some(picture) = recorder.finish_recording_as_picture(None) else {
         return false;
@@ -294,6 +361,8 @@ pub(crate) fn capture_appearance(
             activity,
             root_opacity: opacity,
         }),
+        None,
+        false,
     );
     let picture = recorder.finish_recording_as_picture(None).unwrap();
     crate::core::objects::particle::Silhouette::capture(bounds, |canvas| {
@@ -376,10 +445,32 @@ pub(crate) fn outline_points(
     target: hecs::Entity,
 ) -> Option<[skia_safe::Point; 4]> {
     let mut points = outline_points_in_world(world, scope, target)?;
-    if let Some(view) = camera_matrix2d(world, scope).and_then(|m| m.invert()) {
+    if object_follows_camera(world, scope, target)
+        && let Some(view) = camera_matrix2d(world, scope).and_then(|m| m.invert())
+    {
         view.map_points_inplace(&mut points);
     }
     Some(points)
+}
+
+pub(crate) fn object_follows_camera(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    mut entity: hecs::Entity,
+) -> bool {
+    while entity != scope {
+        if !world
+            .get::<&Draw2D>(entity)
+            .is_ok_and(|draw| draw.follows_camera)
+        {
+            return false;
+        }
+        let Some(parent) = world.get::<&Node>(entity).ok().and_then(|node| node.parent) else {
+            return false;
+        };
+        entity = parent;
+    }
+    true
 }
 
 pub(crate) fn outline_points_in_world(
@@ -432,19 +523,13 @@ pub(crate) fn outline_points_in_world(
         .find_map(|child| visit(world, child, target, GlobalTransform::default()))
 }
 
-pub(crate) fn pick_entity(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    point: Vector2,
-) -> Option<hecs::Entity> {
-    pick_entity_with_parent(world, entity, point, GlobalTransform::default())
-}
-
 fn pick_entity_with_parent(
     world: &hecs::World,
     entity: hecs::Entity,
-    point: Vector2,
+    camera_point: Vector2,
+    fixed_point: Vector2,
     parent: GlobalTransform,
+    follows_camera: bool,
 ) -> Option<hecs::Entity> {
     if world.get::<&CanvasSettings>(entity).is_ok() {
         return None;
@@ -458,13 +543,28 @@ fn pick_entity_with_parent(
         return None;
     }
 
+    let follows_camera = follows_camera && draw.follows_camera;
+    let point = if follows_camera {
+        camera_point
+    } else {
+        fixed_point
+    };
     let global = parent.append(local_transform(world, entity));
     let local_point = inverse_transform_point(global, point)?;
 
     if let Some(child) = children_by_z_index(world, entity)
         .into_iter()
         .rev()
-        .find_map(|child| pick_entity_with_parent(world, child, point, global))
+        .find_map(|child| {
+            pick_entity_with_parent(
+                world,
+                child,
+                camera_point,
+                fixed_point,
+                global,
+                follows_camera,
+            )
+        })
     {
         return Some(child);
     }
@@ -702,8 +802,10 @@ pub(crate) fn draw_canvas2d_editor_with_images(
 
     let saved = canvas.save();
     canvas.translate((target_size.0 as f32 * 0.5, target_size.1 as f32 * 0.5));
+    let mut camera_base = None;
     if camera_view {
         canvas.scale((correction[0], correction[1]));
+        camera_base = Some(canvas.local_to_device());
         if let Some(view) = camera_matrix2d(world, entity).and_then(|camera| camera.invert()) {
             canvas.concat(&view);
         }
@@ -718,6 +820,8 @@ pub(crate) fn draw_canvas2d_editor_with_images(
             GlobalTransform::default(),
             canvas,
             Some(images),
+            camera_base.as_ref(),
+            camera_base.is_some(),
         );
     }
     if !camera_view && let Some(points) = camera_outline_points2d(world, entity, false) {
@@ -750,13 +854,22 @@ fn draw_canvas2d_inner(
         settings.resolution.0 as f32 * 0.5,
         settings.resolution.1 as f32 * 0.5,
     ));
+    let camera_base = canvas.local_to_device();
     if let Some(camera) = camera_matrix2d(world, entity) {
         if let Some(view) = camera.invert() {
             canvas.concat(&view);
         }
     }
     for child in children_by_z_index(world, entity) {
-        draw_entity_with_parent(world, child, GlobalTransform::default(), canvas, images);
+        draw_entity_with_parent(
+            world,
+            child,
+            GlobalTransform::default(),
+            canvas,
+            images,
+            Some(&camera_base),
+            true,
+        );
     }
     canvas.restore_to_count(saved);
 }
@@ -767,26 +880,14 @@ pub(crate) fn pick_canvas2d(
     scope: hecs::Entity,
     point: Vector2,
 ) -> Option<hecs::Entity> {
-    if !world
-        .get::<&Draw2D>(scope)
-        .is_ok_and(|draw| draw.visibility)
-    {
-        return None;
-    }
-    let point = canvas_camera_matrix(world, scope).map_or(point, |matrix| {
-        let point = matrix.map_point((point.x, point.y));
-        Vector2::new(point.x, point.y)
-    });
-    children_by_z_index(world, scope)
-        .into_iter()
-        .rev()
-        .find_map(|child| pick_entity(world, child, point))
+    pick_canvas2d_with_view(world, scope, point, true)
 }
 
-pub(crate) fn pick_canvas2d_in_world(
+fn pick_canvas2d_with_view(
     world: &hecs::World,
     scope: hecs::Entity,
     point: Vector2,
+    camera_view: bool,
 ) -> Option<hecs::Entity> {
     if !world
         .get::<&Draw2D>(scope)
@@ -794,10 +895,35 @@ pub(crate) fn pick_canvas2d_in_world(
     {
         return None;
     }
+    let camera_point = camera_view
+        .then(|| camera_matrix2d(world, scope))
+        .flatten()
+        .map_or(point, |matrix| {
+            let point = matrix.map_point((point.x, point.y));
+            Vector2::new(point.x, point.y)
+        });
     children_by_z_index(world, scope)
         .into_iter()
         .rev()
-        .find_map(|child| pick_entity(world, child, point))
+        .find_map(|child| {
+            pick_entity_with_parent(
+                world,
+                child,
+                camera_point,
+                point,
+                GlobalTransform::default(),
+                camera_view,
+            )
+        })
+}
+
+pub(crate) fn pick_canvas2d_in_world(
+    world: &hecs::World,
+    scope: hecs::Entity,
+    point: Vector2,
+    camera_view: bool,
+) -> Option<hecs::Entity> {
+    pick_canvas2d_with_view(world, scope, point, camera_view)
 }
 
 #[cfg(test)]
@@ -1049,12 +1175,6 @@ fn project_point(view_projection: glam::Mat4, point: glam::Vec3) -> Option<[f32;
     }
     let ndc = clip.truncate() / clip.w;
     Some([ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5])
-}
-
-#[cfg(test)]
-fn canvas_camera_matrix(world: &hecs::World, scope: hecs::Entity) -> Option<skia_safe::Matrix> {
-    world.get::<&CanvasSettings>(scope).ok()?;
-    camera_matrix2d(world, scope)
 }
 
 pub(crate) fn camera_matrix2d(
