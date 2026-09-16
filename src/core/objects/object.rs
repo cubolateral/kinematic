@@ -1,3 +1,4 @@
+use super::render::object_box;
 use crate::core::{
     AnimatorHandle, SceneWorld, SignalFrame, SignalHandle, TrackInfo, TrackProperty, TrackValue,
     TrackValueType, Trackable, Tween,
@@ -84,13 +85,30 @@ pub trait ObjectHandler: Clone {
     fn entity(&self) -> hecs::Entity;
 
     /// Returns the object's user-facing name.
-    fn name(&self) -> String;
+    fn name(&self) -> String {
+        self.object_world()
+            .borrow()
+            .get::<&Name>(self.entity())
+            .expect("Object handler must contain a Name component.")
+            .get()
+            .to_owned()
+    }
 
     /// Replaces the object's user-facing name.
-    fn set_name(&self, name: impl Into<String>);
+    fn set_name(&self, name: impl Into<String>) {
+        self.object_world()
+            .borrow()
+            .get::<&mut Name>(self.entity())
+            .expect("Object handler must contain a Name component.")
+            .set(name);
+    }
 
     /// Ends this object's lifetime at the current scheduling time.
-    fn remove(&self);
+    fn remove(&self) {
+        let animator = self.object_animator();
+        animator.assert_finite_scope();
+        remove_object(&self.object_world(), self.entity(), animator.time());
+    }
 
     /// Runs a callback after animation tracks while this object is active.
     ///
@@ -107,10 +125,18 @@ pub trait ObjectHandler: Clone {
     }
 
     /// Reads a typed trackable property from the object.
-    fn get<T: TrackValueType>(&self, property: TrackProperty<T>) -> T;
+    fn get<T: TrackValueType>(&self, property: TrackProperty<T>) -> T {
+        property
+            .handle(self.object_world(), self.entity(), self.object_animator())
+            .get()
+    }
 
     /// Creates a tween from the current property value to a target value.
-    fn animate<T: TrackValueType>(&self, property: TrackProperty<T>, to: T) -> Tween<Self::Object>;
+    fn animate<T: TrackValueType>(&self, property: TrackProperty<T>, to: T) -> Tween<Self::Object> {
+        property
+            .handle(self.object_world(), self.entity(), self.object_animator())
+            .animate::<Self::Object>(to)
+    }
 
     /// Creates a tween from an explicit starting value to a target value.
     fn animate_from<T: TrackValueType>(
@@ -118,7 +144,11 @@ pub trait ObjectHandler: Clone {
         property: TrackProperty<T>,
         from: T,
         to: T,
-    ) -> Tween<Self::Object>;
+    ) -> Tween<Self::Object> {
+        property
+            .handle(self.object_world(), self.entity(), self.object_animator())
+            .animate_from::<Self::Object>(from, to)
+    }
 
     /// Captures the current values of every tracked property.
     fn snapshot(&self) -> Snapshot<Self>
@@ -143,28 +173,44 @@ pub trait ObjectHandler: Clone {
     }
 
     /// Saves all tracked property values on this object's snapshot stack.
-    fn save(&self);
+    fn save(&self) {
+        save_object(&self.object_world(), self.entity());
+    }
 
     /// Pops the latest snapshot and creates a tween back to its values.
-    fn restore(&self) -> Tween<Self::Object>;
+    fn restore(&self) -> Tween<Self::Object> {
+        let animator = self.object_animator();
+        animator.assert_timeline_mutation();
+        restore_object(&self.object_world(), self.entity(), animator)
+    }
 }
 
 /// Spatial access for objects in a two-dimensional scene.
 pub trait Object2DHandler: ObjectHandler {
     /// Returns the object's local bounding-box size.
-    fn box_size(&self) -> Vector2;
+    fn box_size(&self) -> Vector2 {
+        object_box(&self.object_world().borrow(), self.entity())
+    }
 
     /// Returns the object's position in scene coordinates.
-    fn global_position(&self) -> Vector2;
+    fn global_position(&self) -> Vector2 {
+        object_global_position(&self.object_world().borrow(), self.entity())
+    }
 
     /// Returns the object's accumulated rotation in radians.
-    fn global_rotation(&self) -> f32;
+    fn global_rotation(&self) -> f32 {
+        object_global_rotation(&self.object_world().borrow(), self.entity())
+    }
 
     /// Returns the object's accumulated scale without introducing skew.
-    fn global_scale(&self) -> Vector2;
+    fn global_scale(&self) -> Vector2 {
+        object_global_scale(&self.object_world().borrow(), self.entity())
+    }
 
     /// Returns the object's opacity combined with its ancestor opacities.
-    fn global_opacity(&self) -> f32;
+    fn global_opacity(&self) -> f32 {
+        object_global_opacity(&self.object_world().borrow(), self.entity())
+    }
 }
 
 /// Pushes the current tracked values onto an object's snapshot stack.

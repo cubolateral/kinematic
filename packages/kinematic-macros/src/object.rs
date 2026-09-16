@@ -68,7 +68,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     };
     let builder_component_trait = quote!(kinematic::core::objects::ObjectBuilderComponent);
     let inspection_type = quote!(kinematic::core::components::Inspection);
-    let name_type = quote!(kinematic::core::components::Name);
     let object_trait = quote!(kinematic::core::objects::Object);
     let object_handler_trait = quote!(kinematic::core::objects::ObjectHandler);
     let handler_root_type = quote!(kinematic::core::objects::HandlerRoot);
@@ -77,18 +76,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let animator_handle_type = quote!(kinematic::core::AnimatorHandle);
     let trackable_info_type = quote!(kinematic::core::TrackableInfo);
     let trackable_trait = quote!(kinematic::core::Trackable);
-    let track_property_type = quote!(kinematic::core::TrackProperty);
-    let track_value_type_trait = quote!(kinematic::core::TrackValueType);
-    let tween_type = quote!(kinematic::core::Tween);
-    let vector_type = quote!(kinematic::core::types::Vector2);
-    let object_box_fn = quote!(kinematic::core::objects::object_box);
-    let object_global_position_fn = quote!(kinematic::core::objects::object_global_position);
-    let object_global_rotation_fn = quote!(kinematic::core::objects::object_global_rotation);
-    let object_global_scale_fn = quote!(kinematic::core::objects::object_global_scale);
-    let object_global_opacity_fn = quote!(kinematic::core::objects::object_global_opacity);
-    let remove_object_fn = quote!(kinematic::core::objects::remove_object);
-    let save_object_fn = quote!(kinematic::core::objects::save_object);
-    let restore_object_fn = quote!(kinematic::core::objects::restore_object);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -166,34 +153,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
     let spatial_impl = match spatial.as_str() {
         "2d" => quote! {
-        impl kinematic::core::objects::Object2DHandler for #handler_name {
-            fn box_size(&self) -> #vector_type {
-                let world = self.world.borrow();
-                #object_box_fn(&world, self.entity)
-            }
-
-            fn global_position(&self) -> #vector_type {
-                let world = self.world.borrow();
-                #object_global_position_fn(&world, self.entity)
-            }
-
-            fn global_rotation(&self) -> f32 {
-                let world = self.world.borrow();
-                #object_global_rotation_fn(&world, self.entity)
-            }
-
-            fn global_scale(&self) -> #vector_type {
-                let world = self.world.borrow();
-                #object_global_scale_fn(&world, self.entity)
-            }
-
-            fn global_opacity(&self) -> f32 {
-                let world = self.world.borrow();
-                #object_global_opacity_fn(&world, self.entity)
-            }
-
-        }
-
+            impl kinematic::core::objects::Object2DHandler for #handler_name {}
         },
         "3d" => quote! {
             impl kinematic::core::objects::Object3DHandler for #handler_name {}
@@ -391,70 +351,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 self.entity
             }
 
-            fn name(&self) -> std::string::String {
-                self.world
-                    .borrow()
-                    .get::<&#name_type>(self.entity)
-                    .expect("Object handler must contain a Name component.")
-                    .get()
-                    .to_owned()
-            }
-
-            fn set_name(&self, name: impl Into<std::string::String>) {
-                self.world
-                    .borrow()
-                    .get::<&mut #name_type>(self.entity)
-                    .expect("Object handler must contain a Name component.")
-                    .set(name);
-            }
-
-            fn remove(&self) {
-                self.animator.assert_finite_scope();
-                #remove_object_fn(&self.world, self.entity, self.animator.time());
-            }
-
-            fn get<T: #track_value_type_trait>(
-                &self,
-                property: #track_property_type<T>,
-            ) -> T {
-                property
-                    .handle(std::rc::Rc::clone(&self.world), self.entity, self.animator.clone())
-                    .get()
-            }
-
-            fn animate<T: #track_value_type_trait>(
-                &self,
-                property: #track_property_type<T>,
-                to: T,
-            ) -> #tween_type<#object_name> {
-                property
-                    .handle(std::rc::Rc::clone(&self.world), self.entity, self.animator.clone())
-                    .animate::<#object_name>(to)
-            }
-
-            fn animate_from<T: #track_value_type_trait>(
-                &self,
-                property: #track_property_type<T>,
-                from: T,
-                to: T,
-            ) -> #tween_type<#object_name> {
-                property
-                    .handle(std::rc::Rc::clone(&self.world), self.entity, self.animator.clone())
-                    .animate_from::<#object_name>(from, to)
-            }
-
-            fn save(&self) {
-                #save_object_fn(&self.world, self.entity);
-            }
-
-            fn restore(&self) -> #tween_type<#object_name> {
-                self.animator.assert_timeline_mutation();
-                #restore_object_fn(
-                    &self.world,
-                    self.entity,
-                    self.animator.clone(),
-                )
-            }
         }
 
         #spatial_impl
