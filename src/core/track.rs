@@ -101,6 +101,7 @@ impl Track {
                 if matches!(
                     (&left.value, &right.value),
                     (TrackValue::Bool(_), TrackValue::Bool(_))
+                        | (TrackValue::Enum(_), TrackValue::Enum(_))
                         | (TrackValue::String(_), TrackValue::String(_))
                 ) {
                     let value = if time < right.time {
@@ -314,6 +315,7 @@ impl Track {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TrackValue {
     Bool(bool),
+    Enum(&'static str),
     U32(u32),
     I32(i32),
     F32(f32),
@@ -333,6 +335,13 @@ impl TrackValue {
                     Self::Bool(*a)
                 } else {
                     Self::Bool(*b)
+                }
+            }
+            (Self::Enum(a), Self::Enum(b)) => {
+                if t < 1.0 {
+                    Self::Enum(a)
+                } else {
+                    Self::Enum(b)
                 }
             }
             (Self::U32(a), Self::U32(b)) => Self::U32(
@@ -377,6 +386,7 @@ impl std::fmt::Display for TrackValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Bool(value) => write!(f, "{value}"),
+            Self::Enum(value) => f.write_str(value),
             Self::U32(value) => write!(f, "{value}"),
             Self::I32(value) => write!(f, "{value}"),
             Self::F32(value) => write!(f, "{value:.2}"),
@@ -404,11 +414,19 @@ pub trait TrackValueType: Clone {
     /// Input accepted by the generated track tween method.
     type Input: Into<Self>;
 
+    /// Editor choices exposed by this value type.
+    const CHOICES: TrackChoices = TrackChoices::None;
+
     /// Converts this typed value into the value stored by an animation track.
     fn into_track_value(self) -> TrackValue;
 
     /// Converts an animation track value back into this typed value.
     fn from_track_value(value: TrackValue) -> Option<Self>;
+}
+
+/// Metadata supplied by an enum that can be used as a track value.
+pub trait TrackEnum: TrackValueType {
+    const VARIANTS: &'static [&'static str];
 }
 
 macro_rules! impl_track_value_type {
@@ -702,6 +720,7 @@ mod tests {
         id: 0,
         name: "value",
         limits: TrackLimits::None,
+        choices: TrackChoices::None,
         get: |_, _| TrackValue::F32(0.0),
         set: |_, _, _| {},
     };
@@ -713,6 +732,7 @@ mod tests {
             min: Some(0.0),
             max: Some(1.0),
         },
+        choices: TrackChoices::None,
         get: |world, entity| TrackValue::F32(*world.get::<&f32>(entity).unwrap()),
         set: |world, entity, value| {
             if let TrackValue::F32(value) = value {
@@ -1005,10 +1025,19 @@ pub struct TrackInfo {
     pub name: &'static str,
     /// Optional numeric bounds shared by animation and editing.
     pub limits: TrackLimits,
+    /// Optional choices presented by editor controls.
+    pub choices: TrackChoices,
     /// Reads the current value of the tracked field.
     pub get: TrackGetter,
     /// Writes an interpolated value back to the field.
     pub set: TrackSetter,
+}
+
+/// Choices available for a tracked field in the editor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrackChoices {
+    None,
+    Enum(&'static [&'static str]),
 }
 
 impl TrackInfo {

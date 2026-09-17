@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        TrackInfo, TrackLimits, TrackValue,
+        TrackChoices, TrackInfo, TrackLimits, TrackValue,
         components::{Animation, Inspection, Name, Node},
         normalized_quaternion,
         objects::{
@@ -169,6 +169,20 @@ fn edit_value(
 ) -> bool {
     match value {
         TrackValue::Bool(v) => ui.checkbox(name, v),
+        TrackValue::Enum(v) => {
+            let TrackChoices::Enum(variants) = track.choices else {
+                return false;
+            };
+            let Some(mut current) = variants.iter().position(|variant| variant == v) else {
+                return false;
+            };
+            if ui.combo_simple_string(name, &mut current, variants) {
+                *v = variants[current];
+                true
+            } else {
+                false
+            }
+        }
         TrackValue::F32(v) => {
             let format = float_format(*v);
             let (min, max) = match track.limits {

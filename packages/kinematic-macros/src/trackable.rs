@@ -359,6 +359,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 id: #id,
                 name: #field_name,
                 limits: #limits,
+                choices: <#field_ty as #track_value_type_trait>::CHOICES,
                 get: |world, entity| {
                     <#struct_name as #trackable_trait>::track(#id).clamp(
                         <#field_ty as #track_value_type_trait>::into_track_value(
