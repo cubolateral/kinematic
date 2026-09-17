@@ -1,4 +1,5 @@
 mod canvas_3d;
+mod container_3d;
 mod group_3d;
 mod image_3d;
 mod latex_3d;
@@ -13,6 +14,7 @@ pub(crate) mod text_3d;
 mod torus;
 
 pub use canvas_3d::*;
+pub use container_3d::*;
 pub use group_3d::*;
 pub use image_3d::*;
 pub use latex_3d::*;

@@ -1,11 +1,12 @@
 use crate::core::{
     AnimatorHandle, SceneWorld, Tween,
-    components::{Inspection, Node, ObjectType, View},
+    components::{Inspection, ObjectType, TreeNode, View},
     objects::{Object, ObjectHandler},
+    types::{Vector2, Vector3},
 };
 
 /// Marker trait for objects whose handlers can own child objects.
-pub trait Container: Object {}
+pub trait Node: Object {}
 
 /// Failure to retrieve a typed direct child from a container.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -44,7 +45,7 @@ impl std::fmt::Display for ChildError {
 impl std::error::Error for ChildError {}
 
 /// Common child-management behavior for scene containers.
-pub trait ContainerHandler {
+pub trait NodeHandler {
     #[doc(hidden)]
     fn container_world(&self) -> SceneWorld;
 
@@ -214,7 +215,7 @@ pub(crate) fn attach_child(
     assert_ne!(parent, child, "A container must not be added to itself.");
     assert!(
         !world
-            .get::<&Node>(child)
+            .get::<&TreeNode>(child)
             .expect("Added object must contain a Node component.")
             .is_root,
         "The scene root must not be added as a child."
@@ -228,7 +229,7 @@ pub(crate) fn attach_child(
         components::Transform3D,
         objects::{CanvasDimension, CanvasSettings},
     };
-    let parent_is_root = world.get::<&Node>(parent).unwrap().is_root;
+    let parent_is_root = world.get::<&TreeNode>(parent).unwrap().is_root;
     if !parent_is_root {
         assert!(
             world.get::<&CanvasSettings>(child).is_err(),
@@ -250,7 +251,7 @@ pub(crate) fn attach_child(
         );
     }
 
-    if let Some(container) = world.get::<&Node>(child).unwrap().parent {
+    if let Some(container) = world.get::<&TreeNode>(child).unwrap().parent {
         assert_eq!(
             container, parent,
             "An object must not belong to more than one container."
@@ -259,13 +260,13 @@ pub(crate) fn attach_child(
     }
 
     world
-        .get::<&mut Node>(parent)
+        .get::<&mut TreeNode>(parent)
         .expect("Container must contain a Node component.")
         .children
         .get_or_insert_with(Vec::new)
         .push(child);
     world
-        .get::<&mut Node>(child)
+        .get::<&mut TreeNode>(child)
         .expect("Added object must contain a Node component.")
         .parent = Some(parent);
     activate_subtree(&world, child, time);
@@ -286,13 +287,13 @@ pub(crate) fn contains_entity(
 
 pub(crate) fn is_attached(world: &hecs::World, entity: hecs::Entity) -> bool {
     world
-        .get::<&Node>(entity)
+        .get::<&TreeNode>(entity)
         .is_ok_and(|node| node.parent.is_some())
 }
 
 pub(crate) fn activate_subtree(world: &hecs::World, entity: hecs::Entity, time: f32) {
     world
-        .get::<&mut Node>(entity)
+        .get::<&mut TreeNode>(entity)
         .expect("Added object must contain a Node component.")
         .activate(time);
 
@@ -304,7 +305,7 @@ pub(crate) fn activate_subtree(world: &hecs::World, entity: hecs::Entity, time: 
 pub(crate) fn deactivate_subtree(world: &hecs::World, entity: hecs::Entity, time: f32) {
     crate::core::invalidate_lifetimes(world);
     world
-        .get::<&mut Node>(entity)
+        .get::<&mut TreeNode>(entity)
         .expect("Removed object must contain a Node component.")
         .deactivate(time);
 
@@ -318,7 +319,7 @@ pub(crate) fn child_iter(
     entity: hecs::Entity,
 ) -> impl Iterator<Item = hecs::Entity> + '_ {
     let node = world
-        .get::<&Node>(entity)
+        .get::<&TreeNode>(entity)
         .expect("Scene object must contain a Node component.");
     let count = node.children.as_ref().map_or(0, Vec::len);
     (0..count).map(move |index| node.children.as_ref().unwrap()[index])
@@ -326,25 +327,143 @@ pub(crate) fn child_iter(
 
 pub(crate) fn children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity> {
     world
-        .get::<&Node>(entity)
+        .get::<&TreeNode>(entity)
         .expect("Scene object must contain a Node component.")
         .children
         .clone()
         .unwrap_or_default()
 }
 
+pub(crate) fn layout_offset_2d(world: &hecs::World, entity: hecs::Entity) -> Vector2 {
+    let Some(parent) = world
+        .get::<&TreeNode>(entity)
+        .ok()
+        .and_then(|node| node.parent)
+    else {
+        return Vector2::ZERO;
+    };
+    let Ok(layout) = world.get::<&crate::core::objects::Layout2D>(parent) else {
+        return Vector2::ZERO;
+    };
+    // ponytail: This is O(children) per child; cache only if large layouts become measurable.
+    let children: Vec<_> = child_iter(world, parent)
+        .filter(|child| {
+            world
+                .get::<&TreeNode>(*child)
+                .is_ok_and(|node| node.is_activated)
+        })
+        .collect();
+    let Some(index) = children.iter().position(|child| *child == entity) else {
+        return Vector2::ZERO;
+    };
+    let sizes: Vec<_> = children
+        .iter()
+        .map(|child| crate::core::objects::object_box(world, *child))
+        .collect();
+    match layout.direction {
+        crate::core::objects::LayoutDirection2D::Horizontal
+        | crate::core::objects::LayoutDirection2D::HorizontalReverse => {
+            let reverse =
+                layout.direction == crate::core::objects::LayoutDirection2D::HorizontalReverse;
+            let (x, _) = axis_position(&sizes, index, layout.gap.x, reverse, |size| size.x);
+            Vector2::new(x, 0.0)
+        }
+        crate::core::objects::LayoutDirection2D::Vertical
+        | crate::core::objects::LayoutDirection2D::VerticalReverse => {
+            let reverse =
+                layout.direction == crate::core::objects::LayoutDirection2D::VerticalReverse;
+            let (y, _) = axis_position(&sizes, index, layout.gap.y, reverse, |size| size.y);
+            Vector2::new(0.0, y)
+        }
+    }
+}
+
+pub(crate) fn layout_offset_3d(world: &hecs::World, entity: hecs::Entity) -> Vector3 {
+    let Some(parent) = world
+        .get::<&TreeNode>(entity)
+        .ok()
+        .and_then(|node| node.parent)
+    else {
+        return Vector3::ZERO;
+    };
+    let Ok(layout) = world.get::<&crate::core::objects::Layout3D>(parent) else {
+        return Vector3::ZERO;
+    };
+    // ponytail: This is O(children) per child; cache only if large layouts become measurable.
+    let children: Vec<_> = child_iter(world, parent)
+        .filter(|child| {
+            world
+                .get::<&TreeNode>(*child)
+                .is_ok_and(|node| node.is_activated)
+        })
+        .collect();
+    let Some(index) = children.iter().position(|child| *child == entity) else {
+        return Vector3::ZERO;
+    };
+    let sizes: Vec<_> = children
+        .iter()
+        .map(|child| crate::core::objects::object_box3d(world, *child))
+        .collect();
+    match layout.direction {
+        crate::core::objects::LayoutDirection3D::Horizontal
+        | crate::core::objects::LayoutDirection3D::HorizontalReverse => {
+            let reverse =
+                layout.direction == crate::core::objects::LayoutDirection3D::HorizontalReverse;
+            let (x, _) = axis_position(&sizes, index, layout.gap.x, reverse, |size| size.x);
+            Vector3::new(x, 0.0, 0.0)
+        }
+        crate::core::objects::LayoutDirection3D::Vertical
+        | crate::core::objects::LayoutDirection3D::VerticalReverse => {
+            let reverse =
+                layout.direction == crate::core::objects::LayoutDirection3D::VerticalReverse;
+            let (y, _) = axis_position(&sizes, index, layout.gap.y, reverse, |size| size.y);
+            Vector3::new(0.0, y, 0.0)
+        }
+        crate::core::objects::LayoutDirection3D::Depth
+        | crate::core::objects::LayoutDirection3D::DepthReverse => {
+            let reverse = layout.direction == crate::core::objects::LayoutDirection3D::DepthReverse;
+            let (z, _) = axis_position(&sizes, index, layout.gap.z, reverse, |size| size.z);
+            Vector3::new(0.0, 0.0, z)
+        }
+    }
+}
+
+fn axis_position<T>(
+    sizes: &[T],
+    target: usize,
+    gap: f32,
+    reverse: bool,
+    extent: impl Fn(&T) -> f32,
+) -> (f32, f32) {
+    let total = sizes.iter().map(&extent).sum::<f32>() + gap * sizes.len().saturating_sub(1) as f32;
+    let mut cursor = -total * 0.5;
+    for order in 0..sizes.len() {
+        let index = if reverse {
+            sizes.len() - order - 1
+        } else {
+            order
+        };
+        let size = extent(&sizes[index]);
+        if index == target {
+            return (cursor + size * 0.5, total);
+        }
+        cursor += size + gap;
+    }
+    (0.0, total)
+}
+
 #[cfg(test)]
 mod tests {
-    use kinematic_macros::{Container, Object};
+    use kinematic_macros::{Node, Object};
 
     use crate::core::{
         Scene,
         components::*,
         objects::*,
-        types::{Color, vec2},
+        types::{Color, vec2, vec3},
     };
 
-    #[derive(Object, Container)]
+    #[derive(Object, Node)]
     #[object(spatial = "2d", builder = "test_container")]
     struct TestContainer {
         #[trackable]
@@ -371,7 +490,7 @@ mod tests {
         assert!(
             scene
                 .world()
-                .get::<&Node>(container.entity())
+                .get::<&TreeNode>(container.entity())
                 .unwrap()
                 .children
                 .is_none()
@@ -382,12 +501,51 @@ mod tests {
         assert_eq!(
             scene
                 .world()
-                .get::<&Node>(container.entity())
+                .get::<&TreeNode>(container.entity())
                 .unwrap()
                 .children
                 .as_deref(),
             Some([child.entity()].as_slice())
         );
+    }
+
+    #[test]
+    fn container_2d_layout_is_procedural_and_preserves_child_positions() {
+        let mut scene = Scene::new();
+        let container = container_2d().gap(vec2(2.0, 4.0)).build(&mut scene);
+        let first = rect()
+            .size(vec2(10.0, 6.0))
+            .position(vec2(3.0, 0.0))
+            .build(&mut scene);
+        let second = rect().size(vec2(20.0, 8.0)).build(&mut scene);
+        container.add(&first);
+        container.add(&second);
+        scene.world_2d().add(&container);
+
+        assert_eq!(first.global_position(), vec2(-8.0, 0.0));
+        assert_eq!(second.global_position(), vec2(6.0, 0.0));
+        assert_eq!(first.get(Transform2D::position_property()), vec2(3.0, 0.0));
+
+        container.set_direction(LayoutDirection2D::HorizontalReverse);
+        assert_eq!(first.global_position(), vec2(14.0, 0.0));
+        assert_eq!(second.global_position(), vec2(-6.0, 0.0));
+    }
+
+    #[test]
+    fn container_3d_uses_sizes_and_gap() {
+        let mut scene = Scene::new();
+        let container = container_3d()
+            .gap(vec3(0.0, 0.0, 1.0))
+            .direction(LayoutDirection3D::Depth)
+            .build(&mut scene);
+        let first = prism().size(vec3(1.0, 1.0, 2.0)).build(&mut scene);
+        let second = prism().size(vec3(1.0, 1.0, 4.0)).build(&mut scene);
+        container.add(&first);
+        container.add(&second);
+        scene.world_3d().add(&container);
+
+        assert_eq!(first.global_position(), vec3(0.0, 0.0, -2.5));
+        assert_eq!(second.global_position(), vec3(0.0, 0.0, 1.5));
     }
 
     #[test]
@@ -451,11 +609,11 @@ mod tests {
 
         let world = scene.world();
         assert_eq!(
-            world.get::<&Node>(container.entity()).unwrap().lifetime,
+            world.get::<&TreeNode>(container.entity()).unwrap().lifetime,
             [0.0, 2.0]
         );
         assert_eq!(
-            world.get::<&Node>(child.entity()).unwrap().lifetime,
+            world.get::<&TreeNode>(child.entity()).unwrap().lifetime,
             [0.0, 2.0]
         );
     }

@@ -1,5 +1,5 @@
 use crate::core::{
-    AnimatorHandle, SceneWorld, TrackInfo, TrackValue, components::Node, frame_dt, frame_index,
+    AnimatorHandle, SceneWorld, TrackInfo, TrackValue, components::TreeNode, frame_dt, frame_index,
 };
 
 type SignalCallback = std::rc::Rc<std::cell::RefCell<Box<dyn FnMut(SignalFrame)>>>;
@@ -121,7 +121,7 @@ impl SignalContext {
                     signal.start <= time
                         && time < signal.end.get()
                         && world
-                            .get::<&Node>(signal.target)
+                            .get::<&TreeNode>(signal.target)
                             .is_ok_and(|node| node.is_activated)
                 })
                 .map(|signal| std::rc::Rc::clone(&signal.callback))

@@ -1,6 +1,6 @@
 use kinematic::prelude::*;
 
-#[derive(Object, Container)]
+#[derive(Object, Node)]
 #[object(spatial = "2d", builder = "custom_container")]
 struct CustomContainer {
     #[trackable]

@@ -1,5 +1,5 @@
 use crate::{
-    core::components::{Draw2D, Draw3D, Inspection, Name, Node},
+    core::components::{Draw2D, Draw3D, Inspection, Name, TreeNode},
     editor::Editor,
 };
 
@@ -256,7 +256,7 @@ fn selectable_row(ui: &dear_imgui_rs::Ui, id: String, size: [f32; 2]) -> bool {
 
 fn active_children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entity> {
     world
-        .get::<&Node>(entity)
+        .get::<&TreeNode>(entity)
         .map(|node| {
             node.children
                 .as_ref()
@@ -265,7 +265,7 @@ fn active_children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::Entit
                 .copied()
                 .filter(|child| {
                     world
-                        .get::<&Node>(*child)
+                        .get::<&TreeNode>(*child)
                         .expect("Scene tree object must contain a Node component.")
                         .is_activated
                 })

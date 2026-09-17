@@ -12,9 +12,9 @@ pub fn derive_object(input: TokenStream) -> TokenStream {
 }
 
 /// Marks an object handler as able to own child objects.
-#[proc_macro_derive(Container)]
-pub fn derive_container(input: TokenStream) -> TokenStream {
-    container::derive_container(input)
+#[proc_macro_derive(Node)]
+pub fn derive_node(input: TokenStream) -> TokenStream {
+    container::derive_node(input)
 }
 
 #[proc_macro_derive(Trackable, attributes(track))]

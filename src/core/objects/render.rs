@@ -1,5 +1,5 @@
 use crate::core::{
-    components::{Camera2D, Camera3D, Draw2D, Draw3D, Node, Simulation},
+    components::{Camera2D, Camera3D, Draw2D, Draw3D, Simulation, TreeNode},
     objects::{
         CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, bounds3d,
         draw_projection_2d, global_matrix3d, global_transform, local_transform,
@@ -73,7 +73,7 @@ fn draw_entity_with_mode(
         return;
     }
     let node = world
-        .get::<&Node>(entity)
+        .get::<&TreeNode>(entity)
         .expect("Drawn object must contain a Node component.");
     let active = match appearance.map(|mode| mode.activity) {
         Some(AppearanceActivity::At { root, .. }) if entity == root => true,
@@ -223,7 +223,7 @@ fn appearance_bounds(
     let own = (draw.visual_bounds)(world, entity);
     let mut bounds = (!own.is_empty()).then_some(own);
     for child in children_by_z_index(world, entity) {
-        let node = world.get::<&Node>(child).unwrap();
+        let node = world.get::<&TreeNode>(child).unwrap();
         let active = match activity {
             AppearanceActivity::Evaluated => node.is_activated,
             AppearanceActivity::At { time, .. } => {
@@ -401,7 +401,7 @@ fn visual_bounds(
     };
     for child in crate::core::objects::child_iter(world, entity) {
         if world.get::<&CanvasSettings>(child).is_ok()
-            || !world.get::<&Node>(child).is_ok_and(|n| n.is_activated)
+            || !world.get::<&TreeNode>(child).is_ok_and(|n| n.is_activated)
             || !world
                 .get::<&Draw2D>(child)
                 .is_ok_and(|d| d.visibility && d.opacity > 0.0)
@@ -465,7 +465,11 @@ pub(crate) fn object_follows_camera(
         {
             return false;
         }
-        let Some(parent) = world.get::<&Node>(entity).ok().and_then(|node| node.parent) else {
+        let Some(parent) = world
+            .get::<&TreeNode>(entity)
+            .ok()
+            .and_then(|node| node.parent)
+        else {
             return false;
         };
         entity = parent;
@@ -486,7 +490,7 @@ pub(crate) fn outline_points_in_world(
     ) -> Option<[skia_safe::Point; 4]> {
         if world.get::<&CanvasSettings>(entity).is_ok()
             || !world
-                .get::<&Node>(entity)
+                .get::<&TreeNode>(entity)
                 .is_ok_and(|node| node.is_activated)
             || !world
                 .get::<&Draw2D>(entity)
@@ -511,7 +515,7 @@ pub(crate) fn outline_points_in_world(
     }
 
     if !world
-        .get::<&Node>(scope)
+        .get::<&TreeNode>(scope)
         .is_ok_and(|node| node.is_activated)
         || !world
             .get::<&Draw2D>(scope)
@@ -535,7 +539,7 @@ fn pick_entity_with_parent(
         return None;
     }
     let node = world
-        .get::<&Node>(entity)
+        .get::<&TreeNode>(entity)
         .expect("Picked object must contain a Node component.");
     let draw = world.get::<&Draw2D>(entity).ok()?;
 
@@ -583,7 +587,7 @@ pub(crate) fn children_by_z_index(
     entity: hecs::Entity,
 ) -> impl DoubleEndedIterator<Item = hecs::Entity> + ExactSizeIterator + '_ {
     let node = world
-        .get::<&Node>(entity)
+        .get::<&TreeNode>(entity)
         .expect("Scene object must contain a Node component.");
     let children = node.children.as_deref().unwrap_or_default();
     let z_index = |entity| world.get::<&Draw2D>(entity).map_or(0, |draw| draw.z_index);
@@ -623,7 +627,7 @@ fn logical_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe
     let children = crate::core::objects::child_iter(world, entity)
         .filter(|child| {
             world
-                .get::<&Node>(*child)
+                .get::<&TreeNode>(*child)
                 .is_ok_and(|node| node.is_activated)
         })
         .filter_map(|child| {
@@ -652,7 +656,7 @@ fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::
     let child_bounds = crate::core::objects::child_iter(world, entity)
         .filter(|child| {
             world
-                .get::<&Node>(*child)
+                .get::<&TreeNode>(*child)
                 .map(|node| node.is_activated)
                 .unwrap_or(false)
         })
@@ -972,7 +976,7 @@ pub(crate) fn outline_segments3d_in_world(
     fn contains(world: &hecs::World, entity: hecs::Entity, target: hecs::Entity) -> bool {
         if world.get::<&CanvasSettings>(entity).is_ok()
             || !world
-                .get::<&Node>(entity)
+                .get::<&TreeNode>(entity)
                 .is_ok_and(|node| node.is_activated)
             || !world
                 .get::<&Draw3D>(entity)
@@ -986,7 +990,7 @@ pub(crate) fn outline_segments3d_in_world(
     }
 
     if !world
-        .get::<&Node>(scope)
+        .get::<&TreeNode>(scope)
         .is_ok_and(|node| node.is_activated)
         || !world
             .get::<&Draw3D>(scope)
@@ -1067,7 +1071,7 @@ fn pick_entity3d(
 ) -> Option<(f32, hecs::Entity)> {
     if world.get::<&CanvasSettings>(entity).is_ok()
         || !world
-            .get::<&Node>(entity)
+            .get::<&TreeNode>(entity)
             .is_ok_and(|node| node.is_activated)
         || !world
             .get::<&Draw3D>(entity)

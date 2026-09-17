@@ -1,5 +1,6 @@
 mod canvas_2d;
 mod circle;
+mod container_2d;
 mod ellipse;
 mod group_2d;
 mod image_2d;
@@ -12,6 +13,7 @@ pub(crate) mod text_2d;
 
 pub use canvas_2d::*;
 pub use circle::*;
+pub use container_2d::*;
 pub use ellipse::*;
 pub use group_2d::*;
 pub use image_2d::*;

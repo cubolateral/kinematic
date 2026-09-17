@@ -1,7 +1,7 @@
 use crate::core::scene_file::{SceneFile, ScheduledEvent, TimeEvent};
 use crate::core::{
     Animator, Scheduling, Task, TrackValueType, TrackableInfo, Tween,
-    components::{Animation, Draw2D, Inspection, Name, Node, Simulation, View},
+    components::{Animation, Draw2D, Inspection, Name, Simulation, TreeNode, View},
     frame_index,
     objects::{
         Canvas2D, Canvas2DHandler, Canvas3D, Canvas3DHandler, Object, ObjectHandler, RootHandler,
@@ -90,7 +90,7 @@ impl Scene {
                 .add(Draw2D::default())
                 .add(Inspection::new("Root", root_trackables))
                 .add(Name::new("Root"))
-                .add(Node::default())
+                .add(TreeNode::default())
                 .add(View::default())
                 .build(),
         );
@@ -98,7 +98,7 @@ impl Scene {
         {
             let world = world.borrow();
             let mut node = world
-                .get::<&mut Node>(root)
+                .get::<&mut TreeNode>(root)
                 .expect("Root must contain a Node component.");
 
             node.is_root = true;
@@ -172,7 +172,7 @@ impl Scene {
             let cursor = runtime.boundaries.partition_point(|(at, _)| *at <= time);
             if !runtime.initialized {
                 for (_, entity) in &runtime.boundaries {
-                    if let Ok(mut node) = world.get::<&mut Node>(*entity) {
+                    if let Ok(mut node) = world.get::<&mut TreeNode>(*entity) {
                         node.update(time);
                     }
                 }
@@ -180,7 +180,7 @@ impl Scene {
                 for (_, entity) in
                     &runtime.boundaries[runtime.cursor.min(cursor)..runtime.cursor.max(cursor)]
                 {
-                    if let Ok(mut node) = world.get::<&mut Node>(*entity) {
+                    if let Ok(mut node) = world.get::<&mut TreeNode>(*entity) {
                         node.update(time);
                     }
                 }
@@ -193,7 +193,7 @@ impl Scene {
             runtime.initialized = true;
             for entity in &runtime.animated {
                 if world
-                    .get::<&Node>(*entity)
+                    .get::<&TreeNode>(*entity)
                     .is_ok_and(|node| node.is_activated)
                     && let Ok(mut animation) = world.get::<&mut Animation>(*entity)
                 {
@@ -204,7 +204,7 @@ impl Scene {
             }
 
             for entity in &runtime.simulations {
-                let Ok(node) = world.get::<&Node>(*entity) else {
+                let Ok(node) = world.get::<&TreeNode>(*entity) else {
                     continue;
                 };
                 if !node.is_activated {
@@ -293,7 +293,7 @@ impl Scene {
                 .load(std::sync::atomic::Ordering::Relaxed),
             ..Runtime::default()
         };
-        for (entity, node) in world.query::<(hecs::Entity, &Node)>().iter() {
+        for (entity, node) in world.query::<(hecs::Entity, &TreeNode)>().iter() {
             for at in node.lifetime {
                 if at.is_finite() {
                     runtime.boundaries.push((at, entity));
@@ -378,7 +378,7 @@ impl Scene {
             if let Ok(settings) = world.get::<&crate::core::objects::CanvasSettings>(entity) {
                 return Some((entity, settings.dimension));
             }
-            entity = world.get::<&Node>(entity).ok()?.parent?;
+            entity = world.get::<&TreeNode>(entity).ok()?.parent?;
         }
     }
 
@@ -456,7 +456,7 @@ impl Scene {
 
     #[cfg(test)]
     fn output_is_active_2d(&self, world: &hecs::World, entity: hecs::Entity) -> bool {
-        world.get::<&Node>(entity).is_ok_and(|n| n.is_activated)
+        world.get::<&TreeNode>(entity).is_ok_and(|n| n.is_activated)
             && world
                 .get::<&crate::core::objects::CanvasSettings>(entity)
                 .is_ok_and(|s| s.dimension == crate::core::objects::CanvasDimension::Two)
@@ -853,7 +853,7 @@ mod tests {
         assert!(
             !scene
                 .world()
-                .get::<&Node>(static_object.entity())
+                .get::<&TreeNode>(static_object.entity())
                 .unwrap()
                 .is_activated
         );
@@ -861,7 +861,7 @@ mod tests {
         assert!(
             scene
                 .world()
-                .get::<&Node>(static_object.entity())
+                .get::<&TreeNode>(static_object.entity())
                 .unwrap()
                 .is_activated
         );
@@ -1921,7 +1921,7 @@ mod tests {
 
         scene.update(1.0);
         let world = scene.world();
-        let mut query = world.query::<(&Node, &Transform2D)>();
+        let mut query = world.query::<(&TreeNode, &Transform2D)>();
         let (_, circle) = query.iter().find(|(node, _)| !node.is_root).unwrap();
 
         assert_eq!(circle.position, vec2(128.0, 64.0));
@@ -2142,7 +2142,7 @@ mod tests {
 
         let world = scene.world();
         let mut lifetimes: Vec<_> = world
-            .query::<(hecs::Entity, &Node)>()
+            .query::<(hecs::Entity, &TreeNode)>()
             .iter()
             .filter(|(entity, node)| {
                 !node.is_root && world.get::<&CanvasSettings>(*entity).is_err()
@@ -2225,7 +2225,7 @@ mod tests {
         let lifetimes = || {
             let world = scene.world();
             let mut lifetimes: Vec<_> = world
-                .query::<(hecs::Entity, &Node)>()
+                .query::<(hecs::Entity, &TreeNode)>()
                 .iter()
                 .filter(|(entity, node)| {
                     !node.is_root && world.get::<&CanvasSettings>(*entity).is_err()
@@ -2242,7 +2242,7 @@ mod tests {
             scene.update(time);
             scene
                 .world()
-                .query::<(hecs::Entity, &Node)>()
+                .query::<(hecs::Entity, &TreeNode)>()
                 .iter()
                 .filter(|(entity, node)| {
                     !node.is_root
@@ -2280,7 +2280,7 @@ mod tests {
         assert_eq!(scene.build(&mut ParallelLifetimeScene), 6.0);
 
         let world = scene.world();
-        let mut query = world.query::<(hecs::Entity, &Node)>();
+        let mut query = world.query::<(hecs::Entity, &TreeNode)>();
         let (_, node) = query
             .iter()
             .find(|(entity, node)| !node.is_root && world.get::<&CanvasSettings>(*entity).is_err())
@@ -2300,7 +2300,7 @@ mod tests {
         scene.update(31.0);
         {
             let world = scene.world();
-            let mut query = world.query::<(hecs::Entity, &Node)>();
+            let mut query = world.query::<(hecs::Entity, &TreeNode)>();
             let (_, node) = query
                 .iter()
                 .find(|(entity, node)| {
@@ -2314,7 +2314,7 @@ mod tests {
 
         scene.update(32.0);
         let world = scene.world();
-        let mut query = world.query::<&Node>();
+        let mut query = world.query::<&TreeNode>();
 
         assert!(
             query

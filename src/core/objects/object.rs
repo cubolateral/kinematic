@@ -3,7 +3,7 @@ use crate::core::{
     AnimatorHandle, SceneWorld, SignalFrame, SignalHandle, TrackInfo, TrackProperty, TrackValue,
     TrackValueType, Trackable, Tween,
     components::{
-        Animation, Draw2D, Draw3D, Inspection, Morph, Name, Node, ObjectType, Transform2D,
+        Animation, Draw2D, Draw3D, Inspection, Morph, Name, ObjectType, Transform2D, TreeNode,
     },
     objects::{deactivate_subtree, is_attached},
     types::Vector2,
@@ -56,7 +56,7 @@ pub trait Object: hecs::DynamicBundle + Sized + 'static {
         builder
             .add_bundle(object)
             .add(Animation::default())
-            .add(Node::default())
+            .add(TreeNode::default())
             .add(ObjectType(std::any::TypeId::of::<Self>()))
             .add(SnapshotStack::default())
             .add(name)
@@ -296,7 +296,7 @@ fn tween_to_values<Object>(
 pub fn remove_object(world: &SceneWorld, entity: hecs::Entity, time: f32) {
     let world = world.borrow();
     let node = world
-        .get::<&Node>(entity)
+        .get::<&TreeNode>(entity)
         .expect("Removed object must contain a Node component.");
 
     assert!(!node.is_root, "The scene root must not be removed.");
@@ -346,6 +346,7 @@ impl GlobalTransform {
 
 pub(crate) fn local_transform(world: &hecs::World, entity: hecs::Entity) -> GlobalTransform {
     if let Ok(transform) = world.get::<&Transform2D>(entity) {
+        let layout = crate::core::objects::layout_offset_2d(world, entity);
         let origin = crate::core::objects::object_box(world, entity) * transform.origin * 0.5;
         let origin = origin * transform.scale;
         let (sin, cos) = transform.rotation.sin_cos();
@@ -354,7 +355,7 @@ pub(crate) fn local_transform(world: &hecs::World, entity: hecs::Entity) -> Glob
             origin.x * sin + origin.y * cos,
         );
         return GlobalTransform {
-            position: transform.position - origin,
+            position: layout + transform.position - origin,
             rotation: transform.rotation,
             scale: transform.scale,
         };
@@ -368,7 +369,7 @@ pub(crate) fn global_transform(world: &hecs::World, entity: hecs::Entity) -> Glo
     let mut current = entity;
 
     while let Some(parent) = world
-        .get::<&Node>(current)
+        .get::<&TreeNode>(current)
         .expect("Scene object must contain a Node component.")
         .parent
     {
@@ -414,7 +415,7 @@ pub fn object_global_opacity(world: &hecs::World, entity: hecs::Entity) -> f32 {
         }
 
         current = world
-            .get::<&Node>(entity)
+            .get::<&TreeNode>(entity)
             .expect("Scene object must contain a Node component.")
             .parent;
     }
@@ -473,7 +474,10 @@ pub trait Object3DHandler: ObjectHandler {
             if let Ok(transform) = world.get::<&crate::core::components::Transform3D>(entity) {
                 scale *= transform.scale;
             }
-            current = world.get::<&Node>(entity).ok().and_then(|node| node.parent);
+            current = world
+                .get::<&TreeNode>(entity)
+                .ok()
+                .and_then(|node| node.parent);
         }
         scale
     }
@@ -483,7 +487,11 @@ pub trait Object3DHandler: ObjectHandler {
 #[doc(hidden)]
 pub fn global_matrix3d(world: &hecs::World, entity: hecs::Entity) -> glam::Mat4 {
     let local = local_matrix3d(world, entity);
-    match world.get::<&Node>(entity).ok().and_then(|node| node.parent) {
+    match world
+        .get::<&TreeNode>(entity)
+        .ok()
+        .and_then(|node| node.parent)
+    {
         Some(parent) => global_matrix3d(world, parent) * local,
         None => local,
     }
@@ -493,7 +501,8 @@ fn local_matrix3d(world: &hecs::World, entity: hecs::Entity) -> glam::Mat4 {
     world
         .get::<&crate::core::components::Transform3D>(entity)
         .map_or(glam::Mat4::IDENTITY, |transform| {
-            transform.matrix_with_origin(object_box3d(world, entity))
+            glam::Mat4::from_translation(crate::core::objects::layout_offset_3d(world, entity))
+                * transform.matrix_with_origin(object_box3d(world, entity))
         })
 }
 
@@ -503,7 +512,11 @@ pub(crate) fn global_rotation3d(world: &hecs::World, entity: hecs::Entity) -> gl
         .map_or(glam::Quat::IDENTITY, |transform| {
             crate::core::normalized_quaternion(transform.rotation)
         });
-    match world.get::<&Node>(entity).ok().and_then(|node| node.parent) {
+    match world
+        .get::<&TreeNode>(entity)
+        .ok()
+        .and_then(|node| node.parent)
+    {
         Some(parent) => (global_rotation3d(world, parent) * local).normalize(),
         None => local,
     }
@@ -529,7 +542,7 @@ pub(crate) fn bounds3d(
         |size| (-size * 0.5, size * 0.5),
     );
     for child in crate::core::objects::child_iter(world, entity) {
-        if !world.get::<&Node>(child).is_ok_and(|n| n.is_activated) {
+        if !world.get::<&TreeNode>(child).is_ok_and(|n| n.is_activated) {
             continue;
         }
         let Some((child_min, child_max)) = bounds3d(world, child) else {

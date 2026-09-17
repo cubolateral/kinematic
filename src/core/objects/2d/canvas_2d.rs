@@ -1,11 +1,11 @@
 use crate::core::components::{Camera2D, Draw2D};
-use kinematic_macros::{Container, Object};
+use kinematic_macros::{Node, Object};
 
 use super::super::canvas::{
     CanvasDimension, CanvasSettings, CanvasTexture, scene_identity, validate_canvas,
 };
 /// Independent 2D Skia viewport with its own camera.
-#[derive(Object, Container)]
+#[derive(Object, Node)]
 #[object(spatial = "none", builder = "canvas_2d")]
 pub struct Canvas2D {
     #[trackable]

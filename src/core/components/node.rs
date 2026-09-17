@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub struct Node {
+pub(crate) struct TreeNode {
     /// Parent container, assigned when the object is attached to the scene tree.
     pub(crate) parent: Option<hecs::Entity>,
     /// Timeline bounds stored as `[start, end]` and evaluated as `start <= time < end`.
@@ -12,7 +12,7 @@ pub struct Node {
     pub(crate) children: Option<Vec<hecs::Entity>>,
 }
 
-impl Node {
+impl TreeNode {
     pub(crate) fn activate(&mut self, start: f32) {
         self.lifetime = [start, f32::INFINITY];
         self.is_activated = start <= 0.0;
@@ -28,7 +28,7 @@ impl Node {
     }
 }
 
-impl Default for Node {
+impl Default for TreeNode {
     fn default() -> Self {
         Self {
             parent: None,

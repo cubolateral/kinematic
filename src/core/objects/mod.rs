@@ -1,9 +1,9 @@
 pub(crate) mod appearance;
 mod canvas;
-mod container;
 mod creation;
 mod image;
 mod latex_geometry;
+mod node;
 mod object;
 pub(crate) mod particle;
 mod regular_polygon;
@@ -16,10 +16,10 @@ mod three_d;
 mod two_d;
 
 pub use canvas::*;
-pub use container::*;
 pub(crate) use creation::{CreationDraw, particle_count_for_bounds, particle_visual_key};
 pub(crate) use creation::{MorphParticleRoute, ParticleBatch, silhouette_grid};
 pub(crate) use image::ImageSource;
+pub use node::*;
 pub use object::*;
 pub(crate) use regular_polygon::regular_polygon_vertices;
 pub use render::object_box;

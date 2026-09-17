@@ -1,8 +1,8 @@
 use crate::core::components::{Draw3D, Transform3D};
-use kinematic_macros::{Container, Object};
+use kinematic_macros::{Node, Object};
 
 /// Container inheriting three-dimensional transforms.
-#[derive(Default, Object, Container)]
+#[derive(Default, Object, Node)]
 #[object(spatial = "3d", builder = "group_3d")]
 pub struct Group3D {
     #[trackable]

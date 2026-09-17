@@ -14,7 +14,7 @@ pub(crate) use animation::*;
 #[doc(hidden)]
 pub use inspection::*;
 pub use name::*;
-pub use node::*;
+pub(crate) use node::*;
 pub use particle::*;
 pub use simulation::*;
 pub use three_d::*;

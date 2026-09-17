@@ -1,7 +1,7 @@
 use crate::{
     core::{
         TrackChoices, TrackInfo, TrackLimits, TrackValue,
-        components::{Animation, Inspection, Name, Node},
+        components::{Animation, Inspection, Name, TreeNode},
         normalized_quaternion,
         objects::{
             CanvasSettings, ProjectionSource, SphereShape,
@@ -52,7 +52,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             .get::<&Name>(entity)
             .expect("Inspected object must contain a Name component.");
         let node = world
-            .get::<&Node>(entity)
+            .get::<&TreeNode>(entity)
             .expect("Inspected object must contain a Node component.");
 
         ui.text(name.get());

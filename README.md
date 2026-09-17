@@ -537,7 +537,7 @@ child_group.add(&circle);
 scene.world_2d().add(&child_group);
 ```
 
-The `Container` derive gives an object's generated handler the `add` method.
+The `Node` derive gives an object's generated handler the `add` method.
 It also provides typed access to direct children in insertion order:
 
 ```rust

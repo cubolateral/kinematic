@@ -1,6 +1,6 @@
 use crate::core::{
     Scene, SceneIdentity,
-    components::{Draw3D, Node},
+    components::{Draw3D, TreeNode},
     objects::{CanvasSettings, ProjectionSource, validate_canvas},
 };
 use std::collections::HashMap;
@@ -48,7 +48,7 @@ pub(crate) fn visible_subtree_3d(
 ) {
     fn visit(world: &hecs::World, entity: hecs::Entity, result: &mut Vec<hecs::Entity>) {
         if !world
-            .get::<&Node>(entity)
+            .get::<&TreeNode>(entity)
             .is_ok_and(|node| node.is_activated)
             || !world
                 .get::<&Draw3D>(entity)
@@ -68,7 +68,7 @@ pub(crate) fn visible_subtree_3d(
 
 pub(crate) fn active_subtree(world: &hecs::World, root: hecs::Entity) -> Vec<hecs::Entity> {
     fn visit(world: &hecs::World, entity: hecs::Entity, result: &mut Vec<hecs::Entity>) {
-        if !world.get::<&Node>(entity).is_ok_and(|n| n.is_activated) {
+        if !world.get::<&TreeNode>(entity).is_ok_and(|n| n.is_activated) {
             return;
         }
         result.push(entity);

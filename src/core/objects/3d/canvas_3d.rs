@@ -1,4 +1,4 @@
-use kinematic_macros::{Container, Object};
+use kinematic_macros::{Node, Object};
 
 use crate::core::components::{Camera3D, Draw3D};
 
@@ -6,7 +6,7 @@ use super::super::canvas::{
     CanvasDimension, CanvasSettings, CanvasTexture, scene_identity, validate_canvas,
 };
 /// Independent 3D perspective viewport with its own camera.
-#[derive(Object, Container)]
+#[derive(Object, Node)]
 #[object(spatial = "none", builder = "canvas_3d")]
 pub struct Canvas3D {
     #[trackable]

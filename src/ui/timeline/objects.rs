@@ -5,7 +5,7 @@ use super::{
     tracks,
 };
 use crate::{
-    core::components::{Name, Node},
+    core::components::{Name, TreeNode},
     editor::Editor,
     ui::widgets::{draw_panel_rect, hierarchy_prefix, text_size},
 };
@@ -38,7 +38,7 @@ pub(super) fn draw(
     let world = editor.scene_mut().world();
     let (root_lifetime, root_name) = {
         let root_node = world
-            .get::<&Node>(root)
+            .get::<&TreeNode>(root)
             .expect("Timeline root must contain a Node component.");
         let root_name = world
             .get::<&Name>(root)
@@ -261,7 +261,7 @@ fn collect_rows(
     rows: &mut Vec<ObjectRow>,
 ) {
     let children = world
-        .get::<&Node>(parent)
+        .get::<&TreeNode>(parent)
         .expect("Timeline parent must contain a Node component.")
         .children
         .clone()
@@ -271,7 +271,7 @@ fn collect_rows(
         let is_last = index + 1 == children.len();
         let is_highlighted = ancestor_selected || selected == Some(entity);
         let node = world
-            .get::<&Node>(entity)
+            .get::<&TreeNode>(entity)
             .expect("Timeline object must contain a Node component.");
         let name = world
             .get::<&Name>(entity)

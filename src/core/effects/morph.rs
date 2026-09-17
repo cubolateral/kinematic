@@ -1,6 +1,6 @@
 use crate::core::{
     Easing, Task,
-    components::{Draw2D, Morph as MorphState, Node, PARTICLE_FADE_START},
+    components::{Draw2D, Morph as MorphState, PARTICLE_FADE_START, TreeNode},
     objects::{
         Object, ObjectHandler, ObjectTrackable, Rect,
         appearance::{AppearanceEdit, AppearanceSnapshot},
@@ -91,13 +91,13 @@ impl MorphEffect {
         let end = start + self.duration;
         let (parent, from_silhouette, to_silhouette) = {
             let world = world.borrow();
-            let node = world.get::<&Node>(from.entity()).unwrap();
+            let node = world.get::<&TreeNode>(from.entity()).unwrap();
             let parent = node.parent.expect("Morph source must be attached.");
             assert!(
                 node.lifetime[0] <= start && start < node.lifetime[1],
                 "Morph source must be alive at the scheduled time."
             );
-            let target_parent = world.get::<&Node>(to.entity()).unwrap().parent;
+            let target_parent = world.get::<&TreeNode>(to.entity()).unwrap().parent;
             assert!(
                 target_parent.is_none() || target_parent == Some(parent),
                 "Morph objects must share the same parent."
@@ -154,7 +154,7 @@ impl MorphEffect {
         attach_child(&world, parent, carrier.entity(), start);
         if world
             .borrow()
-            .get::<&Node>(to.entity())
+            .get::<&TreeNode>(to.entity())
             .unwrap()
             .parent
             .is_none()
@@ -163,7 +163,7 @@ impl MorphEffect {
         }
         {
             let world = world.borrow();
-            let mut node = world.get::<&mut Node>(parent).unwrap();
+            let mut node = world.get::<&mut TreeNode>(parent).unwrap();
             let children = node.children.as_mut().unwrap();
             children.retain(|entity| *entity != carrier.entity() && *entity != to.entity());
             let index = children
@@ -368,7 +368,7 @@ mod tests {
         assert_eq!(pixels(&scene, 2.0), middle);
         assert_eq!(pixels(&scene, 0.5), before);
         let world = scene.world();
-        let mut nodes = world.query::<(hecs::Entity, &Node)>();
+        let mut nodes = world.query::<(hecs::Entity, &TreeNode)>();
         assert_eq!(
             nodes
                 .iter()
@@ -539,7 +539,7 @@ mod tests {
         let before = {
             let world = scene.world();
             world
-                .query::<(&Node, &MorphState)>()
+                .query::<(&TreeNode, &MorphState)>()
                 .iter()
                 .map(|(node, morph)| (node.is_activated, morph.progress))
                 .collect::<Vec<_>>()
@@ -549,7 +549,7 @@ mod tests {
         let after = {
             let world = scene.world();
             world
-                .query::<(&Node, &MorphState)>()
+                .query::<(&TreeNode, &MorphState)>()
                 .iter()
                 .map(|(node, morph)| (node.is_activated, morph.progress))
                 .collect::<Vec<_>>()
