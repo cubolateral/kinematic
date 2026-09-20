@@ -2,6 +2,8 @@ use kinematic_macros::Trackable;
 
 use crate::core::types::{Color, Vector2};
 
+const PATH_REBASE_THRESHOLD: f32 = 32_768.0;
+
 /// Fill and stroke properties for a style entity.
 #[derive(Clone, Trackable, Debug)]
 pub struct Style {
@@ -54,23 +56,38 @@ pub(crate) fn draw_complete_styled_path(
         device_bounds.bottom,
     ]
     .into_iter()
-    .any(|value| value.abs() > 32_768.0);
-    let rebased = oversized.then(|| {
-        let transformed = path.with_transform(&matrix);
-        let stroke_width = stroke_width_for_scale(style.stroke_width.max(0.0), scale)
-            * matrix.map_radius(1.0).unwrap_or(1.0);
-        let clipped = canvas.device_clip_bounds().and_then(|bounds| {
-            let mut bounds = skia_safe::Rect::from_irect(bounds);
+    .any(|value| value.abs() > PATH_REBASE_THRESHOLD);
+    let rebased = oversized
+        .then(|| {
+            let bounds = skia_safe::Rect::from_irect(canvas.device_clip_bounds()?);
+            let center = skia_safe::Point::new(bounds.center_x(), bounds.center_y());
+            let anchor = matrix.invert()?.map_point(center);
+            let shifted =
+                path.with_transform(&skia_safe::Matrix::translate((-anchor.x, -anchor.y)));
+            let transformed = shifted.with_transform(&skia_safe::Matrix::new_all(
+                matrix.scale_x(),
+                matrix.skew_x(),
+                center.x,
+                matrix.skew_y(),
+                matrix.scale_y(),
+                center.y,
+                0.0,
+                0.0,
+                1.0,
+            ));
+            let stroke_width = stroke_width_for_scale(style.stroke_width.max(0.0), scale)
+                * matrix.map_radius(1.0).unwrap_or(1.0);
+            let mut bounds = bounds;
             bounds.outset((stroke_width * 0.5, stroke_width * 0.5));
-            transformed.op(
+            let clipped = transformed.op(
                 &skia_safe::Path::rect(bounds, None),
                 skia_safe::PathOp::Intersect,
-            )
-        });
-        let saved = canvas.save();
-        canvas.reset_matrix();
-        (clipped.unwrap_or(transformed), saved)
-    });
+            );
+            let saved = canvas.save();
+            canvas.reset_matrix();
+            Some((clipped.unwrap_or(transformed), saved))
+        })
+        .flatten();
     let path = rebased.as_ref().map_or(path, |(path, _)| path);
 
     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();

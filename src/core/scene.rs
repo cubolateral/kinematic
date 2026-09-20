@@ -831,14 +831,14 @@ mod tests {
         let mut scene = Scene::new_with_resolution((100, 80));
         let line = line_2d()
             .from(vec2(0.0, 0.0))
-            .to(vec2(20_000_000.0, 0.0))
+            .to(vec2(100_000_000.0, 0.0))
             .thickness(10.0)
             .fill(Color::RED)
             .build(&mut scene);
         scene.world_2d().add(&line);
         scene
             .world_2d()
-            .camera_position(vec2(20_000_000.0, 0.0))
+            .camera_position(vec2(100_000_000.0, 0.0))
             .camera_zoom(100.0)
             .immediate();
         let mut surface = skia_safe::surfaces::raster_n32_premul((100, 80)).unwrap();
