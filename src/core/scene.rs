@@ -827,6 +827,29 @@ mod tests {
     }
 
     #[test]
+    fn camera_2d_draws_the_far_end_of_a_large_object_when_zoomed() {
+        let mut scene = Scene::new_with_resolution((100, 80));
+        let line = line_2d()
+            .from(vec2(0.0, 0.0))
+            .to(vec2(20_000_000.0, 0.0))
+            .thickness(10.0)
+            .fill(Color::RED)
+            .build(&mut scene);
+        scene.world_2d().add(&line);
+        scene
+            .world_2d()
+            .camera_position(vec2(20_000_000.0, 0.0))
+            .camera_zoom(100.0)
+            .immediate();
+        let mut surface = skia_safe::surfaces::raster_n32_premul((100, 80)).unwrap();
+
+        surface.canvas().translate((50.0, 40.0));
+        scene.draw(surface.canvas());
+
+        assert!(surface.peek_pixels().unwrap().get_color((40, 40)).r() > 0);
+    }
+
+    #[test]
     fn compiled_runtime_visits_tracks_and_crossed_lifetimes_and_handles_later_removal() {
         let mut scene = Scene::new();
         let static_object = circle().build(&mut scene);

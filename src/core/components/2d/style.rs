@@ -45,6 +45,34 @@ pub(crate) fn draw_complete_styled_path(
     opacity: f32,
     canvas: &skia_safe::Canvas,
 ) {
+    let matrix = canvas.local_to_device_as_3x3();
+    let device_bounds = matrix.map_rect(*path.bounds()).0;
+    let oversized = [
+        device_bounds.left,
+        device_bounds.top,
+        device_bounds.right,
+        device_bounds.bottom,
+    ]
+    .into_iter()
+    .any(|value| value.abs() > 32_768.0);
+    let rebased = oversized.then(|| {
+        let transformed = path.with_transform(&matrix);
+        let stroke_width = stroke_width_for_scale(style.stroke_width.max(0.0), scale)
+            * matrix.map_radius(1.0).unwrap_or(1.0);
+        let clipped = canvas.device_clip_bounds().and_then(|bounds| {
+            let mut bounds = skia_safe::Rect::from_irect(bounds);
+            bounds.outset((stroke_width * 0.5, stroke_width * 0.5));
+            transformed.op(
+                &skia_safe::Path::rect(bounds, None),
+                skia_safe::PathOp::Intersect,
+            )
+        });
+        let saved = canvas.save();
+        canvas.reset_matrix();
+        (clipped.unwrap_or(transformed), saved)
+    });
+    let path = rebased.as_ref().map_or(path, |(path, _)| path);
+
     let [fill_r, fill_g, fill_b, fill_a] = style.fill.rgba();
     let mut paint = skia_safe::Paint::new(
         skia_safe::Color4f::new(fill_r, fill_g, fill_b, fill_a * opacity),
@@ -53,18 +81,24 @@ pub(crate) fn draw_complete_styled_path(
     paint.set_anti_alias(true);
     canvas.draw_path(path, &paint);
 
-    if style.stroke_width <= 0.0 {
-        return;
+    if style.stroke_width > 0.0 {
+        let [stroke_r, stroke_g, stroke_b, stroke_a] = style.stroke.rgba();
+        paint.set_color4f(
+            skia_safe::Color4f::new(stroke_r, stroke_g, stroke_b, stroke_a * opacity),
+            None,
+        );
+        paint.set_style(skia_safe::PaintStyle::Stroke);
+        let mut stroke_width = stroke_width_for_scale(style.stroke_width, scale);
+        if oversized {
+            stroke_width *= matrix.map_radius(1.0).unwrap_or(1.0);
+        }
+        paint.set_stroke_width(stroke_width);
+        canvas.draw_path(path, &paint);
     }
 
-    let [stroke_r, stroke_g, stroke_b, stroke_a] = style.stroke.rgba();
-    paint.set_color4f(
-        skia_safe::Color4f::new(stroke_r, stroke_g, stroke_b, stroke_a * opacity),
-        None,
-    );
-    paint.set_style(skia_safe::PaintStyle::Stroke);
-    paint.set_stroke_width(stroke_width_for_scale(style.stroke_width, scale));
-    canvas.draw_path(path, &paint);
+    if let Some((_, saved)) = rebased {
+        canvas.restore_to_count(saved);
+    }
 }
 
 /// Compensates a stroke width for the entity scale applied by the canvas.

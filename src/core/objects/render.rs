@@ -6,7 +6,6 @@ use crate::core::{
     },
     types::Vector2,
 };
-use skia_safe::QuickReject;
 use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
@@ -128,11 +127,6 @@ fn draw_entity_with_mode(
     } else {
         None
     };
-    if bounds.is_some_and(|bounds| canvas.quick_reject(&bounds)) {
-        canvas.restore_to_count(save_count);
-        return;
-    }
-
     let composites_opacity = children.len() != 0 || world.get::<&Simulation>(entity).is_ok();
     if !composites_opacity || opacity >= 1.0 {
         draw_object_appearance(world, entity, canvas, opacity, images, appearance.is_none());

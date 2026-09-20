@@ -77,12 +77,12 @@ pub struct FadeIn {
 }
 
 impl FadeIn {
-    /// Creates a fade-in with a one-second duration and linear easing.
+    /// Creates a fade-in with a one-second duration and default easing.
     pub fn new() -> Self {
         Self {
             delay: 0.0,
             duration: 1.0,
-            easing: Easing::Linear,
+            easing: Easing::default(),
             scale: 1.0,
             spin: 0.0,
             from: None,
@@ -182,13 +182,13 @@ pub struct FadeOut {
 }
 
 impl FadeOut {
-    /// Creates a fade-out with a one-second duration and linear easing.
+    /// Creates a fade-out with a one-second duration and defautl easing.
     pub fn new() -> Self {
         Self {
             delay: 0.0,
 
             duration: 1.0,
-            easing: Easing::Linear,
+            easing: Easing::default(),
             scale: 1.0,
             spin: 0.0,
             from: None,
