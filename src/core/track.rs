@@ -1,5 +1,6 @@
 use crate::core::{
     AnimatorHandle, Easing, SceneWorld, Tween,
+    components::{Animation, Inspection, TreeNode},
     objects::HandlerContext,
     types::{Color, Quad, Quaternion, Vector2, Vector3},
 };
@@ -460,6 +461,7 @@ impl_track_value_type!(Quaternion, Quaternion);
 impl_track_value_type!(String, String);
 
 /// Typed interface for updating a single tracked component field.
+#[derive(Clone)]
 pub struct TrackHandle<T: TrackValueType> {
     world: SceneWorld,
     entity: hecs::Entity,
@@ -468,6 +470,71 @@ pub struct TrackHandle<T: TrackValueType> {
     get: fn(&hecs::World, hecs::Entity) -> T,
     replace: fn(&mut hecs::World, hecs::Entity, T) -> T,
     animator: AnimatorHandle,
+}
+
+struct StandaloneTrackValue(TrackValue);
+
+static STANDALONE_TRACK_INFO: TrackInfo = TrackInfo {
+    id: 0,
+    name: "value",
+    limits: TrackLimits::None,
+    choices: TrackChoices::None,
+    get: |world, entity| {
+        world
+            .get::<&StandaloneTrackValue>(entity)
+            .expect("Standalone track must contain its value.")
+            .0
+            .clone()
+    },
+    set: |world, entity, value| {
+        world
+            .get::<&mut StandaloneTrackValue>(entity)
+            .expect("Standalone track must contain its value.")
+            .0 = value;
+    },
+};
+
+static STANDALONE_TRACKABLE_INFO: TrackableInfo = TrackableInfo {
+    name: "StandaloneTrack",
+    type_id: || std::any::TypeId::of::<StandaloneTrackValue>(),
+    get: || std::slice::from_ref(&STANDALONE_TRACK_INFO),
+};
+
+fn standalone_trackables(_: &hecs::World, _: hecs::Entity) -> &'static [TrackableInfo] {
+    std::slice::from_ref(&STANDALONE_TRACKABLE_INFO)
+}
+
+pub(crate) fn standalone_track<T: TrackValueType>(
+    world: SceneWorld,
+    animator: AnimatorHandle,
+    initial: T,
+) -> TrackHandle<T> {
+    animator.assert_finite_scope();
+    let mut node = TreeNode::default();
+    node.activate(0.0);
+    let entity = world.borrow_mut().spawn((
+        StandaloneTrackValue(initial.into_track_value()),
+        Animation::default(),
+        Inspection::new("StandaloneTrack", standalone_trackables),
+        node,
+    ));
+
+    TrackHandle::new(
+        world,
+        entity,
+        std::any::TypeId::of::<StandaloneTrackValue>(),
+        &STANDALONE_TRACK_INFO,
+        |world, entity| {
+            T::from_track_value((STANDALONE_TRACK_INFO.get)(world, entity))
+                .expect("Standalone track value type must remain consistent.")
+        },
+        |world, entity, value| {
+            let old = (STANDALONE_TRACK_INFO.get)(world, entity);
+            (STANDALONE_TRACK_INFO.set)(world, entity, value.into_track_value());
+            T::from_track_value(old).expect("Standalone track value type must remain consistent.")
+        },
+        animator,
+    )
 }
 
 impl<T: TrackValueType> TrackHandle<T> {

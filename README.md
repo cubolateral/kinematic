@@ -13,6 +13,7 @@ Kinematic is in early development, so its API may change.
 ## Features
 
 - Typed scene objects and trackable component fields.
+- Invisible typed tracks for small scene-local animated values.
 - First-class 2D and 3D canvases rendered with Skia and three-d, respectively.
 - User-facing object names with type-based defaults.
 - Hierarchical scene trees with reusable 2D and 3D containers and inherited transforms.
@@ -147,6 +148,30 @@ For continuous 3D spinning, repeat `object.rotation_y_by(TAU)` with linear easin
 The axis-angle path preserves direction and full turns; `object.rotation(q)`
 interpolates orientations along the shortest quaternion path. Match the cycle's
 end and start for a seamless loop; repetition does not automatically close it.
+
+## Standalone tracks
+
+Use `scene.track(initial)` when a small animated value does not belong to a
+scene object or custom trackable component:
+
+```rust
+let counter = s.track(0_u32);
+
+counter
+    .set(10)
+    .duration(2.0)
+    .easing(Easing::Linear)
+    .play();
+
+let counter_for_signal = counter.clone();
+object.signal(move |object, _frame| {
+    object.set_sides(counter_for_signal.get());
+});
+```
+
+The initial and target values are converted through `TrackValueType`; callers
+do not manipulate `TrackValue` directly. Standalone tracks support normal
+timeline groups, `repeat`, and seeking, but remain hidden from the editor UI.
 
 ## Deterministic random values
 

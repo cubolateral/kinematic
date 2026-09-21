@@ -1,6 +1,6 @@
 use crate::core::scene_file::{SceneFile, ScheduledEvent, TimeEvent};
 use crate::core::{
-    Animator, Scheduling, Task, TrackValueType, TrackableInfo, Tween,
+    Animator, Scheduling, Task, TrackHandle, TrackValueType, TrackableInfo, Tween,
     components::{Animation, Draw2D, Inspection, Name, Simulation, TreeNode, View},
     frame_index,
     objects::{
@@ -490,6 +490,23 @@ impl Scene {
     /// Plays a tween on the current scene timeline.
     pub fn tween<Object>(&mut self, tween: Tween<Object>) {
         self.play(tween.task());
+    }
+
+    /// Creates an invisible typed track initialized with `initial`.
+    ///
+    /// The value is converted through [`TrackValueType`], follows the scene
+    /// timeline during seeking, and can be read with [`TrackHandle::get`].
+    ///
+    /// ```
+    /// let counter = scene.track(0_u32);
+    /// counter.set(10).duration(2.0).play();
+    /// ```
+    pub fn track<T: TrackValueType>(&mut self, initial: T) -> TrackHandle<T> {
+        crate::core::standalone_track(
+            std::rc::Rc::clone(&self.world),
+            self.animator.handle().active(),
+            initial,
+        )
     }
 
     /// Waits for the specified duration on the current scene timeline.
@@ -1336,6 +1353,31 @@ mod tests {
         for (time, y) in [(0.5, 3.0), (2.5, 6.0), (3.5, 4.0), (1.5, 4.0), (6.5, 6.0)] {
             scene.update(time);
             assert_eq!(object.get(Transform2D::position_property()).y, y);
+        }
+    }
+
+    #[test]
+    fn standalone_track_is_seekable_and_readable_from_a_signal() {
+        let mut scene = Scene::new();
+        let value = scene.track(0.0_f32);
+        scene.repeat(|_| {
+            value.set(10.0).duration(2.0).easing(Easing::Linear).play();
+        });
+        assert_eq!(value.get(), 0.0);
+
+        let object = circle().build(&mut scene);
+        scene.world_2d().add(&object);
+        let observed = std::rc::Rc::new(std::cell::Cell::new(0.0));
+        let signal_value = value.clone();
+        let signal_observed = std::rc::Rc::clone(&observed);
+        object.signal(move |_, _| signal_observed.set(signal_value.get()));
+        scene.wait(6.0);
+        scene.animator.take_schedule().compile(&scene);
+
+        for (time, expected) in [(0.5, 2.5), (2.5, 2.5), (1.5, 7.5), (0.5, 2.5)] {
+            scene.update(time);
+            assert_eq!(value.get(), expected);
+            assert_eq!(observed.get(), expected);
         }
     }
 
