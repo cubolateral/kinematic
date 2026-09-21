@@ -24,7 +24,10 @@ pub struct Snapshot<Handler> {
 }
 
 #[derive(Default)]
-struct SnapshotStack(Vec<Vec<SnapshotValue>>);
+struct Snapshots {
+    initial: Vec<SnapshotValue>,
+    saved: Vec<Vec<SnapshotValue>>,
+}
 
 /// Marker trait for object types that can be spawned into the scene.
 ///
@@ -58,13 +61,19 @@ pub trait Object: hecs::DynamicBundle + Sized + 'static {
             .add(Animation::default())
             .add(TreeNode::default())
             .add(ObjectType(std::any::TypeId::of::<Self>()))
-            .add(SnapshotStack::default())
+            .add(Snapshots::default())
             .add(name)
             .add(Self::inspection());
         if Self::SPATIAL_2D {
             builder.add(Morph::default());
         }
         let entity = world.borrow_mut().spawn(builder.build());
+        let initial = snapshot_values(&world, entity);
+        world
+            .borrow()
+            .get::<&mut Snapshots>(entity)
+            .expect("Spawned object must contain snapshots.")
+            .initial = initial;
 
         Self::handler(world, entity, animator)
     }
@@ -183,6 +192,13 @@ pub trait ObjectHandler: Clone {
         animator.assert_timeline_mutation();
         restore_object(&self.object_world(), self.entity(), animator)
     }
+
+    /// Creates a tween back to the tracked values configured by the builder.
+    fn reset(&self) -> Tween<Self::Object> {
+        let animator = self.object_animator();
+        animator.assert_timeline_mutation();
+        reset_object(&self.object_world(), self.entity(), animator)
+    }
 }
 
 /// Spatial access for objects in a two-dimensional scene.
@@ -220,9 +236,9 @@ pub fn save_object(world: &SceneWorld, entity: hecs::Entity) {
 
     world
         .borrow()
-        .get::<&mut SnapshotStack>(entity)
-        .expect("Object handler must contain a snapshot stack.")
-        .0
+        .get::<&mut Snapshots>(entity)
+        .expect("Object handler must contain snapshots.")
+        .saved
         .push(values);
 }
 
@@ -259,11 +275,26 @@ pub fn restore_object<Object>(
 ) -> Tween<Object> {
     let snapshot = world
         .borrow()
-        .get::<&mut SnapshotStack>(entity)
-        .expect("Object handler must contain a snapshot stack.")
-        .0
+        .get::<&mut Snapshots>(entity)
+        .expect("Object handler must contain snapshots.")
+        .saved
         .pop()
         .expect("Cannot restore an object without a saved snapshot.");
+
+    tween_to_values(world, entity, snapshot, animator)
+}
+
+fn reset_object<Object>(
+    world: &SceneWorld,
+    entity: hecs::Entity,
+    animator: AnimatorHandle,
+) -> Tween<Object> {
+    let snapshot = world
+        .borrow()
+        .get::<&Snapshots>(entity)
+        .expect("Object handler must contain snapshots.")
+        .initial
+        .clone();
 
     tween_to_values(world, entity, snapshot, animator)
 }

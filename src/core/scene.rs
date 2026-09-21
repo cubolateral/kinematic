@@ -1874,6 +1874,23 @@ mod tests {
     }
 
     #[test]
+    fn object_handler_resets_to_reusable_builder_state() {
+        let mut scene = Scene::new();
+        let circle = circle().position_x(10.0).fill(Color::RED).build(&mut scene);
+        scene.world_2d().add(&circle);
+
+        circle.position_x(100.0).fill(Color::BLUE).play();
+        circle.reset().play();
+        circle.position_x(200.0).fill(Color::GREEN).play();
+        circle.reset().play();
+
+        assert_eq!(scene.animator.take_schedule().compile(&scene), 4.0);
+        scene.update(4.0);
+        assert_eq!(circle.get_position().x, 10.0);
+        assert_eq!(circle.get_fill(), Color::RED);
+    }
+
+    #[test]
     fn object_state_tweens_every_track_on_another_instance() {
         let mut scene = Scene::new();
         let source = circle()
