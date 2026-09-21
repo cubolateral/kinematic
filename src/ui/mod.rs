@@ -65,6 +65,7 @@ impl Ui {
 
             if fullscreen_shortcut || fullscreen_button {
                 self.is_fullscreen = false;
+                ui.set_window_focus(Some(inspector::WINDOW_NAME));
             }
 
             return;

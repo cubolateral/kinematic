@@ -1,4 +1,5 @@
 use crate::editor::Timeline;
+use crate::ui::widgets::text_size;
 use crate::ui::{controls, icons};
 
 use super::metrics::{BUTTON_SIZE, FULLSCREEN_SCRUBBER_HEIGHT, FULLSCREEN_SCRUBBER_THICKNESS};
@@ -91,20 +92,40 @@ pub(in crate::ui) fn fullscreen_controls(
 ) -> Response {
     let scrubber_min = ui.cursor_screen_pos();
     let scrubber_width = ui.content_region_avail_width().max(1.0);
-    let buttons_y = scrubber_min[1] + FULLSCREEN_SCRUBBER_HEIGHT + 7.0;
+    let buttons_y = scrubber_min[1] + FULLSCREEN_SCRUBBER_HEIGHT + 18.0;
+    let panel_bottom = scrubber_min[1] + ui.content_region_avail_height();
 
     {
         let _disabled = ui.begin_disabled_with_cond(!interactive);
 
-        ui.invisible_button(
-            "Fullscreen scrubber.",
-            [scrubber_width, FULLSCREEN_SCRUBBER_HEIGHT],
-        );
+        ui.set_cursor_screen_pos([scrubber_min[0], buttons_y]);
+        let response = draw(timeline, ui, fps, interactive, true);
 
-        timeline.is_controlling = interactive && ui.is_item_active();
-        if timeline.is_controlling {
+        let mouse = ui.io().mouse_pos();
+        let panel_hovered = ui.is_mouse_hovering_rect(
+            scrubber_min,
+            [scrubber_min[0] + scrubber_width, panel_bottom],
+        );
+        let blocked_by_button = ui.is_any_item_hovered();
+        let left = dear_imgui_rs::MouseButton::Left;
+
+        if !interactive {
+            timeline.is_controlling = false;
+        } else if timeline.is_controlling {
+            if ui.is_mouse_down(left) {
+                timeline.go_to(time_at_position(
+                    mouse[0],
+                    scrubber_min[0],
+                    scrubber_width,
+                    timeline.duration(),
+                ));
+            } else {
+                timeline.is_controlling = false;
+            }
+        } else if panel_hovered && !blocked_by_button && ui.is_mouse_clicked(left) {
+            timeline.is_controlling = true;
             timeline.go_to(time_at_position(
-                ui.io().mouse_pos()[0],
+                mouse[0],
                 scrubber_min[0],
                 scrubber_width,
                 timeline.duration(),
@@ -113,8 +134,7 @@ pub(in crate::ui) fn fullscreen_controls(
 
         draw_fullscreen_scrubber(timeline, ui, scrubber_min, scrubber_width);
 
-        ui.set_cursor_screen_pos([scrubber_min[0], buttons_y]);
-        draw(timeline, ui, fps, interactive, true)
+        response
     }
 }
 
@@ -201,6 +221,19 @@ fn draw_fullscreen_scrubber(
     let progress_x = min[0] + width * ratio;
     let line_y = min[1] + FULLSCREEN_SCRUBBER_HEIGHT * 0.5;
     let draw_list = ui.get_window_draw_list();
+    let current = format!("{:.2}s", timeline.time());
+    let duration = format!("{duration:.2}s");
+    let current_size = text_size(ui, &current);
+    let duration_size = text_size(ui, &duration);
+    let current_x =
+        (progress_x - current_size[0] * 0.5).clamp(min[0], min[0] + width - current_size[0]);
+    let duration_x = min[0] + width - duration_size[0];
+
+    draw_list.add_text(
+        [current_x, line_y + 4.0],
+        ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+        &current,
+    );
 
     draw_list.add_line_h(
         min[0],
@@ -224,6 +257,11 @@ fn draw_fullscreen_scrubber(
         )
         .filled(true)
         .build();
+    draw_list.add_text(
+        [duration_x, line_y + 4.0],
+        ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+        &duration,
+    );
 }
 
 fn time_at_position(position: f32, start: f32, width: f32, duration: f32) -> f32 {
