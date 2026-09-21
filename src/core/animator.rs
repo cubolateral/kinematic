@@ -55,6 +55,7 @@ impl Scheduling {
 #[derive(Default)]
 pub(crate) struct Schedule {
     pub(crate) duration: f32,
+    pub(crate) parallel: bool,
     tweens: Vec<ScheduledTween>,
     repeats: Vec<ScheduledRepeat>,
 }
@@ -167,7 +168,7 @@ impl Schedule {
         Self {
             duration: tween.duration,
             tweens: vec![tween],
-            repeats: vec![],
+            ..Self::default()
         }
     }
 
@@ -181,7 +182,9 @@ impl Schedule {
 
     fn append(&mut self, mut child: Self, scheduling: Scheduling) {
         let offset = scheduling.offset(self.duration);
-        self.duration = self.duration.max(offset + child.duration);
+        if !child.parallel {
+            self.duration = self.duration.max(offset + child.duration);
+        }
         validate_duration(self.duration);
         for tween in &mut child.tweens {
             tween.start += offset;
@@ -208,6 +211,7 @@ impl Schedule {
         );
         Self {
             duration: 0.0,
+            parallel: false,
             tweens: vec![],
             repeats: vec![ScheduledRepeat {
                 start: 0.0,

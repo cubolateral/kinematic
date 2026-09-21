@@ -548,12 +548,17 @@ impl Scene {
 
     /// Adds a sequential group to the current scene timeline.
     pub fn chain(&mut self, schedule: impl FnOnce(&mut Scene)) {
-        self.schedule_group(Scheduling::Sequential, false, schedule);
+        self.schedule_group(Scheduling::Sequential, false, false, schedule);
     }
 
     /// Adds a simultaneous group to the current scene timeline.
     pub fn all(&mut self, schedule: impl FnOnce(&mut Scene)) {
-        self.schedule_group(Scheduling::Parallel, false, schedule);
+        self.schedule_group(Scheduling::Parallel, false, false, schedule);
+    }
+
+    /// Runs a group without advancing or extending the current timeline.
+    pub fn parallel(&mut self, schedule: impl FnOnce(&mut Scene)) {
+        self.schedule_group(Scheduling::Sequential, false, true, schedule);
     }
 
     /// Loops one finite animation cycle without advancing the scene timeline.
@@ -576,7 +581,7 @@ impl Scene {
             values
         };
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.schedule_group(Scheduling::Sequential, true, schedule);
+            self.schedule_group(Scheduling::Sequential, true, false, schedule);
         }));
         // A background cycle does not advance the outer construction values.
         let world = self.world.borrow();
@@ -592,6 +597,7 @@ impl Scene {
         &mut self,
         scheduling: Scheduling,
         repeating: bool,
+        parallel: bool,
         schedule: impl FnOnce(&mut Scene),
     ) {
         let group = self.animator.group(scheduling, repeating);
@@ -603,7 +609,8 @@ impl Scene {
         if let Err(error) = result {
             std::panic::resume_unwind(error);
         }
-        let schedule = group.take_schedule();
+        let mut schedule = group.take_schedule();
+        schedule.parallel = parallel;
         self.animator.handle().schedule(if repeating {
             schedule.repeated()
         } else {
@@ -1385,6 +1392,26 @@ mod tests {
             scene.update(time);
             assert_eq!(object.get(Transform2D::position_property()).x, x);
         }
+    }
+
+    #[test]
+    fn parallel_tween_does_not_extend_the_timeline() {
+        let mut scene = Scene::new();
+        let object = circle().build(&mut scene);
+        scene.world_2d().add(&object);
+
+        scene.parallel(|_| {
+            object
+                .position_x(10.0)
+                .duration(5.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+        scene.wait(1.0);
+
+        assert_eq!(scene.animator.take_schedule().compile(&scene), 1.0);
+        scene.update(0.5);
+        assert_eq!(object.get_position().x, 1.0);
     }
 
     #[test]
