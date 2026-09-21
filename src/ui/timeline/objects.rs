@@ -16,10 +16,10 @@ const OBJECT_SEPARATOR_GAP: f32 = 8.0;
 struct ObjectRow {
     entity: hecs::Entity,
     lifetime: [f32; 2],
-    name: String,
     branches: Vec<bool>,
     is_last: bool,
     is_highlighted: bool,
+    tracks_height: f32,
 }
 
 pub(super) fn draw(
@@ -36,22 +36,19 @@ pub(super) fn draw(
     let scene_range = editor.scene_range();
     let root = editor.scene_mut().root().entity();
     let world = editor.scene_mut().world();
-    let (root_lifetime, root_name) = {
+    let root_lifetime = {
         let root_node = world
             .get::<&TreeNode>(root)
             .expect("Timeline root must contain a Node component.");
-        let root_name = world
-            .get::<&Name>(root)
-            .expect("Timeline root must contain a Name component.");
-        (root_node.lifetime, root_name.get().to_owned())
+        root_node.lifetime
     };
     let mut objects = vec![ObjectRow {
         entity: root,
         lifetime: root_lifetime,
-        name: root_name,
         branches: vec![],
         is_last: true,
         is_highlighted: selected == Some(root),
+        tracks_height: expanded_tracks_height(&world, state, root),
     }];
 
     collect_rows(
@@ -60,18 +57,14 @@ pub(super) fn draw(
         &mut vec![false],
         selected,
         selected == Some(root),
+        state,
         &mut objects,
     );
 
-    let height = objects.iter().fold(0.0, |height, object| {
-        let tracks_height = if state.is_object_expanded(object.entity) {
-            tracks::height(&world, object.entity)
-        } else {
-            0.0
-        };
-
-        height + OBJECT_HEIGHT + TRACK_SPACING + tracks_height
-    });
+    let height = objects
+        .iter()
+        .map(|object| OBJECT_HEIGHT + TRACK_SPACING + object.tracks_height)
+        .sum::<f32>();
 
     ui.dummy([
         layout.timeline_right() - layout.content_left,
@@ -88,19 +81,19 @@ pub(super) fn draw(
     let mut top = origin[1];
 
     for object in objects {
+        let tracks_height = object.tracks_height;
+        let bottom = top + OBJECT_HEIGHT + tracks_height;
+        if !vertically_visible(top, bottom, layout.viewport_top, layout.bottom) {
+            top += OBJECT_HEIGHT + TRACK_SPACING + tracks_height;
+            continue;
+        }
+
         let lifetime = [
             scene_range[0] + object.lifetime[0],
             (scene_range[0] + object.lifetime[1]).min(scene_range[1]),
         ];
         let start = lifetime[0].max(time.start);
         let end = lifetime[1].min(time.end);
-        let expanded = state.is_object_expanded(object.entity);
-        let tracks_height = if expanded {
-            tracks::height(&world, object.entity)
-        } else {
-            0.0
-        };
-        let bottom = top + OBJECT_HEIGHT + tracks_height;
         let sidebar_min = [layout.content_left, top];
         let sidebar_max = [layout.divider_x, bottom];
         let view_hovered = ui.is_window_hovered();
@@ -143,12 +136,14 @@ pub(super) fn draw(
         }
 
         let tree = hierarchy_prefix(&object.branches, object.is_last);
-        let label = format!("{tree}{}", object.name);
-        let label_size = text_size(ui, &label);
+        let name = world
+            .get::<&Name>(object.entity)
+            .expect("Timeline object must contain a Name component.");
+        let label_height = text_size(ui, name.get())[1];
         let tree_width = text_size(ui, &tree)[0];
         let tree_position = [
             layout.content_left + PANEL_TEXT_PADDING,
-            top + (OBJECT_HEIGHT - label_size[1]) * 0.5,
+            top + (OBJECT_HEIGHT - label_height) * 0.5,
         ];
         let name_position = [tree_position[0] + tree_width, tree_position[1]];
         let panel_min = [layout.content_left + PANEL_TEXT_PADDING, top];
@@ -172,11 +167,11 @@ pub(super) fn draw(
             } else {
                 dear_imgui_rs::StyleColor::Text
             }),
-            &object.name,
+            name.get(),
         );
 
         let separator_start =
-            name_position[0] + text_size(ui, &object.name)[0] + OBJECT_SEPARATOR_GAP;
+            name_position[0] + text_size(ui, name.get())[0] + OBJECT_SEPARATOR_GAP;
         let separator_end = panel_max[0];
         if separator_end > separator_start {
             draw_list.add_line_h(
@@ -193,10 +188,11 @@ pub(super) fn draw(
         }
 
         drop(text_clip);
+        drop(name);
 
         top += OBJECT_HEIGHT + TRACK_SPACING;
 
-        if expanded {
+        if tracks_height > 0.0 {
             tracks::draw(
                 &world,
                 ui,
@@ -258,6 +254,7 @@ fn collect_rows(
     branches: &mut Vec<bool>,
     selected: Option<hecs::Entity>,
     ancestor_selected: bool,
+    state: &State,
     rows: &mut Vec<ObjectRow>,
 ) {
     let children = world
@@ -273,9 +270,6 @@ fn collect_rows(
         let node = world
             .get::<&TreeNode>(entity)
             .expect("Timeline object must contain a Node component.");
-        let name = world
-            .get::<&Name>(entity)
-            .expect("Timeline object must contain a Name component.");
         let has_children = node
             .children
             .as_ref()
@@ -285,10 +279,10 @@ fn collect_rows(
             rows.push(ObjectRow {
                 entity,
                 lifetime: node.lifetime,
-                name: name.get().to_owned(),
                 branches: branches.clone(),
                 is_last,
                 is_highlighted,
+                tracks_height: expanded_tracks_height(world, state, entity),
             });
         }
 
@@ -297,7 +291,39 @@ fn collect_rows(
         }
 
         branches.push(!is_last);
-        collect_rows(world, entity, branches, selected, is_highlighted, rows);
+        collect_rows(
+            world,
+            entity,
+            branches,
+            selected,
+            is_highlighted,
+            state,
+            rows,
+        );
         branches.pop();
+    }
+}
+
+fn expanded_tracks_height(world: &hecs::World, state: &State, entity: hecs::Entity) -> f32 {
+    if state.is_object_expanded(entity) {
+        tracks::height(world, entity)
+    } else {
+        0.0
+    }
+}
+
+fn vertically_visible(top: f32, bottom: f32, viewport_top: f32, viewport_bottom: f32) -> bool {
+    bottom >= viewport_top && top <= viewport_bottom
+}
+
+#[cfg(test)]
+mod tests {
+    use super::vertically_visible;
+
+    #[test]
+    fn vertical_culling_keeps_only_rows_touching_the_viewport() {
+        assert!(!vertically_visible(0.0, 20.0, 21.0, 100.0));
+        assert!(vertically_visible(20.0, 40.0, 21.0, 100.0));
+        assert!(!vertically_visible(101.0, 120.0, 21.0, 100.0));
     }
 }

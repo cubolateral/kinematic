@@ -12,6 +12,14 @@ use super::{
 const ROW_HEIGHT: f32 = 24.0;
 pub(super) const WINDOW_NAME: &str = "Scene Tree";
 
+struct ObjectRow {
+    entity: hecs::Entity,
+    branches: Vec<bool>,
+    is_last: bool,
+    ancestor_selected: bool,
+    ancestor_visible: bool,
+}
+
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     let is_exporting = editor.is_exporting();
     let selected = editor.selected_entity();
@@ -54,23 +62,31 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
             clicked = Some(root);
         }
 
-        let children = active_children(&world, root);
-        if children.is_empty() {
+        let root_visibility = object_visibility(&world, root).unwrap_or(true);
+        let mut rows = vec![];
+        collect_rows(
+            &world,
+            root,
+            &mut vec![],
+            selected,
+            selected == Some(root),
+            root_visibility,
+            &mut rows,
+        );
+        if rows.is_empty() {
             ui.text_disabled("   No objects.");
         } else {
-            let root_visibility = object_visibility(&world, root).unwrap_or(true);
-            draw_children(
-                &world,
-                ui,
-                &children,
-                &mut vec![],
-                selected,
-                selected == Some(root),
-                root_visibility,
-                &mut clicked,
-                &mut edit_clicked,
-                &mut visibility_changed,
-            );
+            for index in dear_imgui_rs::ListClipper::new(rows.len()).begin(ui).iter() {
+                draw_row(
+                    &world,
+                    ui,
+                    &rows[index],
+                    selected,
+                    &mut clicked,
+                    &mut edit_clicked,
+                    &mut visibility_changed,
+                );
+            }
         }
 
         empty_clicked = !is_exporting
@@ -99,93 +115,105 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     }
 }
 
-fn draw_children(
+fn draw_row(
     world: &hecs::World,
     ui: &dear_imgui_rs::Ui,
-    children: &[hecs::Entity],
-    branches: &mut Vec<bool>,
+    row: &ObjectRow,
     selected: Option<hecs::Entity>,
-    ancestor_selected: bool,
-    ancestor_visible: bool,
     clicked: &mut Option<hecs::Entity>,
     edit_clicked: &mut Option<hecs::Entity>,
     visibility_changed: &mut bool,
 ) {
+    let entity = row.entity;
+    let is_highlighted = row.ancestor_selected || selected == Some(entity);
+    let name = world
+        .get::<&Name>(entity)
+        .expect("Scene tree object must contain a Name component.");
+    let tree = hierarchy_prefix(&row.branches, row.is_last);
+    let position = ui.cursor_screen_pos();
+    let row_width = ui.content_region_avail_width();
+    let visibility = object_visibility(world, entity);
+    let effective_visibility = row.ancestor_visible && visibility.unwrap_or(true);
+    let row_id = format!("##scene_tree_{}", entity.to_bits());
+    let control_count = 1.0 + f32::from(visibility.is_some());
+    let selectable_width = (row_width - ROW_HEIGHT * control_count).max(1.0);
+    let was_clicked = selectable_row(ui, row_id, [selectable_width, ROW_HEIGHT]);
+    if ui.is_item_hovered() {
+        if let Ok(inspection) = world.get::<&Inspection>(entity) {
+            ui.tooltip_text(format!("Type: {}", inspection.object_name));
+        }
+    }
+
+    let text_y = position[1] + (ROW_HEIGHT - text_size(ui, name.get())[1]) * 0.5;
+    let draw_list = ui.get_window_draw_list();
+
+    draw_list.add_text(
+        [position[0], text_y],
+        ui.get_color_u32(if is_highlighted {
+            dear_imgui_rs::StyleColor::CheckMark
+        } else {
+            dear_imgui_rs::StyleColor::TextDisabled
+        }),
+        &tree,
+    );
+    draw_list.add_text(
+        [position[0] + text_size(ui, &tree)[0], text_y],
+        ui.get_color_u32(if is_highlighted {
+            dear_imgui_rs::StyleColor::CheckMark
+        } else {
+            dear_imgui_rs::StyleColor::Text
+        }),
+        name.get(),
+    );
+    drop(draw_list);
+    drop(name);
+    ui.same_line_with_spacing(0.0, 0.0);
+    if edit_button(ui, entity) {
+        *edit_clicked = Some(entity);
+    }
+    if let Some(visibility) = visibility {
+        ui.same_line_with_spacing(0.0, 0.0);
+        *visibility_changed |=
+            visibility_button(world, ui, entity, visibility, effective_visibility);
+    }
+
+    if was_clicked {
+        *clicked = Some(entity);
+    }
+}
+
+fn collect_rows(
+    world: &hecs::World,
+    parent: hecs::Entity,
+    branches: &mut Vec<bool>,
+    selected: Option<hecs::Entity>,
+    ancestor_selected: bool,
+    ancestor_visible: bool,
+    rows: &mut Vec<ObjectRow>,
+) {
+    let children = active_children(world, parent);
+
     for (index, entity) in children.iter().copied().enumerate() {
         let is_last = index + 1 == children.len();
-        let is_highlighted = ancestor_selected || selected == Some(entity);
-        let entity_children = active_children(world, entity);
-        let name = world
-            .get::<&Name>(entity)
-            .expect("Scene tree object must contain a Name component.");
-        let tree = hierarchy_prefix(branches, is_last);
-        let position = ui.cursor_screen_pos();
-        let row_width = ui.content_region_avail_width();
-        let visibility = object_visibility(world, entity);
-        let effective_visibility = ancestor_visible && visibility.unwrap_or(true);
-        let row_id = format!("##scene_tree_{}", entity.to_bits());
-        let control_count = 1.0 + f32::from(visibility.is_some());
-        let selectable_width = (row_width - ROW_HEIGHT * control_count).max(1.0);
-        let was_clicked = selectable_row(ui, row_id, [selectable_width, ROW_HEIGHT]);
-        if ui.is_item_hovered() {
-            if let Ok(inspection) = world.get::<&Inspection>(entity) {
-                ui.tooltip_text(format!("Type: {}", inspection.object_name));
-            }
-        }
-
-        let text_y = position[1] + (ROW_HEIGHT - text_size(ui, name.get())[1]) * 0.5;
-        let draw_list = ui.get_window_draw_list();
-
-        draw_list.add_text(
-            [position[0], text_y],
-            ui.get_color_u32(if is_highlighted {
-                dear_imgui_rs::StyleColor::CheckMark
-            } else {
-                dear_imgui_rs::StyleColor::TextDisabled
-            }),
-            &tree,
-        );
-        draw_list.add_text(
-            [position[0] + text_size(ui, &tree)[0], text_y],
-            ui.get_color_u32(if is_highlighted {
-                dear_imgui_rs::StyleColor::CheckMark
-            } else {
-                dear_imgui_rs::StyleColor::Text
-            }),
-            name.get(),
-        );
-        drop(draw_list);
-        drop(name);
-        ui.same_line_with_spacing(0.0, 0.0);
-        if edit_button(ui, entity) {
-            *edit_clicked = Some(entity);
-        }
-        if let Some(visibility) = visibility {
-            ui.same_line_with_spacing(0.0, 0.0);
-            *visibility_changed |=
-                visibility_button(world, ui, entity, visibility, effective_visibility);
-        }
-
-        if was_clicked {
-            *clicked = Some(entity);
-        }
-
-        if entity_children.is_empty() {
-            continue;
-        }
+        let is_selected = ancestor_selected || selected == Some(entity);
+        let visibility = object_visibility(world, entity).unwrap_or(true);
+        rows.push(ObjectRow {
+            entity,
+            branches: branches.clone(),
+            is_last,
+            ancestor_selected,
+            ancestor_visible,
+        });
 
         branches.push(!is_last);
-        draw_children(
+        collect_rows(
             world,
-            ui,
-            &entity_children,
+            entity,
             branches,
             selected,
-            is_highlighted,
-            effective_visibility,
-            clicked,
-            edit_clicked,
-            visibility_changed,
+            is_selected,
+            ancestor_visible && visibility,
+            rows,
         );
         branches.pop();
     }
