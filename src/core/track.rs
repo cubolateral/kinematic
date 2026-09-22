@@ -12,6 +12,88 @@ pub type TrackSetter = fn(&hecs::World, hecs::Entity, TrackValue);
 /// Numeric identifier for a component field track.
 pub type TrackId = u32;
 
+#[derive(Clone, Debug)]
+pub(crate) enum TrackTarget {
+    Property {
+        type_id: std::any::TypeId,
+        info: &'static TrackInfo,
+    },
+    Uniform(String),
+}
+
+impl TrackTarget {
+    pub(crate) fn property(type_id: std::any::TypeId, info: &'static TrackInfo) -> Self {
+        Self::Property { type_id, info }
+    }
+
+    pub(crate) fn uniform(name: impl Into<String>) -> Self {
+        Self::Uniform(name.into())
+    }
+
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Property {
+                    type_id: left_type,
+                    info: left_info,
+                },
+                Self::Property {
+                    type_id: right_type,
+                    info: right_info,
+                },
+            ) => left_type == right_type && left_info.id == right_info.id,
+            (Self::Uniform(left), Self::Uniform(right)) => left == right,
+            _ => false,
+        }
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        match self {
+            Self::Property { info, .. } => info.name,
+            Self::Uniform(name) => name,
+        }
+    }
+
+    pub(crate) fn get(&self, world: &hecs::World, entity: hecs::Entity) -> TrackValue {
+        match self {
+            Self::Property { info, .. } => (info.get)(world, entity),
+            Self::Uniform(name) => crate::core::objects::shader_uniform(world, entity, name)
+                .unwrap_or_else(|error| panic!("{error}")),
+        }
+    }
+
+    pub(crate) fn set(&self, world: &hecs::World, entity: hecs::Entity, value: TrackValue) {
+        match self {
+            Self::Property { info, .. } => (info.set)(world, entity, value),
+            Self::Uniform(name) => {
+                crate::core::objects::set_shader_uniform(world, entity, name, value)
+                    .unwrap_or_else(|error| panic!("{error}"));
+            }
+        }
+    }
+
+    pub(crate) fn clamp(&self, value: TrackValue) -> TrackValue {
+        match self {
+            Self::Property { info, .. } => info.clamp(value),
+            Self::Uniform(_) => value,
+        }
+    }
+
+    pub(crate) fn property_parts(&self) -> Option<(std::any::TypeId, &'static TrackInfo)> {
+        match self {
+            Self::Property { type_id, info } => Some((*type_id, *info)),
+            Self::Uniform(_) => None,
+        }
+    }
+
+    pub(crate) fn uniform_name(&self) -> Option<&str> {
+        match self {
+            Self::Uniform(name) => Some(name),
+            Self::Property { .. } => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Keyframe {
     pub time: f32,
@@ -45,7 +127,7 @@ impl TrackRepeat {
 
 #[derive(Debug)]
 pub(crate) struct Track {
-    pub info: &'static TrackInfo,
+    pub(crate) target: TrackTarget,
     pub keyframes: Vec<Keyframe>,
     pub repeat: Option<TrackRepeat>,
     current_tween_range: (f32, f32),
@@ -54,9 +136,14 @@ pub(crate) struct Track {
 
 impl Track {
     /// Creates an empty track for a single component field.
+    #[cfg(test)]
     pub fn new(info: &'static TrackInfo) -> Self {
+        Self::property(std::any::TypeId::of::<()>(), info)
+    }
+
+    pub(crate) fn property(type_id: std::any::TypeId, info: &'static TrackInfo) -> Self {
         Self {
-            info,
+            target: TrackTarget::property(type_id, info),
             keyframes: vec![],
             repeat: None,
             current_tween_range: (0.0, 0.0),
@@ -64,14 +151,27 @@ impl Track {
         }
     }
 
+    pub(crate) fn uniform(name: impl Into<String>) -> Self {
+        Self {
+            target: TrackTarget::uniform(name),
+            keyframes: vec![],
+            repeat: None,
+            current_tween_range: (0.0, 0.0),
+            current_tween_start: 0,
+        }
+    }
+
+    pub(crate) fn name(&self) -> &str {
+        self.target.name()
+    }
+
     pub fn update(&mut self, world: &hecs::World, entity: hecs::Entity, time: f32) {
-        let set = self.info.set;
         let time = self.repeat.map_or(time, |repeat| repeat.local_time(time));
         let (left, right) = self.find_keyframes(time);
         if let Some(value) =
-            Self::sample_keyframes(left, right, time).map(|value| self.info.clamp(value))
+            Self::sample_keyframes(left, right, time).map(|value| self.target.clamp(value))
         {
-            set(world, entity, value);
+            self.target.set(world, entity, value);
         }
     }
 
@@ -83,7 +183,7 @@ impl Track {
             .partition_point(|keyframe| keyframe.time <= time);
         let left = right.checked_sub(1).map(|index| &self.keyframes[index]);
         let right = self.keyframes.get(right);
-        Self::sample_keyframes(left, right, time).map(|value| self.info.clamp(value))
+        Self::sample_keyframes(left, right, time).map(|value| self.target.clamp(value))
     }
 
     fn sample_keyframes(
@@ -226,7 +326,7 @@ impl Track {
         interpolation: TrackInterpolation,
     ) {
         self.clear_current_tween_range();
-        let value = self.info.clamp(value);
+        let value = self.target.clamp(value);
 
         if let Some(last) = self.keyframes.last_mut() {
             // Keyframes are appended in time order because runtime lookup assumes

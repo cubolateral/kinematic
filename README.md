@@ -19,6 +19,7 @@ Kinematic is in early development, so its API may change.
 - Hierarchical scene trees with reusable 2D and 3D containers and inherited transforms.
 - Animatable orthographic 2D and perspective 3D cameras.
 - Built-in and custom `Draw3D` meshes with reusable geometry caches, materials, and lighting.
+- Builder-configured GLSL image and mesh shaders.
 - Bidirectional projection of 2D and 3D canvases.
 - Sequential and parallel animation tasks.
 - Named, editable event waits persisted per scene.
@@ -459,6 +460,114 @@ fn draw_custom(
 The bounds callback returns the object's local size. A cache key must change
 whenever the generated CPU geometry changes; transforms and material values do
 not belong in the key.
+
+### GLSL shaders
+
+Shader definitions are reusable, while uniforms and texture bindings belong to
+each built object. The shader remains builder-only; handlers can read, set, and
+animate uniforms that were declared by that object's builder. Updating a
+uniform does not recompile the shared GLSL program.
+
+An image shader is a complete GLSL 3.30 fragment shader. It processes a 2D
+object, a composed `group_2d`, or a 2D/3D canvas image:
+
+```rust
+let tint = ImageShader::new(r#"#version 330 core
+in vec2 k_uv;
+out vec4 k_color;
+uniform sampler2D k_image;
+uniform vec4 tint;
+uniform float u_progress;
+
+void main() {
+    k_color = texture(k_image, k_uv) * tint * u_progress;
+}
+"#);
+
+let object = circle()
+    .shader(&tint)
+    .uniform("tint", Color::RED)
+    .uniform("u_progress", 0.0_f32)
+    .shader_padding(8.0)
+    .build(s);
+
+let progress = object.get_uniform::<f32>("u_progress");
+object.set_uniform("u_progress", progress + 0.1);
+object
+    .uniform("u_progress", 1.0_f32)
+    .position_x(200.0)
+    .duration(2.0)
+    .play();
+object
+    .uniform_from("u_progress", 0.0_f32, 1.0_f32)
+    .play();
+```
+
+The engine supplies `k_image`, pixel-sized `k_resolution`, evaluated scene
+seconds in `k_time`, and `k_alpha`. UV `(0, 0)` is the bottom-left pixel. Input
+and output are premultiplied, sRGB-encoded RGBA. Additional canvas samplers use
+`.texture(name, &canvas)`; canvas dependencies are ordered and cycles are
+rejected. Captures are allocated on demand, and `shader_padding` expands them
+for blur or glow. CPU morph capture rejects shader-rendered objects because its
+result depends on the GPU renderer.
+
+Uniform tracks use the normal timeline, easing, repetition, seek, signals,
+snapshots, Timeline, Inspector, and export evaluation. Supported values are
+`bool`, `u32`, `i32`, `f32`, `Quad`, `Vector2`, `Vector3`, `Quaternion`, and
+`Color`; enum and string tracks have no GLSL uniform representation. Canvas
+texture bindings remain fixed builder values and are not interpolated.
+
+A mesh shader either supplies only a fragment stage, paired with the standard
+vertex stage, or supplies both stages:
+
+```rust
+let shader = MeshShader::fragment(r#"
+in vec3 k_world_position;
+in vec3 k_normal;
+in vec2 k_uv;
+out vec4 outColor;
+uniform vec4 materialColor;
+uniform float amount;
+
+void main() {
+    outColor = vec4(materialColor.rgb * amount, materialColor.a);
+}
+"#);
+
+let group = group_3d()
+    .mesh_shader(&shader)
+    .mesh_uniform("amount", 0.8)
+    .build(s);
+let child = sphere()
+    .mesh_uniform("amount", 1.0)
+    .mesh_shader_bounds(0.25)
+    .build(s);
+group.add(&child);
+```
+
+`group_3d` passes its shader and uniform values to descendants. A child's own
+shader wins; compatible local uniforms override inherited values. Mesh sources
+omit `#version`. The standard vertex stage exposes `k_world_position`,
+`k_normal`, and `k_uv`; missing normals or UVs produce zero values. A custom
+vertex stage uses `position` plus available `normal` and `uv_coordinates`
+attributes and must actively use `modelMatrix` and `viewProjection`. Optional
+engine uniforms are `normalMatrix`, `viewMatrix`, `projectionMatrix`,
+`cameraPosition`, `sceneTime`, linear `materialColor`, `hasNormal`, and `hasUv`.
+
+A custom mesh shader replaces the standard material shader, so it receives no
+automatic PBR lighting or material textures. Object transforms, depth state,
+outline, and transparency selected by material opacity are preserved.
+Application-defined `Draw3D` objects must draw through
+`RenderContext3D::render_material` to use mesh shaders. GPU vertex deformation
+does not update CPU geometry: selection and CPU-side culling keep the original
+bounds, expanded conservatively by `.mesh_shader_bounds(...)`. A `group_3d`
+remains a mesh hierarchy; canvas-level image shaders are the post-processing
+path for flattened 3D output.
+
+Animating a group uniform updates every descendant that inherits it. To animate
+one descendant independently, declare a compatible local `.mesh_uniform(...)`
+on that descendant's builder first; handler calls never create bindings or
+change shader definitions.
 
 For picture-in-picture, texture projection, or other off-screen work, build a
 canvas with its own resolution and register it with `Scene::add_canvas_2d` or

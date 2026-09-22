@@ -1,6 +1,6 @@
 use super::render::object_box;
 use crate::core::{
-    AnimatorHandle, SceneWorld, SignalFrame, SignalHandle, TrackInfo, TrackProperty, TrackValue,
+    AnimatorHandle, SceneWorld, SignalFrame, SignalHandle, TrackProperty, TrackTarget, TrackValue,
     TrackValueType, Trackable, Tween,
     components::{
         Animation, Draw2D, Draw3D, Inspection, Morph, Name, ObjectType, Transform2D, TreeNode,
@@ -11,8 +11,7 @@ use crate::core::{
 
 #[derive(Clone)]
 struct SnapshotValue {
-    type_id: std::any::TypeId,
-    track_info: &'static TrackInfo,
+    target: TrackTarget,
     value: TrackValue,
 }
 
@@ -35,7 +34,7 @@ struct Snapshots {
 /// returned by that builder.
 pub trait Object: hecs::DynamicBundle + Sized + 'static {
     /// Handler type returned after spawning the object into the ECS world.
-    type Handler;
+    type Handler: ObjectHandler<Object = Self>;
 
     #[doc(hidden)]
     const SPATIAL_2D: bool = false;
@@ -159,6 +158,74 @@ pub trait ObjectHandler: Clone {
             .animate_from::<Self::Object>(from, to)
     }
 
+    /// Reads a builder-defined shader uniform with its original Rust type.
+    fn get_uniform<T: TrackValueType>(&self, name: &str) -> T {
+        let value = crate::core::objects::shader_uniform(
+            &self.object_world().borrow(),
+            self.entity(),
+            name,
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        T::from_track_value(value)
+            .unwrap_or_else(|| panic!("Shader uniform `{name}` has a different type."))
+    }
+
+    /// Writes a builder-defined shader uniform without creating a timeline task.
+    fn set_uniform<T: TrackValueType>(&self, name: &str, value: T) {
+        let value = value.into_track_value();
+        crate::core::objects::validate_shader_track_value(&value)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let world = self.object_world();
+        let previous = crate::core::objects::shader_uniform(&world.borrow(), self.entity(), name)
+            .unwrap_or_else(|error| panic!("{error}"));
+        crate::core::objects::set_shader_uniform(&world.borrow(), self.entity(), name, value)
+            .unwrap_or_else(|error| panic!("{error}"));
+        self.object_animator()
+            .record_signal_uniform_override(self.entity(), name, previous);
+    }
+
+    /// Creates a tween from the current uniform value to `to`.
+    fn uniform<T: TrackValueType>(&self, name: &str, to: T) -> Tween<Self::Object> {
+        let world = self.object_world();
+        let animator = self.object_animator();
+        animator.assert_timeline_mutation();
+        let from = crate::core::objects::shader_uniform(&world.borrow(), self.entity(), name)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let to = to.into_track_value();
+        crate::core::objects::validate_shader_track_value(&to)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let target = TrackTarget::uniform(name);
+        assert!(
+            std::mem::discriminant(&from) == std::mem::discriminant(&to),
+            "Shader uniform `{name}` must keep its builder-defined type."
+        );
+        target.set(&world.borrow(), self.entity(), to.clone());
+        Tween::from_targets(world, self.entity(), vec![(target, from, to)], animator)
+    }
+
+    /// Creates a tween between explicit values for a builder-defined uniform.
+    fn uniform_from<T: TrackValueType>(&self, name: &str, from: T, to: T) -> Tween<Self::Object> {
+        let world = self.object_world();
+        let animator = self.object_animator();
+        animator.assert_timeline_mutation();
+        let current = crate::core::objects::shader_uniform(&world.borrow(), self.entity(), name)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let from = from.into_track_value();
+        let to = to.into_track_value();
+        crate::core::objects::validate_shader_track_value(&from)
+            .unwrap_or_else(|error| panic!("{error}"));
+        crate::core::objects::validate_shader_track_value(&to)
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(
+            std::mem::discriminant(&current) == std::mem::discriminant(&from)
+                && std::mem::discriminant(&from) == std::mem::discriminant(&to),
+            "Shader uniform `{name}` must keep its builder-defined type."
+        );
+        let target = TrackTarget::uniform(name);
+        target.set(&world.borrow(), self.entity(), to.clone());
+        Tween::from_targets(world, self.entity(), vec![(target, from, to)], animator)
+    }
+
     /// Captures the current values of every tracked property.
     fn snapshot(&self) -> Snapshot<Self>
     where
@@ -256,11 +323,17 @@ fn snapshot_values(world: &SceneWorld, entity: hecs::Entity) -> Vec<SnapshotValu
 
         for track_info in (trackable.get)() {
             values.push(SnapshotValue {
-                type_id,
-                track_info,
+                target: TrackTarget::property(type_id, track_info),
                 value: (track_info.get)(&world, entity),
             });
         }
+    }
+
+    for (name, value) in crate::core::objects::shader_uniforms(&world, entity) {
+        values.push(SnapshotValue {
+            target: TrackTarget::uniform(name),
+            value,
+        });
     }
 
     values
@@ -311,15 +384,26 @@ fn tween_to_values<Object>(
         values
             .into_iter()
             .map(|saved| {
-                let from = (saved.track_info.get)(&world_ref, entity);
-                (saved.track_info.set)(&world_ref, entity, saved.value.clone());
+                let from = saved.target.get(&world_ref, entity);
+                saved.target.set(&world_ref, entity, saved.value.clone());
 
-                (saved.type_id, saved.track_info, from, saved.value)
+                (saved.target, from, saved.value)
             })
             .collect()
     };
 
     Tween::from_targets(std::rc::Rc::clone(world), entity, targets, animator)
+}
+
+/// Refreshes builder-state snapshots after shader components are attached.
+#[doc(hidden)]
+pub fn initialize_object_snapshots(world: &SceneWorld, entity: hecs::Entity) {
+    let initial = snapshot_values(world, entity);
+    world
+        .borrow()
+        .get::<&mut Snapshots>(entity)
+        .expect("Spawned object must contain snapshots.")
+        .initial = initial;
 }
 
 /// Ends an object subtree's lifetime at the supplied scheduling time.
@@ -554,29 +638,55 @@ pub(crate) fn global_rotation3d(world: &hecs::World, entity: hecs::Entity) -> gl
 }
 
 pub(crate) fn object_box3d(world: &hecs::World, entity: hecs::Entity) -> glam::Vec3 {
-    bounds3d(world, entity).map_or(glam::Vec3::ZERO, |(min, max)| max - min)
+    bounds3d_inner(world, entity, false).map_or(glam::Vec3::ZERO, |(min, max)| max - min)
 }
 
 pub(crate) fn bounds3d(
     world: &hecs::World,
     entity: hecs::Entity,
 ) -> Option<(glam::Vec3, glam::Vec3)> {
+    bounds3d_inner(world, entity, true)
+}
+
+fn bounds3d_inner(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    shader_padding: bool,
+) -> Option<(glam::Vec3, glam::Vec3)> {
     let size = world
         .get::<&Draw3D>(entity)
         .ok()
         .map(|draw| (draw.box_size)(world, entity));
+    let padding = if shader_padding {
+        crate::core::objects::effective_mesh_shader(world, entity)
+            .ok()
+            .flatten()
+            .map_or(0.0, |shader| shader.bounds_padding)
+    } else {
+        0.0
+    };
     let (mut min, mut max) = size.map_or(
         (
             glam::Vec3::splat(f32::INFINITY),
             glam::Vec3::splat(f32::NEG_INFINITY),
         ),
-        |size| (-size * 0.5, size * 0.5),
+        |size| {
+            let padding = if size == glam::Vec3::ZERO {
+                0.0
+            } else {
+                padding
+            };
+            (
+                -size * 0.5 - glam::Vec3::splat(padding),
+                size * 0.5 + glam::Vec3::splat(padding),
+            )
+        },
     );
     for child in crate::core::objects::child_iter(world, entity) {
         if !world.get::<&TreeNode>(child).is_ok_and(|n| n.is_activated) {
             continue;
         }
-        let Some((child_min, child_max)) = bounds3d(world, child) else {
+        let Some((child_min, child_max)) = bounds3d_inner(world, child, shader_padding) else {
             continue;
         };
         let matrix = local_matrix3d(world, child);

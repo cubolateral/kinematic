@@ -1,11 +1,19 @@
 use super::{
-    plan::{PlanCache, canvas_plan_for, visible_subtree_3d},
+    image_shaders::ImageShaders,
+    plan::{PlanCache, active_subtree, canvas_plan_for, visible_subtree_3d},
     target::{Target, reset_gl},
 };
 use crate::core::{
     Scene, SceneIdentity,
-    components::{CachedGeometry, Camera3D, Draw3D, GeometryKey, RenderContext3D},
-    objects::{CanvasDimension, CanvasSettings, CanvasTexture, draw_canvas2d_with_images},
+    components::{
+        CachedGeometry, Camera2D, Camera3D, Draw2D, Draw3D, GeometryKey, MeshProgramCache,
+        RenderContext3D,
+    },
+    objects::{
+        CanvasDimension, CanvasSettings, CanvasTexture, ImageShaderData, ImageShaderImage,
+        draw_canvas2d_with_shader_images, draw_image_shader_source, effective_mesh_shader,
+        global_transform, image_shader_bounds, object_follows_camera,
+    },
 };
 use crate::renderer::editor_guides::{EditorGuideRenderer, EditorGuides3D};
 use glow::HasContext;
@@ -17,9 +25,15 @@ use std::{
 pub(crate) struct Canvases {
     targets: HashMap<CanvasTexture, Target>,
     geometries: HashMap<GeometryKey, CachedGeometry>,
+    mesh_programs: MeshProgramCache,
     plans: PlanCache,
     visible: Vec<hecs::Entity>,
     images: HashMap<CanvasTexture, skia_safe::Image>,
+    shader_images: HashMap<hecs::Entity, ImageShaderImage>,
+    shader_targets: HashMap<CanvasTexture, Target>,
+    shader_outputs: HashSet<CanvasTexture>,
+    object_targets: HashMap<(u64, hecs::Entity), (Target, Target)>,
+    image_shaders: ImageShaders,
     used_geometries: HashSet<GeometryKey>,
     frame: u64,
     target_usage: HashMap<CanvasTexture, u64>,
@@ -37,9 +51,15 @@ impl Canvases {
         Self {
             targets: HashMap::new(),
             geometries: HashMap::new(),
+            mesh_programs: HashMap::new(),
             plans: PlanCache::default(),
             visible: Vec::new(),
             images: HashMap::new(),
+            shader_images: HashMap::new(),
+            shader_targets: HashMap::new(),
+            shader_outputs: HashSet::new(),
+            object_targets: HashMap::new(),
+            image_shaders: ImageShaders::new(gl),
             used_geometries: HashSet::new(),
             frame: 0,
             target_usage: HashMap::new(),
@@ -96,8 +116,7 @@ impl Canvases {
         );
         let output = scene.view_texture();
         if order.contains(&output.entity) {
-            self.targets
-                .get(&output)
+            self.rendered_target(output)
                 .ok_or("Output canvas is unavailable.")?
                 .present_to(final_target);
         } else {
@@ -142,12 +161,16 @@ impl Canvases {
         self.images.clear();
         for source in &plan.sources[&entity] {
             let image = self
-                .targets
-                .get(source)
+                .rendered_target(*source)
                 .ok_or("Projection source texture is unavailable.")?
                 .image(skia)?;
             self.images.insert(*source, image);
         }
+        let scene_id = world
+            .get::<&SceneIdentity>(scene.root().entity())
+            .unwrap()
+            .0;
+        self.prepare_object_shaders(scene_id, scene.time(), &world, entity, skia)?;
         let target_size = target.size;
         target.draw_skia(skia, |canvas| {
             crate::core::objects::draw_canvas2d_editor_with_images(
@@ -155,6 +178,7 @@ impl Canvases {
                 entity,
                 canvas,
                 &self.images,
+                &self.shader_images,
                 target_size,
                 pan,
                 zoom,
@@ -220,10 +244,18 @@ impl Canvases {
                     &self.ambient,
                     &self.sun,
                     &resolve_texture,
+                    &mut self.mesh_programs,
+                    scene.time(),
                 );
                 for child in &self.visible {
                     if let Ok(draw) = world.get::<&Draw3D>(*child) {
+                        render.set_mesh_shader(
+                            effective_mesh_shader(&world, *child).map_err(std::io::Error::other)?,
+                        );
                         (draw.on_draw)(&world, *child, &mut render)
+                            .map_err(std::io::Error::other)?;
+                        render
+                            .finish_mesh_shader((draw.box_size)(&world, *child) != glam::Vec3::ZERO)
                             .map_err(std::io::Error::other)?;
                     }
                 }
@@ -252,10 +284,13 @@ impl Canvases {
             .get::<&SceneIdentity>(scene.root().entity())
             .unwrap()
             .0;
+        self.images.clear();
+        self.shader_images.clear();
         self.used_geometries.clear();
+        self.shader_outputs.clear();
 
         for entity in order {
-            let settings = world.get::<&CanvasSettings>(*entity).unwrap();
+            let settings = world.get::<&CanvasSettings>(*entity).unwrap().clone();
             let key = CanvasTexture {
                 scene: scene_id,
                 entity: *entity,
@@ -277,21 +312,26 @@ impl Canvases {
             self.target_usage.insert(key, self.frame);
             match settings.dimension {
                 CanvasDimension::Two => {
-                    skia.reset(None);
                     self.images.clear();
                     for source in &sources[entity] {
                         let image = self
-                            .targets
-                            .get(source)
+                            .rendered_target(*source)
                             .ok_or("Projection source texture is unavailable.")?
                             .image(skia)?;
                         self.images.insert(*source, image);
                     }
+                    self.prepare_object_shaders(scene_id, scene.time(), &world, *entity, skia)?;
                     self.targets
                         .get_mut(&key)
                         .unwrap()
                         .draw_skia(skia, |canvas| {
-                            draw_canvas2d_with_images(&world, *entity, canvas, &self.images)
+                            draw_canvas2d_with_shader_images(
+                                &world,
+                                *entity,
+                                canvas,
+                                &self.images,
+                                &self.shader_images,
+                            )
                         });
                 }
                 CanvasDimension::Three => {
@@ -312,8 +352,15 @@ impl Canvases {
                         1.0,
                     ));
                     let textures = &self.targets;
-                    let resolve_texture =
-                        |texture: CanvasTexture| textures.get(&texture).map(Target::texture);
+                    let shader_targets = &self.shader_targets;
+                    let shader_outputs = &self.shader_outputs;
+                    let resolve_texture = |texture: CanvasTexture| {
+                        if shader_outputs.contains(&texture) {
+                            shader_targets.get(&texture).map(Target::texture)
+                        } else {
+                            textures.get(&texture).map(Target::texture)
+                        }
+                    };
                     let context = &self.context;
                     let geometries = &mut self.geometries;
                     let physical = &mut self.physical;
@@ -332,10 +379,21 @@ impl Canvases {
                                 ambient,
                                 sun,
                                 &resolve_texture,
+                                &mut self.mesh_programs,
+                                scene.time(),
                             );
                             for child in &self.visible {
                                 if let Ok(draw) = world.get::<&Draw3D>(*child) {
+                                    render.set_mesh_shader(
+                                        effective_mesh_shader(&world, *child)
+                                            .map_err(std::io::Error::other)?,
+                                    );
                                     (draw.on_draw)(&world, *child, &mut render)
+                                        .map_err(std::io::Error::other)?;
+                                    render
+                                        .finish_mesh_shader(
+                                            (draw.box_size)(&world, *child) != glam::Vec3::ZERO,
+                                        )
                                         .map_err(std::io::Error::other)?;
                                 }
                             }
@@ -344,16 +402,161 @@ impl Canvases {
                         .map_err(|error| error.to_string())?;
                 }
             }
+            self.apply_canvas_shader(scene.time(), &world, key, skia)?;
         }
         Ok(())
     }
+
+    fn rendered_target(&self, texture: CanvasTexture) -> Option<&Target> {
+        if self.shader_outputs.contains(&texture) {
+            self.shader_targets.get(&texture)
+        } else {
+            self.targets.get(&texture)
+        }
+    }
+
+    fn prepare_object_shaders(
+        &mut self,
+        scene_id: u64,
+        time: f32,
+        world: &hecs::World,
+        canvas: hecs::Entity,
+        skia: &mut skia_safe::gpu::DirectContext,
+    ) -> Result<(), String> {
+        self.shader_images.clear();
+        let camera_zoom = world
+            .get::<&Camera2D>(canvas)
+            .map_or(1.0, |camera| camera.camera_zoom);
+        let entities = active_subtree(world, canvas);
+        for entity in entities.into_iter().rev() {
+            let Ok(data) = world.get::<&ImageShaderData>(entity) else {
+                continue;
+            };
+            let Ok(draw) = world.get::<&Draw2D>(entity) else {
+                continue;
+            };
+            let Some(bounds) = image_shader_bounds(world, entity, data.padding) else {
+                continue;
+            };
+            let scale = global_transform(world, entity).scale.abs();
+            let camera = if object_follows_camera(world, canvas, entity) {
+                camera_zoom
+            } else {
+                1.0
+            };
+            let requested = (
+                (bounds.width() * scale.x * camera).ceil().max(1.0) as u32,
+                (bounds.height() * scale.y * camera).ceil().max(1.0) as u32,
+            );
+            let size = (bucket(requested.0), bucket(requested.1));
+            let key = (scene_id, entity);
+            if self
+                .object_targets
+                .get(&key)
+                .is_none_or(|targets| targets.0.size != size)
+            {
+                self.object_targets.insert(
+                    key,
+                    (
+                        Target::new(size, false, skia, &self.gl)?,
+                        Target::new(size, false, skia, &self.gl)?,
+                    ),
+                );
+            }
+            let textures = data
+                .textures
+                .values()
+                .map(|texture| {
+                    self.rendered_target(*texture)
+                        .map(|target| (*texture, target.texture()))
+                        .ok_or("Image shader texture is unavailable.")
+                })
+                .collect::<Result<HashMap<_, _>, _>>()?;
+            let data = (*data).clone();
+            let alpha = draw.opacity.clamp(0.0, 1.0);
+            let targets = self.object_targets.get_mut(&key).unwrap();
+            targets.0.draw_skia(skia, |surface| {
+                let saved = surface.save();
+                surface.clear(skia_safe::colors::TRANSPARENT);
+                surface.scale((
+                    size.0 as f32 / bounds.width(),
+                    size.1 as f32 / bounds.height(),
+                ));
+                surface.translate((-bounds.left, -bounds.top));
+                draw_image_shader_source(world, entity, surface, &self.images, &self.shader_images);
+                surface.restore_to_count(saved);
+            });
+            self.image_shaders
+                .apply(&targets.0, &targets.1, &data, time, alpha, |texture| {
+                    textures.get(&texture).copied()
+                })?;
+            let image = targets.1.image(skia)?;
+            self.shader_images
+                .insert(entity, ImageShaderImage { image, bounds });
+        }
+        Ok(())
+    }
+
+    fn apply_canvas_shader(
+        &mut self,
+        time: f32,
+        world: &hecs::World,
+        key: CanvasTexture,
+        skia: &mut skia_safe::gpu::DirectContext,
+    ) -> Result<(), String> {
+        let Ok(data) = world.get::<&ImageShaderData>(key.entity) else {
+            return Ok(());
+        };
+        if data.padding != 0.0 {
+            return Err(
+                "Canvas image shaders have fixed output bounds and cannot use padding.".into(),
+            );
+        }
+        let data = (*data).clone();
+        let size = self.targets[&key].size;
+        if self
+            .shader_targets
+            .get(&key)
+            .is_none_or(|target| target.size != size)
+        {
+            self.shader_targets
+                .insert(key, Target::new(size, false, skia, &self.gl)?);
+        }
+        let textures = data
+            .textures
+            .values()
+            .map(|texture| {
+                self.rendered_target(*texture)
+                    .map(|target| (*texture, target.texture()))
+                    .ok_or("Image shader texture is unavailable.")
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
+        self.image_shaders.apply(
+            &self.targets[&key],
+            &self.shader_targets[&key],
+            &data,
+            time,
+            1.0,
+            |texture| textures.get(&texture).copied(),
+        )?;
+        self.shader_outputs.insert(key);
+        Ok(())
+    }
+}
+
+fn bucket(size: u32) -> u32 {
+    size.saturating_add(63) / 64 * 64
 }
 
 impl Drop for Canvases {
     fn drop(&mut self) {
         self.images.clear();
+        self.shader_images.clear();
         self.targets.clear();
+        self.shader_targets.clear();
+        self.object_targets.clear();
         self.geometries.clear();
+        self.mesh_programs.clear();
         // Program objects retain Context clones; clear this cache to break that cycle.
         if let Ok(mut programs) = self.context.programs.write() {
             programs.clear();

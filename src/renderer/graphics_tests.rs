@@ -149,6 +149,127 @@ fn graphics_canvas_projection_alpha_orientation() {
     );
     assert_eq!(read(&gl, &output), pixels);
 
+    let group_shader = ImageShader::new(
+        "#version 330 core\n\
+         in vec2 k_uv;\n\
+         out vec4 k_color;\n\
+         uniform sampler2D k_image;\n\
+         uniform float gain;\n\
+         void main() {\n\
+             vec4 color = texture(k_image, k_uv);\n\
+             k_color = vec4(color.b * gain, 0.0, 0.0, color.a);\n\
+         }",
+    );
+    let canvas_shader = ImageShader::new(
+        "#version 330 core\n\
+         in vec2 k_uv;\n\
+         out vec4 k_color;\n\
+         uniform sampler2D k_image;\n\
+         uniform vec2 k_resolution;\n\
+         uniform float k_time;\n\
+         void main() {\n\
+             vec4 color = texture(k_image, k_uv);\n\
+             k_color = vec4(0.0, color.r * step(63.5, k_resolution.x), k_time * color.a, color.a);\n\
+         }",
+    );
+    let mut shader_scene = Scene::new_with_canvases(
+        canvas_2d().resolution((64, 64)).shader(&canvas_shader),
+        canvas_3d().resolution((64, 64)),
+    );
+    let group = group_2d()
+        .shader(&group_shader)
+        .uniform("gain", 1.0)
+        .shader_padding(4.0)
+        .build(&mut shader_scene);
+    let child = rect()
+        .size(vec2(24.0, 24.0))
+        .fill(Color::BLUE)
+        .build(&mut shader_scene);
+    group.add(&child);
+    shader_scene.world_2d().add(&group);
+    shader_scene.update(0.25);
+    renderer
+        .render(&shader_scene, &mut output, &mut skia)
+        .unwrap();
+    assert_pixel(&read(&gl, &output), 32, 32, [0, 255, 64, 255]);
+    group.set_uniform("gain", 0.5_f32);
+    assert_eq!(group.get_uniform::<f32>("gain"), 0.5);
+    shader_scene.update(0.25);
+    renderer
+        .render(&shader_scene, &mut output, &mut skia)
+        .unwrap();
+    assert_pixel(&read(&gl, &output), 32, 32, [0, 128, 64, 255]);
+
+    let inherited_mesh_shader = MeshShader::fragment(
+        "in vec3 k_world_position;\n\
+         in vec3 k_normal;\n\
+         in vec2 k_uv;\n\
+         uniform vec4 materialColor;\n\
+         uniform float sceneTime;\n\
+         uniform float gain;\n\
+         out vec4 outColor;\n\
+         void main() {\n\
+             outColor = vec4(materialColor.r * gain, sceneTime, k_uv.x, materialColor.a);\n\
+         }",
+    );
+    let mut mesh_scene = Scene::new_with_resolution((64, 64));
+    mesh_scene
+        .world_3d()
+        .camera_position(vec3(0.0, 0.0, 2.0))
+        .camera_fov(std::f32::consts::FRAC_PI_2)
+        .immediate();
+    let group = group_3d()
+        .mesh_shader(&inherited_mesh_shader)
+        .mesh_uniform("gain", 1.0)
+        .build(&mut mesh_scene);
+    let child = crate::core::objects::cube()
+        .size(vec3(1.0, 1.0, 1.0))
+        .albedo(Color::RED)
+        .mesh_uniform("gain", 0.5)
+        .build(&mut mesh_scene);
+    group.add(&child);
+    mesh_scene.world_3d().add(&group);
+    mesh_scene.root().view_2d(false).immediate();
+    mesh_scene.update(0.25);
+    renderer
+        .render(&mesh_scene, &mut output, &mut skia)
+        .unwrap();
+    assert_pixel(&read(&gl, &output), 32, 32, [128, 64, 0, 255]);
+    child.set_uniform("gain", 0.25_f32);
+    mesh_scene.update(0.25);
+    renderer
+        .render(&mesh_scene, &mut output, &mut skia)
+        .unwrap();
+    assert_pixel(&read(&gl, &output), 32, 32, [64, 64, 0, 255]);
+
+    let custom_mesh_shader = MeshShader::program(
+        "in vec3 position;\n\
+         uniform mat4 modelMatrix;\n\
+         uniform mat4 viewProjection;\n\
+         void main() {\n\
+             gl_Position = viewProjection * modelMatrix * vec4(position, 1.0);\n\
+         }",
+        "out vec4 outColor;\n\
+         void main() { outColor = vec4(0.0, 0.0, 1.0, 1.0); }",
+    );
+    let mut program_scene = Scene::new_with_resolution((64, 64));
+    program_scene
+        .world_3d()
+        .camera_position(vec3(0.0, 0.0, 2.0))
+        .camera_fov(std::f32::consts::FRAC_PI_2)
+        .immediate();
+    let object = crate::core::objects::cube()
+        .size(vec3(1.0, 1.0, 1.0))
+        .mesh_shader(&custom_mesh_shader)
+        .build(&mut program_scene);
+    program_scene.world_3d().add(&object);
+    program_scene.root().view_2d(false).immediate();
+    program_scene.update(0.0);
+    renderer
+        .render(&program_scene, &mut output, &mut skia)
+        .unwrap();
+    assert_pixel(&read(&gl, &output), 32, 32, [0, 0, 255, 255]);
+
     reset_gl(&gl, (64, 64));
     assert_eq!(unsafe { gl.get_error() }, glow::NO_ERROR);
     let allocations: Vec<_> = renderer

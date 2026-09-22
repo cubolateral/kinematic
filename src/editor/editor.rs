@@ -1,5 +1,12 @@
 use crate::{
-    core::{Project, ProjectSettings, Scene, objects::ObjectHandler, types::Vector2},
+    core::{
+        Project, ProjectSettings, Scene, TrackInfo, TrackValue,
+        objects::{
+            ObjectHandler,
+            appearance::{AppearanceEdit, refresh_appearance},
+        },
+        types::Vector2,
+    },
     editor::{
         Canvas, Selection, Timeline,
         cache::{Camera2DCache, Camera3DCache, EditorCache, EditorMode},
@@ -20,6 +27,161 @@ struct EditorScene {
     scene: Scene,
     start: f32,
     end: f32,
+    inspector_edits: InspectorEdits,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) struct InspectorTrack {
+    entity: hecs::Entity,
+    target: InspectorTarget,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum InspectorTarget {
+    Property {
+        component: std::any::TypeId,
+        track_id: crate::core::TrackId,
+    },
+    Uniform(String),
+}
+
+impl InspectorTrack {
+    pub(crate) fn new(
+        entity: hecs::Entity,
+        component: std::any::TypeId,
+        track: &'static TrackInfo,
+    ) -> Self {
+        Self {
+            entity,
+            target: InspectorTarget::Property {
+                component,
+                track_id: track.id,
+            },
+        }
+    }
+
+    pub(crate) fn uniform(entity: hecs::Entity, name: impl Into<String>) -> Self {
+        Self {
+            entity,
+            target: InspectorTarget::Uniform(name.into()),
+        }
+    }
+}
+
+struct InspectorEdit {
+    key: InspectorTrack,
+    track: Option<&'static TrackInfo>,
+    original: TrackValue,
+    current: TrackValue,
+    animated: bool,
+}
+
+#[derive(Default)]
+pub(crate) struct InspectorEdits(Vec<InspectorEdit>);
+
+impl InspectorEdits {
+    pub(crate) fn contains(&self, key: &InspectorTrack) -> bool {
+        self.0.iter().any(|edit| edit.key == *key)
+    }
+
+    pub(crate) fn record(
+        &mut self,
+        key: InspectorTrack,
+        track: &'static TrackInfo,
+        before: TrackValue,
+        value: TrackValue,
+        animated: bool,
+    ) {
+        if let Some(edit) = self.0.iter_mut().find(|edit| edit.key == key) {
+            edit.current = value;
+            if edit.current == edit.original {
+                self.0.retain(|edit| edit.key != key);
+            }
+        } else if before != value {
+            self.0.push(InspectorEdit {
+                key,
+                track: Some(track),
+                original: before,
+                current: value,
+                animated,
+            });
+        }
+    }
+
+    pub(crate) fn record_uniform(
+        &mut self,
+        key: InspectorTrack,
+        before: TrackValue,
+        value: TrackValue,
+        animated: bool,
+    ) {
+        if let Some(edit) = self.0.iter_mut().find(|edit| edit.key == key) {
+            edit.current = value;
+            if edit.current == edit.original {
+                self.0.retain(|edit| edit.key != key);
+            }
+        } else if before != value {
+            self.0.push(InspectorEdit {
+                key,
+                track: None,
+                original: before,
+                current: value,
+                animated,
+            });
+        }
+    }
+
+    pub(crate) fn reset(&mut self, scene: &Scene, key: InspectorTrack) -> bool {
+        let Some(index) = self.0.iter().position(|edit| edit.key == key) else {
+            return false;
+        };
+        let edit = self.0.remove(index);
+        Self::restore(scene, std::slice::from_ref(&edit));
+        true
+    }
+
+    fn reset_animated(&mut self, scene: &Scene) {
+        let (animated, remaining) = std::mem::take(&mut self.0)
+            .into_iter()
+            .partition(|edit| edit.animated);
+        self.0 = remaining;
+        Self::restore(scene, &animated);
+    }
+
+    fn restore(scene: &Scene, saved: &[InspectorEdit]) {
+        if saved.is_empty() {
+            return;
+        }
+        let world = scene.world();
+        let edits = saved
+            .iter()
+            .filter_map(|saved| match (&saved.key.target, saved.track) {
+                (InspectorTarget::Property { component, .. }, Some(track)) => {
+                    (track.set)(&world, saved.key.entity, saved.original.clone());
+                    Some(AppearanceEdit {
+                        entity: saved.key.entity,
+                        component: *component,
+                        track,
+                        before: saved.current.clone(),
+                        value: saved.original.clone(),
+                    })
+                }
+                (InspectorTarget::Uniform(name), None) => {
+                    crate::core::objects::set_shader_uniform(
+                        &world,
+                        saved.key.entity,
+                        name,
+                        saved.original.clone(),
+                    )
+                    .unwrap_or_else(|error| panic!("{error}"));
+                    None
+                }
+                _ => unreachable!(),
+            })
+            .collect::<Vec<_>>();
+        refresh_appearance(&world, &edits);
+        scene.invalidate();
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -217,6 +379,7 @@ impl Editor {
 
         while self.accumulator >= delta {
             if let Some(time) = self.timeline.update(delta) {
+                self.reset_animated_inspector_edits();
                 self.update_active_scene(time);
             }
 
@@ -313,6 +476,7 @@ impl Editor {
 
         self.timeline.pause();
         self.timeline.go_to_start();
+        self.reset_animated_inspector_edits();
         self.evaluated = None;
         self.update_active_scene(0.0);
         self.pending_export_time = None;
@@ -499,8 +663,12 @@ impl Editor {
         self.selection.get()
     }
 
-    pub(crate) fn scene_at_mut(&mut self, index: usize) -> &mut Scene {
-        &mut self.scenes[index].scene
+    pub(crate) fn inspector_scene_mut(
+        &mut self,
+        index: usize,
+    ) -> (&mut Scene, &mut InspectorEdits) {
+        let scene = &mut self.scenes[index];
+        (&mut scene.scene, &mut scene.inspector_edits)
     }
 
     pub fn select_entity(&mut self, entity: hecs::Entity) {
@@ -1011,6 +1179,12 @@ impl Editor {
             self.evaluated = Some((identity, local_time));
         }
     }
+
+    fn reset_animated_inspector_edits(&mut self) {
+        for scene in &mut self.scenes {
+            scene.inspector_edits.reset_animated(&scene.scene);
+        }
+    }
 }
 
 fn active_scene_at(scenes: &[EditorScene], time: f32) -> usize {
@@ -1033,7 +1207,12 @@ fn create_scenes(
             let mut scene = create_scene(resolution);
             scene.set_fps(fps);
             let end = start + scene.duration();
-            let editor_scene = EditorScene { scene, start, end };
+            let editor_scene = EditorScene {
+                scene,
+                start,
+                end,
+                inspector_edits: InspectorEdits::default(),
+            };
             start = end;
             editor_scene
         })
@@ -1054,6 +1233,7 @@ fn recalculate_scene_ranges(scenes: &mut [EditorScene]) -> f32 {
 mod tests {
     use super::*;
     use crate::core::objects::ObjectHandler;
+    use crate::prelude::{ImageShader, rect};
 
     #[crate::scene]
     fn opening(scene: &mut Scene) {
@@ -1092,11 +1272,13 @@ mod tests {
                 scene: Scene::new(),
                 start: 0.0,
                 end: 2.0,
+                inspector_edits: InspectorEdits::default(),
             },
             EditorScene {
                 scene: Scene::new(),
                 start: 2.0,
                 end: 5.0,
+                inspector_edits: InspectorEdits::default(),
             },
         ];
 
@@ -1113,11 +1295,13 @@ mod tests {
                 scene: Scene::new(),
                 start: 10.0,
                 end: 12.0,
+                inspector_edits: InspectorEdits::default(),
             },
             EditorScene {
                 scene: Scene::new(),
                 start: 12.0,
                 end: 15.0,
+                inspector_edits: InspectorEdits::default(),
             },
         ];
         scenes[0].scene.wait(4.0);
@@ -1128,5 +1312,100 @@ mod tests {
         assert_eq!([scenes[0].start, scenes[0].end], [0.0, 4.0]);
         assert_eq!([scenes[1].start, scenes[1].end], [4.0, 6.0]);
         assert_eq!(duration, 6.0);
+    }
+
+    #[test]
+    fn timeline_updates_reset_only_animated_inspector_edits() {
+        use crate::core::{TrackChoices, TrackLimits};
+
+        struct Values([f32; 2]);
+
+        fn get<const INDEX: usize>(world: &hecs::World, entity: hecs::Entity) -> TrackValue {
+            TrackValue::F32(world.get::<&Values>(entity).unwrap().0[INDEX])
+        }
+
+        fn set<const INDEX: usize>(world: &hecs::World, entity: hecs::Entity, value: TrackValue) {
+            let TrackValue::F32(value) = value else {
+                panic!("Test track requires an f32 value.");
+            };
+            world.get::<&mut Values>(entity).unwrap().0[INDEX] = value;
+        }
+
+        static TRACKS: [TrackInfo; 2] = [
+            TrackInfo {
+                id: 0,
+                name: "animated",
+                limits: TrackLimits::None,
+                choices: TrackChoices::None,
+                get: get::<0>,
+                set: set::<0>,
+            },
+            TrackInfo {
+                id: 1,
+                name: "static",
+                limits: TrackLimits::None,
+                choices: TrackChoices::None,
+                get: get::<1>,
+                set: set::<1>,
+            },
+        ];
+
+        let scene = Scene::new();
+        let entity = scene.world_mut().spawn((Values([10.0, 20.0]),));
+        let component = std::any::TypeId::of::<Values>();
+        let animated = InspectorTrack::new(entity, component, &TRACKS[0]);
+        let static_track = InspectorTrack::new(entity, component, &TRACKS[1]);
+        let mut edits = InspectorEdits::default();
+        edits.record(
+            animated.clone(),
+            &TRACKS[0],
+            TrackValue::F32(1.0),
+            TrackValue::F32(10.0),
+            true,
+        );
+        edits.record(
+            static_track.clone(),
+            &TRACKS[1],
+            TrackValue::F32(2.0),
+            TrackValue::F32(20.0),
+            false,
+        );
+
+        edits.reset_animated(&scene);
+
+        assert_eq!(
+            (TRACKS[0].get)(&scene.world(), entity),
+            TrackValue::F32(1.0)
+        );
+        assert_eq!(
+            (TRACKS[1].get)(&scene.world(), entity),
+            TrackValue::F32(20.0)
+        );
+        assert!(!edits.contains(&animated));
+        assert!(edits.contains(&static_track));
+    }
+
+    #[test]
+    fn timeline_updates_restore_animated_uniform_inspector_edits() {
+        let shader = ImageShader::new("#version 330 core\nvoid main() {}");
+        let mut scene = Scene::new();
+        let object = rect()
+            .shader(&shader)
+            .uniform("amount", 0.25_f32)
+            .build(&mut scene);
+        object.set_uniform("amount", 0.75_f32);
+        let key = InspectorTrack::uniform(object.entity(), "amount");
+        let mut edits = InspectorEdits::default();
+        edits.record_uniform(
+            key.clone(),
+            TrackValue::F32(0.25),
+            TrackValue::F32(0.75),
+            true,
+        );
+
+        edits.reset_animated(&scene);
+
+        assert_eq!(object.get_uniform::<f32>("amount"), 0.25);
+        assert!(!edits.contains(&key));
     }
 }

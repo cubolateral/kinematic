@@ -6,7 +6,7 @@ use super::super::canvas::{
 };
 /// Independent 2D Skia viewport with its own camera.
 #[derive(Object, Node)]
-#[object(spatial = "none", builder = "canvas_2d")]
+#[object(spatial = "none", builder = "canvas_2d", image_shader)]
 pub struct Canvas2D {
     #[trackable]
     pub settings: CanvasSettings,

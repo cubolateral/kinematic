@@ -1,7 +1,7 @@
 use crate::core::{
     Scene, SceneIdentity,
     components::{Draw3D, TreeNode},
-    objects::{CanvasSettings, ProjectionSource, validate_canvas},
+    objects::{CanvasSettings, ImageShaderData, ProjectionSource, validate_canvas},
 };
 use std::collections::HashMap;
 
@@ -109,6 +109,19 @@ pub(crate) fn canvas_plan_for(scene: &Scene, output: hecs::Entity) -> Result<Ren
                     dependencies.push(source.entity);
                 }
             }
+            if let Ok(shader) = world.get::<&ImageShaderData>(child) {
+                for source in shader.textures.values() {
+                    if source.scene != scene_id {
+                        return Err("Image shader texture belongs to another scene.".into());
+                    }
+                    if world.get::<&CanvasSettings>(source.entity).is_err() {
+                        return Err("Image shader texture requires a canvas source.".into());
+                    }
+                    if !dependencies.contains(&source.entity) {
+                        dependencies.push(source.entity);
+                    }
+                }
+            }
         }
         graph.insert(entity, dependencies);
     }
@@ -148,6 +161,13 @@ pub(crate) fn canvas_plan_for(scene: &Scene, output: hecs::Entity) -> Result<Ren
                 && !textures.contains(&source)
             {
                 textures.push(source);
+            }
+            if let Ok(shader) = world.get::<&ImageShaderData>(child) {
+                for source in shader.textures.values() {
+                    if !textures.contains(source) {
+                        textures.push(*source);
+                    }
+                }
             }
         }
         sources.insert(*entity, textures);
@@ -247,6 +267,28 @@ mod tests {
         assert_eq!(
             cache.entries[&first.render_key().0].revision,
             first.plan_revision()
+        );
+    }
+
+    #[test]
+    fn shader_canvas_bindings_join_the_dependency_graph_and_reject_cycles() {
+        let shader = ImageShader::new("#version 330 core\nvoid main() {}");
+        let mut scene = Scene::new_with_resolution((64, 64));
+        let extra = canvas_2d().resolution((64, 64)).build(&mut scene);
+        scene.add_canvas_2d(&extra);
+        let first = rect()
+            .shader(&shader)
+            .texture("source", &extra)
+            .build(&mut scene);
+        scene.world_2d().add(&first);
+        let second = projection_2d().source(&scene.world_2d()).build(&mut scene);
+        extra.add(&second);
+        scene.update(0.0);
+        assert_eq!(
+            canvas_plan_for(&scene, scene.world_2d().entity())
+                .err()
+                .unwrap(),
+            "Canvas dependency cycle detected."
         );
     }
 }

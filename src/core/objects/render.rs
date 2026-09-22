@@ -8,6 +8,11 @@ use crate::core::{
 };
 use std::collections::HashMap;
 
+pub(crate) struct ImageShaderImage {
+    pub(crate) image: skia_safe::Image,
+    pub(crate) bounds: skia_safe::Rect,
+}
+
 #[derive(Clone, Copy)]
 enum AppearanceActivity {
     Evaluated,
@@ -32,6 +37,8 @@ pub(crate) fn draw_entity(
         GlobalTransform::default(),
         canvas,
         None,
+        None,
+        None,
         camera_base,
         camera_base.is_some(),
     );
@@ -43,6 +50,8 @@ fn draw_entity_with_parent(
     parent: GlobalTransform,
     canvas: &skia_safe::Canvas,
     images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
+    shader_images: Option<&HashMap<hecs::Entity, ImageShaderImage>>,
+    skip_shader: Option<hecs::Entity>,
     camera_base: Option<&skia_safe::M44>,
     follows_camera: bool,
 ) {
@@ -52,6 +61,8 @@ fn draw_entity_with_parent(
         parent,
         canvas,
         images,
+        shader_images,
+        skip_shader,
         None,
         camera_base,
         follows_camera,
@@ -64,6 +75,8 @@ fn draw_entity_with_mode(
     parent: GlobalTransform,
     canvas: &skia_safe::Canvas,
     images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
+    shader_images: Option<&HashMap<hecs::Entity, ImageShaderImage>>,
+    skip_shader: Option<hecs::Entity>,
     appearance: Option<AppearanceMode>,
     camera_base: Option<&skia_safe::M44>,
     follows_camera: bool,
@@ -109,6 +122,20 @@ fn draw_entity_with_mode(
         apply_global_transform(parent, global, canvas);
     }
 
+    if appearance.is_none()
+        && skip_shader != Some(entity)
+        && let Some(shader_image) = shader_images.and_then(|images| images.get(&entity))
+    {
+        canvas.draw_image_rect(
+            &shader_image.image,
+            None,
+            shader_image.bounds,
+            &skia_safe::Paint::default(),
+        );
+        canvas.restore_to_count(save_count);
+        return;
+    }
+
     if appearance.is_none() && draw_creation_appearance(world, entity, canvas, opacity) {
         canvas.restore_to_count(save_count);
         return;
@@ -138,6 +165,8 @@ fn draw_entity_with_mode(
                 global,
                 canvas,
                 images,
+                shader_images,
+                skip_shader,
                 appearance,
                 camera_base,
                 follows_camera,
@@ -154,6 +183,8 @@ fn draw_entity_with_mode(
                 global,
                 canvas,
                 images,
+                shader_images,
+                skip_shader,
                 appearance,
                 camera_base,
                 follows_camera,
@@ -265,6 +296,8 @@ fn draw_creation_appearance(
         GlobalTransform::default(),
         target,
         None,
+        None,
+        None,
         Some(AppearanceMode {
             activity: AppearanceActivity::Evaluated,
             root_opacity: 1.0,
@@ -336,6 +369,10 @@ pub(crate) fn capture_appearance(
     time: f32,
     opacity: f32,
 ) -> crate::core::objects::particle::Silhouette {
+    assert!(
+        !subtree_has_image_shader(world, entity),
+        "Image-shader objects cannot be captured for morphs without a renderer."
+    );
     let activity = AppearanceActivity::At { root: entity, time };
     let local_bounds = appearance_bounds(world, entity, activity)
         .unwrap_or_else(|| skia_safe::Rect::from_xywh(0.0, 0.0, 1.0, 1.0));
@@ -351,6 +388,8 @@ pub(crate) fn capture_appearance(
         global_transform(world, parent),
         canvas,
         None,
+        None,
+        None,
         Some(AppearanceMode {
             activity,
             root_opacity: opacity,
@@ -362,6 +401,14 @@ pub(crate) fn capture_appearance(
     crate::core::objects::particle::Silhouette::capture(bounds, |canvas| {
         canvas.draw_picture(&picture, None, None);
     })
+}
+
+fn subtree_has_image_shader(world: &hecs::World, entity: hecs::Entity) -> bool {
+    world
+        .get::<&crate::core::objects::ImageShaderData>(entity)
+        .is_ok()
+        || crate::core::objects::child_iter(world, entity)
+            .any(|child| subtree_has_image_shader(world, child))
 }
 
 fn visual_bounds(
@@ -734,16 +781,17 @@ fn union_bounds(left: skia_safe::Rect, right: skia_safe::Rect) -> skia_safe::Rec
 /// Draws one canvas scope using only its explicitly associated camera.
 #[cfg(test)]
 pub(crate) fn draw_canvas2d(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canvas) {
-    draw_canvas2d_inner(world, entity, canvas, None);
+    draw_canvas2d_inner(world, entity, canvas, None, None);
 }
 
-pub(crate) fn draw_canvas2d_with_images(
+pub(crate) fn draw_canvas2d_with_shader_images(
     world: &hecs::World,
     entity: hecs::Entity,
     canvas: &skia_safe::Canvas,
     images: &HashMap<CanvasTexture, skia_safe::Image>,
+    shader_images: &HashMap<hecs::Entity, ImageShaderImage>,
 ) {
-    draw_canvas2d_inner(world, entity, canvas, Some(images));
+    draw_canvas2d_inner(world, entity, canvas, Some(images), Some(shader_images));
 }
 
 pub(crate) fn draw_canvas2d_editor_with_images(
@@ -751,6 +799,7 @@ pub(crate) fn draw_canvas2d_editor_with_images(
     entity: hecs::Entity,
     canvas: &skia_safe::Canvas,
     images: &HashMap<CanvasTexture, skia_safe::Image>,
+    shader_images: &HashMap<hecs::Entity, ImageShaderImage>,
     target_size: (u32, u32),
     pan: [f32; 2],
     zoom: f32,
@@ -785,6 +834,8 @@ pub(crate) fn draw_canvas2d_editor_with_images(
             GlobalTransform::default(),
             canvas,
             Some(images),
+            Some(shader_images),
+            None,
             camera_base.as_ref(),
             camera_base.is_some(),
         );
@@ -804,6 +855,7 @@ fn draw_canvas2d_inner(
     entity: hecs::Entity,
     canvas: &skia_safe::Canvas,
     images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
+    shader_images: Option<&HashMap<hecs::Entity, ImageShaderImage>>,
 ) {
     let settings = world.get::<&CanvasSettings>(entity).unwrap();
     let [r, g, b, a] = settings.clear.rgba();
@@ -832,8 +884,46 @@ fn draw_canvas2d_inner(
             GlobalTransform::default(),
             canvas,
             images,
+            shader_images,
+            None,
             Some(&camera_base),
             true,
+        );
+    }
+    canvas.restore_to_count(saved);
+}
+
+pub(crate) fn image_shader_bounds(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    padding: f32,
+) -> Option<skia_safe::Rect> {
+    let mut bounds = appearance_bounds(world, entity, AppearanceActivity::Evaluated)?;
+    bounds.outset((padding, padding));
+    Some(bounds)
+}
+
+pub(crate) fn draw_image_shader_source(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    canvas: &skia_safe::Canvas,
+    images: &HashMap<CanvasTexture, skia_safe::Image>,
+    shader_images: &HashMap<hecs::Entity, ImageShaderImage>,
+) {
+    let saved = canvas.save();
+    if let Some(inverse) = transform_matrix(local_transform(world, entity)).invert() {
+        canvas.concat(&inverse);
+        draw_entity_with_mode(
+            world,
+            entity,
+            GlobalTransform::default(),
+            canvas,
+            Some(images),
+            Some(shader_images),
+            Some(entity),
+            None,
+            None,
+            false,
         );
     }
     canvas.restore_to_count(saved);
@@ -1170,4 +1260,24 @@ pub(crate) fn camera_outline_points2d(
         camera.invert()?.map_points_inplace(&mut points);
     }
     Some(points)
+}
+
+#[cfg(test)]
+mod shader_capture_tests {
+    use super::*;
+    use crate::prelude::*;
+
+    #[test]
+    #[should_panic(
+        expected = "Image-shader objects cannot be captured for morphs without a renderer."
+    )]
+    fn cpu_morph_capture_rejects_image_shaders() {
+        let shader = ImageShader::new("#version 330 core\nvoid main() {}");
+        let mut scene = Scene::new_with_resolution((64, 64));
+        let object = rect().shader(&shader).build(&mut scene);
+        let canvas = scene.world_2d();
+        canvas.add(&object);
+        scene.update(0.0);
+        capture_appearance(&scene.world(), object.entity(), canvas.entity(), 0.0, 1.0);
+    }
 }

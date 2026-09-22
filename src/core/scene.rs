@@ -4,8 +4,9 @@ use crate::core::{
     components::{Animation, Draw2D, Inspection, Name, Simulation, TreeNode, View},
     frame_index,
     objects::{
-        Canvas2D, Canvas2DHandler, Canvas3D, Canvas3DHandler, Object, ObjectHandler, RootHandler,
-        camera_matrix2d, canvas_2d, canvas_3d, children_by_z_index, draw_entity,
+        Canvas2D, Canvas2DBuilder, Canvas2DHandler, Canvas3D, Canvas3DBuilder, Canvas3DHandler,
+        Object, ObjectHandler, RootHandler, camera_matrix2d, canvas_2d, canvas_3d,
+        children_by_z_index, draw_entity,
     },
     types::Vector2,
 };
@@ -41,6 +42,7 @@ pub struct Scene {
     world_2d: hecs::Entity,
     world_3d: hecs::Entity,
     animator_time: std::rc::Rc<std::cell::Cell<f32>>,
+    time: std::cell::Cell<f32>,
     animator: Animator,
     scene_file: SceneFile,
     scheduled_events: Vec<ScheduledEvent>,
@@ -69,15 +71,35 @@ impl Scene {
 
     /// Creates a scene whose built-in worlds use `resolution`.
     pub fn new_with_resolution(resolution: (u32, u32)) -> Self {
-        Self::new_inner("Scene", resolution, false)
+        Self::new_inner("Scene", resolution, false, None)
+    }
+
+    /// Creates a scene using fully configured builders for its built-in canvases.
+    pub fn new_with_canvases(world_2d: Canvas2DBuilder, world_3d: Canvas3DBuilder) -> Self {
+        Self::new_inner("Scene", (0, 0), false, Some((world_2d, world_3d)))
     }
 
     #[doc(hidden)]
     pub fn new_named(name: &'static str, resolution: (u32, u32)) -> Self {
-        Self::new_inner(name, resolution, true)
+        Self::new_inner(name, resolution, true, None)
     }
 
-    fn new_inner(name: &'static str, resolution: (u32, u32), persist_events: bool) -> Self {
+    /// Creates a named scene using fully configured built-in canvas builders.
+    #[doc(hidden)]
+    pub fn new_named_with_canvases(
+        name: &'static str,
+        world_2d: Canvas2DBuilder,
+        world_3d: Canvas3DBuilder,
+    ) -> Self {
+        Self::new_inner(name, (0, 0), true, Some((world_2d, world_3d)))
+    }
+
+    fn new_inner(
+        name: &'static str,
+        resolution: (u32, u32),
+        persist_events: bool,
+        canvases: Option<(Canvas2DBuilder, Canvas3DBuilder)>,
+    ) -> Self {
         let animator_time = std::rc::Rc::new(std::cell::Cell::new(0.0));
         let animator = Animator::with_scene_time(std::rc::Rc::clone(&animator_time));
         let world = std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new()));
@@ -112,6 +134,7 @@ impl Scene {
             world_2d: root,
             world_3d: root,
             animator_time: std::rc::Rc::clone(&animator_time),
+            time: std::cell::Cell::new(0.0),
             animator,
             scene_file: if persist_events {
                 SceneFile::load(name)
@@ -126,14 +149,14 @@ impl Scene {
             fps: 60,
         };
 
-        let world_2d = canvas_2d()
-            .name("World 2D")
-            .resolution(resolution)
-            .build(&mut scene);
-        let world_3d = canvas_3d()
-            .name("World 3D")
-            .resolution(resolution)
-            .build(&mut scene);
+        let (world_2d, world_3d) = canvases.unwrap_or_else(|| {
+            (
+                canvas_2d().name("World 2D").resolution(resolution),
+                canvas_3d().name("World 3D").resolution(resolution),
+            )
+        });
+        let world_2d = world_2d.build(&mut scene);
+        let world_3d = world_3d.build(&mut scene);
         scene.root().add(&world_2d);
         scene.root().add(&world_3d);
         scene.world_2d = world_2d.entity();
@@ -153,6 +176,7 @@ impl Scene {
     ///
     /// This updates scene state only; rendering remains in [`Self::draw`].
     pub fn update(&self, time: f32) {
+        self.time.set(time);
         let generation = self.structure_revision();
         if self
             .runtime
@@ -478,6 +502,10 @@ impl Scene {
         self.animator.duration()
     }
 
+    pub(crate) fn time(&self) -> f32 {
+        self.time.get()
+    }
+
     pub(crate) fn name(&self) -> &'static str {
         self.name
     }
@@ -498,6 +526,8 @@ impl Scene {
     /// timeline during seeking, and can be read with [`TrackHandle::get`].
     ///
     /// ```
+    /// # use kinematic::prelude::*;
+    /// # let mut scene = Scene::new();
     /// let counter = scene.track(0_u32);
     /// counter.set(10).duration(2.0).play();
     /// ```
@@ -637,12 +667,46 @@ impl Scene {
 
     #[doc(hidden)]
     pub fn spawn_object<T: Object>(&mut self, object: T, name: impl Into<String>) -> T::Handler {
-        T::spawn(
+        self.spawn_object_with_shaders(object, name, None, None)
+    }
+
+    #[doc(hidden)]
+    pub fn spawn_object_with_shaders<T: Object>(
+        &mut self,
+        object: T,
+        name: impl Into<String>,
+        image_shader: Option<crate::core::objects::ImageShaderData>,
+        mesh_shader: Option<crate::core::objects::MeshShaderData>,
+    ) -> T::Handler {
+        let handler = T::spawn(
             std::rc::Rc::clone(&self.world),
             self.animator.handle().active(),
             object,
             Name::new(name),
-        )
+        );
+        if let Some(shader) = image_shader {
+            self.world
+                .borrow_mut()
+                .insert_one(
+                    crate::core::objects::ObjectHandler::entity(&handler),
+                    shader,
+                )
+                .expect("Spawned object must accept its image shader.");
+        }
+        if let Some(shader) = mesh_shader {
+            self.world
+                .borrow_mut()
+                .insert_one(
+                    crate::core::objects::ObjectHandler::entity(&handler),
+                    shader,
+                )
+                .expect("Spawned object must accept its mesh shader.");
+        }
+        crate::core::objects::initialize_object_snapshots(
+            &self.world,
+            crate::core::objects::ObjectHandler::entity(&handler),
+        );
+        handler
     }
 
     /// Returns the built-in 2D canvas.
@@ -837,6 +901,7 @@ mod tests {
             &world,
             canvas,
             surface.canvas(),
+            &std::collections::HashMap::new(),
             &std::collections::HashMap::new(),
             (200, 160),
             [0.0; 2],

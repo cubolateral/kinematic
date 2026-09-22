@@ -20,6 +20,16 @@ pub enum Task {
         duration: f32,
         easing: Easing,
     },
+    /// Interpolates one builder-defined shader uniform.
+    #[doc(hidden)]
+    UniformTween {
+        entity: hecs::Entity,
+        name: String,
+        from: TrackValue,
+        to: TrackValue,
+        duration: f32,
+        easing: Easing,
+    },
     /// Rotates a quaternion through an axis-angle path without losing full turns.
     #[doc(hidden)]
     RotationTween {

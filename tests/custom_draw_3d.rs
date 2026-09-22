@@ -52,8 +52,15 @@ fn draw_custom_mesh(
 #[test]
 fn custom_3d_object_uses_the_public_draw_contract() {
     let mut scene = Scene::new();
+    let shader = MeshShader::fragment(
+        "uniform float amount;\n\
+         out vec4 outColor;\n\
+         void main() { outColor = vec4(amount); }",
+    );
     let custom = custom_mesh()
         .position(vec3(1.0, 2.0, 3.0))
+        .mesh_shader(&shader)
+        .mesh_uniform("amount", 1.0)
         .build(&mut scene);
     scene.world_3d().add(&custom);
 

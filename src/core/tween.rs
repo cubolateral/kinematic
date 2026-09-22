@@ -1,14 +1,13 @@
 use crate::core::{
-    AnimatorHandle, Easing, SceneWorld, Task, TrackInfo, TrackProperty, TrackValue, TrackValueType,
-    normalized_quaternion, quaternion_with_euler_axis,
+    AnimatorHandle, Easing, SceneWorld, Task, TrackInfo, TrackProperty, TrackTarget, TrackValue,
+    TrackValueType, normalized_quaternion, quaternion_with_euler_axis,
     types::{Quaternion, Vector3},
 };
 
 type PrepareTween<Object> = Box<dyn FnOnce(&Tween<Object>)>;
 
 struct TweenTarget {
-    type_id: std::any::TypeId,
-    track_info: &'static TrackInfo,
+    target: TrackTarget,
     from: TrackValue,
     to: TrackValue,
     rotation: Option<RotationTarget>,
@@ -54,9 +53,13 @@ impl<Object> Tween<Object> {
         let mut snapshot = hecs::World::new();
         let entity = snapshot.spawn((base.clone(),));
         for target in &self.targets {
-            if target.type_id == std::any::TypeId::of::<C>() {
+            if target
+                .target
+                .property_parts()
+                .is_some_and(|(type_id, _)| type_id == std::any::TypeId::of::<C>())
+            {
                 let value = if end { &target.to } else { &target.from };
-                (target.track_info.set)(&snapshot, entity, value.clone());
+                target.target.set(&snapshot, entity, value.clone());
             }
         }
         snapshot.remove_one::<C>(entity).unwrap()
@@ -78,8 +81,7 @@ impl<Object> Tween<Object> {
             world,
             entity,
             targets: vec![TweenTarget {
-                type_id,
-                track_info,
+                target: TrackTarget::property(type_id, track_info),
                 from,
                 to,
                 rotation: None,
@@ -97,7 +99,7 @@ impl<Object> Tween<Object> {
     pub(crate) fn from_targets(
         world: SceneWorld,
         entity: hecs::Entity,
-        targets: Vec<(std::any::TypeId, &'static TrackInfo, TrackValue, TrackValue)>,
+        targets: Vec<(TrackTarget, TrackValue, TrackValue)>,
         animator: AnimatorHandle,
     ) -> Self {
         Self {
@@ -105,11 +107,10 @@ impl<Object> Tween<Object> {
             entity,
             targets: targets
                 .into_iter()
-                .map(|(type_id, track_info, from, to)| TweenTarget {
-                    type_id,
-                    track_info,
-                    from: track_info.clamp(from),
-                    to: track_info.clamp(to),
+                .map(|(target, from, to)| TweenTarget {
+                    from: target.clamp(from),
+                    to: target.clamp(to),
+                    target,
                     rotation: None,
                 })
                 .collect(),
@@ -152,17 +153,16 @@ impl<Object> Tween<Object> {
             (from, to)
         };
 
-        if let Some(target) = self
-            .targets
-            .iter_mut()
-            .find(|target| target.type_id == type_id && std::ptr::eq(target.track_info, track_info))
-        {
+        if let Some(target) = self.targets.iter_mut().find(|target| {
+            target
+                .target
+                .same(&TrackTarget::property(type_id, track_info))
+        }) {
             target.to = to;
             target.rotation = None;
         } else {
             self.targets.push(TweenTarget {
-                type_id,
-                track_info,
+                target: TrackTarget::property(type_id, track_info),
                 from,
                 to,
                 rotation: None,
@@ -189,18 +189,17 @@ impl<Object> Tween<Object> {
             (track_info.set)(&world, self.entity, to.clone());
         }
 
-        if let Some(target) = self
-            .targets
-            .iter_mut()
-            .find(|target| target.type_id == type_id && std::ptr::eq(target.track_info, track_info))
-        {
+        if let Some(target) = self.targets.iter_mut().find(|target| {
+            target
+                .target
+                .same(&TrackTarget::property(type_id, track_info))
+        }) {
             target.from = from;
             target.to = to;
             target.rotation = None;
         } else {
             self.targets.push(TweenTarget {
-                type_id,
-                track_info,
+                target: TrackTarget::property(type_id, track_info),
                 from,
                 to,
                 rotation: None,
@@ -225,6 +224,59 @@ impl<Object> Tween<Object> {
     /// Sets the easing function used by every target field.
     pub fn easing(mut self, easing: Easing) -> Self {
         self.easing = easing;
+        self
+    }
+
+    /// Adds or replaces a shader-uniform target in this simultaneous tween.
+    pub fn uniform<T: TrackValueType>(self, name: impl Into<String>, value: T) -> Self {
+        let value = value.into_track_value();
+        crate::core::objects::validate_shader_track_value(&value)
+            .unwrap_or_else(|error| panic!("{error}"));
+        self.uniform_values(name.into(), None, value)
+    }
+
+    /// Adds a shader uniform with explicit starting and ending values.
+    pub fn uniform_from<T: TrackValueType>(self, name: impl Into<String>, from: T, to: T) -> Self {
+        let from = from.into_track_value();
+        let to = to.into_track_value();
+        crate::core::objects::validate_shader_track_value(&from)
+            .unwrap_or_else(|error| panic!("{error}"));
+        crate::core::objects::validate_shader_track_value(&to)
+            .unwrap_or_else(|error| panic!("{error}"));
+        self.uniform_values(name.into(), Some(from), to)
+    }
+
+    fn uniform_values(mut self, name: String, from: Option<TrackValue>, to: TrackValue) -> Self {
+        let target = TrackTarget::uniform(name);
+        let current = {
+            let world = self.world.borrow();
+            target.get(&world, self.entity)
+        };
+        assert!(
+            same_value_type(&current, &to)
+                && from.as_ref().is_none_or(|from| same_value_type(from, &to)),
+            "Shader uniform '{}' must keep its builder-defined type.",
+            target.name(),
+        );
+        target.set(&self.world.borrow(), self.entity, to.clone());
+        if let Some(existing) = self
+            .targets
+            .iter_mut()
+            .find(|existing| existing.target.same(&target))
+        {
+            if let Some(from) = from {
+                existing.from = from;
+            }
+            existing.to = to;
+            existing.rotation = None;
+        } else {
+            self.targets.push(TweenTarget {
+                target,
+                from: from.unwrap_or(current),
+                to,
+                rotation: None,
+            });
+        }
         self
     }
 
@@ -256,11 +308,11 @@ impl<Object> Tween<Object> {
             (track_info.set)(&world, self.entity, TrackValue::Quaternion(to));
         }
 
-        if let Some(target) = self
-            .targets
-            .iter_mut()
-            .find(|target| target.type_id == type_id && std::ptr::eq(target.track_info, track_info))
-        {
+        if let Some(target) = self.targets.iter_mut().find(|target| {
+            target
+                .target
+                .same(&TrackTarget::property(type_id, track_info))
+        }) {
             target.to = TrackValue::Quaternion(to);
             target.rotation = match target.rotation.take() {
                 Some(mut rotation) if rotation.axis == axis => {
@@ -275,8 +327,7 @@ impl<Object> Tween<Object> {
             };
         } else {
             self.targets.push(TweenTarget {
-                type_id,
-                track_info,
+                target: TrackTarget::property(type_id, track_info),
                 from: TrackValue::Quaternion(from),
                 to: TrackValue::Quaternion(to),
                 rotation: Some(RotationTarget { from, axis, angle }),
@@ -333,26 +384,37 @@ impl<Object> Tween<Object> {
         let mut tasks: Vec<_> = self
             .targets
             .into_iter()
-            .map(|target| match target.rotation {
-                Some(rotation) => Task::RotationTween {
+            .map(|target| match (target.target, target.rotation) {
+                (TrackTarget::Property { type_id, info }, Some(rotation)) => Task::RotationTween {
                     entity: self.entity,
-                    type_id: target.type_id,
-                    track_info: target.track_info,
+                    type_id,
+                    track_info: info,
                     from: rotation.from,
                     axis: rotation.axis,
                     angle: rotation.angle,
                     duration: self.duration,
                     easing: self.easing,
                 },
-                None => Task::Tween {
+                (TrackTarget::Property { type_id, info }, None) => Task::Tween {
                     entity: self.entity,
-                    type_id: target.type_id,
-                    track_info: target.track_info,
+                    type_id,
+                    track_info: info,
                     from: target.from,
                     to: target.to,
                     duration: self.duration,
                     easing: self.easing,
                 },
+                (TrackTarget::Uniform(name), None) => Task::UniformTween {
+                    entity: self.entity,
+                    name,
+                    from: target.from,
+                    to: target.to,
+                    duration: self.duration,
+                    easing: self.easing,
+                },
+                (TrackTarget::Uniform(_), Some(_)) => {
+                    unreachable!("Uniforms cannot use quaternion rotation paths.")
+                }
             })
             .collect();
 
@@ -390,8 +452,7 @@ impl Tween<()> {
             world,
             entity,
             targets: vec![TweenTarget {
-                type_id,
-                track_info,
+                target: TrackTarget::property(type_id, track_info),
                 from: TrackValue::Quaternion(from),
                 to: TrackValue::Quaternion(to),
                 rotation: Some(RotationTarget { from, axis, angle }),
@@ -412,6 +473,10 @@ fn validate_rotation(axis: Vector3, angle: f32) {
         "Rotation axis must be finite and non-zero."
     );
     assert!(angle.is_finite(), "Rotation angle must be finite.");
+}
+
+fn same_value_type(left: &TrackValue, right: &TrackValue) -> bool {
+    std::mem::discriminant(left) == std::mem::discriminant(right)
 }
 
 #[cfg(test)]

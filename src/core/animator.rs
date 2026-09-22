@@ -1,5 +1,6 @@
 use crate::core::{
-    Easing, Scene, SignalContext, SignalFrame, SignalHandle, Task, TrackInfo, TrackValue,
+    Easing, Scene, SignalContext, SignalFrame, SignalHandle, Task, TrackInfo, TrackTarget,
+    TrackValue,
     components::Animation,
     normalized_quaternion,
     track::TrackRepeat,
@@ -69,8 +70,7 @@ struct ScheduledRepeat {
 struct ScheduledTween {
     start: f32,
     entity: hecs::Entity,
-    type_id: std::any::TypeId,
-    track_info: &'static TrackInfo,
+    target: TrackTarget,
     from: TrackValue,
     to: TrackValue,
     duration: f32,
@@ -80,12 +80,13 @@ struct ScheduledTween {
 
 impl ScheduledTween {
     fn append(self, animation: &mut Animation, offset: f32) {
-        let track = animation.track_mut(self.type_id, self.track_info);
+        let name = self.target.name().to_owned();
+        let track = animation.target_mut(self.target);
         let start = offset + self.start;
         assert!(
             track.keyframes.last().is_none_or(|last| last.time <= start),
             "Animations on property '{}' overlap.",
-            self.track_info.name,
+            name,
         );
         if let Some((axis, angle)) = self.rotation {
             let TrackValue::Quaternion(from) = self.from else {
@@ -112,8 +113,24 @@ impl Schedule {
             } => Self::tween(ScheduledTween {
                 start: 0.0,
                 entity,
-                type_id,
-                track_info,
+                target: TrackTarget::property(type_id, track_info),
+                from,
+                to,
+                duration,
+                easing,
+                rotation: None,
+            }),
+            Task::UniformTween {
+                entity,
+                name,
+                from,
+                to,
+                duration,
+                easing,
+            } => Self::tween(ScheduledTween {
+                start: 0.0,
+                entity,
+                target: TrackTarget::uniform(name),
                 from,
                 to,
                 duration,
@@ -141,8 +158,7 @@ impl Schedule {
                 Self::tween(ScheduledTween {
                     start: 0.0,
                     entity,
-                    type_id,
-                    track_info,
+                    target: TrackTarget::property(type_id, track_info),
                     from: TrackValue::Quaternion(from),
                     to: TrackValue::Quaternion(to),
                     duration,
@@ -231,11 +247,16 @@ impl Schedule {
         }
         for mut repeat in self.repeats {
             repeat.tweens.sort_by(|a, b| a.start.total_cmp(&b.start));
-            let mut initialized = std::collections::HashSet::new();
+            let mut initialized: Vec<(hecs::Entity, TrackTarget)> = Vec::new();
             for tween in repeat.tweens {
                 let mut animation = world.get::<&mut Animation>(tween.entity).unwrap();
-                if initialized.insert((tween.entity, tween.type_id, tween.track_info.id)) {
-                    let track = animation.track_mut(tween.type_id, tween.track_info);
+                if !initialized
+                    .iter()
+                    .any(|(entity, target)| *entity == tween.entity && target.same(&tween.target))
+                {
+                    initialized.push((tween.entity, tween.target.clone()));
+                    let name = tween.target.name().to_owned();
+                    let track = animation.target_mut(tween.target.clone());
                     assert!(
                         track.repeat.is_none()
                             && track
@@ -243,7 +264,7 @@ impl Schedule {
                                 .last()
                                 .is_none_or(|last| last.time <= repeat.start),
                         "Repeat overlaps another animation on property '{}'.",
-                        tween.track_info.name
+                        name
                     );
                     track.add_tween(
                         repeat.start,
@@ -415,6 +436,17 @@ impl AnimatorHandle {
         self.context
             .signals
             .record_override(entity, type_id, track_info, value);
+    }
+
+    pub(crate) fn record_signal_uniform_override(
+        &self,
+        entity: hecs::Entity,
+        name: impl Into<String>,
+        value: TrackValue,
+    ) {
+        self.context
+            .signals
+            .record_uniform_override(entity, name, value);
     }
 
     fn sync_scene_time(&self) {

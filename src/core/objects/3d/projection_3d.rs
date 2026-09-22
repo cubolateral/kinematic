@@ -97,6 +97,17 @@ fn draw_projection_3d(
     if transformation.determinant().abs() <= f32::EPSILON {
         return Ok(());
     }
+    if context.render_mesh_shader_only(
+        GeometryKey::new::<PlaneShape>(0),
+        three_d::CpuMesh::square,
+        transformation,
+        &crate::core::components::Material {
+            unlit: true,
+            ..Default::default()
+        },
+    )? {
+        return Ok(());
+    }
     let source = world
         .get::<&ProjectionSource>(entity)
         .unwrap()

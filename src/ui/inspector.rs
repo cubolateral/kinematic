@@ -8,12 +8,12 @@ use crate::{
             appearance::{AppearanceEdit, refresh_appearance},
         },
     },
-    editor::Editor,
+    editor::{Editor, InspectorTrack},
 };
 use std::{ffi::CString, os::raw::c_void, ptr};
 
 use super::{
-    icons,
+    controls, icons,
     widgets::{NumericValue, numeric_input_arrows, text_size},
 };
 
@@ -42,7 +42,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             return;
         };
 
-        let scene = editor.scene_at_mut(scene_index);
+        let (scene, inspector_edits) = editor.inspector_scene_mut(scene_index);
         let world = scene.world();
         let Ok(inspection) = world.get::<&Inspection>(entity) else {
             ui.text_disabled("The selected object is unavailable.");
@@ -115,16 +115,31 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                     .get::<&Animation>(entity)
                     .is_ok_and(|animation| animation.animates(component, track));
                 let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing && animated);
+                let key = InspectorTrack::new(entity, component, track);
+                let show_reset = inspector_edits.contains(&key);
+                if show_reset {
+                    let spacing = unsafe { ui.style().item_spacing() }[0];
+                    ui.set_next_item_width(
+                        (ui.calc_item_width() - ui.frame_height() - spacing).max(1.0),
+                    );
+                }
                 let mut value = (track.get)(&world, entity);
                 let before = value.clone();
                 let label = if animated {
-                    format!("{} {}", track.name, icons::DIAMOND)
+                    format!("{} {}", icons::DIAMOND, track.name)
                 } else {
                     track.name.to_owned()
                 };
-                if edit_value(ui, state, &label, &mut value, track) {
+                if edit_value(ui, state, &label, &mut value, Some(track)) {
                     value = track.clamp(value);
                     (track.set)(&world, entity, value.clone());
+                    inspector_edits.record(
+                        key.clone(),
+                        track,
+                        before.clone(),
+                        value.clone(),
+                        animated,
+                    );
                     edits.push(AppearanceEdit {
                         entity,
                         component,
@@ -133,7 +148,17 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                         value,
                     });
                 }
-                if animated && ui.is_item_hovered() {
+                let track_hovered = ui.is_item_hovered();
+                if show_reset {
+                    ui.same_line();
+                    if controls::text_button(ui, icons::RESET, [ui.frame_height(); 2]) {
+                        inspector_edits.reset(scene, key.clone());
+                    }
+                    if ui.is_item_hovered() {
+                        ui.tooltip_text("Reset to the scene value.");
+                    }
+                }
+                if animated && track_hovered {
                     ui.tooltip_text(if is_playing {
                         "Animated track. Pause playback to edit it."
                     } else {
@@ -144,8 +169,57 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
             ui.spacing();
         }
+        let mut uniform_changed = false;
+        let uniforms = crate::core::objects::shader_uniforms(&world, entity);
+        if !uniforms.is_empty() {
+            ui.separator_with_text("Shader uniforms");
+        }
+        for (name, mut value) in uniforms {
+            let _id = ui.push_id(&format!("uniform:{name}"));
+            let animated = world
+                .get::<&Animation>(entity)
+                .is_ok_and(|animation| animation.animates_uniform(&name));
+            let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing && animated);
+            let key = InspectorTrack::uniform(entity, &name);
+            let show_reset = inspector_edits.contains(&key);
+            if show_reset {
+                let spacing = unsafe { ui.style().item_spacing() }[0];
+                ui.set_next_item_width(
+                    (ui.calc_item_width() - ui.frame_height() - spacing).max(1.0),
+                );
+            }
+            let before = value.clone();
+            let label = if animated {
+                format!("{} {name}", icons::DIAMOND)
+            } else {
+                name.clone()
+            };
+            if edit_value(ui, state, &label, &mut value, None) {
+                crate::core::objects::set_shader_uniform(&world, entity, &name, value.clone())
+                    .unwrap_or_else(|error| panic!("{error}"));
+                inspector_edits.record_uniform(key.clone(), before, value, animated);
+                uniform_changed = true;
+            }
+            let track_hovered = ui.is_item_hovered();
+            if show_reset {
+                ui.same_line();
+                if controls::text_button(ui, icons::RESET, [ui.frame_height(); 2]) {
+                    inspector_edits.reset(scene, key.clone());
+                }
+                if ui.is_item_hovered() {
+                    ui.tooltip_text("Reset to the scene value.");
+                }
+            }
+            if animated && track_hovered {
+                ui.tooltip_text(if is_playing {
+                    "Animated uniform. Pause playback to edit it."
+                } else {
+                    "Animated uniform."
+                });
+            }
+        }
         refresh_appearance(&world, &edits);
-        if !edits.is_empty() {
+        if !edits.is_empty() || uniform_changed {
             scene.invalidate();
         }
     });
@@ -165,11 +239,14 @@ fn edit_value(
     state: &mut State,
     name: &str,
     value: &mut TrackValue,
-    track: &TrackInfo,
+    track: Option<&TrackInfo>,
 ) -> bool {
     match value {
         TrackValue::Bool(v) => ui.checkbox(name, v),
         TrackValue::Enum(v) => {
+            let Some(track) = track else {
+                return false;
+            };
             let TrackChoices::Enum(variants) = track.choices else {
                 return false;
             };
@@ -185,8 +262,8 @@ fn edit_value(
         }
         TrackValue::F32(v) => {
             let format = float_format(*v);
-            let (min, max) = match track.limits {
-                TrackLimits::F32 { min, max } => (min, max),
+            let (min, max) = match track.map(|track| track.limits) {
+                Some(TrackLimits::F32 { min, max }) => (min, max),
                 _ => (None, None),
             };
             numeric_drag(
@@ -218,12 +295,12 @@ fn edit_value(
             1.0,
             "%u",
             dear_imgui_rs::sys::ImGuiDataType_U32,
-            match &track.limits {
-                TrackLimits::U32 { min, .. } => min.as_ref(),
+            match track.map(|track| &track.limits) {
+                Some(TrackLimits::U32 { min, .. }) => min.as_ref(),
                 _ => None,
             },
-            match &track.limits {
-                TrackLimits::U32 { max, .. } => max.as_ref(),
+            match track.map(|track| &track.limits) {
+                Some(TrackLimits::U32 { max, .. }) => max.as_ref(),
                 _ => None,
             },
         ),
@@ -235,12 +312,12 @@ fn edit_value(
             1.0,
             "%d",
             dear_imgui_rs::sys::ImGuiDataType_S32,
-            match &track.limits {
-                TrackLimits::I32 { min, .. } => min.as_ref(),
+            match track.map(|track| &track.limits) {
+                Some(TrackLimits::I32 { min, .. }) => min.as_ref(),
                 _ => None,
             },
-            match &track.limits {
-                TrackLimits::I32 { max, .. } => max.as_ref(),
+            match track.map(|track| &track.limits) {
+                Some(TrackLimits::I32 { max, .. }) => max.as_ref(),
                 _ => None,
             },
         ),

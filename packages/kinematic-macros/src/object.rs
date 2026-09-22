@@ -10,6 +10,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let mut alias = None;
     let mut spatial = None;
     let mut simulation = None;
+    let mut image_shader = false;
     for attr in &input.attrs {
         if attr.path().is_ident("object") {
             if let Err(error) = attr.parse_nested_meta(|meta| {
@@ -19,6 +20,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                     spatial = Some(meta.value()?.parse::<syn::LitStr>()?.value());
                 } else if meta.path.is_ident("simulation") {
                     simulation = Some(meta.value()?.parse::<syn::Type>()?);
+                } else if meta.path.is_ident("image_shader") {
+                    image_shader = true;
                 } else {
                     return Err(meta.error("Unknown object option."));
                 }
@@ -161,6 +164,80 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         _ => quote! {},
     };
     let morphable = spatial == "2d";
+    let supports_image_shader = morphable || image_shader;
+    let image_shader_methods = supports_image_shader.then(|| quote! {
+        /// Applies a shared GLSL image shader to this object's rendered image.
+        pub fn shader(mut self, shader: &kinematic::core::objects::ImageShader) -> Self {
+            self.image_shader = Some(kinematic::core::objects::ImageShaderData::new(shader.clone()));
+            self
+        }
+
+        /// Sets an initial custom uniform value for the selected image shader.
+        pub fn uniform(
+            mut self,
+            name: impl Into<std::string::String>,
+            value: impl Into<kinematic::core::objects::ImageShaderUniform>,
+        ) -> Self {
+            self.image_shader
+                .as_mut()
+                .expect("Call shader before configuring image shader uniforms.")
+                .uniform(name, value);
+            self
+        }
+
+        /// Binds a canvas output texture to the selected image shader.
+        pub fn texture(
+            mut self,
+            name: impl Into<std::string::String>,
+            canvas: &impl kinematic::core::objects::ProjectionCanvas,
+        ) -> Self {
+            self.image_shader
+                .as_mut()
+                .expect("Call shader before configuring image shader textures.")
+                .texture(name, canvas);
+            self
+        }
+
+        /// Expands the captured image bounds by this many local units on every side.
+        pub fn shader_padding(mut self, padding: f32) -> Self {
+            self.image_shader
+                .as_mut()
+                .expect("Call shader before configuring image shader padding.")
+                .padding(padding);
+            self
+        }
+    });
+    let mesh_shader_methods = (spatial == "3d").then(|| {
+        quote! {
+            /// Applies a shared GLSL mesh shader to this object's geometry.
+            pub fn mesh_shader(mut self, shader: &kinematic::core::objects::MeshShader) -> Self {
+                self.mesh_shader = Some(
+                    kinematic::core::objects::MeshShaderData::with_shader(shader.clone())
+                );
+                self
+            }
+
+            /// Sets an initial custom uniform or an override for an inherited mesh shader.
+            pub fn mesh_uniform(
+                mut self,
+                name: impl Into<std::string::String>,
+                value: impl Into<kinematic::core::objects::MeshShaderUniform>,
+            ) -> Self {
+                self.mesh_shader
+                    .get_or_insert_with(Default::default)
+                    .uniform(name, value);
+                self
+            }
+
+            /// Conservatively expands CPU bounds for GPU vertex deformation.
+            pub fn mesh_shader_bounds(mut self, padding: f32) -> Self {
+                self.mesh_shader
+                    .get_or_insert_with(Default::default)
+                    .bounds_padding(padding);
+                self
+            }
+        }
+    });
     let simulation_impl = simulation.map_or_else(
         || quote! {},
         |state| {
@@ -281,6 +358,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         #visibility struct #builder_name {
             object: #object_name,
             name: std::string::String,
+            image_shader: Option<kinematic::core::objects::ImageShaderData>,
+            mesh_shader: Option<kinematic::core::objects::MeshShaderData>,
         }
 
         impl #builder_name {
@@ -288,6 +367,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 Self {
                     object: <#object_name as Default>::default(),
                     name: stringify!(#object_name).to_owned(),
+                    image_shader: None,
+                    mesh_shader: None,
                 }
             }
 
@@ -299,8 +380,16 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
             /// Spawns the configured object as inactive in `scene` and returns its handler.
             pub fn build(self, s: &mut kinematic::core::Scene) -> #handler_name {
-                s.spawn_object::<#object_name>(self.object, self.name)
+                s.spawn_object_with_shaders::<#object_name>(
+                    self.object,
+                    self.name,
+                    self.image_shader,
+                    self.mesh_shader,
+                )
             }
+
+            #image_shader_methods
+            #mesh_shader_methods
         }
 
         #[doc = concat!("Creates a builder for [`", stringify!(#object_name), "`].")]
@@ -370,9 +459,23 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                     (object, <Self as #object_handler_trait>::name(self))
                 };
 
+                let image_shader = self
+                    .world
+                    .borrow()
+                    .get::<&kinematic::core::objects::ImageShaderData>(self.entity)
+                    .ok()
+                    .map(|shader| (*shader).clone());
+                let mesh_shader = self
+                    .world
+                    .borrow()
+                    .get::<&kinematic::core::objects::MeshShaderData>(self.entity)
+                    .ok()
+                    .map(|shader| (*shader).clone());
                 #builder_name {
                     object,
                     name,
+                    image_shader,
+                    mesh_shader,
                 }
                 .build(s)
             }

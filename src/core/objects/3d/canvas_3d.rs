@@ -7,7 +7,7 @@ use super::super::canvas::{
 };
 /// Independent 3D perspective viewport with its own camera.
 #[derive(Object, Node)]
-#[object(spatial = "none", builder = "canvas_3d")]
+#[object(spatial = "none", builder = "canvas_3d", image_shader)]
 pub struct Canvas3D {
     #[trackable]
     pub settings: CanvasSettings,

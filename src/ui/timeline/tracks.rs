@@ -66,7 +66,7 @@ impl TrackView {
         top: f32,
         name_x: f32,
     ) {
-        let label = track.info.name;
+        let label = track.name();
         let clip = draw_list.push_clip_rect(
             [name_x, top],
             [

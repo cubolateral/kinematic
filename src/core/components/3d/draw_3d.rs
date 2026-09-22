@@ -3,13 +3,39 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use crate::core::{components::Material, objects::CanvasTexture};
-use three_d::{Geometry, InnerSpace, SquareMatrix};
+use crate::core::{
+    TrackValue,
+    components::Material,
+    objects::{CanvasTexture, EffectiveMeshShader},
+};
+use three_d::{Geometry, InnerSpace, SquareMatrix, Viewer};
 
 pub(crate) struct CachedGeometry {
     mesh: three_d::Mesh,
     outline: Option<MeshOutline>,
+    attributes: MeshAttributes,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct MeshAttributes {
+    normal: bool,
+    tangent: bool,
+    uv: bool,
+    color: bool,
+}
+
+impl MeshAttributes {
+    fn new(mesh: &three_d::CpuMesh) -> Self {
+        Self {
+            normal: mesh.normals.is_some(),
+            tangent: mesh.tangents.is_some(),
+            uv: mesh.uvs.is_some(),
+            color: mesh.colors.is_some(),
+        }
+    }
+}
+
+pub(crate) type MeshProgramCache = HashMap<(u64, MeshAttributes), three_d::Program>;
 
 struct MeshOutline {
     positions: three_d::VertexBuffer<three_d::Vec3>,
@@ -182,7 +208,9 @@ impl GeometryKey {
 /// Resources available to a [`Draw3D`] callback during one canvas pass.
 ///
 /// Geometries are cached across frames. Callbacks can either use [`Self::render_material`]
-/// or access three-d directly through the public camera, target, and context fields.
+/// or access three-d directly through the public camera, target, and context fields. Mesh
+/// shaders require `render_material`; direct three-d drawing has no compatible interception
+/// point and is rejected when a shader is configured or inherited.
 pub struct RenderContext3D<'a> {
     pub camera: &'a three_d::Camera,
     pub target: &'a three_d::RenderTarget<'static>,
@@ -193,7 +221,12 @@ pub struct RenderContext3D<'a> {
     ambient: &'a three_d::AmbientLight,
     sun: &'a three_d::DirectionalLight,
     texture: &'a dyn Fn(CanvasTexture) -> Option<glow::NativeTexture>,
+    mesh_programs: &'a mut MeshProgramCache,
     current_transform: glam::Mat4,
+    mesh_shader: Option<EffectiveMeshShader>,
+    mesh_shader_used: bool,
+    direct_geometry_access: bool,
+    scene_time: f32,
 }
 
 impl<'a> RenderContext3D<'a> {
@@ -208,6 +241,8 @@ impl<'a> RenderContext3D<'a> {
         ambient: &'a three_d::AmbientLight,
         sun: &'a three_d::DirectionalLight,
         texture: &'a dyn Fn(CanvasTexture) -> Option<glow::NativeTexture>,
+        mesh_programs: &'a mut MeshProgramCache,
+        scene_time: f32,
     ) -> Self {
         Self {
             camera,
@@ -219,8 +254,32 @@ impl<'a> RenderContext3D<'a> {
             ambient,
             sun,
             texture,
+            mesh_programs,
             current_transform: glam::Mat4::IDENTITY,
+            mesh_shader: None,
+            mesh_shader_used: false,
+            direct_geometry_access: false,
+            scene_time,
         }
+    }
+
+    pub(crate) fn set_mesh_shader(&mut self, shader: Option<EffectiveMeshShader>) {
+        self.mesh_shader = shader;
+        self.mesh_shader_used = false;
+        self.direct_geometry_access = false;
+    }
+
+    pub(crate) fn finish_mesh_shader(&self, expects_mesh: bool) -> Result<(), String> {
+        if expects_mesh
+            && self.mesh_shader.is_some()
+            && (!self.mesh_shader_used || self.direct_geometry_access)
+        {
+            return Err(
+                "Custom 3D objects with mesh shaders must draw through RenderContext3D::render_material."
+                    .into(),
+            );
+        }
+        Ok(())
     }
 
     /// Returns the transform applied before local callback geometry transforms.
@@ -241,13 +300,18 @@ impl<'a> RenderContext3D<'a> {
         key: GeometryKey,
         create: impl FnOnce() -> three_d::CpuMesh,
     ) -> &mut three_d::Mesh {
+        self.direct_geometry_access = true;
         self.used_geometries.insert(key);
         &mut self
             .geometries
             .entry(key)
-            .or_insert_with(|| CachedGeometry {
-                mesh: three_d::Mesh::new(self.three_d, &create()),
-                outline: None,
+            .or_insert_with(|| {
+                let cpu = create();
+                CachedGeometry {
+                    mesh: three_d::Mesh::new(self.three_d, &cpu),
+                    outline: None,
+                    attributes: MeshAttributes::new(&cpu),
+                }
             })
             .mesh
     }
@@ -269,6 +333,7 @@ impl<'a> RenderContext3D<'a> {
         transformation: glam::Mat4,
         data: &Material,
     ) -> Result<(), String> {
+        self.mesh_shader_used |= self.mesh_shader.is_some();
         let transformation = combine_transforms(self.current_transform, transformation);
         validate_transformation(transformation)?;
         if transformation.determinant().abs() <= f32::EPSILON {
@@ -285,6 +350,10 @@ impl<'a> RenderContext3D<'a> {
         let states = render_states(transparent, false);
         let camera = self.camera;
         self.prepare_geometry(key, create, data.outline_width > 0.0);
+        if self.render_mesh_shader(key, transformation, data, states)? {
+            self.render_outline(key, transformation, data);
+            return Ok(());
+        }
         if data.unlit {
             let material = three_d::ColorMaterial {
                 color,
@@ -320,6 +389,7 @@ impl<'a> RenderContext3D<'a> {
         texture: three_d::Texture2DRef,
         data: &Material,
     ) -> Result<(), String> {
+        self.mesh_shader_used |= self.mesh_shader.is_some();
         let transformation = combine_transforms(self.current_transform, transformation);
         validate_transformation(transformation)?;
         if transformation.determinant().abs() <= f32::EPSILON {
@@ -336,6 +406,11 @@ impl<'a> RenderContext3D<'a> {
         let states = render_states(true, false);
         let camera = self.camera;
         self.prepare_geometry(key, create, data.outline_width > 0.0);
+
+        if self.render_mesh_shader(key, transformation, data, states)? {
+            self.render_outline(key, transformation, data);
+            return Ok(());
+        }
 
         if data.unlit {
             let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
@@ -367,6 +442,72 @@ impl<'a> RenderContext3D<'a> {
         Ok(())
     }
 
+    pub(crate) fn render_mesh_shader_only(
+        &mut self,
+        key: GeometryKey,
+        create: impl FnOnce() -> three_d::CpuMesh,
+        transformation: glam::Mat4,
+        data: &Material,
+    ) -> Result<bool, String> {
+        if self.mesh_shader.is_none() {
+            return Ok(false);
+        }
+        self.mesh_shader_used = true;
+        let transformation = combine_transforms(self.current_transform, transformation);
+        validate_transformation(transformation)?;
+        if transformation.determinant().abs() <= f32::EPSILON {
+            return Ok(true);
+        }
+        let a = data.albedo.a;
+        let transparent = data.opacity * a < 1.0;
+        let states = render_states(transparent, false);
+        self.prepare_geometry(key, create, data.outline_width > 0.0);
+        self.render_mesh_shader(key, transformation, data, states)?;
+        self.render_outline(key, transformation, data);
+        Ok(true)
+    }
+
+    fn render_mesh_shader(
+        &mut self,
+        key: GeometryKey,
+        transformation: glam::Mat4,
+        data: &Material,
+        states: three_d::RenderStates,
+    ) -> Result<bool, String> {
+        let Some(shader) = self.mesh_shader.clone() else {
+            return Ok(false);
+        };
+        let attributes = self.geometries[&key].attributes;
+        let cache_key = (shader.shader.id, attributes);
+        if !self.mesh_programs.contains_key(&cache_key) {
+            let vertex = shader
+                .shader
+                .vertex
+                .as_deref()
+                .map(str::to_owned)
+                .unwrap_or_else(|| default_mesh_vertex_shader(attributes));
+            let program =
+                three_d::Program::from_source(self.three_d, &vertex, &shader.shader.fragment)
+                    .map_err(|error| format!("Mesh shader compilation failed: {error}"))?;
+            validate_mesh_program(&program, attributes)?;
+            self.mesh_programs.insert(cache_key, program);
+        }
+        let program = &self.mesh_programs[&cache_key];
+        use_uniforms(
+            program,
+            &shader,
+            attributes,
+            self.camera,
+            self.scene_time,
+            data,
+        )?;
+        let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
+        mesh.set_transformation(transformation.to_cols_array_2d().into());
+        mesh.draw(self.camera, program, states);
+        self.mesh_shader_used = true;
+        Ok(true)
+    }
+
     fn prepare_geometry(
         &mut self,
         key: GeometryKey,
@@ -391,6 +532,7 @@ impl<'a> RenderContext3D<'a> {
                 CachedGeometry {
                     mesh: three_d::Mesh::new(self.three_d, &cpu),
                     outline: outline.then(|| MeshOutline::new(self.three_d, &cpu)),
+                    attributes: MeshAttributes::new(&cpu),
                 },
             );
         } else {
@@ -426,6 +568,139 @@ impl<'a> RenderContext3D<'a> {
             &[],
         );
     }
+}
+
+fn default_mesh_vertex_shader(attributes: MeshAttributes) -> String {
+    format!(
+        r#"
+        in vec3 position;
+        {normal_attribute}
+        {uv_attribute}
+        uniform mat4 modelMatrix;
+        uniform mat4 viewProjection;
+        {normal_uniform}
+        out vec3 k_world_position;
+        out vec3 k_normal;
+        out vec2 k_uv;
+
+        void main() {{
+            vec4 world = modelMatrix * vec4(position, 1.0);
+            k_world_position = world.xyz;
+            {normal_value}
+            {uv_value}
+            gl_Position = viewProjection * world;
+        }}
+        "#,
+        normal_attribute = attributes.normal.then_some("in vec3 normal;").unwrap_or(""),
+        uv_attribute = attributes
+            .uv
+            .then_some("in vec2 uv_coordinates;")
+            .unwrap_or(""),
+        normal_uniform = attributes
+            .normal
+            .then_some("uniform mat4 normalMatrix;")
+            .unwrap_or(""),
+        normal_value = if attributes.normal {
+            "k_normal = normalize((normalMatrix * vec4(normal, 0.0)).xyz);"
+        } else {
+            "k_normal = vec3(0.0);"
+        },
+        uv_value = if attributes.uv {
+            "k_uv = uv_coordinates;"
+        } else {
+            "k_uv = vec2(0.0);"
+        },
+    )
+}
+
+fn validate_mesh_program(
+    program: &three_d::Program,
+    attributes: MeshAttributes,
+) -> Result<(), String> {
+    for required in ["position"] {
+        if !program.requires_attribute(required) {
+            return Err(format!(
+                "Mesh shader vertex stage must actively use `{required}`."
+            ));
+        }
+    }
+    for required in ["modelMatrix", "viewProjection"] {
+        if !program.requires_uniform(required) {
+            return Err(format!(
+                "Mesh shader vertex stage must actively use `{required}`."
+            ));
+        }
+    }
+    for (name, available) in [
+        ("normal", attributes.normal),
+        ("tangent", attributes.tangent),
+        ("uv_coordinates", attributes.uv),
+        ("color", attributes.color),
+    ] {
+        if program.requires_attribute(name) && !available {
+            return Err(format!(
+                "Mesh shader requires attribute `{name}`, but this geometry does not provide it."
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn use_uniforms(
+    program: &three_d::Program,
+    shader: &EffectiveMeshShader,
+    attributes: MeshAttributes,
+    camera: &three_d::Camera,
+    time: f32,
+    material: &Material,
+) -> Result<(), String> {
+    program.use_uniform_if_required("viewMatrix", camera.view());
+    program.use_uniform_if_required("projectionMatrix", camera.projection());
+    program.use_uniform_if_required("cameraPosition", camera.position());
+    program.use_uniform_if_required("sceneTime", time);
+    let [r, g, b, a] = material.albedo.rgba();
+    let color = three_d::Srgba::new(
+        channel(r),
+        channel(g),
+        channel(b),
+        channel(a * material.opacity),
+    )
+    .to_linear_srgb();
+    program.use_uniform_if_required("materialColor", color);
+    program.use_uniform_if_required("hasNormal", i32::from(attributes.normal));
+    program.use_uniform_if_required("hasUv", i32::from(attributes.uv));
+    for (name, value) in &shader.uniforms {
+        if !program.requires_uniform(name) {
+            return Err(format!(
+                "Mesh shader uniform `{name}` is missing or inactive."
+            ));
+        }
+        match value {
+            TrackValue::F32(value) => program.use_uniform(name, *value),
+            TrackValue::Vector2(value) => {
+                program.use_uniform(name, three_d::vec2(value.x, value.y))
+            }
+            TrackValue::Vector3(value) => {
+                program.use_uniform(name, three_d::vec3(value.x, value.y, value.z))
+            }
+            TrackValue::Quad(value) => {
+                let [x, y, z, w] = value.to_array();
+                program.use_uniform(name, three_d::vec4(x, y, z, w))
+            }
+            TrackValue::Quaternion(value) => {
+                program.use_uniform(name, three_d::vec4(value.x, value.y, value.z, value.w))
+            }
+            TrackValue::Color(value) => {
+                let [r, g, b, a] = value.rgba();
+                program.use_uniform(name, three_d::vec4(r, g, b, a))
+            }
+            TrackValue::I32(value) => program.use_uniform(name, *value),
+            TrackValue::U32(value) => program.use_uniform(name, *value),
+            TrackValue::Bool(value) => program.use_uniform(name, i32::from(*value)),
+            TrackValue::Enum(_) | TrackValue::String(_) => unreachable!(),
+        }
+    }
+    Ok(())
 }
 
 type PositionKey = [u32; 3];

@@ -1,5 +1,6 @@
 use crate::core::{
-    AnimatorHandle, SceneWorld, TrackInfo, TrackValue, components::TreeNode, frame_dt, frame_index,
+    AnimatorHandle, SceneWorld, TrackInfo, TrackTarget, TrackValue, components::TreeNode, frame_dt,
+    frame_index,
 };
 
 type SignalCallback = std::rc::Rc<std::cell::RefCell<Box<dyn FnMut(SignalFrame)>>>;
@@ -25,8 +26,7 @@ struct ScheduledSignal {
 
 struct SignalOverride {
     entity: hecs::Entity,
-    type_id: std::any::TypeId,
-    track_info: &'static TrackInfo,
+    target: TrackTarget,
     value: TrackValue,
 }
 
@@ -83,22 +83,33 @@ impl SignalContext {
         track_info: &'static TrackInfo,
         value: TrackValue,
     ) {
+        self.record_target_override(entity, TrackTarget::property(type_id, track_info), value);
+    }
+
+    pub(crate) fn record_uniform_override(
+        &self,
+        entity: hecs::Entity,
+        name: impl Into<String>,
+        value: TrackValue,
+    ) {
+        self.record_target_override(entity, TrackTarget::uniform(name), value);
+    }
+
+    fn record_target_override(&self, entity: hecs::Entity, target: TrackTarget, value: TrackValue) {
         if !self.evaluating.get() {
             return;
         }
 
         let mut overrides = self.overrides.borrow_mut();
-        if overrides.iter().any(|saved| {
-            saved.entity == entity
-                && saved.type_id == type_id
-                && saved.track_info.id == track_info.id
-        }) {
+        if overrides
+            .iter()
+            .any(|saved| saved.entity == entity && saved.target.same(&target))
+        {
             return;
         }
         overrides.push(SignalOverride {
             entity,
-            type_id,
-            track_info,
+            target,
             value,
         });
     }
@@ -106,7 +117,7 @@ impl SignalContext {
     pub(crate) fn restore_overrides(&self, world: &hecs::World) {
         for saved in self.overrides.take() {
             if world.contains(saved.entity) {
-                (saved.track_info.set)(world, saved.entity, saved.value);
+                saved.target.set(world, saved.entity, saved.value);
             }
         }
     }
