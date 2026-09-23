@@ -143,7 +143,7 @@ pub trait ObjectHandler: Clone {
     fn animate<T: TrackValueType>(&self, property: TrackProperty<T>, to: T) -> Tween<Self::Object> {
         property
             .handle(self.object_world(), self.entity(), self.object_animator())
-            .animate::<Self::Object>(to)
+            .set_for::<Self::Object>(to)
     }
 
     /// Creates a tween from an explicit starting value to a target value.
@@ -155,7 +155,7 @@ pub trait ObjectHandler: Clone {
     ) -> Tween<Self::Object> {
         property
             .handle(self.object_world(), self.entity(), self.object_animator())
-            .animate_from::<Self::Object>(from, to)
+            .from_for::<Self::Object>(from, to)
     }
 
     /// Reads a builder-defined shader uniform with its original Rust type.

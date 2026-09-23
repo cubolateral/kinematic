@@ -529,7 +529,7 @@ impl Scene {
     /// # use kinematic::prelude::*;
     /// # let mut scene = Scene::new();
     /// let counter = scene.track(0_u32);
-    /// counter.set(10).duration(2.0).play();
+    /// counter.to(10).duration(2.0).play();
     /// ```
     pub fn track<T: TrackValueType>(&mut self, initial: T) -> TrackHandle<T> {
         crate::core::standalone_track(
@@ -1426,7 +1426,7 @@ mod tests {
         let mut scene = Scene::new();
         let value = scene.track(0.0_f32);
         scene.repeat(|_| {
-            value.set(10.0).duration(2.0).easing(Easing::Linear).play();
+            value.to(10.0).duration(2.0).easing(Easing::Linear).play();
         });
         assert_eq!(value.get(), 0.0);
 
@@ -1444,6 +1444,62 @@ mod tests {
             assert_eq!(value.get(), expected);
             assert_eq!(observed.get(), expected);
         }
+    }
+
+    #[test]
+    fn track_signal_runs_only_when_the_value_changes() {
+        let mut scene = Scene::new();
+        let value = scene.track(0.0_f32);
+        let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let callback_observed = std::rc::Rc::clone(&observed);
+        value.signal(move |value, frame| {
+            callback_observed
+                .borrow_mut()
+                .push((value.get(), frame.time));
+        });
+        value.to(10.0).duration(2.0).easing(Easing::Linear).play();
+        scene.animator.take_schedule().compile(&scene);
+
+        for time in [0.0, 0.0, 0.5, 0.5, 1.0, 1.0, 0.5] {
+            scene.update(time);
+        }
+
+        assert_eq!(*observed.borrow(), [(2.5, 0.5), (5.0, 1.0), (2.5, 0.5)]);
+    }
+
+    #[test]
+    fn standalone_track_set_overrides_its_value_from_a_signal() {
+        let mut scene = Scene::new();
+        let value = scene.track(0.0_f32);
+        let object = circle().build(&mut scene);
+        scene.world_2d().add(&object);
+        let signaled_value = value.clone();
+        object.signal(move |_, _| signaled_value.set(20.0));
+        value.to(10.0).duration(1.0).easing(Easing::Linear).play();
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.5);
+        assert_eq!(value.get(), 20.0);
+        scene.update(1.0);
+        assert_eq!(value.get(), 20.0);
+    }
+
+    #[test]
+    fn standalone_track_supports_explicit_and_relative_tweens() {
+        let mut scene = Scene::new();
+        let value = scene.track(0.0_f32);
+        value
+            .from(2.0, 6.0)
+            .duration(1.0)
+            .easing(Easing::Linear)
+            .play();
+        value.by(4.0).duration(1.0).easing(Easing::Linear).play();
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.5);
+        assert_eq!(value.get(), 4.0);
+        scene.update(1.5);
+        assert_eq!(value.get(), 8.0);
     }
 
     #[test]

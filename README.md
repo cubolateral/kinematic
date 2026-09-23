@@ -159,7 +159,7 @@ scene object or custom trackable component:
 let counter = s.track(0_u32);
 
 counter
-    .set(10)
+    .to(10)
     .duration(2.0)
     .easing(Easing::Linear)
     .play();

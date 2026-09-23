@@ -932,25 +932,25 @@ impl Text2DHandler {
         };
         let progress = WriteState::progress_property()
             .handle(world.clone(), self.entity(), animator.clone())
-            .animate_from::<Text2D>(0.0, total_duration)
+            .from_for::<Text2D>(0.0, total_duration)
             .duration(total_duration)
             .easing(Easing::Linear)
             .task();
         let transition = WriteState::transition_property()
             .handle(world.clone(), self.entity(), animator.clone())
-            .animate_from::<Text2D>(transition, transition)
+            .from_for::<Text2D>(transition, transition)
             .duration(total_duration)
             .easing(Easing::Linear)
             .task();
         let activate = WriteState::active_property()
             .handle(world.clone(), self.entity(), animator.clone())
-            .animate_from::<Text2D>(false, true)
+            .from_for::<Text2D>(false, true)
             .duration(0.0)
             .easing(Easing::Linear)
             .task();
         let active = WriteState::active_property()
             .handle(world.clone(), self.entity(), animator.clone())
-            .animate_from::<Text2D>(true, false)
+            .from_for::<Text2D>(true, false)
             .duration(total_duration)
             .easing(Easing::Linear)
             .task();
@@ -958,7 +958,7 @@ impl Text2DHandler {
         if reverse {
             let hide = Draw2D::opacity_property()
                 .handle(world, self.entity(), animator.clone())
-                .animate_from::<Text2D>(opacity, 0.0)
+                .from_for::<Text2D>(opacity, 0.0)
                 .duration(0.0)
                 .task();
             animator.play(Task::Chain(vec![animation, hide]));

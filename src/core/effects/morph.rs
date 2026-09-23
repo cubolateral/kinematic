@@ -177,7 +177,7 @@ impl MorphEffect {
         }
         let progress = MorphState::progress_property()
             .handle(world.clone(), carrier.entity(), animator.clone())
-            .animate_from::<Rect>(0.0, 1.0)
+            .from_for::<Rect>(0.0, 1.0)
             .duration(self.duration)
             .easing(Easing::Linear)
             .task();

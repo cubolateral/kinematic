@@ -22,13 +22,13 @@ fn play_creation<T>(
     let (world, animator) = anchor.context();
     let transition = Morph::progress_property()
         .handle(world.clone(), handler.entity(), animator.clone())
-        .animate_from::<T::Object>(progress.0, progress.1)
+        .from_for::<T::Object>(progress.0, progress.1)
         .duration(duration)
         .easing(easing)
         .task();
     let particles = Morph::particles_enabled_property()
         .handle(world, handler.entity(), animator.clone())
-        .animate_from::<T::Object>(true, false)
+        .from_for::<T::Object>(true, false)
         .duration(duration)
         .easing(easing)
         .task();

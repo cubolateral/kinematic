@@ -170,7 +170,7 @@ impl RootHandler {
                 self.entity,
                 self.animator.clone(),
             )
-            .animate(enabled)
+            .to(enabled)
     }
 
     /// Animates the selected world from an explicit starting value.
@@ -181,7 +181,7 @@ impl RootHandler {
                 self.entity,
                 self.animator.clone(),
             )
-            .animate_from(from, to)
+            .from(from, to)
     }
 
     /// Adds a canvas to the internal root at the current scheduling time.

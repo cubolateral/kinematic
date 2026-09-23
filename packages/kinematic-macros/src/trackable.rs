@@ -416,7 +416,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             }
 
             pub fn #set_method_name<Value: Into<#field_ty>>(&self, value: Value) {
-                self.#field_ident.set_direct(value.into());
+                self.#field_ident.set(value.into());
             }
         });
 
@@ -446,7 +446,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                         pub fn #component_set_method_name(&self, value: f32) {
                             let mut component = self.#field_ident.get();
                             component.#component_field = value;
-                            self.#field_ident.set_direct(component);
+                            self.#field_ident.set(component);
                         }
                     });
                 }
@@ -472,7 +472,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 &self,
                 value: #value_type,
             ) -> #tween_type<<Next as #handler_context_trait>::Object> {
-                self.#field_ident.animate::< <Next as #handler_context_trait>::Object >(value.into())
+                self.#field_ident.set_for::< <Next as #handler_context_trait>::Object >(value.into())
             }
 
             pub fn #from_method_name #from_generic (
@@ -480,7 +480,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 from: #from_type,
                 to: #to_type,
             ) -> #tween_type<<Next as #handler_context_trait>::Object> {
-                self.#field_ident.animate_from::< <Next as #handler_context_trait>::Object >(from.into(), to.into())
+                self.#field_ident.from_for::< <Next as #handler_context_trait>::Object >(from.into(), to.into())
             }
         });
         tween_trait_fns.push(quote! {
@@ -592,7 +592,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                         ) -> #tween_type<<Next as #handler_context_trait>::Object> {
                             let mut component = self.#field_ident.get();
                             component.#component_field = value;
-                            self.#field_ident.animate::< <Next as #handler_context_trait>::Object >(component)
+                            self.#field_ident.set_for::< <Next as #handler_context_trait>::Object >(component)
                         }
 
                         pub fn #from_method_name(
@@ -605,7 +605,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             let mut to_component = self.#field_ident.get();
                             to_component.#component_field = to;
 
-                            self.#field_ident.animate_from::< <Next as #handler_context_trait>::Object >(
+                            self.#field_ident.from_for::< <Next as #handler_context_trait>::Object >(
                                 from_component,
                                 to_component,
                             )
@@ -671,7 +671,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                         ) -> #tween_type<<Next as #handler_context_trait>::Object> {
                             let mut component = self.#field_ident.get();
                             component.#component_field = value;
-                            self.#field_ident.animate::< <Next as #handler_context_trait>::Object >(component)
+                            self.#field_ident.set_for::< <Next as #handler_context_trait>::Object >(component)
                         }
 
                         pub fn #from_method_name(
@@ -684,7 +684,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             let mut to_component = self.#field_ident.get();
                             to_component.#component_field = to;
 
-                            self.#field_ident.animate_from::< <Next as #handler_context_trait>::Object >(
+                            self.#field_ident.from_for::< <Next as #handler_context_trait>::Object >(
                                 from_component,
                                 to_component,
                             )
