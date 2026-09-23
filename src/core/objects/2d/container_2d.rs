@@ -1,4 +1,4 @@
-use crate::core::components::{Draw2D, Transform2D};
+use crate::core::components::{Draw2D, Filter, Transform2D};
 use crate::core::types::Vector2;
 use kinematic_macros::{Node, Object, TrackEnum, Trackable};
 
@@ -31,4 +31,6 @@ pub struct Container2D {
     pub transform: Transform2D,
     #[trackable]
     pub draw: Draw2D,
+    #[trackable]
+    pub filter: Filter,
 }

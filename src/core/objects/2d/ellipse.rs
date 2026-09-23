@@ -1,7 +1,7 @@
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    components::{Draw2D, Style, Transform2D, draw_styled_path, styled_bounds},
+    components::{Draw2D, Filter, Style, Transform2D, draw_styled_path, styled_bounds},
     types::{Vector2, vec2},
 };
 
@@ -32,6 +32,8 @@ pub struct Ellipse {
     pub transform: Transform2D,
     #[trackable]
     pub draw: Draw2D,
+    #[trackable]
+    pub filter: Filter,
 }
 
 impl Default for Ellipse {
@@ -65,6 +67,7 @@ impl Default for Ellipse {
                 },
                 ..Default::default()
             },
+            filter: Default::default(),
         }
     }
 }

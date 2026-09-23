@@ -1,7 +1,7 @@
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    components::{Draw2D, Style, Transform2D, draw_styled_path, styled_bounds},
+    components::{Draw2D, Filter, Style, Transform2D, draw_styled_path, styled_bounds},
     objects::regular_polygon_vertices,
     types::{Vector2, vec2},
 };
@@ -45,6 +45,8 @@ pub struct RegularPolygon2D {
     pub transform: Transform2D,
     #[trackable]
     pub draw: Draw2D,
+    #[trackable]
+    pub filter: Filter,
 }
 
 impl Default for RegularPolygon2D {
@@ -86,6 +88,7 @@ impl Default for RegularPolygon2D {
                 },
                 ..Default::default()
             },
+            filter: Default::default(),
         }
     }
 }

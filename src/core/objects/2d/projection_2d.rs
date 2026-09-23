@@ -1,5 +1,5 @@
 use crate::core::{
-    components::{Draw2D, Style, Transform2D, draw_styled_path},
+    components::{Draw2D, Filter, Style, Transform2D, draw_styled_path},
     objects::{ProjectionCanvas, ProjectionSource, RectShape, rect_path},
     types::Color,
 };
@@ -17,6 +17,8 @@ pub struct Projection2D {
     pub transform: Transform2D,
     #[trackable]
     pub draw: Draw2D,
+    #[trackable]
+    pub filter: Filter,
 
     pub source: ProjectionSource,
 }
@@ -44,6 +46,7 @@ impl Default for Projection2D {
                 },
                 ..Default::default()
             },
+            filter: Default::default(),
             source: ProjectionSource::default(),
         }
     }

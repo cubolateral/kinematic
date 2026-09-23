@@ -3,7 +3,7 @@ use std::path::Path;
 use kinematic_macros::Object;
 
 use crate::core::{
-    components::{Draw2D, Style, Transform2D, draw_styled_path, styled_bounds},
+    components::{Draw2D, Filter, Style, Transform2D, draw_styled_path, styled_bounds},
     objects::{ImageSource, RectShape, rect_path},
     types::{Color, Vector2},
 };
@@ -20,6 +20,8 @@ pub struct Image2D {
     pub transform: Transform2D,
     #[trackable]
     pub draw: Draw2D,
+    #[trackable]
+    pub filter: Filter,
 
     source: ImageSource,
 }
@@ -44,6 +46,7 @@ impl Default for Image2D {
                 },
                 ..Default::default()
             },
+            filter: Default::default(),
             source: ImageSource::default(),
         }
     }

@@ -2,7 +2,9 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
     Tween,
-    components::{Draw2D, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale},
+    components::{
+        Draw2D, Filter, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale,
+    },
     objects::{
         ObjectHandler,
         latex_geometry::{FormulaGlyph, geometry},
@@ -67,6 +69,8 @@ pub struct Latex2D {
     pub transform: Transform2D,
     #[trackable]
     pub draw: Draw2D,
+    #[trackable]
+    pub filter: Filter,
 }
 
 fn latex_box(shape: &Latex2DShape) -> Vector2 {
@@ -401,6 +405,7 @@ impl Default for Latex2D {
                 },
                 ..Default::default()
             },
+            filter: Default::default(),
         }
     }
 }

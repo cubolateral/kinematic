@@ -4,7 +4,8 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::core::{
     Easing, Task, Tween,
     components::{
-        Draw2D, Morph, Style, Transform2D, draw_complete_styled_path, stroke_width_for_scale,
+        Draw2D, Filter, Morph, Style, Transform2D, draw_complete_styled_path,
+        stroke_width_for_scale,
     },
     objects::{
         CreationDraw, ObjectHandler,
@@ -162,6 +163,8 @@ pub struct Text2D {
     pub transform: Transform2D,
     #[trackable]
     pub draw: Draw2D,
+    #[trackable]
+    pub filter: Filter,
 }
 
 impl Text2DBuilder {
@@ -875,6 +878,7 @@ impl Default for Text2D {
                 },
                 ..Default::default()
             },
+            filter: Default::default(),
         }
     }
 }

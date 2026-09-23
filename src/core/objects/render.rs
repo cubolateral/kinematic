@@ -1,5 +1,5 @@
 use crate::core::{
-    components::{Camera2D, Camera3D, Camera3DMode, Draw2D, Draw3D, Simulation, TreeNode},
+    components::{Camera2D, Camera3D, Camera3DMode, Draw2D, Draw3D, Filter, Simulation, TreeNode},
     objects::{
         CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, bounds3d,
         draw_projection_2d, global_matrix3d, global_transform, local_transform,
@@ -110,6 +110,9 @@ fn draw_entity_with_mode(
     if !draw.visibility || opacity <= 0.0 {
         return;
     }
+    let blur = world
+        .get::<&Filter>(entity)
+        .map_or(0.0, |filter| filter.blur.max(0.0));
 
     let children = children_by_z_index(world, entity);
     let global = parent.append(local_transform(world, entity));
@@ -143,19 +146,19 @@ fn draw_entity_with_mode(
 
     let mixes_camera_spaces = follows_camera
         && camera_base.is_some()
-        && opacity < 1.0
+        && (opacity < 1.0 || blur > 0.0)
         && subtree_ignores_camera(world, entity);
     let bounds = if mixes_camera_spaces {
         None
-    } else if children.len() == 0 || opacity < 1.0 {
+    } else if children.len() == 0 || opacity < 1.0 || blur > 0.0 {
         appearance
             .and_then(|mode| appearance_bounds(world, entity, mode.activity))
             .or_else(|| visual_bounds(world, entity, global, transform_matrix(global).invert()))
     } else {
         None
     };
-    let composites_opacity = children.len() != 0 || world.get::<&Simulation>(entity).is_ok();
-    if !composites_opacity || opacity >= 1.0 {
+    let composites = children.len() != 0 || world.get::<&Simulation>(entity).is_ok();
+    if blur <= 0.0 && (!composites || opacity >= 1.0) {
         draw_object_appearance(world, entity, canvas, opacity, images, appearance.is_none());
 
         for child in children {
@@ -173,7 +176,21 @@ fn draw_entity_with_mode(
             );
         }
     } else {
-        let layer_count = canvas.save_layer_alpha_f(bounds, opacity);
+        let mut paint = skia_safe::Paint::default();
+        paint.set_alpha_f(opacity);
+        if blur > 0.0 {
+            paint.set_image_filter(skia_safe::image_filters::blur(
+                (blur, blur),
+                None,
+                None,
+                None,
+            ));
+        }
+        let mut layer = skia_safe::canvas::SaveLayerRec::default().paint(&paint);
+        if let Some(bounds) = bounds.as_ref() {
+            layer = layer.bounds(bounds);
+        }
+        let layer_count = canvas.save_layer(&layer);
         draw_object_appearance(world, entity, canvas, 1.0, images, appearance.is_none());
 
         for child in children {
@@ -266,7 +283,22 @@ fn appearance_bounds(
             .0;
         bounds = Some(bounds.map_or(transformed, |bounds| union_bounds(bounds, transformed)));
     }
-    bounds
+    bounds.map(|bounds| filtered_bounds(world, entity, bounds))
+}
+
+fn filtered_bounds(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    bounds: skia_safe::Rect,
+) -> skia_safe::Rect {
+    let blur = world
+        .get::<&Filter>(entity)
+        .map_or(0.0, |filter| filter.blur.max(0.0));
+    if blur <= 0.0 {
+        return bounds;
+    }
+    skia_safe::image_filters::blur((blur, blur), None, None, None)
+        .map_or(bounds, |filter| filter.compute_fast_bounds(bounds))
 }
 
 fn draw_creation_appearance(
@@ -704,11 +736,12 @@ fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::
         .filter_map(|child| transformed_bounds(world, child))
         .reduce(union_bounds);
 
-    match (own, child_bounds) {
+    let bounds = match (own, child_bounds) {
         (Some(own), Some(children)) => Some(union_bounds(own, children)),
         (Some(own), None) => Some(own),
         (None, children) => children,
-    }
+    };
+    bounds.map(|bounds| filtered_bounds(world, entity, bounds))
 }
 
 fn transformed_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::Rect> {
@@ -1293,6 +1326,27 @@ pub(crate) fn camera_outline_points2d(
 mod shader_capture_tests {
     use super::*;
     use crate::prelude::*;
+
+    #[test]
+    fn group_blur_filters_its_subtree() {
+        let mut scene = Scene::new_with_resolution((64, 64));
+        let group = group_2d().blur(4.0).build(&mut scene);
+        let child = rect()
+            .size(vec2(16.0, 16.0))
+            .fill(Color::WHITE)
+            .build(&mut scene);
+        group.add(&child);
+        scene.world_2d().add(&group);
+        scene.update(0.0);
+
+        let mut surface = skia_safe::surfaces::raster_n32_premul((64, 64)).unwrap();
+        surface.canvas().clear(skia_safe::colors::TRANSPARENT);
+        surface.canvas().translate((32.0, 32.0));
+        draw_entity(&scene.world(), group.entity(), surface.canvas(), None);
+
+        let pixels = surface.peek_pixels().unwrap();
+        assert!(pixels.get_color((44, 32)).a() > 0);
+    }
 
     #[test]
     #[should_panic(
