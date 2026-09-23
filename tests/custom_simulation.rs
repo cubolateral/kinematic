@@ -247,6 +247,24 @@ fn auto_update_runs_after_same_frame_mutations() {
 }
 
 #[test]
+fn signal_can_write_simulation_in_the_same_frame() {
+    let observed = Arc::new(Mutex::new((Vec::new(), Vec::new())));
+    let mut scene = Scene::new();
+    let ca = scene.spawn_object(CA2D::new(Arc::clone(&observed)), "CA");
+    scene.world_2d().add(&ca);
+    ca.signal(|ca, _frame| ca.write_simulation_now(|state| state.set_cell(0, true)));
+
+    scene.update(0.0);
+    draw(&scene);
+
+    assert_eq!(
+        ca.read_simulation(|state| state.cells.clone()),
+        vec![true, false, false, false]
+    );
+    assert_eq!(observed.lock().unwrap().0, vec![true, false, false, false]);
+}
+
+#[test]
 fn simulation_drawing_is_opt_in_for_2d_3d_and_custom_callbacks() {
     let mut scene = Scene::new();
     let ca_2d = ca_2d()

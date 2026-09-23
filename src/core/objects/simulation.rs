@@ -41,6 +41,23 @@ where
         .read_state(read)
 }
 
+/// Writes directly to the simulation state currently evaluated by the scene.
+#[doc(hidden)]
+pub fn write_simulation_state<H>(
+    handler: &H,
+    write: impl FnOnce(&mut <H::Object as SimulationObject>::State),
+) where
+    H: ObjectHandler,
+    H::Object: SimulationObject,
+{
+    handler
+        .object_world()
+        .borrow()
+        .get::<&mut Simulation>(handler.entity())
+        .expect("Simulated object must contain a Simulation component.")
+        .write_state(write);
+}
+
 /// Schedules a deterministic simulation-state write at the current timeline time.
 #[doc(hidden)]
 pub fn schedule_simulation_write<H>(

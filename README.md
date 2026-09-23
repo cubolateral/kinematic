@@ -256,9 +256,9 @@ impl Default for LifeObject {
 }
 ```
 
-The generated handler exposes `update`, `write_simulation`, and
-`read_simulation`. Writes and explicit updates are stored in timeline order and
-replayed through seeks and checkpoints:
+The generated handler exposes `update`, `write_simulation`,
+`write_simulation_now`, and `read_simulation`. Writes and explicit updates are
+stored in timeline order and replayed through seeks and checkpoints:
 
 ```rust
 let life = life().auto_update(false).build(s);
@@ -269,6 +269,9 @@ life.update();
 s.wait(1.0);
 life.write_simulation(|state| state.cells[4] = false);
 ```
+
+`write_simulation_now` instead changes only the currently evaluated state. Use
+it inside a signal when drawing must observe the change in the same frame.
 
 `read_simulation` reads the state produced by the latest `Scene::update` and
 returns an owned result, so no reference escapes the ECS borrow:
@@ -285,6 +288,7 @@ let label = text_2d().text("Alive: 0").build(s);
 let label_for_signal = label.clone();
 
 life.signal(move |life, _frame| {
+    life.write_simulation_now(|state| state.cells[0] = true);
     let alive = life.read_simulation(|state| state.cells.iter().filter(|cell| **cell).count());
     label_for_signal.set_text(format!("Alive: {alive}"));
 });

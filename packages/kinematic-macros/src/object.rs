@@ -255,6 +255,13 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                         kinematic::core::objects::read_simulation_state(self, read)
                     }
 
+                    /// Writes directly to the current state, without adding a timeline operation.
+                    ///
+                    /// Use this from a signal to affect drawing in the same frame.
+                    pub fn write_simulation_now(&self, write: impl FnOnce(&mut #state)) {
+                        kinematic::core::objects::write_simulation_state(self, write);
+                    }
+
                     /// Schedules one explicit simulation update at the current timeline time.
                     pub fn update(&self) {
                         kinematic::core::objects::schedule_simulation_update(self);

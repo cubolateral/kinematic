@@ -348,6 +348,15 @@ impl Simulation {
         )
     }
 
+    pub(crate) fn write_state<S: SimulationState>(&mut self, write: impl FnOnce(&mut S)) {
+        write(
+            self.current
+                .state_mut()
+                .downcast_mut::<S>()
+                .expect("Simulation state must match the state associated with its object."),
+        );
+    }
+
     pub(crate) fn schedule_update(&mut self, time: f32) {
         self.operations.push(SimulationOperation::Update { time });
         self.reset_replay();
