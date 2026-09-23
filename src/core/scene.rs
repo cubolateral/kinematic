@@ -1447,7 +1447,7 @@ mod tests {
     }
 
     #[test]
-    fn track_signal_runs_only_when_the_value_changes() {
+    fn track_signal_runs_on_every_scene_evaluation() {
         let mut scene = Scene::new();
         let value = scene.track(0.0_f32);
         let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
@@ -1464,7 +1464,18 @@ mod tests {
             scene.update(time);
         }
 
-        assert_eq!(*observed.borrow(), [(2.5, 0.5), (5.0, 1.0), (2.5, 0.5)]);
+        assert_eq!(
+            *observed.borrow(),
+            [
+                (0.0, 0.0),
+                (0.0, 0.0),
+                (2.5, 0.5),
+                (2.5, 0.5),
+                (5.0, 1.0),
+                (5.0, 1.0),
+                (2.5, 0.5),
+            ]
+        );
     }
 
     #[test]

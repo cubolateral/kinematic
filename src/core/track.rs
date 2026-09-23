@@ -665,21 +665,15 @@ impl<T: TrackValueType> TrackHandle<T> {
         self.clamp((self.get)(&world, self.entity))
     }
 
-    /// Runs a callback after animation tracks whenever this value changes.
+    /// Runs a callback after animation tracks on every scene evaluation.
     pub fn signal(&self, callback: impl FnMut(Self, SignalFrame) + 'static) -> SignalHandle
     where
         T: 'static,
     {
         let track = self.clone();
-        let mut previous = track.get().into_track_value();
         let mut callback = callback;
-        self.animator.signal(self.entity, move |frame| {
-            let value = track.get().into_track_value();
-            if value != previous {
-                previous = value;
-                callback(track.clone(), frame);
-            }
-        })
+        self.animator
+            .signal(self.entity, move |frame| callback(track.clone(), frame))
     }
 
     /// Writes the current value without creating a tween.
