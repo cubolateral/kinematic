@@ -182,7 +182,7 @@ impl ImageShaderData {
             valid_binding_name(&name),
             "Image shader bindings must be GLSL identifiers and cannot use the `k_` prefix."
         );
-        self.textures.insert(name, canvas.projection_texture());
+        self.textures.insert(name, canvas.texture());
     }
 
     #[doc(hidden)]

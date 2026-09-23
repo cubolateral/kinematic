@@ -75,11 +75,8 @@ impl Projection3DBuilder {
     }
 
     pub fn source(mut self, canvas: &impl ProjectionCanvas) -> Self {
-        let resolution = canvas.projection_resolution();
-        self.object.source = ProjectionSource(Some(canvas.projection_texture()));
-        let scale = self.object.settings.pixels_per_unit;
-        self.object.shape.size =
-            glam::vec2(resolution.0 as f32 / scale, resolution.1 as f32 / scale);
+        self.object.source = ProjectionSource(Some(canvas.texture()));
+        self.object.shape.size = canvas.resolution() / self.object.settings.pixels_per_unit;
         self
     }
 }

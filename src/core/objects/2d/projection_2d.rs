@@ -52,9 +52,8 @@ impl Default for Projection2D {
 impl Projection2DBuilder {
     /// Sets the canvas rendered by this projection and adopts its pixel dimensions.
     pub fn source(mut self, canvas: &impl ProjectionCanvas) -> Self {
-        let resolution = canvas.projection_resolution();
-        self.object.source = ProjectionSource(Some(canvas.projection_texture()));
-        self.object.shape.size = glam::vec2(resolution.0 as f32, resolution.1 as f32);
+        self.object.source = ProjectionSource(Some(canvas.texture()));
+        self.object.shape.size = canvas.resolution();
         self
     }
 }

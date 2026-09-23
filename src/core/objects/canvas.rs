@@ -66,28 +66,30 @@ mod sealed {
 /// Canvas handler accepted as the source of a 2D or 3D projection.
 #[doc(hidden)]
 pub trait ProjectionCanvas: ObjectHandler + sealed::Sealed {
-    fn projection_texture(&self) -> CanvasTexture;
+    fn texture(&self) -> CanvasTexture;
 
-    fn projection_resolution(&self) -> (u32, u32) {
-        self.object_world()
+    fn resolution(&self) -> glam::Vec2 {
+        let resolution = self
+            .object_world()
             .borrow()
             .get::<&CanvasSettings>(self.entity())
             .expect("Canvas handler must contain CanvasSettings.")
-            .resolution
+            .resolution;
+        glam::vec2(resolution.0 as f32, resolution.1 as f32)
     }
 }
 
 impl sealed::Sealed for Canvas2DHandler {}
 impl ProjectionCanvas for Canvas2DHandler {
-    fn projection_texture(&self) -> CanvasTexture {
-        self.texture()
+    fn texture(&self) -> CanvasTexture {
+        Canvas2DHandler::texture(self)
     }
 }
 
 impl sealed::Sealed for Canvas3DHandler {}
 impl ProjectionCanvas for Canvas3DHandler {
-    fn projection_texture(&self) -> CanvasTexture {
-        self.texture()
+    fn texture(&self) -> CanvasTexture {
+        Canvas3DHandler::texture(self)
     }
 }
 
