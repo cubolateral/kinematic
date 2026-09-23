@@ -137,6 +137,7 @@ impl InspectorEdits {
         };
         let edit = self.0.remove(index);
         Self::restore(scene, std::slice::from_ref(&edit));
+        scene.invalidate();
         true
     }
 
@@ -783,8 +784,15 @@ impl Editor {
             let canvas_aspect = canvas_size.0.max(1) as f32 / canvas_size.1.max(1) as f32;
             let editor_aspect = editor_size.0.max(1) as f32 / editor_size.1.max(1) as f32;
             if editor_aspect < canvas_aspect {
-                camera.camera_fov =
-                    ((camera.camera_fov * 0.5).tan() * canvas_aspect / editor_aspect).atan() * 2.0;
+                camera.camera_fov = match camera.camera_mode {
+                    crate::core::components::Camera3DMode::Perspective => {
+                        ((camera.camera_fov * 0.5).tan() * canvas_aspect / editor_aspect).atan()
+                            * 2.0
+                    }
+                    crate::core::components::Camera3DMode::Orthogonal => {
+                        camera.camera_fov * canvas_aspect / editor_aspect
+                    }
+                };
             }
             return camera;
         }
@@ -1407,5 +1415,25 @@ mod tests {
 
         assert_eq!(object.get_uniform::<f32>("amount"), 0.25);
         assert!(!edits.contains(&key));
+    }
+
+    #[test]
+    fn inspector_reset_invalidates_the_rendered_scene() {
+        use crate::core::components::Camera3D;
+
+        let scene = Scene::new();
+        let entity = scene.world_3d().entity();
+        let track = <Camera3D as crate::core::Trackable>::track(0);
+        let key = InspectorTrack::new(entity, std::any::TypeId::of::<Camera3D>(), track);
+        let mut edits = InspectorEdits::default();
+        let original = TrackValue::Enum("Perspective");
+        let current = TrackValue::Enum("Orthogonal");
+        (track.set)(&scene.world(), entity, current.clone());
+        edits.record(key.clone(), track, original.clone(), current, false);
+        let render_key = scene.render_key();
+
+        assert!(edits.reset(&scene, key));
+        assert_ne!(scene.render_key(), render_key);
+        assert_eq!((track.get)(&scene.world(), entity), original);
     }
 }

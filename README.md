@@ -709,7 +709,7 @@ world
 ```
 
 `Camera2D` provides `camera_position`, `camera_zoom`, and `camera_rotation`.
-`Camera3D` provides `camera_position`, `camera_rotation`, `camera_fov`,
+`Camera3D` provides `camera_mode`, `camera_position`, `camera_rotation`, `camera_fov`,
 `camera_near`, and `camera_far`. The same methods are available on
 `canvas_2d()` and `canvas_3d()` builders for initial values:
 

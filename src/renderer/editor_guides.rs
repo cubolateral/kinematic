@@ -1,4 +1,4 @@
-use crate::core::components::Camera3D;
+use crate::core::components::{Camera3D, Camera3DMode};
 use three_d::{Geometry, Viewer};
 
 pub(crate) struct EditorGuides3D {
@@ -143,7 +143,10 @@ fn guide_mesh(
 
     if let Some((camera, resolution)) = &guides.canvas_camera {
         let distance = 1.0;
-        let half_height = (camera.camera_fov * 0.5).tan() * distance;
+        let half_height = match camera.camera_mode {
+            Camera3DMode::Perspective => (camera.camera_fov * 0.5).tan() * distance,
+            Camera3DMode::Orthogonal => camera.camera_fov * 0.5,
+        };
         let half_width = half_height * resolution.0.max(1) as f32 / resolution.1.max(1) as f32;
         let transform = camera.matrix();
         let origin = camera.camera_position;
@@ -213,7 +216,11 @@ fn add_segment(
     let screen = |point: glam::Vec3| {
         let point = relative(point);
         let depth = point.dot(forward);
-        glam::vec2(point.dot(right), point.dot(up)) / depth
+        let point = glam::vec2(point.dot(right), point.dot(up));
+        match camera.camera_mode {
+            Camera3DMode::Perspective => point / depth,
+            Camera3DMode::Orthogonal => point,
+        }
     };
     let screen_direction = screen(to) - screen(from);
     if !screen_direction.is_finite() || screen_direction.length_squared() <= f32::EPSILON {
@@ -221,9 +228,12 @@ fn add_segment(
     }
     let screen_side = glam::vec2(-screen_direction.y, screen_direction.x).normalize();
     let side = right * screen_side.x + up * screen_side.y;
-    let world_per_pixel = |point: glam::Vec3| {
-        let depth = relative(point).dot(forward);
-        2.0 * depth * (camera.camera_fov * 0.5).tan() / viewport_height.max(1) as f32
+    let world_per_pixel = |point: glam::Vec3| match camera.camera_mode {
+        Camera3DMode::Perspective => {
+            let depth = relative(point).dot(forward);
+            2.0 * depth * (camera.camera_fov * 0.5).tan() / viewport_height.max(1) as f32
+        }
+        Camera3DMode::Orthogonal => camera.camera_fov / viewport_height.max(1) as f32,
     };
     let from_side = side * world_per_pixel(from) * 0.5;
     let to_side = side * world_per_pixel(to) * 0.5;

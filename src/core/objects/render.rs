@@ -1,5 +1,5 @@
 use crate::core::{
-    components::{Camera2D, Camera3D, Draw2D, Draw3D, Simulation, TreeNode},
+    components::{Camera2D, Camera3D, Camera3DMode, Draw2D, Draw3D, Simulation, TreeNode},
     objects::{
         CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, bounds3d,
         draw_projection_2d, global_matrix3d, global_transform, local_transform,
@@ -1129,19 +1129,33 @@ struct Ray3D {
 }
 
 fn camera_ray(camera: &Camera3D, resolution: (u32, u32), point: Vector2) -> Option<Ray3D> {
-    let width = resolution.0.max(1) as f32;
     let height = resolution.1.max(1) as f32;
-    let tan = (camera.camera_fov * 0.5).tan();
-    let local_direction = glam::vec3(
-        point.x * 2.0 / width * width / height * tan,
-        -point.y * 2.0 / height * tan,
-        -1.0,
-    )
-    .normalize();
     let rotation = crate::core::normalized_quaternion(camera.camera_rotation);
-    let direction = rotation * local_direction;
+    let (origin, direction) = match camera.camera_mode {
+        Camera3DMode::Perspective => {
+            let tan = (camera.camera_fov * 0.5).tan();
+            let direction = glam::vec3(
+                point.x * 2.0 / height * tan,
+                -point.y * 2.0 / height * tan,
+                -1.0,
+            )
+            .normalize();
+            (camera.camera_position, rotation * direction)
+        }
+        Camera3DMode::Orthogonal => {
+            let offset = glam::vec3(
+                point.x / height * camera.camera_fov,
+                -point.y / height * camera.camera_fov,
+                0.0,
+            );
+            (
+                camera.camera_position + rotation * offset,
+                rotation * -glam::Vec3::Z,
+            )
+        }
+    };
     direction.is_finite().then_some(Ray3D {
-        origin: camera.camera_position,
+        origin,
         direction,
         near: camera.camera_near,
         far: camera.camera_far,
@@ -1213,12 +1227,25 @@ fn ray_cuboid_intersection(
 #[cfg(test)]
 fn camera_projection(camera: &Camera3D, resolution: (u32, u32)) -> Option<glam::Mat4> {
     let aspect = resolution.0 as f32 / resolution.1.max(1) as f32;
-    let projection = glam::camera::rh::proj::opengl::perspective(
-        camera.camera_fov,
-        aspect,
-        camera.camera_near,
-        camera.camera_far,
-    );
+    let projection = match camera.camera_mode {
+        Camera3DMode::Perspective => glam::camera::rh::proj::opengl::perspective(
+            camera.camera_fov,
+            aspect,
+            camera.camera_near,
+            camera.camera_far,
+        ),
+        Camera3DMode::Orthogonal => {
+            let half_height = camera.camera_fov * 0.5;
+            glam::camera::rh::proj::opengl::orthographic(
+                -half_height * aspect,
+                half_height * aspect,
+                -half_height,
+                half_height,
+                camera.camera_near,
+                camera.camera_far,
+            )
+        }
+    };
     projection.is_finite().then_some(projection)
 }
 

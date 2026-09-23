@@ -419,6 +419,7 @@ fn canvas_camera_tracks_use_the_camera_prefix() {
         .build(&mut scene);
     let three = canvas_3d()
         .resolution((32, 32))
+        .camera_mode(Camera3DMode::Orthogonal)
         .camera_position(vec3(1.0, 2.0, 4.0))
         .camera_fov(1.0)
         .camera_near(0.2)
@@ -432,6 +433,7 @@ fn canvas_camera_tracks_use_the_camera_prefix() {
     assert_eq!(camera_2d.camera_rotation, 0.5);
 
     let camera_3d = world.get::<&Camera3D>(three.entity()).unwrap();
+    assert_eq!(camera_3d.camera_mode, Camera3DMode::Orthogonal);
     assert_eq!(camera_3d.camera_position, vec3(1.0, 2.0, 4.0));
     assert_eq!(camera_3d.camera_fov, 1.0);
     assert_eq!(camera_3d.camera_near, 0.2);
@@ -449,6 +451,34 @@ fn canvas_camera_tracks_use_the_camera_prefix() {
                 .all(|track| track.name.starts_with("camera_"))
         );
     }
+}
+
+#[test]
+fn camera3d_defaults_to_perspective_mode() {
+    assert_eq!(Camera3D::default().camera_mode, Camera3DMode::Perspective);
+    assert_eq!(
+        Camera3D::track(0).choices,
+        TrackChoices::Enum(&["Perspective", "Orthogonal"])
+    );
+}
+
+#[test]
+fn orthogonal_camera_projects_and_picks_with_parallel_rays() {
+    let mut scene = Scene::new_with_resolution((64, 64));
+    let canvas = scene.world_3d();
+    let cube = cube()
+        .position(vec3(0.5, 0.0, 0.0))
+        .size(vec3(0.25, 0.25, 0.25))
+        .build(&mut scene);
+    canvas.add(&cube);
+    canvas
+        .camera_mode(Camera3DMode::Orthogonal)
+        .camera_fov(2.0)
+        .immediate();
+    scene.root().view_2d(false).immediate();
+
+    assert_eq!(scene.pick(vec2(16.0, 0.0)), Some(cube.entity()));
+    assert!((scene.selection_outline(cube.entity()).unwrap()[0][0][0] - 0.6875).abs() < 0.0001);
 }
 
 #[test]

@@ -6,8 +6,8 @@ use super::{
 use crate::core::{
     Scene, SceneIdentity,
     components::{
-        CachedGeometry, Camera2D, Camera3D, Draw2D, Draw3D, GeometryKey, MeshProgramCache,
-        RenderContext3D,
+        CachedGeometry, Camera2D, Camera3D, Camera3DMode, Draw2D, Draw3D, GeometryKey,
+        MeshProgramCache, RenderContext3D,
     },
     objects::{
         CanvasDimension, CanvasSettings, CanvasTexture, ImageShaderData, ImageShaderImage,
@@ -586,15 +586,27 @@ fn camera_from_component(
     let target = position + rotation * -glam::Vec3::Z;
     let up = rotation * glam::Vec3::Y;
     let convert = |v: glam::Vec3| three_d::vec3(v.x, v.y, v.z);
-    let mut camera = three_d::Camera::new_perspective(
-        three_d::Viewport::new_at_origo(size.0, size.1),
-        convert(position),
-        convert(target),
-        convert(up),
-        three_d::radians(camera_component.camera_fov),
-        camera_component.camera_near,
-        camera_component.camera_far,
-    );
+    let viewport = three_d::Viewport::new_at_origo(size.0, size.1);
+    let mut camera = match camera_component.camera_mode {
+        Camera3DMode::Perspective => three_d::Camera::new_perspective(
+            viewport,
+            convert(position),
+            convert(target),
+            convert(up),
+            three_d::radians(camera_component.camera_fov),
+            camera_component.camera_near,
+            camera_component.camera_far,
+        ),
+        Camera3DMode::Orthogonal => three_d::Camera::new_orthographic(
+            viewport,
+            convert(position),
+            convert(target),
+            convert(up),
+            camera_component.camera_fov,
+            camera_component.camera_near,
+            camera_component.camera_far,
+        ),
+    };
     camera.tone_mapping = three_d::ToneMapping::None;
     Ok(camera)
 }
