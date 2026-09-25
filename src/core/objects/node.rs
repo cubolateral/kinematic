@@ -72,6 +72,29 @@ pub trait NodeHandler {
         );
     }
 
+    /// Inserts an object subtree at `index` at the current scheduling time.
+    fn insert(&self, handler: &impl ObjectHandler, index: usize) {
+        let scene_world = self.container_world();
+        let len = children(&scene_world.borrow(), self.container_entity()).len();
+        assert!(
+            index <= len,
+            "Child index {index} is out of bounds for {len} children."
+        );
+        self.add(handler);
+        if index < len {
+            move_child_to(&scene_world.borrow(), handler.entity(), index);
+        }
+    }
+
+    /// Ends the lifetime of every direct child at the current scheduling time.
+    fn remove_children(&self) {
+        let scene_world = self.container_world();
+        let time = self.container_time();
+        for child in children(&scene_world.borrow(), self.container_entity()) {
+            deactivate_subtree(&scene_world.borrow(), child, time);
+        }
+    }
+
     /// Returns the entity ids of all direct children in insertion order.
     fn children(&self) -> Vec<hecs::Entity> {
         let scene_world = self.container_world();
@@ -117,6 +140,70 @@ pub trait NodeHandler {
         }
 
         Ok(T::handler(scene_world, entity, self.container_animator()))
+    }
+
+    /// Returns the first direct child with object type `T`.
+    fn first_child<T: Object + 'static>(&self) -> Option<T::Handler> {
+        self.all_children::<T>().into_iter().next()
+    }
+
+    /// Returns the last direct child with object type `T`.
+    fn last_child<T: Object + 'static>(&self) -> Option<T::Handler> {
+        self.all_children::<T>().into_iter().next_back()
+    }
+
+    /// Returns all direct children with object type `T` in insertion order.
+    fn all_children<T: Object + 'static>(&self) -> Vec<T::Handler> {
+        let scene_world = self.container_world();
+        let entities = {
+            let world = scene_world.borrow();
+            children(&world, self.container_entity())
+                .into_iter()
+                .filter(|entity| {
+                    world
+                        .get::<&ObjectType>(*entity)
+                        .is_ok_and(|object_type| object_type.0 == std::any::TypeId::of::<T>())
+                })
+                .collect::<Vec<_>>()
+        };
+        let animator = self.container_animator();
+        entities
+            .into_iter()
+            .map(|entity| T::handler(std::rc::Rc::clone(&scene_world), entity, animator.clone()))
+            .collect()
+    }
+
+    /// Returns the first descendant with object type `T` in depth-first order.
+    fn first_child_recursively<T: Object + 'static>(&self) -> Option<T::Handler> {
+        self.all_children_recursively::<T>().into_iter().next()
+    }
+
+    /// Returns the last descendant with object type `T` in depth-first order.
+    fn last_child_recursively<T: Object + 'static>(&self) -> Option<T::Handler> {
+        self.all_children_recursively::<T>().into_iter().next_back()
+    }
+
+    /// Returns all descendants with object type `T` in depth-first order.
+    fn all_children_recursively<T: Object + 'static>(&self) -> Vec<T::Handler> {
+        let scene_world = self.container_world();
+        let entities = {
+            let world = scene_world.borrow();
+            let mut entities = Vec::new();
+            collect_descendants(&world, self.container_entity(), &mut entities);
+            entities
+                .into_iter()
+                .filter(|entity| {
+                    world
+                        .get::<&ObjectType>(*entity)
+                        .is_ok_and(|object_type| object_type.0 == std::any::TypeId::of::<T>())
+                })
+                .collect::<Vec<_>>()
+        };
+        let animator = self.container_animator();
+        entities
+            .into_iter()
+            .map(|entity| T::handler(std::rc::Rc::clone(&scene_world), entity, animator.clone()))
+            .collect()
     }
 }
 
@@ -332,6 +419,67 @@ pub(crate) fn children(world: &hecs::World, entity: hecs::Entity) -> Vec<hecs::E
         .children
         .clone()
         .unwrap_or_default()
+}
+
+fn collect_descendants(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    descendants: &mut Vec<hecs::Entity>,
+) {
+    for child in child_iter(world, entity) {
+        descendants.push(child);
+        collect_descendants(world, child, descendants);
+    }
+}
+
+pub(crate) fn move_child(
+    scene_world: &SceneWorld,
+    entity: hecs::Entity,
+    target: impl FnOnce(usize, usize) -> usize,
+) {
+    let world = scene_world.borrow();
+    let parent = world
+        .get::<&TreeNode>(entity)
+        .expect("Object handler must contain a Node component.")
+        .parent
+        .expect("Cannot move an object without a parent.");
+    let (index, len) = {
+        let node = world
+            .get::<&TreeNode>(parent)
+            .expect("Parent must contain a Node component.");
+        let children = node.children.as_ref().unwrap();
+        (
+            children.iter().position(|child| *child == entity).unwrap(),
+            children.len(),
+        )
+    };
+    move_child_to(&world, entity, target(index, len));
+}
+
+fn move_child_to(world: &hecs::World, entity: hecs::Entity, index: usize) {
+    let parent = world.get::<&TreeNode>(entity).unwrap().parent.unwrap();
+    let mut node = world.get::<&mut TreeNode>(parent).unwrap();
+    let children = node.children.as_mut().unwrap();
+    let current = children.iter().position(|child| *child == entity).unwrap();
+    let child = children.remove(current);
+    children.insert(index, child);
+}
+
+pub(crate) fn ancestor_entity<T: Object + 'static>(
+    world: &hecs::World,
+    entity: hecs::Entity,
+) -> Option<hecs::Entity> {
+    let mut ancestor = world.get::<&TreeNode>(entity).ok()?.parent;
+    while let Some(entity) = ancestor {
+        if world
+            .get::<&ObjectType>(entity)
+            .is_ok_and(|object_type| object_type.0 == std::any::TypeId::of::<T>())
+        {
+            return Some(entity);
+        }
+        ancestor = world.get::<&TreeNode>(entity).ok()?.parent;
+    }
+    None
 }
 
 pub(crate) fn layout_offset_2d(world: &hecs::World, entity: hecs::Entity) -> Vector2 {

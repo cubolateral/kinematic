@@ -5,7 +5,7 @@ use crate::core::{
     components::{
         Animation, Draw2D, Draw3D, Inspection, Morph, Name, ObjectType, Transform2D, TreeNode,
     },
-    objects::{deactivate_subtree, is_attached},
+    objects::{ancestor_entity, deactivate_subtree, is_attached, move_child},
     types::Vector2,
 };
 
@@ -116,6 +116,57 @@ pub trait ObjectHandler: Clone {
         let animator = self.object_animator();
         animator.assert_finite_scope();
         remove_object(&self.object_world(), self.entity(), animator.time());
+    }
+
+    /// Returns the entity id of this object's parent, if attached.
+    fn parent(&self) -> Option<hecs::Entity> {
+        self.object_world()
+            .borrow()
+            .get::<&TreeNode>(self.entity())
+            .ok()?
+            .parent
+    }
+
+    /// Moves this object one position toward the top of its siblings.
+    fn move_up(&self) {
+        move_child(&self.object_world(), self.entity(), |index, len| {
+            (index + 1).min(len - 1)
+        });
+    }
+
+    /// Moves this object one position toward the bottom of its siblings.
+    fn move_down(&self) {
+        move_child(&self.object_world(), self.entity(), |index, _| {
+            index.saturating_sub(1)
+        });
+    }
+
+    /// Moves this object above all of its siblings.
+    fn move_to_top(&self) {
+        move_child(&self.object_world(), self.entity(), |_, len| len - 1);
+    }
+
+    /// Moves this object below all of its siblings.
+    fn move_to_bottom(&self) {
+        move_child(&self.object_world(), self.entity(), |_, _| 0);
+    }
+
+    /// Moves this object to `index` among its siblings.
+    fn move_to(&self, index: usize) {
+        move_child(&self.object_world(), self.entity(), |_, len| {
+            assert!(
+                index < len,
+                "Sibling index {index} is out of bounds for {len} siblings."
+            );
+            index
+        });
+    }
+
+    /// Returns the nearest ancestor with object type `T`.
+    fn ancestor<T: Object + 'static>(&self) -> Option<T::Handler> {
+        let world = self.object_world();
+        let entity = ancestor_entity::<T>(&world.borrow(), self.entity())?;
+        Some(T::handler(world, entity, self.object_animator()))
     }
 
     /// Runs a callback after animation tracks while this object is active.

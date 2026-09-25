@@ -15,6 +15,20 @@ pub fn derive_node(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 <Self as kinematic::core::objects::NodeHandler>::add(self, handler);
             }
 
+            /// Inserts an object subtree at `index` at the current scheduling time.
+            pub fn insert(
+                &self,
+                handler: &impl kinematic::core::objects::ObjectHandler,
+                index: usize,
+            ) {
+                <Self as kinematic::core::objects::NodeHandler>::insert(self, handler, index);
+            }
+
+            /// Ends the lifetime of every direct child at the current scheduling time.
+            pub fn remove_children(&self) {
+                <Self as kinematic::core::objects::NodeHandler>::remove_children(self);
+            }
+
             /// Returns the entity ids of all direct children in insertion order.
             pub fn children(&self) -> Vec<hecs::Entity> {
                 <Self as kinematic::core::objects::NodeHandler>::children(self)
@@ -34,6 +48,48 @@ pub fn derive_node(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 index: usize,
             ) -> Result<T::Handler, kinematic::core::objects::ChildError> {
                 <Self as kinematic::core::objects::NodeHandler>::get_child::<T>(self, index)
+            }
+
+            /// Returns the first direct child with object type `T`.
+            pub fn first_child<T: kinematic::core::objects::Object + 'static>(
+                &self,
+            ) -> Option<T::Handler> {
+                <Self as kinematic::core::objects::NodeHandler>::first_child::<T>(self)
+            }
+
+            /// Returns the last direct child with object type `T`.
+            pub fn last_child<T: kinematic::core::objects::Object + 'static>(
+                &self,
+            ) -> Option<T::Handler> {
+                <Self as kinematic::core::objects::NodeHandler>::last_child::<T>(self)
+            }
+
+            /// Returns all direct children with object type `T` in insertion order.
+            pub fn all_children<T: kinematic::core::objects::Object + 'static>(
+                &self,
+            ) -> Vec<T::Handler> {
+                <Self as kinematic::core::objects::NodeHandler>::all_children::<T>(self)
+            }
+
+            /// Returns the first descendant with object type `T` in depth-first order.
+            pub fn first_child_recursively<
+                T: kinematic::core::objects::Object + 'static,
+            >(&self) -> Option<T::Handler> {
+                <Self as kinematic::core::objects::NodeHandler>::first_child_recursively::<T>(self)
+            }
+
+            /// Returns the last descendant with object type `T` in depth-first order.
+            pub fn last_child_recursively<
+                T: kinematic::core::objects::Object + 'static,
+            >(&self) -> Option<T::Handler> {
+                <Self as kinematic::core::objects::NodeHandler>::last_child_recursively::<T>(self)
+            }
+
+            /// Returns all descendants with object type `T` in depth-first order.
+            pub fn all_children_recursively<
+                T: kinematic::core::objects::Object + 'static,
+            >(&self) -> Vec<T::Handler> {
+                <Self as kinematic::core::objects::NodeHandler>::all_children_recursively::<T>(self)
             }
         }
 
