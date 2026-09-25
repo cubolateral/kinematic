@@ -457,7 +457,7 @@ mod tests {
             .build(&mut scene);
         let snapshot = object.snapshot();
         object.set_uniform("float", 0.75_f32);
-        let tween = object.restore_snapshot(snapshot);
+        let tween = object.restore_snapshot(&snapshot);
         assert_eq!(object.get_uniform::<f32>("float"), 0.25);
         assert_eq!(object.get_uniform::<u32>("uint"), 2);
         assert!(object.get_uniform::<bool>("bool"));

@@ -2082,7 +2082,8 @@ mod tests {
         scene.world_2d().add(&source);
         scene.world_2d().add(&target);
 
-        target.restore_snapshot(source.snapshot()).play();
+        let snapshot = source.snapshot();
+        target.restore_snapshot(&snapshot).play();
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(0.5);

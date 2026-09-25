@@ -289,14 +289,14 @@ pub trait ObjectHandler: Clone {
     }
 
     /// Creates a tween from the current values to a compatible snapshot.
-    fn restore_snapshot(&self, state: Snapshot<Self>) -> Tween<Self::Object>
+    fn restore_snapshot(&self, state: &Snapshot<Self>) -> Tween<Self::Object>
     where
         Self: Sized,
     {
         let world = self.object_world();
         let animator = self.object_animator();
         animator.assert_timeline_mutation();
-        tween_to_values(&world, self.entity(), state.values, animator)
+        tween_to_values(&world, self.entity(), state.values.clone(), animator)
     }
 
     /// Saves all tracked property values on this object's snapshot stack.
