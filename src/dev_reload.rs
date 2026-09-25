@@ -97,10 +97,35 @@ fn reloadable(event: &Event) -> bool {
         event.kind,
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
     ) && event.paths.iter().any(|path| {
-        !path
+        let components: Vec<_> = path
             .components()
-            .any(|component| component.as_os_str() == "target")
-            && (path.file_name().is_some_and(|name| name == "Cargo.toml")
-                || path.extension().is_some_and(|extension| extension == "rs"))
+            .map(|component| component.as_os_str())
+            .collect();
+
+        !components
+            .iter()
+            .any(|component| matches!(component.to_str(), Some("target" | ".git" | "output")))
+            && !components
+                .windows(2)
+                .any(|components| components[0] == ".kinematic" && components[1] == "cache")
+            && path.file_name().is_none_or(|name| name != "imgui.ini")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::event::ModifyKind;
+
+    #[test]
+    fn reloads_for_client_files_but_not_generated_files() {
+        let modified =
+            |path| Event::new(EventKind::Modify(ModifyKind::Any)).add_path(PathBuf::from(path));
+
+        assert!(reloadable(&modified("assets/image.png")));
+        assert!(reloadable(&modified("Cargo.lock")));
+        assert!(!reloadable(&modified("target/debug/client")));
+        assert!(!reloadable(&modified(".kinematic/cache/editor.ron")));
+        assert!(!reloadable(&modified("output/render.mp4")));
+    }
 }
