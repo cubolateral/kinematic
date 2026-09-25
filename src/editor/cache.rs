@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 const CACHE_PATH: &str = ".kinematic/cache/editor.ron";
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub(super) struct EditorCache {
     pub(super) camera_2d: Camera2DCache,
@@ -12,6 +12,7 @@ pub(super) struct EditorCache {
     pub(super) timeline_time: f32,
     pub(super) mode: EditorMode,
     pub(super) fullscreen: bool,
+    pub(super) focused_scene: Option<String>,
 }
 
 impl Default for EditorCache {
@@ -22,6 +23,7 @@ impl Default for EditorCache {
             timeline_time: 0.0,
             mode: EditorMode::default(),
             fullscreen: false,
+            focused_scene: None,
         }
     }
 }
@@ -71,7 +73,7 @@ impl EditorCache {
         }
     }
 
-    pub(super) fn timeline_time(self, duration: f32) -> f32 {
+    pub(super) fn timeline_time(&self, duration: f32) -> f32 {
         if self.timeline_time <= duration {
             self.timeline_time
         } else {
@@ -198,6 +200,7 @@ mod tests {
             timeline_time: 1.5,
             mode: EditorMode::Three,
             fullscreen: true,
+            focused_scene: Some("Main".to_owned()),
         };
 
         write(&cache, &path).unwrap();
@@ -206,6 +209,7 @@ mod tests {
         let loaded: EditorCache = ron::from_str(&contents).unwrap();
         assert_eq!(loaded, cache);
         assert!(contents.contains("timeline_time: 1.5"));
+        assert!(contents.contains("focused_scene: Some(\"Main\")"));
 
         std::fs::remove_dir_all(directory).unwrap();
     }

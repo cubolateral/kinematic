@@ -238,6 +238,7 @@ pub(crate) struct Editor {
     project: Project,
     scenes: Vec<EditorScene>,
     active_scene: usize,
+    focused_scene: Option<usize>,
     selection: Selection,
     timeline: Timeline,
     preview: Canvas,
@@ -281,8 +282,19 @@ impl Editor {
             project.settings.resolution,
             project.settings.fps,
         );
-        let duration = scenes.last().map_or(0.0, |scene| scene.end);
         let cache = EditorCache::load();
+        let focused_scene = (scenes.len() > 1)
+            .then(|| {
+                cache
+                    .focused_scene
+                    .as_deref()
+                    .and_then(|name| scenes.iter().position(|scene| scene.scene.name() == name))
+            })
+            .flatten();
+        let duration = focused_scene.map_or_else(
+            || scenes.last().map_or(0.0, |scene| scene.end),
+            |index| scenes[index].end - scenes[index].start,
+        );
         let mut timeline = Timeline::new(duration, project.settings.fps);
         let timeline_time = cache.timeline_time(duration);
         timeline.go_to(timeline_time);
@@ -310,7 +322,8 @@ impl Editor {
         let mut editor = Self {
             project,
             scenes,
-            active_scene: 0,
+            active_scene: focused_scene.unwrap_or(0),
+            focused_scene,
             selection: Selection::default(),
             timeline,
             preview,
@@ -464,6 +477,7 @@ impl Editor {
             return;
         }
 
+        self.clear_scene_focus();
         let started = self.renderer.start(
             self.project.name,
             self.project.settings.resolution,
@@ -528,6 +542,9 @@ impl Editor {
             timeline_time: self.timeline.time(),
             mode,
             fullscreen,
+            focused_scene: self
+                .focused_scene
+                .map(|index| self.scenes[index].scene.name().to_owned()),
         }
         .save();
         self.renderer.shutdown(gl);
@@ -583,10 +600,13 @@ impl Editor {
         self.pending_editor_3d_size = None;
         self.renderer = Renderer::new(settings.resolution);
         self.scenes = create_scenes(&self.project.scenes, settings.resolution, settings.fps);
-        let duration = self.scenes.last().map_or(0.0, |scene| scene.end);
+        let duration = self.focused_scene.map_or_else(
+            || self.scenes.last().map_or(0.0, |scene| scene.end),
+            |index| self.scenes[index].end - self.scenes[index].start,
+        );
         self.timeline = Timeline::new(duration, settings.fps);
         self.project.settings = settings;
-        self.active_scene = 0;
+        self.active_scene = self.focused_scene.unwrap_or(0);
         self.selection.clear();
         self.render_error = None;
         self.pending_export_time = None;
@@ -602,25 +622,35 @@ impl Editor {
 
     pub fn scene_range(&self) -> [f32; 2] {
         let scene = &self.scenes[self.active_scene];
-        [scene.start, scene.end]
+        if self.focused_scene.is_some() {
+            [0.0, scene.end - scene.start]
+        } else {
+            [scene.start, scene.end]
+        }
     }
 
     pub(crate) fn scenes(
         &self,
     ) -> impl Iterator<
         Item = (
+            usize,
             &'static str,
             [f32; 2],
             &[crate::core::scene_file::ScheduledEvent],
         ),
     > + '_ {
-        self.scenes.iter().map(|scene| {
-            (
-                scene.scene.name(),
-                [scene.start, scene.end],
-                scene.scene.events(),
-            )
-        })
+        self.scenes
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| self.focused_scene.map_or(true, |focused| focused == *index))
+            .map(|(index, scene)| {
+                let range = if self.focused_scene.is_some() {
+                    [0.0, scene.end - scene.start]
+                } else {
+                    [scene.start, scene.end]
+                };
+                (index, scene.scene.name(), range, scene.scene.events())
+            })
     }
 
     pub(crate) fn set_event_duration(
@@ -645,10 +675,49 @@ impl Editor {
         let duration = recalculate_scene_ranges(&mut self.scenes);
 
         self.selection.clear();
-        self.timeline.set_duration(duration);
+        self.timeline
+            .set_duration(self.focused_scene.map_or(duration, |index| {
+                self.scenes[index].end - self.scenes[index].start
+            }));
         self.update_active_scene(self.timeline.time());
     }
 
+    pub(crate) fn focused_scene_name(&self) -> Option<&'static str> {
+        self.focused_scene
+            .map(|index| self.scenes[index].scene.name())
+    }
+
+    pub(crate) fn focused_scene_index(&self) -> Option<usize> {
+        self.focused_scene
+    }
+
+    pub(crate) fn focus_scene(&mut self, index: usize, time: f32) {
+        if self.scenes.len() <= 1 || index >= self.scenes.len() {
+            return;
+        }
+
+        self.timeline.pause();
+        self.focused_scene = Some(index);
+        self.selection.clear();
+        let duration = self.scenes[index].end - self.scenes[index].start;
+        self.timeline.set_duration(duration);
+        self.timeline.go_to(time.clamp(0.0, duration));
+        self.evaluated = None;
+        self.update_active_scene(self.timeline.time());
+    }
+
+    pub(crate) fn clear_scene_focus(&mut self) {
+        let Some(index) = self.focused_scene.take() else {
+            return;
+        };
+
+        let time = self.scenes[index].start + self.timeline.time();
+        self.timeline
+            .set_duration(self.scenes.last().map_or(0.0, |scene| scene.end));
+        self.timeline.go_to(time);
+        self.evaluated = None;
+        self.update_active_scene(time);
+    }
     pub fn active_scene_index(&self) -> usize {
         self.active_scene
     }
@@ -1173,12 +1242,19 @@ impl Editor {
     }
 
     fn update_active_scene(&mut self, time: f32) {
-        let active_scene = active_scene_at(&self.scenes, time);
+        let active_scene = self
+            .focused_scene
+            .unwrap_or_else(|| active_scene_at(&self.scenes, time));
 
         self.active_scene = active_scene;
 
         let scene = &self.scenes[self.active_scene];
-        let local_time = (time - scene.start).clamp(0.0, scene.end - scene.start);
+        let local_time = if self.focused_scene.is_some() {
+            time
+        } else {
+            time - scene.start
+        }
+        .clamp(0.0, scene.end - scene.start);
         let identity = scene.scene.render_key().0;
         if self.evaluated != Some((identity, local_time)) {
             let started = std::time::Instant::now();

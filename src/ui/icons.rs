@@ -1,3 +1,4 @@
+pub(super) const ARROW_LEFT: &str = "\u{f060}";
 pub(super) const BACKWARD: &str = "\u{f04a}";
 pub(super) const BACKWARD_FAST: &str = "\u{f048}";
 pub(super) const CAMERA: &str = "\u{f030}";

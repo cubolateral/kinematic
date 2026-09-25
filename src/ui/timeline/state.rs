@@ -25,14 +25,33 @@ pub(in crate::ui) struct State {
     duration: f32,
     view_start: f32,
     view_end: f32,
+    view_focus: Option<usize>,
+    saved_views: std::collections::HashMap<Option<usize>, (f32, f32)>,
     pub(super) interaction: Interaction,
     pressed_entity: Option<Option<hecs::Entity>>,
     pressed_toggle: bool,
+    pressed_scene: Option<usize>,
     expanded_objects: std::collections::HashSet<hecs::Entity>,
     event_drag: Option<EventDrag>,
 }
 
 impl State {
+    pub fn sync_focus(&mut self, focus: Option<usize>, duration: f32) {
+        if self.view_focus != focus {
+            if self.duration > 0.0 {
+                self.saved_views
+                    .insert(self.view_focus, (self.view_start, self.view_end));
+            }
+            self.view_focus = focus;
+            self.duration = 0.0;
+            self.sync_duration(duration);
+            if let Some(&(start, end)) = self.saved_views.get(&focus) {
+                self.set_view(start, end);
+            }
+        } else {
+            self.sync_duration(duration);
+        }
+    }
     pub fn sync_duration(&mut self, duration: f32) {
         if self.duration == duration {
             return;
@@ -143,6 +162,22 @@ impl State {
         }
     }
 
+    pub(super) fn press_scene(&mut self, scene: usize) {
+        self.pressed_scene = Some(scene);
+    }
+
+    pub(super) fn release_scene(
+        &mut self,
+        scene: Option<usize>,
+        drag_delta: [f32; 2],
+    ) -> Option<usize> {
+        let pressed = self.pressed_scene.take()?;
+        let moved = drag_delta[0].abs().max(drag_delta[1].abs()) >= DRAG_DIRECTION_THRESHOLD;
+        (!moved
+            && matches!(self.interaction, Interaction::None | Interaction::Tracks)
+            && scene == Some(pressed))
+        .then_some(pressed)
+    }
     pub fn toggle_object(&mut self, entity: hecs::Entity) {
         if !self.expanded_objects.remove(&entity) {
             self.expanded_objects.insert(entity);
@@ -190,6 +225,7 @@ impl State {
         self.interaction = Interaction::None;
         self.pressed_entity = None;
         self.pressed_toggle = false;
+        self.pressed_scene = None;
         self.event_drag = None;
     }
 
@@ -243,6 +279,30 @@ mod tests {
     }
 
     #[test]
+    fn switching_focus_restores_each_view_and_clamps_after_event_changes() {
+        let mut state = State::default();
+        state.sync_focus(None, 20.0);
+        state.zoom(-100.0, 0.5);
+        state.pan(-20.0, 100.0);
+        let project_view = state.view_range();
+
+        state.sync_focus(Some(1), 5.0);
+        assert_eq!(state.view_range(), (0.0, 5.0));
+        state.zoom(-100.0, 0.5);
+        let scene_view = state.view_range();
+
+        state.sync_focus(Some(2), 3.0);
+        assert_eq!(state.view_range(), (0.0, 3.0));
+        state.sync_focus(None, 25.0);
+        assert_eq!(state.view_range(), project_view);
+
+        state.sync_focus(Some(1), 8.0);
+        assert_eq!(state.view_range(), scene_view);
+        state.sync_focus(None, 1.0);
+        assert_eq!(state.view_range(), (0.0, 1.0));
+    }
+
+    #[test]
     fn event_drag_changes_only_duration_and_clamps_it_to_zero() {
         let mut state = State::default();
         state.begin_event_drag(2, 3, 4, 5.0, 7.0);
@@ -257,5 +317,19 @@ mod tests {
         assert_eq!(drag.event, 3);
         assert_eq!(drag.file_event, 4);
         assert_eq!(drag.duration, 0.0);
+    }
+
+    #[test]
+    fn scene_focus_requires_a_stationary_click_on_the_same_scene() {
+        let mut state = State::default();
+        state.press_scene(2);
+        assert_eq!(state.release_scene(Some(2), [0.0, 0.0]), Some(2));
+
+        state.press_scene(2);
+        assert_eq!(state.release_scene(Some(2), [10.0, 0.0]), None);
+
+        state.press_scene(2);
+        state.interaction = super::Interaction::Event;
+        assert_eq!(state.release_scene(Some(2), [0.0, 0.0]), None);
     }
 }

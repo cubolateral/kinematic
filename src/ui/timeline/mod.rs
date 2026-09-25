@@ -41,9 +41,10 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         ui.spacing();
         ui.separator();
 
+        let focused_scene = editor.focused_scene_index();
         let time = {
             let timeline = editor.timeline_mut();
-            state.sync_duration(timeline.duration());
+            state.sync_focus(focused_scene, timeline.duration());
             let (start, end) = state.view_range();
             TimeRange {
                 current: timeline.time(),
