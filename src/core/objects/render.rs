@@ -689,7 +689,23 @@ pub fn object_box(world: &hecs::World, entity: hecs::Entity) -> Vector2 {
         .unwrap_or(Vector2::ZERO)
 }
 
-fn logical_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::Rect> {
+pub(crate) fn logical_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::Rect> {
+    logical_bounds_inner(world, entity, None)
+}
+
+pub(crate) fn logical_bounds_at(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    time: f32,
+) -> Option<skia_safe::Rect> {
+    logical_bounds_inner(world, entity, Some(time))
+}
+
+fn logical_bounds_inner(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    time: Option<f32>,
+) -> Option<skia_safe::Rect> {
     if world.get::<&CanvasSettings>(entity).is_ok() {
         return None;
     }
@@ -699,12 +715,14 @@ fn logical_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe
         .then(|| skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y));
     let children = crate::core::objects::child_iter(world, entity)
         .filter(|child| {
-            world
-                .get::<&TreeNode>(*child)
-                .is_ok_and(|node| node.is_activated)
+            world.get::<&TreeNode>(*child).is_ok_and(|node| {
+                time.map_or(node.is_activated, |time| {
+                    node.lifetime[0] <= time && time < node.lifetime[1]
+                })
+            })
         })
         .filter_map(|child| {
-            let bounds = logical_bounds(world, child)?;
+            let bounds = logical_bounds_inner(world, child, time)?;
             Some(
                 transform_matrix(local_transform(world, child))
                     .map_rect(bounds)

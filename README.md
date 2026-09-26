@@ -74,6 +74,37 @@ scene reaches the end of its timeline. Resolution and frame rate default to
 1280 x 720 and 60 FPS. Change them in the editor's Configuration panel;
 Kinematic stores them in `.kinematic/project.ron`.
 
+### Positioning 2D objects
+
+Every 2D object handler exposes `middle()`, `left()`, `right()`, `top()`,
+`bottom()`, and the four corners (`top_left()`, `top_right()`,
+`bottom_left()`, `bottom_right()`). Each returns a `Vector2` based on the
+current local position and bounding box.
+
+Each point has a matching `*_to(position)` method that returns the local
+position needed to place that point at `position`. For objects sharing a
+parent:
+
+```rust
+object.position(object.left_to(other.right())).immediate();
+```
+
+These helpers use the unrotated, unscaled bounding box in parent coordinates.
+For groups, they include the offset of children relative to the group origin.
+They use child lifetimes at the current scheduling time, including future objects.
+
+The 3D handlers provide the same methods with `Vector3`, plus `front()`,
+`back()`, face edges such as `top_front()`, and corners such as
+`top_left_front()`; every point also has a `*_to(position)` method. In 3D,
+top is positive Y and front is positive Z:
+
+```rust
+object.position(object.back_to(other.front())).immediate();
+```
+
+The helpers use each object's local position and bounding box. Compose
+points directly between objects sharing a parent.
+
 ## Timed events
 
 Use `event` for a named wait whose duration can be edited directly in the

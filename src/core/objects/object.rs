@@ -1,12 +1,13 @@
-use super::render::object_box;
+use super::render::{logical_bounds_at, object_box};
 use crate::core::{
     AnimatorHandle, SceneWorld, SignalFrame, SignalHandle, TrackProperty, TrackTarget, TrackValue,
     TrackValueType, Trackable, Tween,
     components::{
-        Animation, Draw2D, Draw3D, Inspection, Morph, Name, ObjectType, Transform2D, TreeNode,
+        Animation, Draw2D, Draw3D, Inspection, Morph, Name, ObjectType, Transform2D, Transform3D,
+        TreeNode,
     },
     objects::{ancestor_entity, deactivate_subtree, is_attached, move_child},
-    types::Vector2,
+    types::{Vector2, Vector3},
 };
 
 #[derive(Clone)]
@@ -326,6 +327,108 @@ pub trait Object2DHandler: ObjectHandler {
         object_box(&self.object_world().borrow(), self.entity())
     }
 
+    /// Returns a point on the local bounding box relative to the object's position.
+    #[doc(hidden)]
+    fn box_offset(&self, x: f32, y: f32) -> Vector2 {
+        logical_bounds_at(
+            &self.object_world().borrow(),
+            self.entity(),
+            self.object_animator().time(),
+        )
+        .map_or(Vector2::ZERO, |bounds| {
+            Vector2::new(
+                (bounds.left + bounds.right) * 0.5 + bounds.width() * x * 0.5,
+                (bounds.top + bounds.bottom) * 0.5 + bounds.height() * y * 0.5,
+            )
+        })
+    }
+
+    /// Returns a point on the local bounding box in parent coordinates.
+    #[doc(hidden)]
+    fn box_point(&self, x: f32, y: f32) -> Vector2 {
+        self.get(Transform2D::position_property()) + self.box_offset(x, y)
+    }
+
+    /// Returns the local position that places a bounding-box point at `position`.
+    #[doc(hidden)]
+    fn box_point_to(&self, position: Vector2, x: f32, y: f32) -> Vector2 {
+        position - self.box_offset(x, y)
+    }
+
+    /// Returns the center of the bounding box.
+    fn middle(&self) -> Vector2 {
+        self.box_point(0.0, 0.0)
+    }
+    /// Returns the center of the left edge.
+    fn left(&self) -> Vector2 {
+        self.box_point(-1.0, 0.0)
+    }
+    /// Returns the center of the right edge.
+    fn right(&self) -> Vector2 {
+        self.box_point(1.0, 0.0)
+    }
+    /// Returns the center of the top edge.
+    fn top(&self) -> Vector2 {
+        self.box_point(0.0, -1.0)
+    }
+    /// Returns the center of the bottom edge.
+    fn bottom(&self) -> Vector2 {
+        self.box_point(0.0, 1.0)
+    }
+    /// Returns the top-left corner.
+    fn top_left(&self) -> Vector2 {
+        self.box_point(-1.0, -1.0)
+    }
+    /// Returns the top-right corner.
+    fn top_right(&self) -> Vector2 {
+        self.box_point(1.0, -1.0)
+    }
+    /// Returns the bottom-left corner.
+    fn bottom_left(&self) -> Vector2 {
+        self.box_point(-1.0, 1.0)
+    }
+    /// Returns the bottom-right corner.
+    fn bottom_right(&self) -> Vector2 {
+        self.box_point(1.0, 1.0)
+    }
+
+    /// Returns the local position that places the center at `position`.
+    fn middle_to(&self, position: Vector2) -> Vector2 {
+        self.box_point_to(position, 0.0, 0.0)
+    }
+    /// Returns the local position that places the left edge at `position`.
+    fn left_to(&self, position: Vector2) -> Vector2 {
+        self.box_point_to(position, -1.0, 0.0)
+    }
+    /// Returns the local position that places the right edge at `position`.
+    fn right_to(&self, position: Vector2) -> Vector2 {
+        self.box_point_to(position, 1.0, 0.0)
+    }
+    /// Returns the local position that places the top edge at `position`.
+    fn top_to(&self, position: Vector2) -> Vector2 {
+        self.box_point_to(position, 0.0, -1.0)
+    }
+    /// Returns the local position that places the bottom edge at `position`.
+    fn bottom_to(&self, position: Vector2) -> Vector2 {
+        self.box_point_to(position, 0.0, 1.0)
+    }
+    /// Returns the local position that places the top-left corner at `position`.
+    fn top_left_to(&self, position: Vector2) -> Vector2 {
+        self.box_point_to(position, -1.0, -1.0)
+    }
+    /// Returns the local position that places the top-right corner at `position`.
+    fn top_right_to(&self, position: Vector2) -> Vector2 {
+        self.box_point_to(position, 1.0, -1.0)
+    }
+    /// Returns the local position that places the bottom-left corner at `position`.
+    fn bottom_left_to(&self, position: Vector2) -> Vector2 {
+        self.box_point_to(position, -1.0, 1.0)
+    }
+    /// Returns the local position that places the bottom-right corner at `position`.
+    fn bottom_right_to(&self, position: Vector2) -> Vector2 {
+        self.box_point_to(position, 1.0, 1.0)
+    }
+
     /// Returns the object's position in scene coordinates.
     fn global_position(&self) -> Vector2 {
         object_global_position(&self.object_world().borrow(), self.entity())
@@ -619,11 +722,84 @@ pub trait ObjectBuilderComponent<T> {
     fn component_mut(&mut self) -> &mut T;
 }
 
+macro_rules! anchor3d_methods {
+    ($( $name:ident, $to:ident => ($x:expr, $y:expr, $z:expr); )*) => {
+        $(
+            #[doc = concat!("Returns the ", stringify!($name), " point of the local bounding box.")]
+            fn $name(&self) -> Vector3 {
+                self.box_point($x, $y, $z)
+            }
+
+            #[doc = concat!("Returns the local position that places ", stringify!($name), " at `position`.")]
+            fn $to(&self, position: Vector3) -> Vector3 {
+                self.box_point_to(position, $x, $y, $z)
+            }
+        )*
+    };
+}
+
 /// Spatial access for three-dimensional objects. Bounds are local extents.
 pub trait Object3DHandler: ObjectHandler {
     fn box_size(&self) -> crate::core::types::Vector3 {
         object_box3d(&self.object_world().borrow(), self.entity())
     }
+    /// Returns a point on the local bounding box relative to the object's position.
+    #[doc(hidden)]
+    fn box_offset(&self, x: f32, y: f32, z: f32) -> Vector3 {
+        object_bounds3d_at(
+            &self.object_world().borrow(),
+            self.entity(),
+            self.object_animator().time(),
+        )
+        .map_or(Vector3::ZERO, |(min, max)| {
+            (min + max) * 0.5 + (max - min) * Vector3::new(x, y, z) * 0.5
+        })
+    }
+
+    /// Returns a point on the local bounding box in parent coordinates.
+    #[doc(hidden)]
+    fn box_point(&self, x: f32, y: f32, z: f32) -> Vector3 {
+        self.get(Transform3D::position_property()) + self.box_offset(x, y, z)
+    }
+
+    /// Returns the local position that places a bounding-box point at `position`.
+    #[doc(hidden)]
+    fn box_point_to(&self, position: Vector3, x: f32, y: f32, z: f32) -> Vector3 {
+        position - self.box_offset(x, y, z)
+    }
+
+    anchor3d_methods! {
+        middle, middle_to => (0.0, 0.0, 0.0);
+        left, left_to => (-1.0, 0.0, 0.0);
+        right, right_to => (1.0, 0.0, 0.0);
+        top, top_to => (0.0, 1.0, 0.0);
+        bottom, bottom_to => (0.0, -1.0, 0.0);
+        top_left, top_left_to => (-1.0, 1.0, 0.0);
+        top_right, top_right_to => (1.0, 1.0, 0.0);
+        bottom_left, bottom_left_to => (-1.0, -1.0, 0.0);
+        bottom_right, bottom_right_to => (1.0, -1.0, 0.0);
+
+        front, front_to => (0.0, 0.0, 1.0);
+        left_front, left_front_to => (-1.0, 0.0, 1.0);
+        right_front, right_front_to => (1.0, 0.0, 1.0);
+        top_front, top_front_to => (0.0, 1.0, 1.0);
+        bottom_front, bottom_front_to => (0.0, -1.0, 1.0);
+        top_left_front, top_left_front_to => (-1.0, 1.0, 1.0);
+        top_right_front, top_right_front_to => (1.0, 1.0, 1.0);
+        bottom_left_front, bottom_left_front_to => (-1.0, -1.0, 1.0);
+        bottom_right_front, bottom_right_front_to => (1.0, -1.0, 1.0);
+
+        back, back_to => (0.0, 0.0, -1.0);
+        left_back, left_back_to => (-1.0, 0.0, -1.0);
+        right_back, right_back_to => (1.0, 0.0, -1.0);
+        top_back, top_back_to => (0.0, 1.0, -1.0);
+        bottom_back, bottom_back_to => (0.0, -1.0, -1.0);
+        top_left_back, top_left_back_to => (-1.0, 1.0, -1.0);
+        top_right_back, top_right_back_to => (1.0, 1.0, -1.0);
+        bottom_left_back, bottom_left_back_to => (-1.0, -1.0, -1.0);
+        bottom_right_back, bottom_right_back_to => (1.0, -1.0, -1.0);
+    }
+
     fn global_position(&self) -> crate::core::types::Vector3 {
         global_matrix3d(&self.object_world().borrow(), self.entity())
             .transform_point3(glam::Vec3::ZERO)
@@ -689,20 +865,33 @@ pub(crate) fn global_rotation3d(world: &hecs::World, entity: hecs::Entity) -> gl
 }
 
 pub(crate) fn object_box3d(world: &hecs::World, entity: hecs::Entity) -> glam::Vec3 {
-    bounds3d_inner(world, entity, false).map_or(glam::Vec3::ZERO, |(min, max)| max - min)
+    object_bounds3d(world, entity).map_or(glam::Vec3::ZERO, |(min, max)| max - min)
+}
+
+fn object_bounds3d(world: &hecs::World, entity: hecs::Entity) -> Option<(Vector3, Vector3)> {
+    bounds3d_inner(world, entity, false, None)
+}
+
+fn object_bounds3d_at(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    time: f32,
+) -> Option<(Vector3, Vector3)> {
+    bounds3d_inner(world, entity, false, Some(time))
 }
 
 pub(crate) fn bounds3d(
     world: &hecs::World,
     entity: hecs::Entity,
 ) -> Option<(glam::Vec3, glam::Vec3)> {
-    bounds3d_inner(world, entity, true)
+    bounds3d_inner(world, entity, true, None)
 }
 
 fn bounds3d_inner(
     world: &hecs::World,
     entity: hecs::Entity,
     shader_padding: bool,
+    time: Option<f32>,
 ) -> Option<(glam::Vec3, glam::Vec3)> {
     let size = world
         .get::<&Draw3D>(entity)
@@ -734,10 +923,15 @@ fn bounds3d_inner(
         },
     );
     for child in crate::core::objects::child_iter(world, entity) {
-        if !world.get::<&TreeNode>(child).is_ok_and(|n| n.is_activated) {
+        if !world.get::<&TreeNode>(child).is_ok_and(|node| {
+            time.map_or(node.is_activated, |time| {
+                node.lifetime[0] <= time && time < node.lifetime[1]
+            })
+        }) {
             continue;
         }
-        let Some((child_min, child_max)) = bounds3d_inner(world, child, shader_padding) else {
+        let Some((child_min, child_max)) = bounds3d_inner(world, child, shader_padding, time)
+        else {
             continue;
         };
         let matrix = local_matrix3d(world, child);
