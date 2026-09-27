@@ -110,9 +110,11 @@ fn draw_entity_with_mode(
     if !draw.visibility || opacity <= 0.0 {
         return;
     }
-    let blur = world
+    let image_filter = world
         .get::<&Filter>(entity)
-        .map_or(0.0, |filter| filter.blur.max(0.0));
+        .ok()
+        .and_then(|filter| image_filter(&filter));
+    let filtered = image_filter.is_some();
 
     let children = children_by_z_index(world, entity);
     let global = parent.append(local_transform(world, entity));
@@ -146,11 +148,11 @@ fn draw_entity_with_mode(
 
     let mixes_camera_spaces = follows_camera
         && camera_base.is_some()
-        && (opacity < 1.0 || blur > 0.0)
+        && (opacity < 1.0 || filtered)
         && subtree_ignores_camera(world, entity);
     let bounds = if mixes_camera_spaces {
         None
-    } else if children.len() == 0 || opacity < 1.0 || blur > 0.0 {
+    } else if children.len() == 0 || opacity < 1.0 || filtered {
         appearance
             .and_then(|mode| appearance_bounds(world, entity, mode.activity))
             .or_else(|| visual_bounds(world, entity, global, transform_matrix(global).invert()))
@@ -158,7 +160,7 @@ fn draw_entity_with_mode(
         None
     };
     let composites = children.len() != 0 || world.get::<&Simulation>(entity).is_ok();
-    if blur <= 0.0 && (!composites || opacity >= 1.0) {
+    if !filtered && (!composites || opacity >= 1.0) {
         draw_object_appearance(world, entity, canvas, opacity, images, appearance.is_none());
 
         for child in children {
@@ -178,14 +180,7 @@ fn draw_entity_with_mode(
     } else {
         let mut paint = skia_safe::Paint::default();
         paint.set_alpha_f(opacity);
-        if blur > 0.0 {
-            paint.set_image_filter(skia_safe::image_filters::blur(
-                (blur, blur),
-                None,
-                None,
-                None,
-            ));
-        }
+        paint.set_image_filter(image_filter);
         let mut layer = skia_safe::canvas::SaveLayerRec::default().paint(&paint);
         if let Some(bounds) = bounds.as_ref() {
             layer = layer.bounds(bounds);
@@ -291,14 +286,30 @@ fn filtered_bounds(
     entity: hecs::Entity,
     bounds: skia_safe::Rect,
 ) -> skia_safe::Rect {
-    let blur = world
+    world
         .get::<&Filter>(entity)
-        .map_or(0.0, |filter| filter.blur.max(0.0));
-    if blur <= 0.0 {
-        return bounds;
-    }
-    skia_safe::image_filters::blur((blur, blur), None, None, None)
+        .ok()
+        .and_then(|filter| image_filter(&filter))
         .map_or(bounds, |filter| filter.compute_fast_bounds(bounds))
+}
+
+fn image_filter(filter: &Filter) -> Option<skia_safe::ImageFilter> {
+    let blur = filter.blur.max(0.0);
+    let mut image_filter = (blur > 0.0)
+        .then(|| skia_safe::image_filters::blur((blur, blur), None, None, None))
+        .flatten();
+    if filter.shadow_color.a > 0.0 {
+        let color = filter.shadow_color;
+        image_filter = skia_safe::image_filters::drop_shadow(
+            (filter.shadow_offset.x, filter.shadow_offset.y),
+            (filter.shadow_blur.max(0.0), filter.shadow_blur.max(0.0)),
+            skia_safe::Color4f::new(color.r, color.g, color.b, color.a),
+            None,
+            image_filter,
+            None,
+        );
+    }
+    image_filter
 }
 
 fn draw_creation_appearance(
@@ -1364,6 +1375,24 @@ mod shader_capture_tests {
 
         let pixels = surface.peek_pixels().unwrap();
         assert!(pixels.get_color((44, 32)).a() > 0);
+    }
+
+    #[test]
+    fn transparent_shadow_skips_the_image_filter() {
+        let filter = Filter {
+            shadow_offset: vec2(8.0, 8.0),
+            shadow_blur: 4.0,
+            ..Default::default()
+        };
+
+        assert!(image_filter(&filter).is_none());
+        assert!(
+            image_filter(&Filter {
+                shadow_color: Color::BLACK,
+                ..filter
+            })
+            .is_some()
+        );
     }
 
     #[test]
