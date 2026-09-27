@@ -36,8 +36,15 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
         ui.same_line();
 
-        let _ = ui.begin_disabled_with_cond(is_exporting);
+        let _disabled = ui.begin_disabled_with_cond(is_exporting);
         ui.checkbox("Silent", &mut state.silent);
+
+        ui.spacing();
+
+        if ui.button_with_size("Export scene", [available_width, 0.0]) {
+            editor.export_scene(state.silent);
+            started = !is_exporting && editor.is_exporting();
+        }
 
         ui.spacing();
 

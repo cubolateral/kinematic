@@ -478,6 +478,19 @@ impl Editor {
         }
 
         self.clear_scene_focus();
+        self.start_export(silent);
+    }
+
+    pub fn export_scene(&mut self, silent: bool) {
+        if self.is_exporting {
+            return;
+        }
+
+        self.focus_scene(self.active_scene, 0.0);
+        self.start_export(silent);
+    }
+
+    fn start_export(&mut self, silent: bool) {
         let started = self.renderer.start(
             self.project.name,
             self.project.settings.resolution,
