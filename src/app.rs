@@ -139,7 +139,7 @@ impl App {
         );
 
         let mut events = self.sdl.event_pump().unwrap();
-        let dev_reload = crate::dev_reload::DevReload::new();
+        let reload = crate::reload::Reload::new();
         let mut restart = false;
 
         'running: loop {
@@ -200,7 +200,12 @@ impl App {
             self.ui.apply_scale(&mut self.imgui);
             self.imgui_sdl.new_frame(&mut self.imgui);
 
-            self.ui.draw(&mut editor, self.imgui.frame());
+            if self
+                .ui
+                .draw(&mut editor, self.imgui.frame(), !reload.is_building())
+            {
+                reload.request();
+            }
 
             if let Some([x, y]) = editor.take_pending_mouse_warp() {
                 self.sdl.mouse().warp_mouse_in_window(&self.window, x, y);
@@ -210,10 +215,7 @@ impl App {
             self.window.gl_swap_window();
             self.window_cache.update(&self.window);
 
-            if dev_reload
-                .as_ref()
-                .is_some_and(crate::dev_reload::DevReload::should_restart)
-            {
+            if reload.should_restart() {
                 restart = true;
                 break 'running;
             }
@@ -233,9 +235,7 @@ impl App {
             .remove(editor.editor_3d_texture_id());
 
         if restart {
-            dev_reload
-                .expect("Automatic reload must be active before restarting.")
-                .restart();
+            reload.restart();
         }
     }
 }

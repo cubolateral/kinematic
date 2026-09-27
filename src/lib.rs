@@ -8,7 +8,7 @@ pub mod utilities;
 extern crate self as kinematic;
 
 mod app;
-mod dev_reload;
+mod reload;
 mod window_cache;
 
 pub use app::*;

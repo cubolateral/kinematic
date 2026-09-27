@@ -26,6 +26,20 @@ pub(crate) struct Ui {
     timeline: timeline::State,
 }
 
+fn draw_top_bar(ui: &dear_imgui_rs::Ui, enabled: bool) -> bool {
+    let Some(_bar) = ui.begin_main_menu_bar() else {
+        return false;
+    };
+    let _disabled = ui.begin_disabled_with_cond(!enabled);
+    let clicked = controls::text_button(ui, icons::HAMMER, [ui.frame_height(); 2]);
+
+    if ui.is_item_hovered() {
+        ui.tooltip_text("Rebuild and reload [B]");
+    }
+
+    clicked
+}
+
 impl Ui {
     pub fn new(context: &mut dear_imgui_rs::Context) -> Self {
         let mut flags = context.io().config_flags();
@@ -46,7 +60,12 @@ impl Ui {
         }
     }
 
-    pub fn draw(&mut self, editor: &mut Editor, ui: &mut dear_imgui_rs::Ui) {
+    pub fn draw(
+        &mut self,
+        editor: &mut Editor,
+        ui: &mut dear_imgui_rs::Ui,
+        can_reload: bool,
+    ) -> bool {
         let _theme = self.appearance.push(ui);
         let _font = ui.push_font(self.font);
         let io = ui.io();
@@ -59,6 +78,10 @@ impl Ui {
         let fullscreen_shortcut = plain_keyboard_input
             && (self.is_fullscreen || !editor.is_exporting())
             && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::F, false);
+        let reload_shortcut = plain_keyboard_input
+            && can_reload
+            && !editor.is_exporting()
+            && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::B, false);
 
         if self.is_fullscreen {
             let fullscreen_button = preview::draw_fullscreen(editor, ui);
@@ -68,9 +91,10 @@ impl Ui {
                 ui.set_window_focus(Some(inspector::WINDOW_NAME));
             }
 
-            return;
+            return reload_shortcut;
         }
 
+        let reload_button = draw_top_bar(ui, can_reload && !editor.is_exporting());
         let dock = ui.dockspace_over_main_viewport();
 
         let initial_layout = self.needs_initial_layout;
@@ -104,6 +128,8 @@ impl Ui {
         if fullscreen_shortcut || fullscreen_button {
             self.is_fullscreen = true;
         }
+
+        reload_shortcut || reload_button
     }
 
     pub fn apply_scale(&self, context: &mut dear_imgui_rs::Context) {

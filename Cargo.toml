@@ -26,7 +26,6 @@ ratex-parser = "0.1.14"
 ratex-types = "0.1.14"
 ratex-font = "0.1.14"
 ratex-katex-fonts = "0.1.14"
-notify = "8"
 
 [workspace]
 members = ["packages/*"]

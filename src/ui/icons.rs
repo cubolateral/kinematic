@@ -10,6 +10,7 @@ pub(super) const EYE_SLASH: &str = "\u{f070}";
 pub(super) const VIDEO_CAMERA: &str = "\u{f03d}";
 pub(super) const FORWARD: &str = "\u{f04e}";
 pub(super) const FORWARD_FAST: &str = "\u{f050}";
+pub(super) const HAMMER: &str = "\u{f08ea}";
 pub(super) const PAUSE: &str = "\u{f04c}";
 pub(super) const PENCIL: &str = "\u{f040}";
 pub(super) const PLAY: &str = "\u{f04b}";

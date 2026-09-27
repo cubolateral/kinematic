@@ -7,7 +7,7 @@ const RIGHT_PANEL_WIDTH_RATIO: f32 = 0.25;
 pub(super) fn apply_default_layout(ui: &dear_imgui_rs::Ui, dock: dear_imgui_rs::Id) {
     dear_imgui_rs::DockBuilder::remove_node(ui, dock);
     dear_imgui_rs::DockBuilder::add_node(ui, dock, dear_imgui_rs::DockNodeFlags::NONE);
-    dear_imgui_rs::DockBuilder::set_node_size(ui, dock, ui.main_viewport().size());
+    dear_imgui_rs::DockBuilder::set_node_size(ui, dock, ui.main_viewport().work_size());
 
     let (timeline_node, top_node) = dear_imgui_rs::DockBuilder::split_node(
         ui,
