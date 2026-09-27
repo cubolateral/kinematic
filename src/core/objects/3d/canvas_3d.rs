@@ -1,6 +1,10 @@
 use kinematic_macros::{Node, Object};
 
-use crate::core::components::{Camera3D, Draw3D};
+use crate::core::{
+    Tween,
+    components::{__KinematicCamera3DTweenFields, Camera3D, Draw3D},
+    types::{Quaternion, Vector3},
+};
 
 use super::super::canvas::{
     CanvasDimension, CanvasSettings, CanvasTexture, scene_identity, validate_canvas,
@@ -36,6 +40,13 @@ impl Canvas3DBuilder {
 }
 
 impl Canvas3DHandler {
+    /// Moves the camera while turning it toward a target point.
+    pub fn focus_camera(&self, position: Vector3, target: Vector3) -> Tween<Canvas3D> {
+        let rotation =
+            Quaternion::from_rotation_arc(Vector3::NEG_Z, (target - position).normalize_or_zero());
+        self.camera_position(position).camera_rotation(rotation)
+    }
+
     /// Returns the render output produced with this canvas's camera.
     pub fn texture(&self) -> CanvasTexture {
         CanvasTexture {

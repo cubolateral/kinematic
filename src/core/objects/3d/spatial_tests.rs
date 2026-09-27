@@ -463,6 +463,22 @@ fn camera3d_defaults_to_perspective_mode() {
 }
 
 #[test]
+fn canvas3d_focus_camera_moves_and_looks_at_the_target() {
+    let mut scene = Scene::new();
+    let canvas = canvas_3d().build(&mut scene);
+    let position = vec3(3.0, 2.0, 1.0);
+    let target = vec3(-1.0, 4.0, -2.0);
+
+    let tween = canvas.focus_camera(position, target);
+    let camera = tween.endpoint(&Camera3D::default(), true);
+    assert_eq!(camera.camera_position, position);
+    assert!(
+        (camera.camera_rotation * Vector3::NEG_Z)
+            .abs_diff_eq((target - position).normalize(), 1e-5)
+    );
+}
+
+#[test]
 fn orthogonal_camera_projects_and_picks_with_parallel_rays() {
     let mut scene = Scene::new_with_resolution((64, 64));
     let canvas = scene.world_3d();
