@@ -267,6 +267,11 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                         kinematic::core::objects::schedule_simulation_update(self);
                     }
 
+                    /// Saves a replay checkpoint at the current timeline time.
+                    pub fn checkpoint(&self) {
+                        kinematic::core::objects::schedule_simulation_checkpoint(self);
+                    }
+
                     /// Schedules a replayable state write at the current timeline time.
                     pub fn write_simulation(
                         &self,

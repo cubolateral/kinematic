@@ -23,6 +23,19 @@ pub fn schedule_simulation_update(handler: &impl ObjectHandler) {
         .schedule_update(animator.time());
 }
 
+/// Schedules a simulation checkpoint at the handler's current timeline time.
+#[doc(hidden)]
+pub fn schedule_simulation_checkpoint(handler: &impl ObjectHandler) {
+    let animator = handler.object_animator();
+    animator.assert_finite_scope();
+    handler
+        .object_world()
+        .borrow()
+        .get::<&mut Simulation>(handler.entity())
+        .expect("Simulated object must contain a Simulation component.")
+        .schedule_checkpoint(animator.time());
+}
+
 /// Reads the simulation state currently evaluated by the scene.
 #[doc(hidden)]
 pub fn read_simulation_state<H, R>(

@@ -272,9 +272,11 @@ fn simulation_drawing_is_opt_in_for_2d_3d_and_custom_callbacks() {
         .auto_update(false)
         .build(&mut scene);
     assert_eq!(ca_2d.get_color(), Color::MAGENTA);
+    ca_2d.checkpoint();
 
     let ca_3d = ca_3d().build(&mut scene);
     assert_eq!(ca_3d.box_size(), Vector3::ONE);
+    ca_3d.checkpoint();
 
     let custom = custom_draw().build(&mut scene);
     scene.world_2d().add(&custom);

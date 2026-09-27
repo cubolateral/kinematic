@@ -246,6 +246,9 @@ enum SimulationOperation {
     Update {
         time: f32,
     },
+    Checkpoint {
+        time: f32,
+    },
     Mutation {
         time: f32,
         apply: Arc<dyn Fn(&mut dyn Any) + Send + Sync>,
@@ -255,7 +258,9 @@ enum SimulationOperation {
 impl SimulationOperation {
     fn time(&self) -> f32 {
         match self {
-            Self::Update { time } | Self::Mutation { time, .. } => *time,
+            Self::Update { time } | Self::Checkpoint { time } | Self::Mutation { time, .. } => {
+                *time
+            }
         }
     }
 }
@@ -362,6 +367,12 @@ impl Simulation {
         self.reset_replay();
     }
 
+    pub(crate) fn schedule_checkpoint(&mut self, time: f32) {
+        self.operations
+            .push(SimulationOperation::Checkpoint { time });
+        self.reset_replay();
+    }
+
     pub(crate) fn schedule_mutation<S: SimulationState>(
         &mut self,
         time: f32,
@@ -408,12 +419,13 @@ impl Simulation {
             let checkpoint = self
                 .checkpoints
                 .iter()
+                .enumerate()
                 .rev()
-                .find(|checkpoint| checkpoint.frame <= target_frame);
-            if let Some(checkpoint) = checkpoint {
+                .find(|(_, checkpoint)| checkpoint.frame <= target_frame);
+            if let Some((index, checkpoint)) = checkpoint {
                 self.current_frame = checkpoint.frame;
                 self.current = checkpoint.state.clone();
-                self.initial_frame_processed = checkpoint.frame > 0;
+                self.initial_frame_processed = index > 0;
             } else {
                 self.current_frame = 0;
                 self.current = self.initial.clone();
@@ -451,17 +463,20 @@ impl Simulation {
                     dt,
                 },
             );
-            if self.current_frame.is_multiple_of(checkpoint_interval)
-                && self
-                    .checkpoints
-                    .last()
-                    .is_none_or(|checkpoint| checkpoint.frame < self.current_frame)
-            {
-                self.checkpoints.push(Checkpoint {
-                    frame: self.current_frame,
-                    state: self.current.clone(),
-                });
+            if self.current_frame.is_multiple_of(checkpoint_interval) {
+                self.save_checkpoint();
             }
+        }
+    }
+
+    fn save_checkpoint(&mut self) {
+        if self.checkpoints.last().is_none_or(|checkpoint| {
+            checkpoint.frame < self.current_frame || !self.initial_frame_processed
+        }) {
+            self.checkpoints.push(Checkpoint {
+                frame: self.current_frame,
+                state: self.current.clone(),
+            });
         }
     }
 
@@ -496,9 +511,13 @@ impl Simulation {
         let has_update = operations
             .iter()
             .any(|operation| matches!(operation, SimulationOperation::Update { .. }));
+        let has_checkpoint = operations
+            .iter()
+            .any(|operation| matches!(operation, SimulationOperation::Checkpoint { .. }));
         for operation in operations {
             match operation {
                 SimulationOperation::Update { .. } => self.current.on_update(&context),
+                SimulationOperation::Checkpoint { .. } => {}
                 SimulationOperation::Mutation { apply, .. } => {
                     apply(self.current.state_mut());
                 }
@@ -506,6 +525,9 @@ impl Simulation {
         }
         if auto_update && !has_update {
             self.current.on_update(&context);
+        }
+        if has_checkpoint {
+            self.save_checkpoint();
         }
     }
 
@@ -584,6 +606,9 @@ mod tests {
     }
 
     #[derive(Clone)]
+    struct ReplayCounter(Arc<Mutex<u64>>);
+
+    #[derive(Clone)]
     struct DrawCounter {
         draws: u64,
         observed: Arc<Mutex<u64>>,
@@ -640,6 +665,12 @@ mod tests {
             _entity: hecs::Entity,
             _canvas: &skia_safe::Canvas,
         ) {
+        }
+    }
+
+    impl SimulationState for ReplayCounter {
+        fn on_update(&mut self, _context: &SimulationContext<'_>) {
+            *self.0.lock().unwrap() += 1;
         }
     }
 
@@ -735,6 +766,21 @@ mod tests {
         assert_eq!(replayed.0, 111);
         assert!((replayed.1 - 5.55).abs() < 1e-5);
         assert_eq!(first, replayed);
+    }
+
+    #[test]
+    fn initial_frame_checkpoint_avoids_replaying_updates() {
+        let updates = Arc::new(Mutex::new(0));
+        let mut simulation = Simulation::new(ReplayCounter(Arc::clone(&updates)));
+        for _ in 0..3 {
+            simulation.schedule_update(0.0);
+        }
+        simulation.schedule_checkpoint(0.0);
+
+        seek(&mut simulation, 10, 20, |_| false);
+        assert_eq!(*updates.lock().unwrap(), 3);
+        seek(&mut simulation, 0, 20, |_| false);
+        assert_eq!(*updates.lock().unwrap(), 3);
     }
 
     #[test]
