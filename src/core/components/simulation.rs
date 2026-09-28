@@ -421,12 +421,16 @@ impl Simulation {
                 .iter()
                 .enumerate()
                 .rev()
-                .find(|(_, checkpoint)| checkpoint.frame <= target_frame);
+                .find(|(_, checkpoint)| {
+                    checkpoint.frame <= target_frame
+                        && (target_frame < self.current_frame
+                            || checkpoint.frame > self.current_frame)
+                });
             if let Some((index, checkpoint)) = checkpoint {
                 self.current_frame = checkpoint.frame;
                 self.current = checkpoint.state.clone();
                 self.initial_frame_processed = index > 0;
-            } else {
+            } else if target_frame < self.current_frame {
                 self.current_frame = 0;
                 self.current = self.initial.clone();
                 self.initial_frame_processed = false;
@@ -766,6 +770,18 @@ mod tests {
         assert_eq!(replayed.0, 111);
         assert!((replayed.1 - 5.55).abs() < 1e-5);
         assert_eq!(first, replayed);
+    }
+
+    #[test]
+    fn forward_seek_continues_from_current_state_when_it_is_closer() {
+        let updates = Arc::new(Mutex::new(0));
+        let mut simulation = Simulation::new(ReplayCounter(Arc::clone(&updates)));
+
+        seek(&mut simulation, 100, 20, |_| true);
+        assert_eq!(*updates.lock().unwrap(), 101);
+        seek(&mut simulation, 102, 20, |_| true);
+
+        assert_eq!(*updates.lock().unwrap(), 103);
     }
 
     #[test]
