@@ -80,7 +80,7 @@ pub fn scene(
 
     quote! {
         #(#attributes)*
-        #visibility fn #name(resolution: (u32, u32)) -> kinematic::core::Scene {
+        #visibility fn #name(resolution: (u32, u32), margin: (u32, u32)) -> kinematic::core::Scene {
             struct #builder_name;
 
             impl kinematic::core::SceneBuilder for #builder_name {
@@ -88,6 +88,7 @@ pub fn scene(
             }
 
             let mut scene = kinematic::core::Scene::new_named(stringify!(#name), resolution);
+            scene.set_margin(margin);
             scene.build(&mut #builder_name);
             scene
         }

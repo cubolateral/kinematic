@@ -29,6 +29,9 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         if let Some(mode) = requested {
             state.set_mode(mode);
         }
+        if plain_keyboard_input && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::M, false) {
+            editor.toggle_margin();
+        }
         let reset = plain_keyboard_input
             && (ui.is_key_pressed(dear_imgui_rs::Key::Key0)
                 || ui.is_key_pressed(dear_imgui_rs::Key::Keypad0));
@@ -60,7 +63,14 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             && requested.is_none_or(|mode| mode == Mode::Preview)
         {
             state.set_mode(Mode::Preview);
-            image::draw(ui, image::preview(editor), ui.content_region_avail());
+            let min = ui.cursor_screen_pos();
+            let available = ui.content_region_avail();
+            let margin = editor.margin_visible().then(|| editor.margin_size());
+            image::draw(ui, image::preview(editor), available, margin);
+            ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + 8.0]);
+            if margin_button(ui, editor.margin_visible()) {
+                editor.toggle_margin();
+            }
         }
 
         let editor_2d_tab =
@@ -109,6 +119,17 @@ fn draw_editor_3d(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
         let (_, canvas_size) = editor.editor_3d_canvas_camera();
         let canvas_aspect = canvas_size.0.max(1) as f32 / canvas_size.1.max(1) as f32;
         draw_camera_mask(ui, min, available, canvas_aspect);
+        if editor.margin_visible() {
+            let [a, b] = camera_frame(min, available, canvas_aspect);
+            let size = editor.editor_3d_canvas_camera().1;
+            image::draw_margin(
+                ui,
+                a,
+                b,
+                [size.0.max(1) as f32, size.1.max(1) as f32],
+                editor.margin_size(),
+            );
+        }
     }
     let right = dear_imgui_rs::MouseButton::Right;
     let looking = viewport_active && ui.is_mouse_down(right) && !editor.editor_3d_camera_view();
@@ -145,6 +166,10 @@ fn draw_editor_3d(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
     ui.same_line();
     if reset_camera_button(ui) {
         editor.reset_editor_3d_camera_transform();
+    }
+    ui.same_line();
+    if margin_button(ui, editor.margin_visible()) {
+        editor.toggle_margin();
     }
 
     ui.set_cursor_screen_pos([min[0] + available[0] - 112.0, min[1] + 8.0]);
@@ -227,6 +252,10 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     if reset_camera_button(ui) {
         editor.reset_editor_2d_camera_transform();
     }
+    ui.same_line();
+    if margin_button(ui, editor.margin_visible()) {
+        editor.toggle_margin();
+    }
     ui.set_cursor_screen_pos([min[0] + available[0] - 80.0, min[1] + 8.0]);
     for (axis, label, color) in [
         (0, "X", [1.0, 0.3, 0.3, 1.0]),
@@ -280,6 +309,24 @@ fn camera_button(ui: &dear_imgui_rs::Ui, camera_view: bool) -> bool {
         } else {
             "Use the canvas camera [0]"
         });
+    }
+    clicked
+}
+
+fn margin_button(ui: &dear_imgui_rs::Ui, visible: bool) -> bool {
+    ui.set_next_item_allow_overlap();
+    let clicked = controls::text_button_colored(
+        ui,
+        "M",
+        [ui.frame_height(); 2],
+        if visible {
+            dear_imgui_rs::StyleColor::Text
+        } else {
+            dear_imgui_rs::StyleColor::TextDisabled
+        },
+    );
+    if ui.is_item_hovered() {
+        ui.tooltip_text("Toggle margin [M]");
     }
     clicked
 }

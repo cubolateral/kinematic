@@ -264,6 +264,7 @@ pub(crate) struct Editor {
     evaluated: Option<(u64, f32)>,
     pub(crate) performance: Performance,
     pending_project_settings: Option<ProjectSettings>,
+    margin_visible: bool,
 }
 
 impl Editor {
@@ -281,6 +282,7 @@ impl Editor {
             &project.scenes,
             project.settings.resolution,
             project.settings.fps,
+            project.settings.margin,
         );
         let cache = EditorCache::load();
         let focused_scene = (scenes.len() > 1)
@@ -362,6 +364,7 @@ impl Editor {
             evaluated: None,
             performance: Performance::default(),
             pending_project_settings: None,
+            margin_visible: cache.margin_visible,
         };
         editor.update_active_scene(timeline_time);
         editor
@@ -555,12 +558,25 @@ impl Editor {
             timeline_time: self.timeline.time(),
             mode,
             fullscreen,
+            margin_visible: self.margin_visible,
             focused_scene: self
                 .focused_scene
                 .map(|index| self.scenes[index].scene.name().to_owned()),
         }
         .save();
         self.renderer.shutdown(gl);
+    }
+
+    pub(crate) fn margin_visible(&self) -> bool {
+        self.margin_visible
+    }
+
+    pub(crate) fn toggle_margin(&mut self) {
+        self.margin_visible = !self.margin_visible;
+    }
+
+    pub(crate) fn margin_size(&self) -> (u32, u32) {
+        self.project.settings.margin
     }
 
     pub(crate) fn project_info(&self) -> (&'static str, ProjectSettings) {
@@ -612,7 +628,12 @@ impl Editor {
         self.editor_3d_rendered = None;
         self.pending_editor_3d_size = None;
         self.renderer = Renderer::new(settings.resolution);
-        self.scenes = create_scenes(&self.project.scenes, settings.resolution, settings.fps);
+        self.scenes = create_scenes(
+            &self.project.scenes,
+            settings.resolution,
+            settings.fps,
+            settings.margin,
+        );
         let duration = self.focused_scene.map_or_else(
             || self.scenes.last().map_or(0.0, |scene| scene.end),
             |index| self.scenes[index].end - self.scenes[index].start,
@@ -681,7 +702,10 @@ impl Editor {
             .set_event_duration(event_index, duration);
 
         let factory = self.project.scenes[scene_index];
-        let mut replacement = factory(self.project.settings.resolution);
+        let mut replacement = factory(
+            self.project.settings.resolution,
+            self.project.settings.margin,
+        );
         replacement.set_fps(self.project.settings.fps);
         self.scenes[scene_index].scene = replacement;
 
@@ -1295,13 +1319,14 @@ fn create_scenes(
     factories: &[crate::core::SceneFactory],
     resolution: (u32, u32),
     fps: u32,
+    margin: (u32, u32),
 ) -> Vec<EditorScene> {
     let mut start = 0.0;
 
     factories
         .iter()
         .map(|create_scene| {
-            let mut scene = create_scene(resolution);
+            let mut scene = create_scene(resolution, margin);
             scene.set_fps(fps);
             let end = start + scene.duration();
             let editor_scene = EditorScene {
@@ -1334,6 +1359,10 @@ mod tests {
 
     #[crate::scene]
     fn opening(scene: &mut Scene) {
+        assert_eq!(
+            scene.margin().top_left(),
+            crate::core::types::vec2(-576.0, -296.0)
+        );
         scene.wait(2.0);
     }
 
@@ -1345,9 +1374,13 @@ mod tests {
     #[test]
     fn scene_factories_create_ordered_project_ranges() {
         let factories: [crate::core::SceneFactory; 2] = [opening, ending];
-        let scenes = create_scenes(&factories, (1280, 720), 60);
+        let scenes = create_scenes(&factories, (1280, 720), 60, (64, 64));
 
         assert_eq!(scenes[0].scene.name(), "opening");
+        assert_eq!(
+            scenes[0].scene.margin().top_left(),
+            crate::core::types::vec2(-576.0, -296.0)
+        );
         assert_eq!([scenes[0].start, scenes[0].end], [0.0, 2.0]);
         assert_eq!(
             scenes[0]

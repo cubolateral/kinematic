@@ -15,6 +15,7 @@ pub(super) struct State {
     initialized: bool,
     resolution: [i32; 2],
     fps: i32,
+    margin: [i32; 2],
 }
 
 pub(super) fn load() -> Appearance {
@@ -71,6 +72,7 @@ pub(super) fn draw(
             let (_, settings) = editor.project_info();
             state.resolution = [settings.resolution.0 as i32, settings.resolution.1 as i32];
             state.fps = settings.fps as i32;
+            state.margin = [settings.margin.0 as i32, settings.margin.1 as i32];
             state.initialized = true;
         }
 
@@ -80,13 +82,19 @@ pub(super) fn draw(
             let resolution_changed =
                 input_int_components(ui, "Resolution", &mut state.resolution, ["Width", "Height"]);
             let fps_changed = input_int(ui, "FPS", &mut state.fps);
-            resolution_changed || fps_changed
+            let margin_changed =
+                input_int_components(ui, "Margin (px)", &mut state.margin, ["Width", "Height"]);
+            resolution_changed || fps_changed || margin_changed
         };
         let valid_resolution = state
             .resolution
             .iter()
             .all(|value| *value > 0 && value % 2 == 0);
         let valid_fps = state.fps > 0;
+        let valid_margin = state.margin[0] >= 0
+            && state.margin[1] >= 0
+            && state.margin[0] < state.resolution[0] / 2
+            && state.margin[1] < state.resolution[1] / 2;
 
         if !valid_resolution {
             ui.text_wrapped("Resolution dimensions must be positive, even numbers.");
@@ -94,10 +102,14 @@ pub(super) fn draw(
         if !valid_fps {
             ui.text_wrapped("FPS must be greater than zero.");
         }
-        if project_changed && valid_resolution && valid_fps {
+        if !valid_margin {
+            ui.text_wrapped("Margin must fit inside the resolution.");
+        }
+        if project_changed && valid_resolution && valid_fps && valid_margin {
             let settings = ProjectSettings {
                 resolution: (state.resolution[0] as u32, state.resolution[1] as u32),
                 fps: state.fps as u32,
+                margin: (state.margin[0] as u32, state.margin[1] as u32),
             };
             if editor.project_info().1 != settings {
                 editor.request_project_settings(settings);

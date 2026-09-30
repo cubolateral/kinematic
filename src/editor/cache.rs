@@ -12,6 +12,7 @@ pub(super) struct EditorCache {
     pub(super) timeline_time: f32,
     pub(super) mode: EditorMode,
     pub(super) fullscreen: bool,
+    pub(super) margin_visible: bool,
     pub(super) focused_scene: Option<String>,
 }
 
@@ -23,6 +24,7 @@ impl Default for EditorCache {
             timeline_time: 0.0,
             mode: EditorMode::default(),
             fullscreen: false,
+            margin_visible: true,
             focused_scene: None,
         }
     }
@@ -200,6 +202,7 @@ mod tests {
             timeline_time: 1.5,
             mode: EditorMode::Three,
             fullscreen: true,
+            margin_visible: false,
             focused_scene: Some("Main".to_owned()),
         };
 

@@ -8,6 +8,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     let viewport = ui.main_viewport();
     let viewport_pos = viewport.pos();
     let viewport_size = viewport.size();
+    let margin = editor.margin_visible().then(|| editor.margin_size());
     let preview = image::preview(editor);
     let window_flags = dear_imgui_rs::WindowFlags::NO_DECORATION
         | dear_imgui_rs::WindowFlags::NO_MOVE
@@ -27,7 +28,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
             .size(viewport_size, dear_imgui_rs::Condition::Always)
             .flags(window_flags | dear_imgui_rs::WindowFlags::NO_INPUTS)
             .build(|| {
-                image::draw(ui, preview, viewport_size);
+                image::draw(ui, preview, viewport_size, margin);
             });
     }
 

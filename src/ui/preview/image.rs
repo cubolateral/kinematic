@@ -31,13 +31,21 @@ fn image(canvas: &mut crate::editor::Canvas) -> PreviewImage {
     }
 }
 
-pub(super) fn draw(ui: &dear_imgui_rs::Ui, preview: PreviewImage, available: [f32; 2]) {
+pub(super) fn draw(
+    ui: &dear_imgui_rs::Ui,
+    preview: PreviewImage,
+    available: [f32; 2],
+    margin: Option<(u32, u32)>,
+) {
     let (_, size, min, max) = placement(ui.cursor_screen_pos(), available, preview.size);
     ui.set_cursor_screen_pos(min);
     ui.image_config(preview.texture, size)
         .uv0([0.0, 1.0])
         .uv1([1.0, 0.0])
         .build();
+    if let Some(margin) = margin {
+        draw_margin(ui, min, max, preview.size, margin);
+    }
     ui.get_window_draw_list()
         .add_rect(min, max, CANVAS_OUTLINE)
         .thickness(1.0)
@@ -135,6 +143,43 @@ pub(super) fn draw_editor(
         CANVAS_OUTLINE,
         1.0,
     );
+    if editor.margin_visible() {
+        let margin = editor.margin_size();
+        let mut points = editor.editor_2d_project_outline();
+        for point in &mut points {
+            point.x += if point.x < 0.0 {
+                margin.0 as f32
+            } else {
+                -(margin.0 as f32)
+            };
+            point.y += if point.y < 0.0 {
+                margin.1 as f32
+            } else {
+                -(margin.1 as f32)
+            };
+        }
+        let accent = margin_color(ui);
+        draw_world_outline(
+            &draw_list,
+            Some(points),
+            center,
+            display_scale,
+            pan,
+            zoom,
+            [0.0, 0.0, 0.0, 0.7],
+            3.0,
+        );
+        draw_world_outline(
+            &draw_list,
+            Some(points),
+            center,
+            display_scale,
+            pan,
+            zoom,
+            accent,
+            1.0,
+        );
+    }
     if !camera_view {
         draw_world_outline(
             &draw_list,
@@ -170,7 +215,7 @@ pub(super) fn draw_editor(
     );
 
     let over_camera = mouse[0] >= min[0] + 8.0
-        && mouse[0] <= min[0] + 8.0 + ui.frame_height()
+        && mouse[0] <= min[0] + 24.0 + ui.frame_height() * 3.0
         && mouse[1] >= min[1] + 8.0
         && mouse[1] <= min[1] + 8.0 + ui.frame_height();
     if !hovered || over_camera || !ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left) {
@@ -211,7 +256,7 @@ pub(super) fn draw_editor_3d(
     );
     let mouse = ui.io().mouse_pos();
     let over_camera = mouse[0] >= min[0] + 8.0
-        && mouse[0] <= min[0] + 8.0 + ui.frame_height()
+        && mouse[0] <= min[0] + 24.0 + ui.frame_height() * 3.0
         && mouse[1] >= min[1] + 8.0
         && mouse[1] <= min[1] + 8.0 + ui.frame_height();
     let over_controls = mouse[0] >= max[0] - 112.0
@@ -305,4 +350,30 @@ fn draw_world_outline(
             .thickness(thickness)
             .build();
     }
+}
+
+fn margin_color(ui: &dear_imgui_rs::Ui) -> [f32; 4] {
+    let mut color = unsafe { ui.style().color(dear_imgui_rs::StyleColor::CheckMark) };
+    color[3] = 0.7;
+    color
+}
+
+pub(super) fn draw_margin(
+    ui: &dear_imgui_rs::Ui,
+    min: [f32; 2],
+    max: [f32; 2],
+    source: [f32; 2],
+    margin: (u32, u32),
+) {
+    let inset = [
+        (max[0] - min[0]) * margin.0 as f32 / source[0].max(1.0),
+        (max[1] - min[1]) * margin.1 as f32 / source[1].max(1.0),
+    ];
+    let a = [min[0] + inset[0], min[1] + inset[1]];
+    let b = [max[0] - inset[0], max[1] - inset[1]];
+    let draw = ui.get_window_draw_list();
+    draw.add_rect(a, b, [0.0, 0.0, 0.0, 0.7])
+        .thickness(3.0)
+        .build();
+    draw.add_rect(a, b, margin_color(ui)).thickness(1.0).build();
 }

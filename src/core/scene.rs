@@ -8,7 +8,7 @@ use crate::core::{
         Object, ObjectHandler, RootHandler, camera_matrix2d, canvas_2d, canvas_3d,
         children_by_z_index, draw_entity,
     },
-    types::Vector2,
+    types::{Rect, Vector2},
 };
 
 /// Shared ECS world used by scenes and their handlers.
@@ -51,6 +51,7 @@ pub struct Scene {
     plan_revision: std::cell::Cell<u64>,
     runtime: std::cell::RefCell<Option<Runtime>>,
     fps: u32,
+    margin: (u32, u32),
 }
 
 #[derive(Default)]
@@ -147,6 +148,7 @@ impl Scene {
             plan_revision: std::cell::Cell::new(0),
             runtime: std::cell::RefCell::new(None),
             fps: 60,
+            margin: (0, 0),
         };
 
         let (world_2d, world_3d) = canvases.unwrap_or_else(|| {
@@ -341,6 +343,27 @@ impl Scene {
         );
         *self.runtime.borrow_mut() = Some(runtime);
         self.invalidate();
+    }
+
+    #[doc(hidden)]
+    pub fn set_margin(&mut self, margin: (u32, u32)) {
+        self.margin = margin;
+    }
+
+    /// Returns the project safe area in centered scene coordinates.
+    pub fn margin(&self) -> Rect {
+        let world = self.world.borrow();
+        let (width, height) = world
+            .get::<&crate::core::objects::CanvasSettings>(self.world_2d)
+            .unwrap()
+            .resolution();
+        let (mx, my) = self.margin;
+        Rect::new(
+            -(width as f32) / 2.0 + mx as f32,
+            -(height as f32) / 2.0 + my as f32,
+            (width as f32 - 2.0 * mx as f32).max(0.0),
+            (height as f32 - 2.0 * my as f32).max(0.0),
+        )
     }
 
     pub(crate) fn set_fps(&mut self, fps: u32) {
@@ -2744,7 +2767,7 @@ mod tests {
 
     #[test]
     fn scene_macro_preserves_the_create_time_as_the_node_start() {
-        let scene = delayed_object_scene((1920, 1080));
+        let scene = delayed_object_scene((1920, 1080), (64, 64));
 
         assert_eq!(scene.name(), "delayed_object_scene");
         assert_eq!(scene.duration(), 33.0);
