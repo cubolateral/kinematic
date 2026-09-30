@@ -1,7 +1,6 @@
 pub(super) const ARROW_LEFT: &str = "\u{f060}";
 pub(super) const BACKWARD: &str = "\u{f04a}";
 pub(super) const BACKWARD_FAST: &str = "\u{f048}";
-pub(super) const CAMERA: &str = "\u{f030}";
 pub(super) const COMPRESS: &str = "\u{f066}";
 pub(super) const DIAMOND: &str = "\u{25c6}";
 pub(super) const EXPAND: &str = "\u{f065}";
@@ -16,3 +15,4 @@ pub(super) const PENCIL: &str = "\u{f040}";
 pub(super) const PLAY: &str = "\u{f04b}";
 pub(super) const RETWEET: &str = "\u{f079}";
 pub(super) const RESET: &str = "\u{f2f1}";
+pub(super) const SHARE: &str = "\u{f064}";

@@ -1,4 +1,4 @@
-use super::{export, inspector, preview, scene_tree, settings, timeline};
+use super::{inspector, preview, scene_tree, settings, timeline};
 
 const TIMELINE_HEIGHT_RATIO: f32 = 0.35;
 const LEFT_PANEL_WIDTH_RATIO: f32 = 0.2;
@@ -32,7 +32,6 @@ pub(super) fn apply_default_layout(ui: &dear_imgui_rs::Ui, dock: dear_imgui_rs::
     dear_imgui_rs::DockBuilder::dock_window(ui, settings::WINDOW_NAME, left_node);
     dear_imgui_rs::DockBuilder::dock_window(ui, preview::WINDOW_NAME, preview_node);
     dear_imgui_rs::DockBuilder::dock_window(ui, inspector::WINDOW_NAME, right_node);
-    dear_imgui_rs::DockBuilder::dock_window(ui, export::WINDOW_NAME, right_node);
     dear_imgui_rs::DockBuilder::dock_window(ui, timeline::WINDOW_NAME, timeline_node);
     dear_imgui_rs::DockBuilder::finish(ui, dock);
 }

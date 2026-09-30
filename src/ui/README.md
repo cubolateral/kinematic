@@ -13,7 +13,7 @@ interaction details belong in the panel modules, not in `ui/mod.rs`.
 - `widgets.rs`: Small drawing and measurement helpers shared by panels.
 - `scene_tree.rs`: Active scene hierarchy and entity selection.
 - `inspector.rs`: Read-only inspection of the selected entity.
-- `export.rs`: Export panel and its local UI state.
+- `export.rs`: Export popup and its local UI state.
 - `preview/`: Canvas preview, hit testing, and fullscreen presentation.
 - `timeline/`: Timeline composition and its independent responsibilities.
 

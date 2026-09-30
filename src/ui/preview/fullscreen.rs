@@ -60,12 +60,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
         .size(controls_size, dear_imgui_rs::Condition::Always)
         .flags(window_flags)
         .build(|| {
-            let response =
+            toggle_fullscreen =
                 timeline::fullscreen_controls(editor.timeline_mut(), ui, fps, !is_exporting);
-            toggle_fullscreen = response.toggle_fullscreen;
-            if response.screenshot {
-                editor.request_screenshot();
-            }
         });
 
     toggle_fullscreen

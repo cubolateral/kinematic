@@ -18,7 +18,6 @@ pub(crate) struct Ui {
     needs_initial_layout: bool,
     font: dear_imgui_rs::FontId,
     appearance: theme::Appearance,
-    export: export::State,
     is_fullscreen: bool,
     preview: preview::State,
     inspector: inspector::State,
@@ -26,18 +25,26 @@ pub(crate) struct Ui {
     timeline: timeline::State,
 }
 
-fn draw_top_bar(ui: &dear_imgui_rs::Ui, enabled: bool) -> bool {
+fn draw_top_bar(editor: &mut Editor, ui: &dear_imgui_rs::Ui, enabled: bool) -> (bool, bool) {
     let Some(_bar) = ui.begin_main_menu_bar() else {
-        return false;
+        return (false, false);
     };
-    let _disabled = ui.begin_disabled_with_cond(!enabled);
-    let clicked = controls::text_button(ui, icons::HAMMER, [ui.frame_height(); 2]);
+    let button_size = ui.frame_height();
+    let spacing = unsafe { ui.style().item_spacing() }[0];
+    ui.set_cursor_pos_x(
+        ui.cursor_pos_x() + ui.content_region_avail_width() - button_size * 2.0 - spacing,
+    );
+    let clicked = {
+        let _disabled = ui.begin_disabled_with_cond(!enabled);
+        controls::text_button(ui, icons::HAMMER, [button_size; 2])
+    };
 
     if ui.is_item_hovered() {
         ui.tooltip_text("Rebuild and reload [B]");
     }
 
-    clicked
+    ui.same_line();
+    (clicked, export::draw(editor, ui))
 }
 
 impl Ui {
@@ -51,7 +58,6 @@ impl Ui {
             needs_initial_layout: true,
             font: theme::initialize(context),
             appearance: settings::load(),
-            export: export::State::default(),
             is_fullscreen: crate::editor::load_editor_fullscreen(),
             preview: preview::State::new(crate::editor::load_editor_mode()),
             inspector: inspector::State::default(),
@@ -94,7 +100,11 @@ impl Ui {
             return reload_shortcut;
         }
 
-        let reload_button = draw_top_bar(ui, can_reload && !editor.is_exporting());
+        let (reload_button, export_started) =
+            draw_top_bar(editor, ui, can_reload && !editor.is_exporting());
+        if export_started {
+            self.preview.show_preview();
+        }
         let dock = ui.dockspace_over_main_viewport();
 
         let initial_layout = self.needs_initial_layout;
@@ -116,10 +126,6 @@ impl Ui {
             inspector::draw(editor, ui, &mut self.inspector);
             timeline::draw(editor, ui, &mut self.timeline)
         };
-
-        if export::draw(editor, ui, &mut self.export) {
-            self.preview.show_preview();
-        }
 
         if initial_layout {
             ui.set_window_focus(Some(inspector::WINDOW_NAME));

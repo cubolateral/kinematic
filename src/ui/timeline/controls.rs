@@ -7,31 +7,22 @@ use super::{
     ruler::format_time,
 };
 
-#[derive(Default)]
-pub(in crate::ui) struct Response {
-    pub toggle_fullscreen: bool,
-    pub screenshot: bool,
-}
-
 pub(super) fn draw(
     timeline: &mut Timeline,
     ui: &dear_imgui_rs::Ui,
     fps: f32,
     interactive: bool,
     is_fullscreen: bool,
-) -> Response {
+) -> bool {
     let is_playing = timeline.is_playing();
     let spacing = unsafe { ui.style().item_spacing() }[0];
-    let width = transport_width(ui) + spacing * 2.0 + BUTTON_SIZE * 2.0;
+    let width = transport_width(ui) + spacing + BUTTON_SIZE;
 
     ui.set_cursor_pos_x(
         ui.cursor_pos_x() + ((ui.content_region_avail_width() - width) * 0.5).max(0.0),
     );
 
     transport_controls(timeline, ui, interactive);
-
-    ui.same_line();
-    let screenshot = transport_button(ui, icons::CAMERA, "Save screenshot");
 
     ui.same_line();
     let toggle_fullscreen = fullscreen_button(ui, is_fullscreen);
@@ -46,10 +37,7 @@ pub(super) fn draw(
         "PAUSED".to_owned()
     });
 
-    Response {
-        toggle_fullscreen,
-        screenshot: screenshot && interactive,
-    }
+    toggle_fullscreen
 }
 
 pub(in crate::ui) fn shortcuts(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interactive: bool) {
@@ -96,7 +84,7 @@ pub(in crate::ui) fn fullscreen_controls(
     ui: &dear_imgui_rs::Ui,
     fps: f32,
     interactive: bool,
-) -> Response {
+) -> bool {
     let scrubber_min = ui.cursor_screen_pos();
     let scrubber_width = ui.content_region_avail_width().max(1.0);
     let buttons_y = scrubber_min[1] + FULLSCREEN_SCRUBBER_HEIGHT + 18.0;

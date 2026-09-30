@@ -33,11 +33,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         let fps = editor.preview_fps();
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
 
-        let response = controls::draw(editor.timeline_mut(), ui, fps, !is_exporting, false);
-        toggle_fullscreen = response.toggle_fullscreen;
-        if response.screenshot {
-            editor.request_screenshot();
-        }
+        toggle_fullscreen = controls::draw(editor.timeline_mut(), ui, fps, !is_exporting, false);
         ui.spacing();
         ui.separator();
 
