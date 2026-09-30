@@ -234,7 +234,10 @@ impl TrackView {
                         ui.separator();
                     }
 
-                    ui.text(format!("Time: {project_time:.2}s"));
+                    ui.text(format!(
+                        "Time: {}",
+                        super::ruler::format_time(project_time, 2)
+                    ));
                     ui.text(format!("Value: {}", track.display_value(&keyframe.value)));
                     match keyframe.easing {
                         Some(easing) => ui.text(format!("Easing: {easing:?}")),

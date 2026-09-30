@@ -1,6 +1,7 @@
 pub(crate) struct Timeline {
     pub is_controlling: bool,
     is_playing: bool,
+    loop_enabled: bool,
     previous_time: f32,
     current_time: f32,
     max_time: f32,
@@ -12,6 +13,7 @@ impl Timeline {
         Self {
             is_controlling: false,
             is_playing: false,
+            loop_enabled: true,
             previous_time: -1.0, // Start by updating.
             current_time: 0.0,
             max_time,
@@ -26,7 +28,11 @@ impl Timeline {
             self.go_to(self.current_time + dt);
 
             if self.current_time == self.max_time {
-                self.go_to(0.0);
+                if self.loop_enabled && self.max_time > 0.0 {
+                    self.go_to(0.0);
+                } else {
+                    self.pause();
+                }
             }
         }
 
@@ -45,6 +51,18 @@ impl Timeline {
         if self.current_time == self.max_time {
             self.go_to(0.0);
         }
+    }
+
+    pub fn loop_enabled(&self) -> bool {
+        self.loop_enabled
+    }
+
+    pub fn set_loop(&mut self, enabled: bool) {
+        self.loop_enabled = enabled;
+    }
+
+    pub fn toggle_loop(&mut self) {
+        self.loop_enabled = !self.loop_enabled;
     }
 
     pub fn pause(&mut self) {
@@ -98,5 +116,26 @@ impl Timeline {
         self.max_time = duration.max(0.0);
         self.go_to(self.current_time);
         self.previous_time = -1.0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Timeline;
+
+    #[test]
+    fn playback_restarts_or_stops_at_the_end() {
+        let mut timeline = Timeline::new(2.0, 60);
+        timeline.play();
+        assert_eq!(timeline.update(2.0), Some(0.0));
+        assert!(timeline.is_playing());
+        timeline.set_loop(false);
+        assert_eq!(timeline.update(2.0), Some(2.0));
+        assert!(!timeline.is_playing());
+        timeline.play();
+        assert_eq!(timeline.time(), 0.0);
+        timeline.set_loop(true);
+        assert_eq!(timeline.update(2.0), Some(0.0));
+        assert!(timeline.is_playing());
     }
 }

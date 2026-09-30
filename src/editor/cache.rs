@@ -13,6 +13,7 @@ pub(super) struct EditorCache {
     pub(super) mode: EditorMode,
     pub(super) fullscreen: bool,
     pub(super) margin_visible: bool,
+    pub(super) loop_enabled: bool,
     pub(super) focused_scene: Option<String>,
 }
 
@@ -25,6 +26,7 @@ impl Default for EditorCache {
             mode: EditorMode::default(),
             fullscreen: false,
             margin_visible: true,
+            loop_enabled: true,
             focused_scene: None,
         }
     }
@@ -203,6 +205,7 @@ mod tests {
             mode: EditorMode::Three,
             fullscreen: true,
             margin_visible: false,
+            loop_enabled: false,
             focused_scene: Some("Main".to_owned()),
         };
 

@@ -30,7 +30,7 @@ pub(super) fn draw_scrubber(
 ) {
     let text_y = layout.top + 8.0;
     let line_y = layout.top + SCRUBBER_HEIGHT - 2.0;
-    let end_text = format!("{:.2}s", time.end);
+    let end_text = format_grid_time(time.end, grid_step(time, layout.timeline_width));
     let end_width = text_size(ui, &end_text)[0];
 
     draw_list.add_text(
@@ -132,7 +132,7 @@ pub(super) fn draw_time_panel(
         2.0,
     );
 
-    let text = format!("{:.2}s", time.current);
+    let text = format_grid_time(time.current, grid_step(time, layout.timeline_width));
     let size = text_size(ui, &text);
     let position = [playhead_x - size[0] * 0.5, layout.top + 8.0];
     let min = [
@@ -209,22 +209,52 @@ fn grid_step(time: TimeRange, width: f32) -> f32 {
 fn format_grid_time(time: f32, step: f32) -> String {
     let mut decimals = 0;
     let mut value = step.abs();
-    while value < 1.0 && decimals < 6 {
+    while value > 0.0 && value < 1.0 && decimals < 6 {
         value *= 10.0;
         decimals += 1;
     }
 
-    format!("{:.*}s", decimals, time)
+    format_time(time, decimals)
+}
+
+pub(super) fn format_time(time: f32, decimals: usize) -> String {
+    let scale = 10_u64.pow(decimals as u32);
+    let ticks = (time.max(0.0) as f64 * scale as f64).round() as u64;
+    let seconds = (ticks % (60 * scale)) as f64 / scale as f64;
+    if ticks < 60 * scale {
+        return format!("{seconds:.decimals$}s");
+    }
+    let width = 2 + usize::from(decimals > 0) * (decimals + 1);
+    let minutes = ticks / (60 * scale);
+    if minutes < 60 {
+        format!("{minutes}:{seconds:0width$.decimals$}")
+    } else {
+        format!(
+            "{}:{:02}:{seconds:0width$.decimals$}",
+            minutes / 60,
+            minutes % 60
+        )
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::format_grid_time;
+    use super::{format_grid_time, format_time};
 
     #[test]
     fn grid_time_precision_follows_the_grid_step() {
         assert_eq!(format_grid_time(5.0, 1.0), "5s");
         assert_eq!(format_grid_time(0.5, 0.1), "0.5s");
         assert_eq!(format_grid_time(0.025, 0.01), "0.025s");
+        assert_eq!(format_grid_time(60.0, 1.0), "1:00");
+        assert_eq!(format_grid_time(65.25, 1.0), "1:05");
+        assert_eq!(format_grid_time(65.25, 0.1), "1:05.3");
+    }
+
+    #[test]
+    fn clock_time_rolls_over_minutes_and_hours() {
+        assert_eq!(format_time(59.996, 2), "1:00.00");
+        assert_eq!(format_time(65.25, 2), "1:05.25");
+        assert_eq!(format_time(3661.5, 2), "1:01:01.50");
     }
 }

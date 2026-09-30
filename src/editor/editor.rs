@@ -299,6 +299,7 @@ impl Editor {
         );
         let mut timeline = Timeline::new(duration, project.settings.fps);
         let timeline_time = cache.timeline_time(duration);
+        timeline.set_loop(cache.loop_enabled);
         timeline.go_to(timeline_time);
 
         let preview = Canvas::new(
@@ -559,6 +560,7 @@ impl Editor {
             mode,
             fullscreen,
             margin_visible: self.margin_visible,
+            loop_enabled: self.timeline.loop_enabled(),
             focused_scene: self
                 .focused_scene
                 .map(|index| self.scenes[index].scene.name().to_owned()),
@@ -638,7 +640,9 @@ impl Editor {
             || self.scenes.last().map_or(0.0, |scene| scene.end),
             |index| self.scenes[index].end - self.scenes[index].start,
         );
+        let loop_enabled = self.timeline.loop_enabled();
         self.timeline = Timeline::new(duration, settings.fps);
+        self.timeline.set_loop(loop_enabled);
         self.project.settings = settings;
         self.active_scene = self.focused_scene.unwrap_or(0);
         self.selection.clear();

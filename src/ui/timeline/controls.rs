@@ -2,7 +2,10 @@ use crate::editor::Timeline;
 use crate::ui::widgets::text_size;
 use crate::ui::{controls, icons};
 
-use super::metrics::{BUTTON_SIZE, FULLSCREEN_SCRUBBER_HEIGHT, FULLSCREEN_SCRUBBER_THICKNESS};
+use super::{
+    metrics::{BUTTON_SIZE, FULLSCREEN_SCRUBBER_HEIGHT, FULLSCREEN_SCRUBBER_THICKNESS},
+    ruler::format_time,
+};
 
 #[derive(Default)]
 pub(in crate::ui) struct Response {
@@ -69,6 +72,10 @@ pub(in crate::ui) fn shortcuts(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, 
         } else {
             timeline.previous_frame();
         }
+    }
+
+    if !shift && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::L, false) {
+        timeline.toggle_loop();
     }
 
     if ui.is_key_pressed(dear_imgui_rs::Key::Space) {
@@ -182,12 +189,30 @@ fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interacti
     if transport_button(ui, icons::FORWARD_FAST, "Go to end [Shift + RightArrow]") && interactive {
         timeline.go_to_end();
     }
+
+    ui.same_line();
+    let clicked = controls::text_button_colored(
+        ui,
+        icons::RETWEET,
+        [BUTTON_SIZE; 2],
+        if timeline.loop_enabled() {
+            dear_imgui_rs::StyleColor::Text
+        } else {
+            dear_imgui_rs::StyleColor::TextDisabled
+        },
+    );
+    if ui.is_item_hovered() {
+        ui.tooltip_text("Toggle loop [L]");
+    }
+    if clicked && interactive {
+        timeline.toggle_loop();
+    }
 }
 
 fn transport_width(ui: &dear_imgui_rs::Ui) -> f32 {
     let spacing = unsafe { ui.style().item_spacing() }[0];
 
-    BUTTON_SIZE * 5.0 + spacing * 4.0
+    BUTTON_SIZE * 6.0 + spacing * 5.0
 }
 
 fn fullscreen_button(ui: &dear_imgui_rs::Ui, is_fullscreen: bool) -> bool {
@@ -221,8 +246,8 @@ fn draw_fullscreen_scrubber(
     let progress_x = min[0] + width * ratio;
     let line_y = min[1] + FULLSCREEN_SCRUBBER_HEIGHT * 0.5;
     let draw_list = ui.get_window_draw_list();
-    let current = format!("{:.2}s", timeline.time());
-    let duration = format!("{duration:.2}s");
+    let current = format_time(timeline.time(), 0);
+    let duration = format_time(duration, 0);
     let current_size = text_size(ui, &current);
     let duration_size = text_size(ui, &duration);
     let current_x =
