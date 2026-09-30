@@ -28,18 +28,6 @@ pub(super) fn draw(
     let top = ui.cursor_screen_pos()[1];
     ui.dummy([layout.timeline_right() - layout.content_left, SCENE_HEIGHT]);
 
-    if editor.focused_scene_name().is_some() {
-        ui.set_cursor_screen_pos([layout.content_left, top]);
-        let clicked = ui.button_with_size(
-            &format!("{ARROW_LEFT} Back to all scenes"),
-            [layout.divider_x - layout.content_left, SCENE_HEIGHT],
-        );
-        if clicked && interactive {
-            editor.clear_scene_focus();
-            return;
-        }
-    }
-
     let clip = draw_list.push_clip_rect(
         [layout.timeline_left, layout.viewport_top],
         [layout.timeline_right(), layout.bottom],
@@ -195,6 +183,30 @@ pub(super) fn draw(
 
     drop(clip);
 
+    let next_row = ui.cursor_screen_pos();
+    let back_hovered = if editor.focused_scene_name().is_some() {
+        let label = format!("{ARROW_LEFT} Back to all scenes");
+        ui.set_cursor_screen_pos([layout.content_left, top]);
+        let clicked = ui.button_with_size(
+            &label,
+            [
+                text_size(ui, &label)[0] + PANEL_TEXT_PADDING * 2.0,
+                EVENT_HEIGHT,
+            ],
+        );
+        let hovered = ui.is_item_hovered();
+        if clicked && interactive {
+            ui.set_cursor_screen_pos(next_row);
+            editor.clear_scene_focus();
+            return;
+        }
+        hovered
+    } else {
+        false
+    };
+
+    ui.set_cursor_screen_pos(next_row);
+
     if !interactive {
         return;
     }
@@ -204,7 +216,8 @@ pub(super) fn draw(
         + (ui.io().mouse_pos()[0] - layout.timeline_left) / layout.timeline_width
             * (time.end - time.start);
 
-    if !over_event
+    if !back_hovered
+        && !over_event
         && let Some(scene) = hovered_scene
         && ui.is_mouse_clicked(left)
     {
@@ -213,7 +226,9 @@ pub(super) fn draw(
 
     if ui.is_mouse_released(left)
         && let Some(scene) = state.release_scene(
-            (!over_event).then_some(hovered_scene).flatten(),
+            (!back_hovered && !over_event)
+                .then_some(hovered_scene)
+                .flatten(),
             ui.mouse_drag_delta(left),
         )
     {

@@ -265,6 +265,7 @@ pub(crate) struct Editor {
     pub(crate) performance: Performance,
     pending_project_settings: Option<ProjectSettings>,
     margin_visible: bool,
+    timeline_tracks_expanded: bool,
 }
 
 impl Editor {
@@ -366,6 +367,7 @@ impl Editor {
             performance: Performance::default(),
             pending_project_settings: None,
             margin_visible: cache.margin_visible,
+            timeline_tracks_expanded: cache.timeline_tracks_expanded,
         };
         editor.update_active_scene(timeline_time);
         editor
@@ -561,6 +563,7 @@ impl Editor {
             fullscreen,
             margin_visible: self.margin_visible,
             loop_enabled: self.timeline.loop_enabled(),
+            timeline_tracks_expanded: self.timeline_tracks_expanded,
             focused_scene: self
                 .focused_scene
                 .map(|index| self.scenes[index].scene.name().to_owned()),
@@ -761,6 +764,14 @@ impl Editor {
     }
     pub fn active_scene_index(&self) -> usize {
         self.active_scene
+    }
+
+    pub(crate) fn timeline_tracks_expanded(&self) -> bool {
+        self.timeline_tracks_expanded
+    }
+
+    pub(crate) fn toggle_timeline_tracks(&mut self) {
+        self.timeline_tracks_expanded = !self.timeline_tracks_expanded;
     }
 
     pub fn selected_entity(&self) -> Option<hecs::Entity> {

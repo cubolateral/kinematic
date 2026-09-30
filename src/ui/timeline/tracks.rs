@@ -41,7 +41,6 @@ impl TrackView {
         lifetime: [f32; 2],
         time_offset: f32,
         top: f32,
-        name_x: f32,
     ) {
         for (row, animation_track) in animation.tracks.iter().enumerate() {
             self.track(
@@ -51,7 +50,6 @@ impl TrackView {
                 lifetime,
                 time_offset,
                 top + row as f32 * (TRACK_HEIGHT + TRACK_SPACING),
-                name_x,
             );
         }
     }
@@ -64,35 +62,18 @@ impl TrackView {
         lifetime: [f32; 2],
         time_offset: f32,
         top: f32,
-        name_x: f32,
     ) {
-        let label = track.name();
-        let clip = draw_list.push_clip_rect(
-            [name_x, top],
-            [
-                self.layout.divider_x - PANEL_TEXT_PADDING,
-                top + TRACK_HEIGHT,
-            ],
-            true,
-        );
-        draw_list.add_text(
-            [
-                name_x,
-                top + (TRACK_HEIGHT - text_size(ui, &label)[1]) * 0.5,
-            ],
-            self.text,
-            &label,
-        );
-        drop(clip);
-
         let Some([start, end]) = visible_lifetime(lifetime, self.time) else {
             return;
         };
-
-        let center = top + TRACK_HEIGHT * 0.5;
         let start_x = self.time.x(self.layout, start);
         let end_x = self.time.x(self.layout, end);
+        let label = track.name();
+        let text_clip = draw_list.push_clip_rect([start_x, top], [end_x, top + TRACK_HEIGHT], true);
+        draw_list.add_text([start_x + PANEL_TEXT_PADDING, top], self.text, &label);
+        drop(text_clip);
 
+        let center = top + TRACK_HEIGHT - 3.0;
         draw_list.add_line_h(
             start_x,
             end_x,
@@ -275,7 +256,6 @@ pub(super) struct ObjectTracks {
     pub lifetime: [f32; 2],
     pub time_offset: f32,
     pub top: f32,
-    pub name_x: f32,
 }
 
 pub(super) fn draw(
@@ -298,7 +278,6 @@ pub(super) fn draw(
         object.lifetime,
         object.time_offset,
         object.top,
-        object.name_x,
     );
 }
 

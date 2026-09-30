@@ -72,14 +72,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
                 ruler::draw_time_grid_lines(ui, &draw_list, layout, time);
                 scene::draw(editor, ui, &draw_list, layout, time, state, !is_exporting);
-                objects::draw(editor, ui, &draw_list, layout, time, state, !is_exporting);
-                ruler::draw_panel_divider(
-                    ui,
-                    &draw_list,
-                    layout,
-                    layout.viewport_top,
-                    layout.bottom,
-                );
+                objects::draw(editor, ui, &draw_list, layout, time, !is_exporting);
                 ruler::draw_mouse_indicator(ui, &draw_list, layout);
                 ruler::draw_playhead(ui, &draw_list, layout, playhead_x);
                 view = Some((layout, mouse));
@@ -93,7 +86,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         let playhead_x = time.x(layout, time.current);
 
         ruler::draw_scrubber(ui, &draw_list, layout, time, playhead_x);
-        ruler::draw_panel_divider(ui, &draw_list, layout, layout.top, layout.viewport_top);
         ruler::draw_time_grid_labels(ui, &draw_list, layout, time);
         ruler::draw_time_panel(ui, &draw_list, layout, time, playhead_x);
 

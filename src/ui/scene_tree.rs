@@ -6,7 +6,7 @@ use crate::{
 use super::{
     controls,
     icons::{EYE, EYE_SLASH, PENCIL},
-    widgets::{hierarchy_prefix, text_size},
+    widgets::{hide_single_window_tab, hierarchy_prefix, text_size},
 };
 
 const ROW_HEIGHT: f32 = 24.0;
@@ -31,6 +31,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     let mut visibility_changed = false;
     let _text_align = ui.push_style_var(dear_imgui_rs::StyleVar::SelectableTextAlign([0.0, 0.5]));
 
+    hide_single_window_tab(ui);
     ui.window(WINDOW_NAME).build(|| {
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
         let root_name = world

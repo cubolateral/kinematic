@@ -14,6 +14,7 @@ pub(super) struct EditorCache {
     pub(super) fullscreen: bool,
     pub(super) margin_visible: bool,
     pub(super) loop_enabled: bool,
+    pub(super) timeline_tracks_expanded: bool,
     pub(super) focused_scene: Option<String>,
 }
 
@@ -27,6 +28,7 @@ impl Default for EditorCache {
             fullscreen: false,
             margin_visible: true,
             loop_enabled: true,
+            timeline_tracks_expanded: false,
             focused_scene: None,
         }
     }
@@ -206,6 +208,7 @@ mod tests {
             fullscreen: true,
             margin_visible: false,
             loop_enabled: false,
+            timeline_tracks_expanded: true,
             focused_scene: Some("Main".to_owned()),
         };
 
@@ -215,6 +218,7 @@ mod tests {
         let loaded: EditorCache = ron::from_str(&contents).unwrap();
         assert_eq!(loaded, cache);
         assert!(contents.contains("timeline_time: 1.5"));
+        assert!(contents.contains("timeline_tracks_expanded: true"));
         assert!(contents.contains("focused_scene: Some(\"Main\")"));
 
         std::fs::remove_dir_all(directory).unwrap();

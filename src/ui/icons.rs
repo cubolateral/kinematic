@@ -1,6 +1,8 @@
 pub(super) const ARROW_LEFT: &str = "\u{f060}";
 pub(super) const BACKWARD: &str = "\u{f04a}";
 pub(super) const BACKWARD_FAST: &str = "\u{f048}";
+pub(super) const CHEVRON_DOWN: &str = "\u{f078}";
+pub(super) const CHEVRON_RIGHT: &str = "\u{f054}";
 pub(super) const COMPRESS: &str = "\u{f066}";
 pub(super) const DIAMOND: &str = "\u{25c6}";
 pub(super) const EXPAND: &str = "\u{f065}";

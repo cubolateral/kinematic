@@ -28,10 +28,7 @@ pub(in crate::ui) struct State {
     view_focus: Option<usize>,
     saved_views: std::collections::HashMap<Option<usize>, (f32, f32)>,
     pub(super) interaction: Interaction,
-    pressed_entity: Option<Option<hecs::Entity>>,
-    pressed_toggle: bool,
     pressed_scene: Option<usize>,
-    expanded_objects: std::collections::HashSet<hecs::Entity>,
     event_drag: Option<EventDrag>,
 }
 
@@ -134,34 +131,6 @@ impl State {
         );
     }
 
-    pub fn press_entity(&mut self, entity: Option<hecs::Entity>, toggle: bool) {
-        self.pressed_entity = Some(entity);
-        self.pressed_toggle = toggle;
-    }
-
-    pub fn release_entity(
-        &mut self,
-        entity: Option<hecs::Entity>,
-        toggle: bool,
-        over_view: bool,
-        drag_delta: [f32; 2],
-    ) -> Option<(Option<hecs::Entity>, bool)> {
-        let pressed = self.pressed_entity.take()?;
-        let pressed_toggle = std::mem::take(&mut self.pressed_toggle);
-        let moved = drag_delta[0].abs().max(drag_delta[1].abs()) >= DRAG_DIRECTION_THRESHOLD;
-
-        if over_view
-            && matches!(self.interaction, Interaction::None | Interaction::Tracks)
-            && !moved
-            && pressed == entity
-            && (!pressed_toggle || toggle)
-        {
-            Some((entity, pressed_toggle))
-        } else {
-            None
-        }
-    }
-
     pub(super) fn press_scene(&mut self, scene: usize) {
         self.pressed_scene = Some(scene);
     }
@@ -178,16 +147,6 @@ impl State {
             && scene == Some(pressed))
         .then_some(pressed)
     }
-    pub fn toggle_object(&mut self, entity: hecs::Entity) {
-        if !self.expanded_objects.remove(&entity) {
-            self.expanded_objects.insert(entity);
-        }
-    }
-
-    pub fn is_object_expanded(&self, entity: hecs::Entity) -> bool {
-        self.expanded_objects.contains(&entity)
-    }
-
     pub(super) fn begin_event_drag(
         &mut self,
         scene: usize,
@@ -223,8 +182,6 @@ impl State {
 
     pub(super) fn cancel_interactions(&mut self) {
         self.interaction = Interaction::None;
-        self.pressed_entity = None;
-        self.pressed_toggle = false;
         self.pressed_scene = None;
         self.event_drag = None;
     }

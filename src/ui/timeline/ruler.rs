@@ -5,22 +5,6 @@ use super::{
     metrics::{GRID_TARGET_SPACING, LABEL_PADDING, SCRUBBER_HEIGHT},
 };
 
-pub(super) fn draw_panel_divider(
-    ui: &dear_imgui_rs::Ui,
-    draw_list: &dear_imgui_rs::DrawListMut<'_>,
-    layout: Layout,
-    top: f32,
-    bottom: f32,
-) {
-    draw_list.add_line_v(
-        layout.divider_x,
-        top,
-        bottom,
-        ui.get_color_u32(dear_imgui_rs::StyleColor::Separator),
-        1.0,
-    );
-}
-
 pub(super) fn draw_scrubber(
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
