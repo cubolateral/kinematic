@@ -218,8 +218,7 @@ pub struct RenderContext3D<'a> {
     geometries: &'a mut HashMap<GeometryKey, CachedGeometry>,
     used_geometries: &'a mut HashSet<GeometryKey>,
     physical: &'a mut three_d::PhysicalMaterial,
-    ambient: &'a three_d::AmbientLight,
-    sun: &'a three_d::DirectionalLight,
+    lights: &'a [&'a dyn three_d::Light],
     texture: &'a dyn Fn(CanvasTexture) -> Option<glow::NativeTexture>,
     mesh_programs: &'a mut MeshProgramCache,
     current_transform: glam::Mat4,
@@ -238,8 +237,7 @@ impl<'a> RenderContext3D<'a> {
         geometries: &'a mut HashMap<GeometryKey, CachedGeometry>,
         used_geometries: &'a mut HashSet<GeometryKey>,
         physical: &'a mut three_d::PhysicalMaterial,
-        ambient: &'a three_d::AmbientLight,
-        sun: &'a three_d::DirectionalLight,
+        lights: &'a [&'a dyn three_d::Light],
         texture: &'a dyn Fn(CanvasTexture) -> Option<glow::NativeTexture>,
         mesh_programs: &'a mut MeshProgramCache,
         scene_time: f32,
@@ -251,8 +249,7 @@ impl<'a> RenderContext3D<'a> {
             geometries,
             used_geometries,
             physical,
-            ambient,
-            sun,
+            lights,
             texture,
             mesh_programs,
             current_transform: glam::Mat4::IDENTITY,
@@ -371,10 +368,9 @@ impl<'a> RenderContext3D<'a> {
             self.physical.is_transparent = transparent;
             self.physical.render_states = states;
             let physical = &*self.physical;
-            let lights: [&dyn three_d::Light; 2] = [self.ambient, self.sun];
             let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
             mesh.set_transformation(transformation.to_cols_array_2d().into());
-            mesh.render_with_material(physical, camera, &lights);
+            mesh.render_with_material(physical, camera, self.lights);
         }
         self.render_outline(key, transformation, data);
         Ok(())
@@ -433,10 +429,9 @@ impl<'a> RenderContext3D<'a> {
             material.roughness = data.roughness.clamp(0.04, 1.0);
             material.is_transparent = true;
             material.render_states = states;
-            let lights: [&dyn three_d::Light; 2] = [self.ambient, self.sun];
             let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
             mesh.set_transformation(transformation.to_cols_array_2d().into());
-            mesh.render_with_material(&material, camera, &lights);
+            mesh.render_with_material(&material, camera, self.lights);
         }
         self.render_outline(key, transformation, data);
         Ok(())

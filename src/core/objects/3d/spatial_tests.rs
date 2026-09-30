@@ -518,3 +518,34 @@ fn root_view_track_switches_between_builtin_worlds() {
     scene.update(2.0);
     assert_eq!(scene.view_texture(), world_2d);
 }
+
+#[test]
+fn light_objects_follow_3d_visibility_and_animation() {
+    let mut scene = Scene::new();
+    let canvas = canvas_3d().build(&mut scene);
+    let group = group_3d().position(vec3(2.0, 0.0, 0.0)).build(&mut scene);
+    let directional = directional_light().intensity(2.0).build(&mut scene);
+    let point = point_light()
+        .position(vec3(1.0, 0.0, 0.0))
+        .quadratic(0.5)
+        .build(&mut scene);
+    let spot = spot_light().cutoff(0.5).build(&mut scene);
+    group.add(&directional);
+    group.add(&point);
+    group.add(&spot);
+    canvas.add(&group);
+    scene.add_canvas_3d(&canvas);
+
+    assert_eq!(point.global_position(), vec3(3.0, 0.0, 0.0));
+    assert_eq!(directional.get_intensity(), 2.0);
+    assert_eq!(point.get_quadratic(), 0.5);
+    assert_eq!(spot.get_cutoff(), 0.5);
+    let mut visible = Vec::new();
+    visible_subtree_3d(&scene.world(), canvas.entity(), &mut visible);
+    assert!(visible.contains(&directional.entity()));
+    assert!(visible.contains(&point.entity()));
+    assert!(visible.contains(&spot.entity()));
+    group.visibility(false).immediate();
+    visible_subtree_3d(&scene.world(), canvas.entity(), &mut visible);
+    assert!(!visible.contains(&point.entity()));
+}

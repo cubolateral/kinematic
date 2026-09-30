@@ -120,6 +120,23 @@ fn graphics_canvas_projection_alpha_orientation() {
     assert_pixel(&pixels, 48, 32, [0, 255, 0, 255]);
     assert_pixel(&pixels, 16, 32, [255, 0, 0, 255]);
 
+    let light = directional_light()
+        .color(Color::RED)
+        .intensity(2.0)
+        .build(&mut scene);
+    world.add(&light);
+    scene.update(1.0);
+    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    let lit = read(&gl, &output);
+    assert_ne!(
+        &lit[(32 * 64 + 32) * 4..(32 * 64 + 32) * 4 + 4],
+        &pixels[(32 * 64 + 32) * 4..(32 * 64 + 32) * 4 + 4]
+    );
+    light.remove();
+    scene.update(1.0);
+    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    assert_eq!(read(&gl, &output), pixels);
+
     let projection = projection_2d().source(&world).build(&mut scene);
     overlay.add(&projection);
     scene.root().view_2d(true).immediate();

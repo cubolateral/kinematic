@@ -10,9 +10,11 @@ use crate::core::{
         MeshProgramCache, RenderContext3D,
     },
     objects::{
-        CanvasDimension, CanvasSettings, CanvasTexture, ImageShaderData, ImageShaderImage,
+        CanvasDimension, CanvasSettings, CanvasTexture, DirectionalLightKind, ImageShaderData,
+        ImageShaderImage, Light3D, LightAttenuation, PointLightKind, SpotLightCone, SpotLightKind,
         draw_canvas2d_with_shader_images, draw_image_shader_source, effective_mesh_shader,
-        global_transform, image_shader_bounds, object_follows_camera,
+        global_matrix3d, global_rotation3d, global_transform, image_shader_bounds,
+        object_follows_camera,
     },
 };
 use crate::renderer::editor_guides::{EditorGuideRenderer, EditorGuides3D};
@@ -232,6 +234,12 @@ impl Canvases {
         let textures = &self.targets;
         let resolve_texture = |texture: CanvasTexture| textures.get(&texture).map(Target::texture);
         visible_subtree_3d(&world, entity, &mut self.visible);
+        let lights = scene_lights(&world, &self.visible, &self.context)?;
+        let mut light_refs: Vec<&dyn three_d::Light> = vec![&self.ambient];
+        if lights.is_empty() {
+            light_refs.push(&self.sun);
+        }
+        light_refs.extend(lights.iter().map(|light| light.as_ref()));
         pass.target()
             .write(|| {
                 let mut render = RenderContext3D::new(
@@ -241,8 +249,7 @@ impl Canvases {
                     &mut self.geometries,
                     &mut self.used_geometries,
                     &mut self.physical,
-                    &self.ambient,
-                    &self.sun,
+                    &light_refs,
                     &resolve_texture,
                     &mut self.mesh_programs,
                     scene.time(),
@@ -364,9 +371,13 @@ impl Canvases {
                     let context = &self.context;
                     let geometries = &mut self.geometries;
                     let physical = &mut self.physical;
-                    let ambient = &self.ambient;
-                    let sun = &self.sun;
                     visible_subtree_3d(&world, *entity, &mut self.visible);
+                    let lights = scene_lights(&world, &self.visible, context)?;
+                    let mut light_refs: Vec<&dyn three_d::Light> = vec![&self.ambient];
+                    if lights.is_empty() {
+                        light_refs.push(&self.sun);
+                    }
+                    light_refs.extend(lights.iter().map(|light| light.as_ref()));
                     pass.target()
                         .write(|| {
                             let mut render = RenderContext3D::new(
@@ -376,8 +387,7 @@ impl Canvases {
                                 geometries,
                                 &mut self.used_geometries,
                                 physical,
-                                ambient,
-                                sun,
+                                &light_refs,
                                 &resolve_texture,
                                 &mut self.mesh_programs,
                                 scene.time(),
@@ -562,6 +572,87 @@ impl Drop for Canvases {
             programs.clear();
         }
     }
+}
+
+fn scene_lights(
+    world: &hecs::World,
+    visible: &[hecs::Entity],
+    context: &three_d::Context,
+) -> Result<Vec<Box<dyn three_d::Light>>, String> {
+    let mut lights: Vec<Box<dyn three_d::Light>> = Vec::new();
+    for &entity in visible {
+        let Ok(light) = world.get::<&Light3D>(entity) else {
+            continue;
+        };
+        if !light.intensity.is_finite() || light.intensity < 0.0 {
+            return Err("Light intensity must be finite and nonnegative.".into());
+        }
+        let color = three_d::Srgba::new(
+            light_channel(light.color.r),
+            light_channel(light.color.g),
+            light_channel(light.color.b),
+            255,
+        );
+        let position = global_matrix3d(world, entity).transform_point3(glam::Vec3::ZERO);
+        let direction = global_rotation3d(world, entity) * glam::Vec3::NEG_Z;
+        let position = three_d::vec3(position.x, position.y, position.z);
+        let direction = three_d::vec3(direction.x, direction.y, direction.z);
+        if world.get::<&DirectionalLightKind>(entity).is_ok() {
+            lights.push(Box::new(three_d::DirectionalLight::new(
+                context,
+                light.intensity,
+                color,
+                direction,
+            )));
+        } else {
+            let attenuation = world.get::<&LightAttenuation>(entity).unwrap();
+            let coefficients = [
+                attenuation.constant,
+                attenuation.linear,
+                attenuation.quadratic,
+            ];
+            if coefficients
+                .iter()
+                .any(|value| !value.is_finite() || *value < 0.0)
+                || coefficients.iter().all(|value| *value == 0.0)
+            {
+                return Err("Light attenuation must have finite, nonnegative coefficients and at least one positive coefficient.".into());
+            }
+            let attenuation = three_d::Attenuation {
+                constant: attenuation.constant,
+                linear: attenuation.linear,
+                quadratic: attenuation.quadratic,
+            };
+            if world.get::<&PointLightKind>(entity).is_ok() {
+                lights.push(Box::new(three_d::PointLight::new(
+                    context,
+                    light.intensity,
+                    color,
+                    position,
+                    attenuation,
+                )));
+            } else if world.get::<&SpotLightKind>(entity).is_ok() {
+                let cutoff = world.get::<&SpotLightCone>(entity).unwrap().cutoff;
+                if !cutoff.is_finite() || !(0.0..std::f32::consts::PI).contains(&cutoff) {
+                    return Err("Spot light cutoff must be between zero and pi radians.".into());
+                }
+                lights.push(Box::new(three_d::SpotLight::new(
+                    context,
+                    light.intensity,
+                    color,
+                    position,
+                    direction,
+                    three_d::radians(cutoff),
+                    attenuation,
+                )));
+            }
+        }
+    }
+    Ok(lights)
+}
+
+fn light_channel(value: f32) -> u8 {
+    (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
 fn camera(
