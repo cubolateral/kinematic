@@ -259,6 +259,7 @@ impl Scene {
                                         std::any::TypeId::of::<Simulation>(),
                                         track_info,
                                         sample_time,
+                                        crate::core::TrackValue::Bool(fallback),
                                     )
                                 })
                                 .and_then(bool::from_track_value)
@@ -1980,6 +1981,30 @@ mod tests {
     }
 
     #[test]
+    fn relative_rotation_starts_from_the_interrupted_orientation() {
+        let mut scene = Scene::new();
+        let cube = cube().build(&mut scene);
+        scene.world_3d().add(&cube);
+        scene.parallel(|_| {
+            cube.rotation_z_by(1.0)
+                .duration(2.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+        scene.wait(1.0);
+        cube.rotation_z_by(0.5).easing(Easing::Linear).play();
+        scene.animator.take_schedule().compile(&scene);
+
+        for (time, angle) in [(0.5, 0.25), (1.0, 0.5), (2.0, 1.0)] {
+            scene.update(time);
+            assert!(
+                cube.get(Transform3D::rotation_property())
+                    .abs_diff_eq(Quaternion::from_rotation_z(angle), 1e-5)
+            );
+        }
+    }
+
+    #[test]
     fn handler_tween_play_registers_in_scene_animator() {
         struct HandlerTweenScene;
 
@@ -2005,6 +2030,191 @@ mod tests {
         let circle = query.iter().next().unwrap();
         assert_eq!(circle.0.position.x, 64.0);
         assert_eq!(circle.1.fill, Color::new(0.75, 0.0, 0.25, 1.0));
+    }
+
+    #[test]
+    fn unchanged_tweens_do_not_add_tracks_or_keyframes() {
+        let mut scene = Scene::new();
+        let circle = circle().build(&mut scene);
+        scene.world_2d().add(&circle);
+
+        circle.save();
+        circle.position_x(10.0).play();
+        circle.position_x(10.0).play();
+        circle.restore().play();
+        assert_eq!(scene.animator.take_schedule().compile(&scene), 3.0);
+
+        let world = scene.world();
+        let animation = world.get::<&Animation>(circle.entity()).unwrap();
+        assert_eq!(animation.tracks.len(), 1);
+        assert_eq!(animation.tracks[0].track.keyframes.len(), 4);
+        assert!(animation.tracks[0].track.keyframes[1].easing.is_none());
+        drop(animation);
+        drop(world);
+
+        scene.update(1.5);
+        assert_eq!(circle.get_position().x, 10.0);
+        scene.update(3.0);
+        assert_eq!(circle.get_position().x, 0.0);
+    }
+
+    #[test]
+    fn constant_tween_still_anchors_an_explicit_value_change() {
+        let mut scene = Scene::new();
+        let circle = circle().build(&mut scene);
+        scene.world_2d().add(&circle);
+
+        circle
+            .animate_from(
+                Transform2D::position_property(),
+                vec2(5.0, 0.0),
+                vec2(5.0, 0.0),
+            )
+            .play();
+        circle
+            .animate_from(
+                Transform2D::position_property(),
+                vec2(0.0, 0.0),
+                vec2(10.0, 0.0),
+            )
+            .play();
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(0.5);
+        assert_eq!(circle.get_position().x, 5.0);
+        scene.update(1.5);
+        assert_eq!(circle.get_position().x, 5.0);
+    }
+
+    #[test]
+    fn vector_and_color_channels_animate_independently() {
+        let mut scene = Scene::new();
+        let circle = circle().fill(Color::RED).build(&mut scene);
+        scene.world_2d().add(&circle);
+        scene.parallel(|_| {
+            circle
+                .position_x(10.0)
+                .duration(2.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+        scene.parallel(|_| {
+            circle
+                .fill_r(0.0)
+                .duration(2.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+        scene.wait(1.0);
+        circle
+            .position_y(20.0)
+            .fill_g(1.0)
+            .easing(Easing::Linear)
+            .play();
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(1.5);
+        assert_eq!(circle.get_position(), vec2(7.5, 10.0));
+        assert_eq!(circle.get_fill(), Color::new(0.25, 0.5, 0.0, 1.0));
+    }
+
+    #[test]
+    fn editing_y_does_not_interrupt_a_full_vector_tween_on_x() {
+        let mut scene = Scene::new();
+        let circle = circle().build(&mut scene);
+        scene.world_2d().add(&circle);
+        scene.parallel(|_| {
+            circle
+                .position(vec2(10.0, 0.0))
+                .duration(2.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+        scene.wait(1.0);
+        circle.position_y(20.0).easing(Easing::Linear).play();
+        scene.animator.take_schedule().compile(&scene);
+
+        scene.update(1.5);
+        assert_eq!(circle.get_position(), vec2(7.5, 10.0));
+    }
+
+    #[test]
+    fn later_tween_interrupts_at_the_sampled_value() {
+        let mut scene = Scene::new();
+        let circle = circle().build(&mut scene);
+        scene.world_2d().add(&circle);
+        scene.parallel(|_| {
+            circle
+                .position_x(10.0)
+                .duration(2.0)
+                .easing(Easing::Linear)
+                .play();
+        });
+        scene.wait(1.0);
+        circle.position_x(20.0).easing(Easing::Linear).play();
+        scene.animator.take_schedule().compile(&scene);
+
+        for (time, x) in [(0.5, 2.5), (1.0, 5.0), (1.5, 12.5), (2.0, 20.0)] {
+            scene.update(time);
+            assert_eq!(circle.get_position().x, x);
+        }
+    }
+
+    #[test]
+    fn interrupted_easing_keeps_the_original_curve_before_the_cut() {
+        let mut scene = Scene::new();
+        let circle = circle().build(&mut scene);
+        scene.world_2d().add(&circle);
+        scene.parallel(|_| {
+            circle
+                .position_x(10.0)
+                .duration(2.0)
+                .easing(Easing::InQuad)
+                .play();
+        });
+        scene.wait(1.0);
+        circle.position_x(20.0).easing(Easing::Linear).play();
+        scene.animator.take_schedule().compile(&scene);
+
+        for (time, x) in [(0.5, 0.625), (1.0, 2.5), (1.5, 11.25), (2.0, 20.0)] {
+            scene.update(time);
+            assert_eq!(circle.get_position().x, x);
+        }
+    }
+
+    #[test]
+    fn relative_and_explicit_tweens_use_their_own_start_rules() {
+        for (relative, expected) in [(true, 25.0), (false, 0.0)] {
+            let mut scene = Scene::new();
+            let circle = circle().build(&mut scene);
+            scene.world_2d().add(&circle);
+            scene.parallel(|_| {
+                circle
+                    .position_x(10.0)
+                    .duration(2.0)
+                    .easing(Easing::Linear)
+                    .play();
+            });
+            scene.wait(1.0);
+            if relative {
+                circle.position_x_by(20.0).easing(Easing::Linear).play();
+            } else {
+                circle
+                    .position_x_from(0.0, 20.0)
+                    .easing(Easing::Linear)
+                    .play();
+            }
+            scene.animator.take_schedule().compile(&scene);
+            scene.update(0.5);
+            assert_eq!(circle.get_position().x, 2.5);
+            scene.update(1.0);
+            assert_eq!(circle.get_position().x, if relative { 5.0 } else { 0.0 });
+            scene.update(2.0);
+            assert_eq!(
+                circle.get_position().x,
+                if relative { expected } else { 20.0 }
+            );
+        }
     }
 
     #[test]

@@ -20,7 +20,7 @@ impl Animation {
             track
                 .track
                 .target
-                .same(&TrackTarget::property(type_id, track_info))
+                .same_field(&TrackTarget::property(type_id, track_info))
                 && !track.track.keyframes.is_empty()
         })
     }
@@ -36,16 +36,23 @@ impl Animation {
         type_id: std::any::TypeId,
         track_info: &'static TrackInfo,
         time: f32,
+        base: TrackValue,
     ) -> Option<TrackValue> {
-        self.tracks
-            .iter()
-            .find(|track| {
-                track
-                    .track
-                    .target
-                    .same(&TrackTarget::property(type_id, track_info))
-            })
-            .and_then(|track| track.track.sample(time))
+        let target = TrackTarget::property(type_id, track_info);
+        let mut result = None;
+        let mut value = base;
+        for track in &self.tracks {
+            if track.track.target.same_field(&target)
+                && let Some(sample) = track.track.sample(time)
+            {
+                value = match track.track.target.channel() {
+                    Some(channel) => value.with_channel(&sample, channel),
+                    None => sample,
+                };
+                result = Some(value.clone());
+            }
+        }
+        result
     }
 
     pub(crate) fn replace_values(
@@ -59,11 +66,20 @@ impl Animation {
             if track
                 .track
                 .target
-                .same(&TrackTarget::property(type_id, track_info))
+                .same_field(&TrackTarget::property(type_id, track_info))
             {
+                let channel = track.track.target.channel();
                 for keyframe in &mut track.track.keyframes {
-                    if keyframe.value == *before {
-                        keyframe.value = value.clone();
+                    let replace = |current: &mut TrackValue| match channel {
+                        Some(channel) if current.channel(channel) == before.channel(channel) => {
+                            *current = current.with_channel(value, channel);
+                        }
+                        None if *current == *before => *current = value.clone(),
+                        _ => {}
+                    };
+                    replace(&mut keyframe.value);
+                    if let Some((_, original)) = &mut keyframe.original_end {
+                        replace(original);
                     }
                 }
             }
@@ -79,10 +95,7 @@ impl Animation {
             Some(index) => index,
             None => {
                 self.tracks.push(AnimationTrack {
-                    track: match target {
-                        TrackTarget::Property { type_id, info } => Track::property(type_id, info),
-                        TrackTarget::Uniform(name) => Track::uniform(name),
-                    },
+                    track: Track::for_target(target),
                 });
                 self.tracks.len() - 1
             }

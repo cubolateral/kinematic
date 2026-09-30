@@ -76,9 +76,12 @@ impl TrackView {
             true,
         );
         draw_list.add_text(
-            [name_x, top + (TRACK_HEIGHT - text_size(ui, label)[1]) * 0.5],
+            [
+                name_x,
+                top + (TRACK_HEIGHT - text_size(ui, &label)[1]) * 0.5,
+            ],
             self.text,
-            label,
+            &label,
         );
         drop(clip);
 
@@ -232,7 +235,7 @@ impl TrackView {
                     }
 
                     ui.text(format!("Time: {project_time:.2}s"));
-                    ui.text(format!("Value: {}", keyframe.value));
+                    ui.text(format!("Value: {}", track.display_value(&keyframe.value)));
                     match keyframe.easing {
                         Some(easing) => ui.text(format!("Easing: {easing:?}")),
                         None => ui.text("Easing: None"),

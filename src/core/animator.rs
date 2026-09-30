@@ -76,25 +76,104 @@ struct ScheduledTween {
     duration: f32,
     easing: Easing,
     rotation: Option<(Vector3, f32)>,
+    mask: u8,
+    relative: u8,
+    implicit: bool,
 }
 
 impl ScheduledTween {
-    fn append(self, animation: &mut Animation, offset: f32) {
-        let name = self.target.name().to_owned();
-        let track = animation.target_mut(self.target);
-        let start = offset + self.start;
-        assert!(
-            track.keyframes.last().is_none_or(|last| last.time <= start),
-            "Animations on property '{}' overlap.",
-            name,
-        );
-        if let Some((axis, angle)) = self.rotation {
-            let TrackValue::Quaternion(from) = self.from else {
-                unreachable!("Rotation must have a quaternion starting value.");
-            };
-            track.add_rotation_tween(start, from, axis, angle, self.duration, self.easing);
+    fn redundant(
+        &self,
+        animation: &Animation,
+        world: &hecs::World,
+        later: &[Self],
+        repeats: &[ScheduledRepeat],
+    ) -> bool {
+        if self.mask == 0 {
+            return true;
+        }
+        if self.rotation.is_some() || self.from != self.to || self.mask.count_ones() != 1 {
+            return false;
+        }
+
+        let channel = self.mask.trailing_zeros() as u8;
+        let target = if self.from.channels() == 1 {
+            self.target.clone()
         } else {
-            track.add_tween(start, self.from, self.to, self.duration, self.easing);
+            self.target.clone().component(channel)
+        };
+        let same_value = |left: &TrackValue, right: &TrackValue| {
+            if self.from.channels() == 1 {
+                left == right
+            } else {
+                left.channel(channel) == right.channel(channel)
+            }
+        };
+        let next = later.iter().find(|tween| {
+            tween.entity == self.entity
+                && tween.target.same_field(&self.target)
+                && tween.mask & self.mask != 0
+        });
+        if next.is_some_and(|next| next.start < self.start + self.duration)
+            || repeats.iter().any(|repeat| {
+                repeat.tweens.iter().any(|tween| {
+                    tween.entity == self.entity
+                        && tween.target.same_field(&self.target)
+                        && tween.mask & self.mask != 0
+                })
+            })
+        {
+            return false;
+        }
+
+        if let Some(track) = animation
+            .tracks
+            .iter()
+            .find(|track| track.track.target.same(&target))
+        {
+            return track.track.repeat.is_none()
+                && track.track.keyframes.last().is_some_and(|last| {
+                    last.time <= self.start && same_value(&last.value, &self.from)
+                });
+        }
+
+        next.map_or_else(
+            || same_value(&target.get(world, self.entity), &self.from),
+            |next| same_value(&next.from, &self.from),
+        )
+    }
+
+    fn append(self, animation: &mut Animation, offset: f32) {
+        let start = offset + self.start;
+        for channel in 0..self.from.channels() {
+            let bit = 1 << channel;
+            if self.mask & bit == 0 {
+                continue;
+            }
+            let target = if self.from.channels() == 1 {
+                self.target.clone()
+            } else {
+                self.target.clone().component(channel)
+            };
+            let track = animation.target_mut(target);
+            let from = if self.implicit {
+                track.sample(start).unwrap_or_else(|| self.from.clone())
+            } else {
+                self.from.clone()
+            };
+            let to = if self.relative & bit != 0 {
+                from.add_difference(&self.from, &self.to)
+            } else {
+                self.to.clone()
+            };
+            if let Some((axis, angle)) = self.rotation {
+                let TrackValue::Quaternion(from) = from else {
+                    unreachable!("Rotation must have a quaternion starting value.");
+                };
+                track.add_rotation_tween(start, from, axis, angle, self.duration, self.easing);
+            } else {
+                track.add_tween(start, from, to, self.duration, self.easing);
+            }
         }
     }
 }
@@ -114,11 +193,38 @@ impl Schedule {
                 start: 0.0,
                 entity,
                 target: TrackTarget::property(type_id, track_info),
+                mask: (1 << from.channels()) - 1,
                 from,
                 to,
                 duration,
                 easing,
                 rotation: None,
+                relative: 0,
+                implicit: false,
+            }),
+            Task::PropertyTween {
+                entity,
+                type_id,
+                track_info,
+                from,
+                to,
+                duration,
+                easing,
+                mask,
+                relative,
+                implicit,
+            } => Self::tween(ScheduledTween {
+                start: 0.0,
+                entity,
+                target: TrackTarget::property(type_id, track_info),
+                from,
+                to,
+                duration,
+                easing,
+                rotation: None,
+                mask,
+                relative,
+                implicit,
             }),
             Task::UniformTween {
                 entity,
@@ -131,11 +237,39 @@ impl Schedule {
                 start: 0.0,
                 entity,
                 target: TrackTarget::uniform(name),
+                mask: (1 << from.channels()) - 1,
                 from,
                 to,
                 duration,
                 easing,
                 rotation: None,
+                relative: 0,
+                implicit: false,
+            }),
+            Task::UniformPropertyTween {
+                entity,
+                name,
+                from,
+                to,
+                duration,
+                easing,
+                implicit,
+            } => Self::tween(ScheduledTween {
+                start: 0.0,
+                entity,
+                target: TrackTarget::uniform(name),
+                mask: if implicit {
+                    from.changed_channels(&to)
+                } else {
+                    (1 << from.channels()) - 1
+                },
+                from,
+                to,
+                duration,
+                easing,
+                rotation: None,
+                relative: 0,
+                implicit,
             }),
             Task::RotationTween {
                 entity,
@@ -164,6 +298,41 @@ impl Schedule {
                     duration,
                     easing,
                     rotation: Some((axis, angle)),
+                    mask: 1,
+                    relative: 0,
+                    implicit: false,
+                })
+            }
+            Task::RotationPropertyTween {
+                entity,
+                type_id,
+                track_info,
+                from,
+                axis,
+                angle,
+                duration,
+                easing,
+            } => {
+                assert!(
+                    axis.is_finite() && axis.length_squared() > f32::EPSILON,
+                    "Rotation axis must be finite and non-zero."
+                );
+                assert!(angle.is_finite(), "Rotation angle must be finite.");
+                let axis = axis.normalize();
+                let from = normalized_quaternion(from);
+                let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
+                Self::tween(ScheduledTween {
+                    start: 0.0,
+                    entity,
+                    target: TrackTarget::property(type_id, track_info),
+                    from: TrackValue::Quaternion(from),
+                    to: TrackValue::Quaternion(to),
+                    duration,
+                    easing,
+                    rotation: Some((axis, angle)),
+                    mask: 1,
+                    relative: 0,
+                    implicit: true,
                 })
             }
             Task::Wait(duration) => {
@@ -232,7 +401,16 @@ impl Schedule {
             repeats: vec![ScheduledRepeat {
                 start: 0.0,
                 duration: self.duration,
-                tweens: self.tweens,
+                tweens: self
+                    .tweens
+                    .into_iter()
+                    .map(|mut tween| {
+                        if tween.mask == 0 {
+                            tween.mask = (1 << tween.from.channels()) - 1;
+                        }
+                        tween
+                    })
+                    .collect(),
             }],
         }
     }
@@ -241,22 +419,35 @@ impl Schedule {
         // Stable ordering preserves instantaneous changes at shared endpoints.
         self.tweens.sort_by(|a, b| a.start.total_cmp(&b.start));
         let world = scene.world();
-        for tween in self.tweens {
+        let mut tweens = self.tweens.into_iter();
+        while let Some(tween) = tweens.next() {
             let mut animation = world.get::<&mut Animation>(tween.entity).unwrap();
-            tween.append(&mut animation, 0.0);
+            if !tween.redundant(&animation, &world, tweens.as_slice(), &self.repeats) {
+                tween.append(&mut animation, 0.0);
+            }
         }
         for mut repeat in self.repeats {
             repeat.tweens.sort_by(|a, b| a.start.total_cmp(&b.start));
             let mut initialized: Vec<(hecs::Entity, TrackTarget)> = Vec::new();
             for tween in repeat.tweens {
                 let mut animation = world.get::<&mut Animation>(tween.entity).unwrap();
-                if !initialized
-                    .iter()
-                    .any(|(entity, target)| *entity == tween.entity && target.same(&tween.target))
-                {
-                    initialized.push((tween.entity, tween.target.clone()));
-                    let name = tween.target.name().to_owned();
-                    let track = animation.target_mut(tween.target.clone());
+                for channel in 0..tween.from.channels() {
+                    if tween.mask & (1 << channel) == 0 {
+                        continue;
+                    }
+                    let target = if tween.from.channels() == 1 {
+                        tween.target.clone()
+                    } else {
+                        tween.target.clone().component(channel)
+                    };
+                    if initialized.iter().any(|(entity, initialized)| {
+                        *entity == tween.entity && initialized.same(&target)
+                    }) {
+                        continue;
+                    }
+                    initialized.push((tween.entity, target.clone()));
+                    let name = target.name().to_owned();
+                    let track = animation.target_mut(target);
                     assert!(
                         track.repeat.is_none()
                             && track

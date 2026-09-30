@@ -556,7 +556,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 ) -> #tween_type<<Next as #handler_context_trait>::Object> {
                     self.#field_ident.update_for::< <Next as #handler_context_trait>::Object >(
                         |value| value + delta,
-                    )
+                    ).relative(u8::MAX)
                 }
             });
             tween_trait_fns.push(quote! {
@@ -568,6 +568,10 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                         std::any::TypeId::of::<#struct_name>(),
                         <#struct_name as #trackable_trait>::track(#id),
                         |value: #field_ty| value + delta,
+                    ).relative_track(
+                        std::any::TypeId::of::<#struct_name>(),
+                        <#struct_name as #trackable_trait>::track(#id),
+                        u8::MAX,
                     )
                 }
             });
@@ -580,7 +584,8 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     "Quad" => &["a", "b", "c", "d"],
                     _ => &["x", "y"],
                 };
-                for suffix in axes {
+                for (channel, suffix) in axes.iter().enumerate() {
+                    let channel = channel as u8;
                     let method_name = format_ident!("{}_{}", field_ident, suffix);
                     let from_method_name = format_ident!("{}_from", method_name);
                     let component_field = format_ident!("{}", suffix);
@@ -593,6 +598,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             let mut component = self.#field_ident.get();
                             component.#component_field = value;
                             self.#field_ident.set_for::< <Next as #handler_context_trait>::Object >(component)
+                                .component(#channel)
                         }
 
                         pub fn #from_method_name(
@@ -608,7 +614,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             self.#field_ident.from_for::< <Next as #handler_context_trait>::Object >(
                                 from_component,
                                 to_component,
-                            )
+                            ).component(#channel)
                         }
                     });
                     tween_trait_fns.push(quote! {
@@ -616,9 +622,10 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     });
                     tween_impl_fns.push(quote! {
                         fn #method_name(self, value: f32) -> Self {
-                            self.update_track(
+                            self.update_component(
                                 std::any::TypeId::of::<#struct_name>(),
                                 <#struct_name as #trackable_trait>::track(#id),
+                                #channel,
                                 |mut component: #field_ty| {
                                 component.#component_field = value;
                                 component
@@ -638,7 +645,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                                     component.#component_field += delta;
                                     component
                                 },
-                            )
+                            ).component(#channel).relative(1 << #channel)
                         }
                     });
                     tween_trait_fns.push(quote! {
@@ -646,20 +653,26 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     });
                     tween_impl_fns.push(quote! {
                         fn #by_method_name(self, delta: f32) -> Self {
-                            self.update_track(
+                            self.update_component(
                                 std::any::TypeId::of::<#struct_name>(),
                                 <#struct_name as #trackable_trait>::track(#id),
+                                #channel,
                                 |mut component: #field_ty| {
                                     component.#component_field += delta;
                                     component
                                 },
+                            ).relative_track(
+                                std::any::TypeId::of::<#struct_name>(),
+                                <#struct_name as #trackable_trait>::track(#id),
+                                1 << #channel,
                             )
                         }
                     });
                 }
             }
             Some("Color") => {
-                for suffix in ["r", "g", "b", "a"] {
+                for (channel, suffix) in ["r", "g", "b", "a"].into_iter().enumerate() {
+                    let channel = channel as u8;
                     let method_name = format_ident!("{}_{}", field_ident, suffix);
                     let from_method_name = format_ident!("{}_from", method_name);
                     let component_field = format_ident!("{}", suffix);
@@ -672,6 +685,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             let mut component = self.#field_ident.get();
                             component.#component_field = value;
                             self.#field_ident.set_for::< <Next as #handler_context_trait>::Object >(component)
+                                .component(#channel)
                         }
 
                         pub fn #from_method_name(
@@ -687,7 +701,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             self.#field_ident.from_for::< <Next as #handler_context_trait>::Object >(
                                 from_component,
                                 to_component,
-                            )
+                            ).component(#channel)
                         }
                     });
                     tween_trait_fns.push(quote! {
@@ -695,9 +709,10 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     });
                     tween_impl_fns.push(quote! {
                         fn #method_name(self, value: f32) -> Self {
-                            self.update_track(
+                            self.update_component(
                                 std::any::TypeId::of::<#struct_name>(),
                                 <#struct_name as #trackable_trait>::track(#id),
+                                #channel,
                                 |mut component: #field_ty| {
                                     component.#component_field = value;
                                     component

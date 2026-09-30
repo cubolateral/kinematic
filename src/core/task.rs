@@ -20,6 +20,19 @@ pub enum Task {
         duration: f32,
         easing: Easing,
     },
+    #[doc(hidden)]
+    PropertyTween {
+        entity: hecs::Entity,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        from: TrackValue,
+        to: TrackValue,
+        duration: f32,
+        easing: Easing,
+        mask: u8,
+        relative: u8,
+        implicit: bool,
+    },
     /// Interpolates one builder-defined shader uniform.
     #[doc(hidden)]
     UniformTween {
@@ -30,9 +43,30 @@ pub enum Task {
         duration: f32,
         easing: Easing,
     },
+    #[doc(hidden)]
+    UniformPropertyTween {
+        entity: hecs::Entity,
+        name: String,
+        from: TrackValue,
+        to: TrackValue,
+        duration: f32,
+        easing: Easing,
+        implicit: bool,
+    },
     /// Rotates a quaternion through an axis-angle path without losing full turns.
     #[doc(hidden)]
     RotationTween {
+        entity: hecs::Entity,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        from: Quaternion,
+        axis: Vector3,
+        angle: f32,
+        duration: f32,
+        easing: Easing,
+    },
+    #[doc(hidden)]
+    RotationPropertyTween {
         entity: hecs::Entity,
         type_id: std::any::TypeId,
         track_info: &'static TrackInfo,

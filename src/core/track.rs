@@ -19,6 +19,10 @@ pub(crate) enum TrackTarget {
         info: &'static TrackInfo,
     },
     Uniform(String),
+    Component {
+        target: Box<TrackTarget>,
+        channel: u8,
+    },
 }
 
 impl TrackTarget {
@@ -28,6 +32,30 @@ impl TrackTarget {
 
     pub(crate) fn uniform(name: impl Into<String>) -> Self {
         Self::Uniform(name.into())
+    }
+
+    pub(crate) fn component(self, channel: u8) -> Self {
+        Self::Component {
+            target: Box::new(self),
+            channel,
+        }
+    }
+
+    pub(crate) fn same_field(&self, other: &Self) -> bool {
+        match self {
+            Self::Component { target, .. } => target.same_field(other),
+            _ => match other {
+                Self::Component { target, .. } => self.same_field(target),
+                _ => self.same(other),
+            },
+        }
+    }
+
+    pub(crate) fn channel(&self) -> Option<u8> {
+        match self {
+            Self::Component { channel, .. } => Some(*channel),
+            _ => None,
+        }
     }
 
     pub(crate) fn same(&self, other: &Self) -> bool {
@@ -43,6 +71,16 @@ impl TrackTarget {
                 },
             ) => left_type == right_type && left_info.id == right_info.id,
             (Self::Uniform(left), Self::Uniform(right)) => left == right,
+            (
+                Self::Component {
+                    target: left,
+                    channel: left_channel,
+                },
+                Self::Component {
+                    target: right,
+                    channel: right_channel,
+                },
+            ) => left_channel == right_channel && left.same(right),
             _ => false,
         }
     }
@@ -51,6 +89,7 @@ impl TrackTarget {
         match self {
             Self::Property { info, .. } => info.name,
             Self::Uniform(name) => name,
+            Self::Component { target, .. } => target.name(),
         }
     }
 
@@ -59,6 +98,7 @@ impl TrackTarget {
             Self::Property { info, .. } => (info.get)(world, entity),
             Self::Uniform(name) => crate::core::objects::shader_uniform(world, entity, name)
                 .unwrap_or_else(|error| panic!("{error}")),
+            Self::Component { target, .. } => target.get(world, entity),
         }
     }
 
@@ -69,6 +109,10 @@ impl TrackTarget {
                 crate::core::objects::set_shader_uniform(world, entity, name, value)
                     .unwrap_or_else(|error| panic!("{error}"));
             }
+            Self::Component { target, channel } => {
+                let current = target.get(world, entity);
+                target.set(world, entity, current.with_channel(&value, *channel));
+            }
         }
     }
 
@@ -76,6 +120,7 @@ impl TrackTarget {
         match self {
             Self::Property { info, .. } => info.clamp(value),
             Self::Uniform(_) => value,
+            Self::Component { target, .. } => target.clamp(value),
         }
     }
 
@@ -83,6 +128,7 @@ impl TrackTarget {
         match self {
             Self::Property { type_id, info } => Some((*type_id, *info)),
             Self::Uniform(_) => None,
+            Self::Component { target, .. } => target.property_parts(),
         }
     }
 
@@ -90,6 +136,7 @@ impl TrackTarget {
         match self {
             Self::Uniform(name) => Some(name),
             Self::Property { .. } => None,
+            Self::Component { target, .. } => target.uniform_name(),
         }
     }
 }
@@ -100,6 +147,7 @@ pub(crate) struct Keyframe {
     pub value: TrackValue,
     pub easing: Option<Easing>,
     interpolation: TrackInterpolation,
+    pub(crate) original_end: Option<(f32, TrackValue)>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -141,9 +189,14 @@ impl Track {
         Self::property(std::any::TypeId::of::<()>(), info)
     }
 
+    #[cfg(test)]
     pub(crate) fn property(type_id: std::any::TypeId, info: &'static TrackInfo) -> Self {
+        Self::for_target(TrackTarget::property(type_id, info))
+    }
+
+    pub(crate) fn for_target(target: TrackTarget) -> Self {
         Self {
-            target: TrackTarget::property(type_id, info),
+            target,
             keyframes: vec![],
             repeat: None,
             current_tween_range: (0.0, 0.0),
@@ -151,18 +204,23 @@ impl Track {
         }
     }
 
-    pub(crate) fn uniform(name: impl Into<String>) -> Self {
-        Self {
-            target: TrackTarget::uniform(name),
-            keyframes: vec![],
-            repeat: None,
-            current_tween_range: (0.0, 0.0),
-            current_tween_start: 0,
-        }
+    pub(crate) fn name(&self) -> String {
+        let Some(channel) = self.target.channel() else {
+            return self.target.name().to_owned();
+        };
+        let suffix = match self.keyframes.first().map(|frame| &frame.value) {
+            Some(TrackValue::Color(_)) => ["r", "g", "b", "a"][channel as usize],
+            Some(TrackValue::Quad(_)) => ["a", "b", "c", "d"][channel as usize],
+            _ => ["x", "y", "z", "w"][channel as usize],
+        };
+        format!("{}.{}", self.target.name(), suffix)
     }
 
-    pub(crate) fn name(&self) -> &str {
-        self.target.name()
+    pub(crate) fn display_value(&self, value: &TrackValue) -> String {
+        match self.target.channel() {
+            Some(channel) => format!("{:.2}", value.channel(channel)),
+            None => value.to_string(),
+        }
     }
 
     pub fn update(&mut self, world: &hecs::World, entity: hecs::Entity, time: f32) {
@@ -214,13 +272,17 @@ impl Track {
                     return Some(value);
                 }
 
+                let (end_time, end_value) = left
+                    .original_end
+                    .as_ref()
+                    .map_or((right.time, &right.value), |(time, value)| (*time, value));
                 let t = match left.easing {
-                    Some(easing) => easing.evaluate((time - left.time) / (right.time - left.time)),
+                    Some(easing) => easing.evaluate((time - left.time) / (end_time - left.time)),
                     None => return Some(left.value.clone()),
                 };
 
                 let value = match left.interpolation {
-                    TrackInterpolation::Value => left.value.lerp(&right.value, t),
+                    TrackInterpolation::Value => left.value.lerp(end_value, t),
                     TrackInterpolation::QuaternionAxisAngle { axis, angle } => {
                         let TrackValue::Quaternion(start) = &left.value else {
                             panic!("Axis-angle interpolation requires a quaternion track.");
@@ -249,6 +311,7 @@ impl Track {
         duration: f32,
         easing: Easing,
     ) {
+        self.truncate_at(start_time);
         if duration == 0.0 {
             // Preserve the value before a standalone instant change. If another
             // tween ends now, its final keyframe already provides that value.
@@ -279,6 +342,7 @@ impl Track {
         duration: f32,
         easing: Easing,
     ) {
+        self.truncate_at(start_time);
         let from = normalized_quaternion(from);
         let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
 
@@ -314,6 +378,31 @@ impl Track {
         &self.keyframes[start..end]
     }
 
+    fn truncate_at(&mut self, time: f32) {
+        let end = self
+            .keyframes
+            .partition_point(|keyframe| keyframe.time <= time);
+        if end == self.keyframes.len() {
+            return;
+        }
+
+        let value = self
+            .sample(time)
+            .expect("A truncated track must have a value.");
+        if end > 0 {
+            let original_end = self.keyframes[end - 1]
+                .original_end
+                .clone()
+                .unwrap_or_else(|| {
+                    let next = &self.keyframes[end];
+                    (next.time, next.value.clone())
+                });
+            self.keyframes[end - 1].original_end = Some(original_end);
+        }
+        self.keyframes.truncate(end);
+        self.set_keyframe(time, value, None);
+    }
+
     fn set_keyframe(&mut self, time: f32, value: TrackValue, easing: Option<Easing>) {
         self.set_keyframe_with_interpolation(time, value, easing, TrackInterpolation::Value);
     }
@@ -340,6 +429,7 @@ impl Track {
                 // Share continuous endpoints; preserve both values for a jump.
                 last.easing = easing;
                 last.interpolation = interpolation;
+                last.original_end = None;
                 return;
             }
         }
@@ -351,6 +441,7 @@ impl Track {
             value,
             easing,
             interpolation,
+            original_end: None,
         });
     }
 
@@ -429,6 +520,90 @@ pub enum TrackValue {
 }
 
 impl TrackValue {
+    pub(crate) fn channels(&self) -> u8 {
+        match self {
+            Self::Vector2(_) => 2,
+            Self::Vector3(_) => 3,
+            Self::Quad(_) | Self::Color(_) => 4,
+            _ => 1,
+        }
+    }
+
+    pub(crate) fn channel(&self, index: u8) -> f32 {
+        match self {
+            Self::Vector2(value) => [value.x, value.y][index as usize],
+            Self::Vector3(value) => [value.x, value.y, value.z][index as usize],
+            Self::Quad(value) => [value.a, value.b, value.c, value.d][index as usize],
+            Self::Color(value) => value.rgba()[index as usize],
+            _ => panic!("Only composite track values have channels."),
+        }
+    }
+
+    pub(crate) fn with_channel(&self, value: &Self, index: u8) -> Self {
+        match (self, value) {
+            (Self::Vector2(current), Self::Vector2(next)) => {
+                let mut result = *current;
+                match index {
+                    0 => result.x = next.x,
+                    1 => result.y = next.y,
+                    _ => unreachable!(),
+                }
+                Self::Vector2(result)
+            }
+            (Self::Vector3(current), Self::Vector3(next)) => {
+                let mut result = *current;
+                match index {
+                    0 => result.x = next.x,
+                    1 => result.y = next.y,
+                    2 => result.z = next.z,
+                    _ => unreachable!(),
+                }
+                Self::Vector3(result)
+            }
+            (Self::Quad(current), Self::Quad(next)) => {
+                let mut result = *current;
+                match index {
+                    0 => result.a = next.a,
+                    1 => result.b = next.b,
+                    2 => result.c = next.c,
+                    3 => result.d = next.d,
+                    _ => unreachable!(),
+                }
+                Self::Quad(result)
+            }
+            (Self::Color(current), Self::Color(next)) => {
+                let mut channels = current.rgba();
+                channels[index as usize] = next.rgba()[index as usize];
+                Self::Color(Color::from(channels))
+            }
+            _ => panic!("Track values must have the same composite type."),
+        }
+    }
+
+    pub(crate) fn changed_channels(&self, to: &Self) -> u8 {
+        if self.channels() == 1 {
+            return u8::from(self != to);
+        }
+        (0..self.channels()).fold(0, |mask, index| {
+            mask | (u8::from(self.channel(index) != to.channel(index)) << index)
+        })
+    }
+
+    pub(crate) fn add_difference(&self, from: &Self, to: &Self) -> Self {
+        match (self, from, to) {
+            (Self::F32(current), Self::F32(from), Self::F32(to)) => {
+                Self::F32(current + (to - from))
+            }
+            (Self::Vector2(current), Self::Vector2(from), Self::Vector2(to)) => {
+                Self::Vector2(*current + (*to - *from))
+            }
+            (Self::Vector3(current), Self::Vector3(from), Self::Vector3(to)) => {
+                Self::Vector3(*current + (*to - *from))
+            }
+            _ => panic!("Relative tweens require scalar or vector values."),
+        }
+    }
+
     pub fn lerp(&self, to: &Self, t: f32) -> Self {
         match (self, to) {
             (Self::Bool(a), Self::Bool(b)) => {
@@ -706,7 +881,7 @@ impl<T: TrackValueType> TrackHandle<T> {
             (self.replace)(&mut world, self.entity, value.clone())
         };
 
-        self.tween(old_value, value)
+        self.tween(old_value, value).implicit()
     }
 
     #[doc(hidden)]
@@ -728,7 +903,7 @@ impl<T: TrackValueType> TrackHandle<T> {
             (old_value, new_value)
         };
 
-        self.tween(old_value, new_value)
+        self.tween(old_value, new_value).implicit()
     }
 
     /// Creates a tween from an explicit starting value to a target value.
@@ -773,7 +948,7 @@ macro_rules! impl_track_by {
             impl TrackHandle<$type> {
                 /// Creates a tween relative to the current target value.
                 pub fn by(&self, delta: $type) -> Tween {
-                    self.update(|value| value + delta)
+                    self.update(|value| value + delta).relative(u8::MAX)
                 }
             }
         )+

@@ -51,7 +51,12 @@ impl SimulationContext<'_> {
         let mut snapshot = hecs::World::new();
         let entity = snapshot.spawn((component,));
         for track in (T::info().get)() {
-            if let Some(value) = animation.sample(std::any::TypeId::of::<T>(), track, self.time) {
+            if let Some(value) = animation.sample(
+                std::any::TypeId::of::<T>(),
+                track,
+                self.time,
+                (track.get)(&snapshot, entity),
+            ) {
                 (track.set)(&snapshot, entity, value);
             }
         }

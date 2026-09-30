@@ -11,6 +11,9 @@ struct TweenTarget {
     from: TrackValue,
     to: TrackValue,
     rotation: Option<RotationTarget>,
+    mask: Option<u8>,
+    relative: u8,
+    implicit: bool,
 }
 
 struct RotationTarget {
@@ -85,6 +88,9 @@ impl<Object> Tween<Object> {
                 from,
                 to,
                 rotation: None,
+                mask: None,
+                relative: 0,
+                implicit: false,
             }],
             prepare: None,
             delay: 0.0,
@@ -112,6 +118,9 @@ impl<Object> Tween<Object> {
                     to: target.clamp(to),
                     target,
                     rotation: None,
+                    mask: None,
+                    relative: 0,
+                    implicit: true,
                 })
                 .collect(),
             prepare: None,
@@ -137,9 +146,68 @@ impl<Object> Tween<Object> {
     /// Updates a target field while preserving the tween's original value.
     #[doc(hidden)]
     pub fn update_track<T: TrackValueType>(
+        self,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        update: impl FnOnce(T) -> T,
+    ) -> Self {
+        self.update_track_channel(type_id, track_info, None, update)
+    }
+
+    #[doc(hidden)]
+    pub fn update_component<T: TrackValueType>(
+        self,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        channel: u8,
+        update: impl FnOnce(T) -> T,
+    ) -> Self {
+        self.update_track_channel(type_id, track_info, Some(channel), update)
+    }
+
+    #[doc(hidden)]
+    pub fn component(mut self, channel: u8) -> Self {
+        self.targets[0].mask = Some(1 << channel);
+        self
+    }
+
+    #[doc(hidden)]
+    pub fn implicit(mut self) -> Self {
+        self.targets[0].implicit = true;
+        self
+    }
+
+    #[doc(hidden)]
+    pub fn relative(mut self, mask: u8) -> Self {
+        self.targets[0].relative |= mask;
+        self
+    }
+
+    #[doc(hidden)]
+    pub fn relative_track(
         mut self,
         type_id: std::any::TypeId,
         track_info: &'static TrackInfo,
+        mask: u8,
+    ) -> Self {
+        let target = self
+            .targets
+            .iter_mut()
+            .find(|target| {
+                target
+                    .target
+                    .same(&TrackTarget::property(type_id, track_info))
+            })
+            .expect("Relative track must already belong to this tween.");
+        target.relative |= mask;
+        self
+    }
+
+    fn update_track_channel<T: TrackValueType>(
+        mut self,
+        type_id: std::any::TypeId,
+        track_info: &'static TrackInfo,
+        channel: Option<u8>,
         update: impl FnOnce(T) -> T,
     ) -> Self {
         let (from, to) = {
@@ -160,12 +228,20 @@ impl<Object> Tween<Object> {
         }) {
             target.to = to;
             target.rotation = None;
+            target.mask = match (target.mask, channel) {
+                (Some(mask), Some(channel)) => Some(mask | (1 << channel)),
+                (_, None) | (None, Some(_)) => None,
+            };
+            target.relative &= !channel.map_or(u8::MAX, |channel| 1 << channel);
         } else {
             self.targets.push(TweenTarget {
                 target: TrackTarget::property(type_id, track_info),
                 from,
                 to,
                 rotation: None,
+                mask: channel.map(|channel| 1 << channel),
+                relative: 0,
+                implicit: true,
             });
         }
 
@@ -197,12 +273,18 @@ impl<Object> Tween<Object> {
             target.from = from;
             target.to = to;
             target.rotation = None;
+            target.mask = None;
+            target.relative = 0;
+            target.implicit = false;
         } else {
             self.targets.push(TweenTarget {
                 target: TrackTarget::property(type_id, track_info),
                 from,
                 to,
                 rotation: None,
+                mask: None,
+                relative: 0,
+                implicit: false,
             });
         }
 
@@ -247,6 +329,7 @@ impl<Object> Tween<Object> {
     }
 
     fn uniform_values(mut self, name: String, from: Option<TrackValue>, to: TrackValue) -> Self {
+        let explicit = from.is_some();
         let target = TrackTarget::uniform(name);
         let current = {
             let world = self.world.borrow();
@@ -269,12 +352,18 @@ impl<Object> Tween<Object> {
             }
             existing.to = to;
             existing.rotation = None;
+            if explicit {
+                existing.implicit = false;
+            }
         } else {
             self.targets.push(TweenTarget {
                 target,
                 from: from.unwrap_or(current),
                 to,
                 rotation: None,
+                mask: None,
+                relative: 0,
+                implicit: !explicit,
             });
         }
         self
@@ -325,12 +414,17 @@ impl<Object> Tween<Object> {
                 }
                 _ => None,
             };
+            target.mask = None;
+            target.relative = 0;
         } else {
             self.targets.push(TweenTarget {
                 target: TrackTarget::property(type_id, track_info),
                 from: TrackValue::Quaternion(from),
                 to: TrackValue::Quaternion(to),
                 rotation: Some(RotationTarget { from, axis, angle }),
+                mask: None,
+                relative: 0,
+                implicit: true,
             });
         }
 
@@ -385,6 +479,18 @@ impl<Object> Tween<Object> {
             .targets
             .into_iter()
             .map(|target| match (target.target, target.rotation) {
+                (TrackTarget::Property { type_id, info }, Some(rotation)) if target.implicit => {
+                    Task::RotationPropertyTween {
+                        entity: self.entity,
+                        type_id,
+                        track_info: info,
+                        from: rotation.from,
+                        axis: rotation.axis,
+                        angle: rotation.angle,
+                        duration: self.duration,
+                        easing: self.easing,
+                    }
+                }
                 (TrackTarget::Property { type_id, info }, Some(rotation)) => Task::RotationTween {
                     entity: self.entity,
                     type_id,
@@ -395,25 +501,38 @@ impl<Object> Tween<Object> {
                     duration: self.duration,
                     easing: self.easing,
                 },
-                (TrackTarget::Property { type_id, info }, None) => Task::Tween {
+                (TrackTarget::Property { type_id, info }, None) => Task::PropertyTween {
                     entity: self.entity,
                     type_id,
                     track_info: info,
+                    mask: target.mask.unwrap_or_else(|| {
+                        if target.implicit {
+                            target.from.changed_channels(&target.to)
+                        } else {
+                            (1 << target.from.channels()) - 1
+                        }
+                    }),
                     from: target.from,
                     to: target.to,
                     duration: self.duration,
                     easing: self.easing,
+                    relative: target.relative,
+                    implicit: target.implicit,
                 },
-                (TrackTarget::Uniform(name), None) => Task::UniformTween {
+                (TrackTarget::Uniform(name), None) => Task::UniformPropertyTween {
                     entity: self.entity,
                     name,
                     from: target.from,
                     to: target.to,
                     duration: self.duration,
                     easing: self.easing,
+                    implicit: target.implicit,
                 },
                 (TrackTarget::Uniform(_), Some(_)) => {
                     unreachable!("Uniforms cannot use quaternion rotation paths.")
+                }
+                (TrackTarget::Component { .. }, _) => {
+                    unreachable!("Tween targets are complete fields.")
                 }
             })
             .collect();
@@ -456,6 +575,9 @@ impl Tween<()> {
                 from: TrackValue::Quaternion(from),
                 to: TrackValue::Quaternion(to),
                 rotation: Some(RotationTarget { from, axis, angle }),
+                mask: None,
+                relative: 0,
+                implicit: true,
             }],
             prepare: None,
             delay: 0.0,

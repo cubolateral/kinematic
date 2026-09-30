@@ -477,9 +477,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Animations on property 'value' overlap")]
-    fn concurrent_uniform_writes_are_rejected() {
-        struct Build;
+    fn concurrent_uniform_writes_use_the_latest_tween() {
+        struct Build(Option<RectHandler>);
         impl SceneBuilder for Build {
             fn build(&mut self, scene: &mut Scene) {
                 let object = rect()
@@ -491,9 +490,14 @@ mod tests {
                     object.uniform("value", 1.0_f32).play();
                     object.uniform("value", 2.0_f32).play();
                 });
+                self.0 = Some(object);
             }
         }
 
-        Scene::new().build(&mut Build);
+        let mut scene = Scene::new();
+        let mut build = Build(None);
+        scene.build(&mut build);
+        scene.update(0.5);
+        assert_eq!(build.0.unwrap().get_uniform::<f32>("value"), 1.0);
     }
 }
