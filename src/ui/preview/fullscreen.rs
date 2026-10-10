@@ -8,6 +8,17 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     let viewport = ui.main_viewport();
     let viewport_pos = viewport.pos();
     let viewport_size = viewport.size();
+    let is_exporting = editor.is_exporting();
+    let plain_keyboard_input = !is_exporting
+        && !ui.io().want_text_input()
+        && !ui.is_any_item_active()
+        && !ui.io().key_ctrl()
+        && !ui.io().key_shift()
+        && !ui.io().key_alt()
+        && !ui.io().key_super();
+    if plain_keyboard_input && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::M, false) {
+        editor.toggle_margin();
+    }
     let margin = editor.margin_visible().then(|| editor.margin_size());
     let preview = image::preview(editor);
     let window_flags = dear_imgui_rs::WindowFlags::NO_DECORATION
@@ -32,7 +43,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
             });
     }
 
-    let is_exporting = editor.is_exporting();
     let fps = editor.preview_fps();
 
     timeline::shortcuts(editor.timeline_mut(), ui, !is_exporting);

@@ -24,17 +24,18 @@ pub(super) fn draw(
     interactive: bool,
 ) {
     let top = ui.cursor_screen_pos()[1];
-    let selected = editor.selected_entity();
-    let scene_range = editor.scene_range();
+    let selected = editor.selected_object();
+    let scene_index = selected.map_or(editor.active_scene_index(), |(index, _)| index);
+    let scene_range = editor.scene_range(scene_index);
     let expanded = editor.timeline_tracks_expanded();
-    let world = editor.scene_mut().world();
-    let object = selected.and_then(|entity| {
+    let world = editor.scene(scene_index).world();
+    let object = selected.and_then(|(_, entity)| {
         world
             .get::<&TreeNode>(entity)
             .ok()
-            .and_then(|node| node.is_activated.then_some((entity, node.lifetime)))
+            .and_then(|node| node.is_activated.then_some(entity))
     });
-    let tracks_height = object.map_or(0.0, |(entity, _)| {
+    let tracks_height = object.map_or(0.0, |entity| {
         if expanded {
             tracks::height(&world, entity)
         } else {
@@ -48,75 +49,67 @@ pub(super) fn draw(
     );
     let mut toggle = false;
 
-    if let Some((entity, local_lifetime)) = object {
-        let lifetime = [
-            scene_range[0] + local_lifetime[0],
-            (scene_range[0] + local_lifetime[1]).min(scene_range[1]),
-        ];
-        let start = lifetime[0].max(time.start);
-        let end = lifetime[1].min(time.end);
-        if end > start {
-            let min = [time.x(layout, start), top];
-            let max = [time.x(layout, end), top + OBJECT_HEIGHT + tracks_height];
-            draw_panel_rect(
+    if let Some(entity) = object {
+        let min = [layout.content_left, top];
+        let max = [layout.timeline_right(), top + OBJECT_HEIGHT + tracks_height];
+        draw_panel_rect(
+            draw_list,
+            min,
+            max,
+            Some(ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg)),
+            ui.get_color_u32(dear_imgui_rs::StyleColor::Border),
+            1.0,
+        );
+
+        if interactive {
+            ui.set_cursor_screen_pos(min);
+            let clicked =
+                ui.invisible_button("##timeline_tracks", [max[0] - min[0], max[1] - min[1]]);
+            let drag = ui.mouse_drag_delta(dear_imgui_rs::MouseButton::Left);
+            toggle = clicked && drag[0].abs().max(drag[1].abs()) < DRAG_DIRECTION_THRESHOLD;
+        }
+        let arrow = if expanded {
+            CHEVRON_DOWN
+        } else {
+            CHEVRON_RIGHT
+        };
+        let name = world
+            .get::<&Name>(entity)
+            .expect("Timeline object must contain a Name component.");
+        let _name_clip = draw_list.push_clip_rect(min, max, true);
+        draw_list.add_text(
+            [
+                min[0] + PANEL_TEXT_PADDING,
+                top + (OBJECT_HEIGHT - text_size(ui, arrow)[1]) * 0.5,
+            ],
+            ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+            arrow,
+        );
+        draw_list.add_text(
+            [
+                min[0] + PANEL_TEXT_PADDING + ARROW_WIDTH,
+                top + (OBJECT_HEIGHT - text_size(ui, name.get())[1]) * 0.5,
+            ],
+            ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+            name.get(),
+        );
+
+        if tracks_height > 0.0 {
+            let _tracks_clip =
+                draw_list.push_clip_rect([min[0], top + OBJECT_HEIGHT], [max[0], max[1]], true);
+            tracks::draw(
+                &world,
+                ui,
                 draw_list,
-                min,
-                max,
-                Some(ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg)),
-                ui.get_color_u32(dear_imgui_rs::StyleColor::CheckMark),
-                2.0,
+                layout,
+                time,
+                tracks::ObjectTracks {
+                    entity,
+                    lifetime: scene_range,
+                    time_offset: scene_range[0],
+                    top: top + OBJECT_HEIGHT + TRACK_SPACING,
+                },
             );
-
-            if interactive {
-                ui.set_cursor_screen_pos(min);
-                let clicked =
-                    ui.invisible_button("##timeline_tracks", [max[0] - min[0], max[1] - min[1]]);
-                let drag = ui.mouse_drag_delta(dear_imgui_rs::MouseButton::Left);
-                toggle = clicked && drag[0].abs().max(drag[1].abs()) < DRAG_DIRECTION_THRESHOLD;
-            }
-            let arrow = if expanded {
-                CHEVRON_DOWN
-            } else {
-                CHEVRON_RIGHT
-            };
-            let name = world
-                .get::<&Name>(entity)
-                .expect("Timeline object must contain a Name component.");
-            let _name_clip = draw_list.push_clip_rect(min, max, true);
-            draw_list.add_text(
-                [
-                    min[0] + PANEL_TEXT_PADDING,
-                    top + (OBJECT_HEIGHT - text_size(ui, arrow)[1]) * 0.5,
-                ],
-                ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
-                arrow,
-            );
-            draw_list.add_text(
-                [
-                    min[0] + PANEL_TEXT_PADDING + ARROW_WIDTH,
-                    top + (OBJECT_HEIGHT - text_size(ui, name.get())[1]) * 0.5,
-                ],
-                ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
-                name.get(),
-            );
-
-            if tracks_height > 0.0 {
-                let _tracks_clip =
-                    draw_list.push_clip_rect([min[0], top + OBJECT_HEIGHT], [max[0], max[1]], true);
-                tracks::draw(
-                    &world,
-                    ui,
-                    draw_list,
-                    layout,
-                    time,
-                    tracks::ObjectTracks {
-                        entity,
-                        lifetime,
-                        time_offset: scene_range[0],
-                        top: top + OBJECT_HEIGHT + TRACK_SPACING,
-                    },
-                );
-            }
         }
     } else {
         let min = [layout.content_left, top];

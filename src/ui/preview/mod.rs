@@ -71,6 +71,14 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             if margin_button(ui, editor.margin_visible()) {
                 editor.toggle_margin();
             }
+            if !is_exporting
+                && ui.is_window_hovered()
+                && ui.is_mouse_hovering_rect(min, [min[0] + available[0], min[1] + available[1]])
+                && !ui.is_item_hovered()
+                && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)
+            {
+                editor.clear_selection();
+            }
         }
 
         let editor_2d_tab =

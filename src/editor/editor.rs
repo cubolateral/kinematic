@@ -661,8 +661,12 @@ impl Editor {
         &mut self.scenes[self.active_scene].scene
     }
 
-    pub fn scene_range(&self) -> [f32; 2] {
-        let scene = &self.scenes[self.active_scene];
+    pub(crate) fn scene(&self, index: usize) -> &Scene {
+        &self.scenes[index].scene
+    }
+
+    pub(crate) fn scene_range(&self, index: usize) -> [f32; 2] {
+        let scene = &self.scenes[index];
         if self.focused_scene.is_some() {
             [0.0, scene.end - scene.start]
         } else {
@@ -724,11 +728,6 @@ impl Editor {
                 self.scenes[index].end - self.scenes[index].start
             }));
         self.update_active_scene(self.timeline.time());
-    }
-
-    pub(crate) fn focused_scene_name(&self) -> Option<&'static str> {
-        self.focused_scene
-            .map(|index| self.scenes[index].scene.name())
     }
 
     pub(crate) fn focused_scene_index(&self) -> Option<usize> {

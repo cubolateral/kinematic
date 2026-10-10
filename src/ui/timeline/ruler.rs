@@ -205,13 +205,10 @@ pub(super) fn format_time(time: f32, decimals: usize) -> String {
     let scale = 10_u64.pow(decimals as u32);
     let ticks = (time.max(0.0) as f64 * scale as f64).round() as u64;
     let seconds = (ticks % (60 * scale)) as f64 / scale as f64;
-    if ticks < 60 * scale {
-        return format!("{seconds:.decimals$}s");
-    }
     let width = 2 + usize::from(decimals > 0) * (decimals + 1);
     let minutes = ticks / (60 * scale);
     if minutes < 60 {
-        format!("{minutes}:{seconds:0width$.decimals$}")
+        format!("{minutes:02}:{seconds:0width$.decimals$}")
     } else {
         format!(
             "{}:{:02}:{seconds:0width$.decimals$}",
@@ -227,18 +224,19 @@ mod tests {
 
     #[test]
     fn grid_time_precision_follows_the_grid_step() {
-        assert_eq!(format_grid_time(5.0, 1.0), "5s");
-        assert_eq!(format_grid_time(0.5, 0.1), "0.5s");
-        assert_eq!(format_grid_time(0.025, 0.01), "0.025s");
-        assert_eq!(format_grid_time(60.0, 1.0), "1:00");
-        assert_eq!(format_grid_time(65.25, 1.0), "1:05");
-        assert_eq!(format_grid_time(65.25, 0.1), "1:05.3");
+        assert_eq!(format_grid_time(5.0, 1.0), "00:05");
+        assert_eq!(format_grid_time(0.5, 0.1), "00:00.5");
+        assert_eq!(format_grid_time(0.025, 0.01), "00:00.025");
+        assert_eq!(format_grid_time(60.0, 1.0), "01:00");
+        assert_eq!(format_grid_time(65.25, 1.0), "01:05");
+        assert_eq!(format_grid_time(65.25, 0.1), "01:05.3");
     }
 
     #[test]
     fn clock_time_rolls_over_minutes_and_hours() {
-        assert_eq!(format_time(59.996, 2), "1:00.00");
-        assert_eq!(format_time(65.25, 2), "1:05.25");
+        assert_eq!(format_time(0.0, 0), "00:00");
+        assert_eq!(format_time(59.996, 2), "01:00.00");
+        assert_eq!(format_time(65.25, 2), "01:05.25");
         assert_eq!(format_time(3661.5, 2), "1:01:01.50");
     }
 }

@@ -147,6 +147,11 @@ fn draw_row(
 
     let text_y = position[1] + (ROW_HEIGHT - text_size(ui, name.get())[1]) * 0.5;
     let draw_list = ui.get_window_draw_list();
+    let text_clip = draw_list.push_clip_rect(
+        position,
+        [position[0] + selectable_width, position[1] + ROW_HEIGHT],
+        true,
+    );
 
     draw_list.add_text(
         [position[0], text_y],
@@ -166,8 +171,17 @@ fn draw_row(
         }),
         name.get(),
     );
+    drop(text_clip);
     drop(draw_list);
     drop(name);
+    ui.get_window_draw_list()
+        .add_rect(
+            [position[0] + selectable_width, position[1]],
+            [position[0] + row_width, position[1] + ROW_HEIGHT],
+            ui.get_color_u32(dear_imgui_rs::StyleColor::WindowBg),
+        )
+        .filled(true)
+        .build();
     ui.same_line_with_spacing(0.0, 0.0);
     if edit_button(ui, entity) {
         *edit_clicked = Some(entity);

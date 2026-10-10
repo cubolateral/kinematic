@@ -58,6 +58,9 @@ pub(super) fn draw(
     let mut hovered_event = None;
     let mut hovered_scene = None;
     let mut over_event = false;
+    let mut back_position = None;
+    let arrow_size = text_size(ui, ARROW_LEFT);
+    let arrow_spacing = arrow_size[0] + text_size(ui, " ")[0];
 
     for (index, name, range, _) in &scenes {
         let start = range[0].max(time.start);
@@ -96,10 +99,17 @@ pub(super) fn draw(
         );
 
         let text_height = text_size(ui, name)[1];
+        let focused = editor.focused_scene_index() == Some(*index);
+        if focused {
+            back_position = Some([
+                min[0] + PANEL_TEXT_PADDING,
+                top + (EVENT_HEIGHT - text_height) * 0.5,
+            ]);
+        }
         let text_clip = draw_list.push_clip_rect(min, max, true);
         draw_list.add_text(
             [
-                min[0] + PANEL_TEXT_PADDING,
+                min[0] + PANEL_TEXT_PADDING + if focused { arrow_spacing } else { 0.0 },
                 top + (EVENT_HEIGHT - text_height) * 0.5,
             ],
             ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
@@ -184,17 +194,19 @@ pub(super) fn draw(
     drop(clip);
 
     let next_row = ui.cursor_screen_pos();
-    let back_hovered = if editor.focused_scene_name().is_some() {
-        let label = format!("{ARROW_LEFT} Back to all scenes");
-        ui.set_cursor_screen_pos([layout.content_left, top]);
-        let clicked = ui.button_with_size(
-            &label,
-            [
-                text_size(ui, &label)[0] + PANEL_TEXT_PADDING * 2.0,
-                EVENT_HEIGHT,
-            ],
-        );
+    let back_hovered = if let Some(position) = back_position {
+        ui.set_cursor_screen_pos(position);
+        let clicked = ui.invisible_button("##back_to_all_scenes", arrow_size);
         let hovered = ui.is_item_hovered();
+        draw_list.add_text(
+            position,
+            ui.get_color_u32(if hovered {
+                dear_imgui_rs::StyleColor::TextDisabled
+            } else {
+                dear_imgui_rs::StyleColor::Text
+            }),
+            ARROW_LEFT,
+        );
         if clicked && interactive {
             ui.set_cursor_screen_pos(next_row);
             editor.clear_scene_focus();

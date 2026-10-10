@@ -1,7 +1,7 @@
 use super::{inspector, preview, scene_tree, settings, timeline};
 
 const TIMELINE_HEIGHT_RATIO: f32 = 0.35;
-const LEFT_PANEL_WIDTH_RATIO: f32 = 0.2;
+const LEFT_PANEL_WIDTH_RATIO: f32 = 0.25;
 const PREVIEW_WIDTH_RATIO: f32 = 0.75;
 
 pub(super) fn apply_default_layout(ui: &dear_imgui_rs::Ui, dock: dear_imgui_rs::Id) {
