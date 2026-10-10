@@ -134,6 +134,7 @@ pub(super) fn draw_time_panel(
             max,
             ui.get_color_u32(dear_imgui_rs::StyleColor::PopupBg),
         )
+        .rounding(crate::ui::CORNER_RADIUS)
         .filled(true)
         .build();
     draw_list
@@ -142,6 +143,7 @@ pub(super) fn draw_time_panel(
             max,
             ui.get_color_u32(dear_imgui_rs::StyleColor::Border),
         )
+        .rounding(crate::ui::CORNER_RADIUS)
         .build();
     draw_list.add_text(position, text_color, text);
 }

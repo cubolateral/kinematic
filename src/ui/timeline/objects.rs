@@ -42,6 +42,13 @@ pub(super) fn draw(
             0.0
         }
     });
+    let panel_height = OBJECT_HEIGHT
+        + tracks_height
+        + if tracks_height > 0.0 {
+            TRACK_SPACING * 2.0
+        } else {
+            0.0
+        };
     let _clip = draw_list.push_clip_rect(
         [layout.content_left, layout.viewport_top],
         [layout.timeline_right(), layout.bottom],
@@ -51,7 +58,7 @@ pub(super) fn draw(
 
     if let Some(entity) = object {
         let min = [layout.content_left, top];
-        let max = [layout.timeline_right(), top + OBJECT_HEIGHT + tracks_height];
+        let max = [layout.timeline_right(), top + panel_height];
         draw_panel_rect(
             draw_list,
             min,
@@ -130,10 +137,7 @@ pub(super) fn draw(
     }
 
     ui.set_cursor_screen_pos([layout.content_left, top]);
-    ui.dummy([
-        layout.timeline_width,
-        OBJECT_HEIGHT + TRACK_SPACING + tracks_height,
-    ]);
+    ui.dummy([layout.timeline_width, panel_height + TRACK_SPACING]);
 
     drop(world);
     if toggle {

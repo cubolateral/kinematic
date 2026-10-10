@@ -7,11 +7,16 @@ pub(super) fn draw_panel_rect(
     border_thickness: f32,
 ) {
     if let Some(fill) = fill {
-        draw_list.add_rect(min, max, fill).filled(true).build();
+        draw_list
+            .add_rect(min, max, fill)
+            .rounding(super::CORNER_RADIUS)
+            .filled(true)
+            .build();
     }
 
     draw_list
         .add_rect(min, max, border)
+        .rounding(super::CORNER_RADIUS)
         .thickness(border_thickness)
         .build();
 }
@@ -19,17 +24,6 @@ pub(super) fn draw_panel_rect(
 pub(super) fn text_size(ui: &dear_imgui_rs::Ui, text: &str) -> [f32; 2] {
     ui.current_font()
         .calc_text_size(ui.current_font_size(), f32::MAX, f32::MAX, text)
-}
-
-pub(super) fn hierarchy_prefix(branches: &[bool], is_last: bool) -> String {
-    let mut prefix = String::new();
-
-    for continues in branches {
-        prefix.push_str(if *continues { "│  " } else { "   " });
-    }
-
-    prefix.push_str(if is_last { "└─ " } else { "├─ " });
-    prefix
 }
 
 pub(super) fn hide_single_window_tab(ui: &dear_imgui_rs::Ui) {
@@ -123,13 +117,7 @@ pub(super) fn numeric_input_arrows<T: NumericValue>(ui: &dear_imgui_rs::Ui, valu
 
 #[cfg(test)]
 mod tests {
-    use super::{NumericValue, hierarchy_prefix};
-
-    #[test]
-    fn hierarchy_prefix_preserves_branch_connections() {
-        assert_eq!(hierarchy_prefix(&[], false), "├─ ");
-        assert_eq!(hierarchy_prefix(&[true, false], true), "│     └─ ");
-    }
+    use super::NumericValue;
 
     #[test]
     fn numeric_offsets_round_and_saturate_integer_values() {

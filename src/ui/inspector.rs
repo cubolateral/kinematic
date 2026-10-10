@@ -10,7 +10,7 @@ use crate::{
     },
     editor::{Editor, InspectorTrack},
 };
-use std::{ffi::CString, os::raw::c_void, ptr};
+use std::{collections::HashMap, ffi::CString, os::raw::c_void, ptr};
 
 use super::{
     controls, icons,
@@ -29,6 +29,30 @@ enum DragAxis {
 #[derive(Default)]
 pub(super) struct State {
     drag: Option<(dear_imgui_rs::Id, Option<DragAxis>)>,
+    rotations: HashMap<dear_imgui_rs::Id, RotationEdit>,
+}
+
+struct RotationEdit {
+    quaternion: glam::Quat,
+    euler: [f32; 3],
+    mode: usize,
+}
+
+impl RotationEdit {
+    fn new(quaternion: glam::Quat) -> Self {
+        Self {
+            quaternion,
+            euler: euler_degrees(quaternion),
+            mode: 0,
+        }
+    }
+
+    fn sync(&mut self, quaternion: glam::Quat) {
+        if self.quaternion != quaternion {
+            self.quaternion = quaternion;
+            self.euler = euler_degrees(quaternion);
+        }
+    }
 }
 
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
@@ -42,6 +66,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             return;
         };
 
+        let _object_id = ui.push_id(&format!("{scene_index}:{}", entity.to_bits()));
         let (scene, inspector_edits) = editor.inspector_scene_mut(scene_index);
         let world = scene.world();
         let Ok(inspection) = world.get::<&Inspection>(entity) else {
@@ -117,12 +142,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing && animated);
                 let key = InspectorTrack::new(entity, component, track);
                 let show_reset = inspector_edits.contains(&key);
-                if show_reset {
-                    let spacing = unsafe { ui.style().item_spacing() }[0];
-                    ui.set_next_item_width(
-                        (ui.calc_item_width() - ui.frame_height() - spacing).max(1.0),
-                    );
-                }
                 let mut value = (track.get)(&world, entity);
                 let before = value.clone();
                 let label = if animated {
@@ -130,7 +149,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 } else {
                     track.name.to_owned()
                 };
-                if edit_value(ui, state, &label, &mut value, Some(track)) {
+                let edit = edit_value(ui, state, &label, &mut value, Some(track), show_reset);
+                if edit.changed {
                     value = track.clamp(value);
                     (track.set)(&world, entity, value.clone());
                     inspector_edits.record(
@@ -148,17 +168,10 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                         value,
                     });
                 }
-                let track_hovered = ui.is_item_hovered();
-                if show_reset {
-                    ui.same_line();
-                    if controls::text_button(ui, icons::RESET, [ui.frame_height(); 2]) {
-                        inspector_edits.reset(scene, key.clone());
-                    }
-                    if ui.is_item_hovered() {
-                        ui.tooltip_text("Reset to the scene value.");
-                    }
+                if edit.reset {
+                    inspector_edits.reset(scene, key.clone());
                 }
-                if animated && track_hovered {
+                if animated && edit.hovered {
                     ui.tooltip_text(if is_playing {
                         "Animated track. Pause playback to edit it."
                     } else {
@@ -182,35 +195,23 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing && animated);
             let key = InspectorTrack::uniform(entity, &name);
             let show_reset = inspector_edits.contains(&key);
-            if show_reset {
-                let spacing = unsafe { ui.style().item_spacing() }[0];
-                ui.set_next_item_width(
-                    (ui.calc_item_width() - ui.frame_height() - spacing).max(1.0),
-                );
-            }
             let before = value.clone();
             let label = if animated {
                 format!("{} {name}", icons::DIAMOND)
             } else {
                 name.clone()
             };
-            if edit_value(ui, state, &label, &mut value, None) {
+            let edit = edit_value(ui, state, &label, &mut value, None, show_reset);
+            if edit.changed {
                 crate::core::objects::set_shader_uniform(&world, entity, &name, value.clone())
                     .unwrap_or_else(|error| panic!("{error}"));
                 inspector_edits.record_uniform(key.clone(), before, value, animated);
                 uniform_changed = true;
             }
-            let track_hovered = ui.is_item_hovered();
-            if show_reset {
-                ui.same_line();
-                if controls::text_button(ui, icons::RESET, [ui.frame_height(); 2]) {
-                    inspector_edits.reset(scene, key.clone());
-                }
-                if ui.is_item_hovered() {
-                    ui.tooltip_text("Reset to the scene value.");
-                }
+            if edit.reset {
+                inspector_edits.reset(scene, key.clone());
             }
-            if animated && track_hovered {
+            if animated && edit.hovered {
                 ui.tooltip_text(if is_playing {
                     "Animated uniform. Pause playback to edit it."
                 } else {
@@ -234,7 +235,96 @@ fn property(ui: &dear_imgui_rs::Ui, name: &str, value: &str) {
     ui.text_disabled(value);
 }
 
+#[derive(Default)]
+struct ValueEdit {
+    changed: bool,
+    reset: bool,
+    hovered: bool,
+}
+
 fn edit_value(
+    ui: &dear_imgui_rs::Ui,
+    state: &mut State,
+    name: &str,
+    value: &mut TrackValue,
+    track: Option<&TrackInfo>,
+    show_reset: bool,
+) -> ValueEdit {
+    let width = ui.content_region_avail_width().max(1.0);
+    ui.group(|| {
+        let Some(_table) = ui.begin_table_with_sizing(
+            "##property",
+            2,
+            dear_imgui_rs::TableOptions::new()
+                .flags(dear_imgui_rs::TableFlags::NO_SAVED_SETTINGS)
+                .sizing_policy(dear_imgui_rs::TableSizingPolicy::StretchProp),
+            [width, 0.0],
+            0.0,
+        ) else {
+            return ValueEdit::default();
+        };
+        ui.table_setup_column_stretch_weight(
+            "Name",
+            dear_imgui_rs::TableColumnFlags::empty(),
+            0.4,
+            None,
+        );
+        ui.table_setup_column_stretch_weight(
+            "Value",
+            dear_imgui_rs::TableColumnFlags::empty(),
+            0.6,
+            None,
+        );
+        ui.table_next_column();
+        let position = ui.cursor_screen_pos();
+        let name_width = ui.content_region_avail_width();
+        let reset_width = if show_reset {
+            ui.frame_height() + 4.0
+        } else {
+            0.0
+        };
+        let text_width = (name_width - reset_width).max(0.0);
+        let draw = ui.get_window_draw_list();
+        let clip = draw.push_clip_rect(
+            position,
+            [position[0] + text_width, position[1] + ui.frame_height()],
+            true,
+        );
+        draw.add_text(
+            [
+                position[0],
+                position[1] + (ui.frame_height() - text_size(ui, name)[1]) * 0.5,
+            ],
+            ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+            name,
+        );
+        drop(clip);
+        drop(draw);
+        ui.dummy([text_width, ui.frame_height()]);
+        let mut reset = false;
+        if show_reset {
+            ui.same_line_with_spacing(0.0, 0.0);
+            ui.set_cursor_screen_pos([
+                position[0] + (name_width - ui.frame_height()).max(0.0),
+                position[1],
+            ]);
+            reset = controls::text_button(ui, icons::RESET, [ui.frame_height(); 2]);
+            if ui.is_item_hovered() {
+                ui.tooltip_text("Reset to the scene value.");
+            }
+        }
+        ui.table_next_column();
+        let _width = ui.push_item_width(-1.0);
+        let changed = ui.group(|| edit_value_input(ui, state, "##value", value, track));
+        ValueEdit {
+            changed,
+            reset,
+            hovered: ui.is_item_hovered(),
+        }
+    })
+}
+
+fn edit_value_input(
     ui: &dear_imgui_rs::Ui,
     state: &mut State,
     name: &str,
@@ -242,7 +332,7 @@ fn edit_value(
     track: Option<&TrackInfo>,
 ) -> bool {
     match value {
-        TrackValue::Bool(v) => ui.checkbox(name, v),
+        TrackValue::Bool(v) => ui.checkbox(if *v { "On###value" } else { "Off###value" }, v),
         TrackValue::Enum(v) => {
             let Some(track) = track else {
                 return false;
@@ -280,7 +370,7 @@ fn edit_value(
         }
         TrackValue::Quad(v) => {
             let mut values = v.to_array();
-            if edit_float_components(ui, state, name, &mut values, ["a", "b", "c", "d"]) {
+            if edit_float_components(ui, state, name, &mut values, ["a", "b", "c", "d"], "") {
                 *v = values.into();
                 true
             } else {
@@ -323,7 +413,7 @@ fn edit_value(
         ),
         TrackValue::Vector2(v) => {
             let mut values = v.to_array();
-            if edit_float_components(ui, state, name, &mut values, ["x", "y"]) {
+            if edit_float_components(ui, state, name, &mut values, ["x", "y"], "") {
                 *v = values.into();
                 true
             } else {
@@ -332,7 +422,7 @@ fn edit_value(
         }
         TrackValue::Vector3(v) => {
             let mut values = v.to_array();
-            if edit_float_components(ui, state, name, &mut values, ["x", "y", "z"]) {
+            if edit_float_components(ui, state, name, &mut values, ["x", "y", "z"], "") {
                 *v = values.into();
                 true
             } else {
@@ -340,13 +430,41 @@ fn edit_value(
             }
         }
         TrackValue::Quaternion(v) => {
-            let mut values = v.to_array();
-            if edit_float_components(ui, state, name, &mut values, ["x", "y", "z", "w"]) {
-                *v = normalized_quaternion(glam::Quat::from_array(values));
-                true
+            let id = ui.get_id("rotation_mode");
+            let rotation = state
+                .rotations
+                .entry(id)
+                .or_insert_with(|| RotationEdit::new(*v));
+            rotation.sync(*v);
+            let mut mode = rotation.mode;
+            let changed = if mode == 0 {
+                let mut values = rotation.euler;
+                if edit_float_components(ui, state, name, &mut values, ["x", "y", "z"], "°") {
+                    *v = quaternion_from_degrees(values);
+                    let rotation = state.rotations.get_mut(&id).unwrap();
+                    rotation.quaternion = *v;
+                    rotation.euler = values;
+                    true
+                } else {
+                    false
+                }
             } else {
-                false
+                let mut values = v.to_array();
+                if edit_float_components(ui, state, name, &mut values, ["x", "y", "z", "w"], "") {
+                    *v = normalized_quaternion(glam::Quat::from_array(values));
+                    state.rotations.get_mut(&id).unwrap().sync(*v);
+                    true
+                } else {
+                    false
+                }
+            };
+            if ui.combo_simple_string("##rotation_mode", &mut mode, &["Euler", "Quaternion"]) {
+                state.rotations.get_mut(&id).unwrap().mode = mode;
             }
+            if ui.is_item_hovered() {
+                ui.tooltip_text("Euler angles use degrees and XYZ rotation order.");
+            }
+            changed
         }
         TrackValue::Color(v) => {
             let mut values = v.rgba();
@@ -373,36 +491,48 @@ fn edit_float_components<const N: usize>(
     name: &str,
     values: &mut [f32; N],
     prefixes: [&str; N],
+    unit: &str,
 ) -> bool {
-    let spacing = unsafe { ui.style().item_inner_spacing() }[0];
-    let width =
-        ((ui.calc_item_width() - spacing * (N.saturating_sub(1) as f32)) / N as f32).max(1.0);
     let mut changed = false;
-
-    for (index, (value, prefix)) in values.iter_mut().zip(prefixes).enumerate() {
-        if index > 0 {
-            ui.same_line_with_spacing(0.0, spacing);
-        }
-
-        ui.set_next_item_width(width);
-        let label = format!("##{name}:{prefix}");
-        let format = format!("{prefix}: {}", float_format(*value));
+    for (value, prefix) in values.iter_mut().zip(prefixes) {
+        ui.align_text_to_frame_padding();
+        ui.text_colored(component_color(prefix), prefix);
+        ui.same_line_with_spacing(0.0, 6.0);
+        ui.set_next_item_width(ui.content_region_avail_width().max(1.0));
+        let label = format!("{name}:{prefix}");
+        let format = format!("{}{unit}", float_format(*value));
         changed |= numeric_drag(
             ui,
             state,
             &label,
             value,
-            0.01,
+            if unit.is_empty() { 0.01 } else { 0.1 },
             &format,
             dear_imgui_rs::sys::ImGuiDataType_Float,
             None,
             None,
         );
     }
-
-    ui.same_line_with_spacing(0.0, spacing);
-    ui.text(name);
     changed
+}
+
+fn component_color(prefix: &str) -> [f32; 4] {
+    match prefix {
+        "x" | "a" => [0.9, 0.45, 0.3, 1.0],
+        "y" | "b" => [0.45, 0.8, 0.4, 1.0],
+        "z" | "c" => [0.4, 0.65, 0.95, 1.0],
+        _ => [0.8, 0.65, 0.9, 1.0],
+    }
+}
+
+fn euler_degrees(quaternion: glam::Quat) -> [f32; 3] {
+    let (x, y, z) = normalized_quaternion(quaternion).to_euler(glam::EulerRot::XYZ);
+    [x, y, z].map(f32::to_degrees)
+}
+
+fn quaternion_from_degrees(angles: [f32; 3]) -> glam::Quat {
+    let [x, y, z] = angles.map(f32::to_radians);
+    normalized_quaternion(glam::Quat::from_euler(glam::EulerRot::XYZ, x, y, z))
 }
 
 fn numeric_drag<T>(
@@ -498,7 +628,94 @@ fn float_format(value: f32) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::float_format;
+    use super::{
+        RotationEdit, State, edit_value, euler_degrees, float_format, quaternion_from_degrees,
+    };
+    use crate::core::TrackValue;
+
+    #[test]
+    fn compound_fields_fit_a_narrow_inspector_and_keep_rotation_on_mode_change() {
+        let mut context = dear_imgui_rs::Context::create();
+        context.set_ini_filename(None::<&str>).unwrap();
+        context.font_atlas_mut().build();
+        context.io_mut().set_display_size([320.0, 480.0]);
+        context.io_mut().set_delta_time(1.0 / 60.0);
+        let mut state = State::default();
+        let mut vector = TrackValue::Vector2(glam::Vec2::new(10.0, 20.0));
+        let rotation = quaternion_from_degrees([30.0, 40.0, 50.0]);
+        let mut quaternion = TrackValue::Quaternion(rotation);
+        for frame in 0..2 {
+            let ui = context.frame();
+            ui.window("Inspector layout test")
+                .position([0.0, 0.0], dear_imgui_rs::Condition::Always)
+                .size([220.0, 400.0], dear_imgui_rs::Condition::Always)
+                .build(|| {
+                    let width = ui.content_region_avail_width();
+                    {
+                        let _id = ui.push_id("vector");
+                        assert!(
+                            !edit_value(
+                                ui,
+                                &mut state,
+                                "Position with a name too long for this narrow inspector",
+                                &mut vector,
+                                None,
+                                true
+                            )
+                            .changed
+                        );
+                        if frame == 1 {
+                            let size = ui.item_rect_size();
+                            assert!(size[1] >= ui.frame_height() * 2.0);
+                            assert!(size[1] < ui.frame_height() * 3.0);
+                            assert!(size[0] <= width);
+                            let _id = ui.push_id("without_reset");
+                            assert!(
+                                !edit_value(ui, &mut state, "Position", &mut vector, None, false)
+                                    .changed
+                            );
+                            assert_eq!(ui.item_rect_size(), size);
+                        }
+                    }
+                    let _id = ui.push_id("rotation");
+                    assert!(
+                        !edit_value(ui, &mut state, "Rotation", &mut quaternion, None, false)
+                            .changed
+                    );
+                    if frame == 1 {
+                        assert!(ui.item_rect_size()[1] >= ui.frame_height() * 5.0);
+                    }
+                });
+            context.render();
+            for rotation in state.rotations.values_mut() {
+                rotation.mode = 1;
+            }
+        }
+        assert_eq!(vector, TrackValue::Vector2(glam::Vec2::new(10.0, 20.0)));
+        assert_eq!(quaternion, TrackValue::Quaternion(rotation));
+    }
+
+    #[test]
+    fn euler_edits_preserve_rotation_and_sync_external_changes() {
+        let original = quaternion_from_degrees([25.0, -40.0, 110.0]);
+        let restored = quaternion_from_degrees(euler_degrees(original));
+        assert!(original.dot(restored).abs() > 1.0 - 1e-6);
+        assert!((original.length() - 1.0).abs() < 1e-6);
+        assert!(quaternion_from_degrees([0.0, 90.0, 0.0]).abs_diff_eq(
+            glam::Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+            1e-6
+        ));
+
+        let mut edit = RotationEdit::new(original);
+        edit.euler = [385.0, -40.0, 110.0];
+        edit.sync(original);
+        assert_eq!(edit.euler[0], 385.0);
+        edit.mode = 1;
+        let external = glam::Quat::from_rotation_x(0.5);
+        edit.sync(external);
+        assert_eq!(edit.mode, 1);
+        assert!(external.dot(quaternion_from_degrees(edit.euler)).abs() > 1.0 - 1e-6);
+    }
 
     #[test]
     fn float_format_keeps_only_required_decimal_places() {

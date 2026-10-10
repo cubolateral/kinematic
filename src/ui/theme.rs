@@ -63,7 +63,7 @@ impl Appearance {
             (StyleColor::PopupBg, background),
             (StyleColor::DockingEmptyBg, background),
             (StyleColor::Border, border),
-            (StyleColor::BorderShadow, border),
+            (StyleColor::BorderShadow, [0.0; 4]),
             (StyleColor::FrameBg, background),
             (StyleColor::FrameBgHovered, hover),
             (StyleColor::FrameBgActive, active),
@@ -145,12 +145,15 @@ fn load_font(context: &mut Context) -> FontId {
 fn apply_geometry(context: &mut Context) {
     let style = context.style_mut();
 
-    style.set_window_rounding(0.0);
-    style.set_child_rounding(0.0);
-    style.set_popup_rounding(0.0);
-    style.set_frame_rounding(0.0);
-    style.set_grab_rounding(0.0);
-    style.set_tab_rounding(0.0);
+    style.set_window_rounding(super::CORNER_RADIUS);
+    style.set_child_rounding(super::CORNER_RADIUS);
+    style.set_popup_rounding(super::CORNER_RADIUS);
+    style.set_frame_rounding(super::CORNER_RADIUS);
+    style.set_grab_rounding(super::CORNER_RADIUS);
+    style.set_tab_rounding(super::CORNER_RADIUS);
+    style.set_scrollbar_rounding(super::CORNER_RADIUS);
+    style.set_image_rounding(super::CORNER_RADIUS);
+    style.set_drag_drop_target_rounding(super::CORNER_RADIUS);
 
     style.set_window_border_size(1.0);
     style.set_child_border_size(1.0);

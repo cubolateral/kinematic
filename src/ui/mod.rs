@@ -14,6 +14,8 @@ mod workspace;
 
 use crate::editor::Editor;
 
+pub(super) const CORNER_RADIUS: f32 = 4.0;
+
 pub(crate) struct Ui {
     needs_initial_layout: bool,
     font: dear_imgui_rs::FontId,
@@ -23,6 +25,7 @@ pub(crate) struct Ui {
     inspector: inspector::State,
     settings: settings::State,
     timeline: timeline::State,
+    scene_tree: scene_tree::State,
 }
 
 fn draw_top_bar(editor: &mut Editor, ui: &dear_imgui_rs::Ui, enabled: bool) -> (bool, bool) {
@@ -63,6 +66,7 @@ impl Ui {
             inspector: inspector::State::default(),
             settings: settings::State::default(),
             timeline: timeline::State::default(),
+            scene_tree: scene_tree::State::default(),
         }
     }
 
@@ -116,7 +120,7 @@ impl Ui {
         let is_exporting = editor.is_exporting();
         let fullscreen_button = {
             let _disabled = ui.begin_disabled_with_cond(is_exporting);
-            if scene_tree::draw(editor, ui) {
+            if scene_tree::draw(editor, ui, &mut self.scene_tree) {
                 self.preview.edit_canvas(editor.selected_canvas());
             }
             if settings::draw(&mut self.appearance, &mut self.settings, editor, ui) {

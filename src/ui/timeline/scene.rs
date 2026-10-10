@@ -138,12 +138,17 @@ pub(super) fn draw(
             ];
             let duration_max = [time.x(layout, global_end.min(time.end)), top + SCENE_HEIGHT];
             if duration_max[0] > duration_min[0] {
+                // Extend under the handle to fill its rounded corners.
                 draw_list
                     .add_rect(
                         duration_min,
-                        duration_max,
+                        [
+                            duration_max[0] + crate::ui::CORNER_RADIUS * 2.0,
+                            duration_max[1],
+                        ],
                         ui.get_color_u32_with_alpha(dear_imgui_rs::StyleColor::CheckMark, 0.5),
                     )
+                    .rounding(crate::ui::CORNER_RADIUS)
                     .filled(true)
                     .build();
             }
