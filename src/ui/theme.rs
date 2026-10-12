@@ -119,10 +119,13 @@ impl Appearance {
             (StyleColor::PlotHistogramHovered, accent),
         ];
 
-        colors
+        let mut tokens = colors
             .into_iter()
             .map(|(style_color, color)| ui.push_style_color(style_color, color))
-            .collect()
+            .collect::<Vec<_>>();
+        // Stack guards must be released in reverse push order.
+        tokens.reverse();
+        tokens
     }
 }
 
@@ -138,8 +141,12 @@ fn load_font(context: &mut Context) -> FontId {
     ));
 
     context
-        .font_atlas_mut()
-        .add_font(&[dear_imgui_rs::FontSource::ttf_data_with_size(FONT, 16.0)])
+        .font_atlas()
+        .add_font(&[dear_imgui_rs::FontSource::stb_truetype_with_size(
+            dear_imgui_rs::StbTrueTypeFontData::from_slice(FONT)
+                .expect("Embedded font must be valid."),
+            16.0,
+        )])
 }
 
 fn apply_geometry(context: &mut Context) {

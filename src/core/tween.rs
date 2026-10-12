@@ -4,8 +4,6 @@ use crate::core::{
     types::{Quaternion, Vector3},
 };
 
-type PrepareTween<Object> = Box<dyn FnOnce(&Tween<Object>)>;
-
 struct TweenTarget {
     target: TrackTarget,
     from: TrackValue,
@@ -32,7 +30,6 @@ pub struct Tween<Object = ()> {
     world: SceneWorld,
     entity: hecs::Entity,
     targets: Vec<TweenTarget>,
-    prepare: Option<PrepareTween<Object>>,
     delay: f32,
     duration: f32,
     easing: Easing,
@@ -41,33 +38,6 @@ pub struct Tween<Object = ()> {
 }
 
 impl<Object> Tween<Object> {
-    pub(crate) fn context(&self) -> (SceneWorld, AnimatorHandle) {
-        (std::rc::Rc::clone(&self.world), self.animator.active())
-    }
-
-    // Prepare derived data after all chained properties have been supplied.
-    pub(crate) fn prepare(mut self, prepare: impl FnOnce(&Self) + 'static) -> Self {
-        self.prepare = Some(Box::new(prepare));
-        self
-    }
-
-    // Evaluate a component endpoint in isolation, without changing scene state.
-    pub(crate) fn endpoint<C: hecs::Component + Clone>(&self, base: &C, end: bool) -> C {
-        let mut snapshot = hecs::World::new();
-        let entity = snapshot.spawn((base.clone(),));
-        for target in &self.targets {
-            if target
-                .target
-                .property_parts()
-                .is_some_and(|(type_id, _)| type_id == std::any::TypeId::of::<C>())
-            {
-                let value = if end { &target.to } else { &target.from };
-                target.target.set(&snapshot, entity, value.clone());
-            }
-        }
-        snapshot.remove_one::<C>(entity).unwrap()
-    }
-
     /// Creates a tween with a one-second duration and [`Easing::default()`] easing.
     pub fn new(
         world: SceneWorld,
@@ -92,7 +62,6 @@ impl<Object> Tween<Object> {
                 relative: 0,
                 implicit: false,
             }],
-            prepare: None,
             delay: 0.0,
             duration: 1.0,
             easing: Easing::default(),
@@ -123,7 +92,6 @@ impl<Object> Tween<Object> {
                     implicit: true,
                 })
                 .collect(),
-            prepare: None,
             delay: 0.0,
             duration: 1.0,
             easing: Easing::default(),
@@ -471,10 +439,7 @@ impl<Object> Tween<Object> {
     }
 
     /// Converts this description into one task that runs all target fields together.
-    pub fn task(mut self) -> Task {
-        if let Some(prepare) = self.prepare.take() {
-            prepare(&self);
-        }
+    pub fn task(self) -> Task {
         let mut tasks: Vec<_> = self
             .targets
             .into_iter()
@@ -531,7 +496,19 @@ impl<Object> Tween<Object> {
                 (TrackTarget::Uniform(_), Some(_)) => {
                     unreachable!("Uniforms cannot use quaternion rotation paths.")
                 }
-                (TrackTarget::Component { .. }, _) => {
+                (field @ TrackTarget::Dynamic(_), None) => Task::RuntimeTween {
+                    rotation: None,
+                    entity: self.entity,
+                    target: field,
+                    mask: target.mask.unwrap_or((1 << target.from.channels()) - 1),
+                    from: target.from,
+                    to: target.to,
+                    duration: self.duration,
+                    easing: self.easing,
+                    relative: target.relative,
+                    implicit: target.implicit,
+                },
+                (TrackTarget::Component { .. }, _) | (TrackTarget::Dynamic(_), Some(_)) => {
                     unreachable!("Tween targets are complete fields.")
                 }
             })
@@ -579,7 +556,6 @@ impl Tween<()> {
                 relative: 0,
                 implicit: true,
             }],
-            prepare: None,
             delay: 0.0,
             duration: 1.0,
             easing: Easing::default(),
@@ -599,29 +575,4 @@ fn validate_rotation(axis: Vector3, angle: f32) {
 
 fn same_value_type(left: &TrackValue, right: &TrackValue) -> bool {
     std::mem::discriminant(left) == std::mem::discriminant(right)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::core::components::Style;
-    use crate::prelude::*;
-
-    #[test]
-    fn endpoints_include_overrides_without_mutating_the_scene() {
-        let mut scene = Scene::new();
-        let object = text_2d().fill(Color::RED).build(&mut scene);
-        let tween = object.fill(Color::YELLOW).fill(Color::BLUE).animate_from(
-            Style::stroke_width_property(),
-            2.0,
-            8.0,
-        );
-        let from = tween.endpoint(&Style::default(), false);
-        let to = tween.endpoint(&Style::default(), true);
-        assert_eq!(from.fill, Color::RED);
-        assert_eq!(to.fill, Color::BLUE);
-        assert_eq!(from.stroke_width, 2.0);
-        assert_eq!(to.stroke_width, 8.0);
-        assert_eq!(object.get(Style::fill_property()), Color::BLUE);
-        assert_eq!(object.get(Style::stroke_width_property()), 8.0);
-    }
 }

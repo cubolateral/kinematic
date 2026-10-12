@@ -18,34 +18,30 @@ pub(super) struct State {
     margin: [i32; 2],
 }
 
-pub(super) fn load() -> Appearance {
-    let path = Path::new(SETTINGS_PATH);
-
-    match fs::read_to_string(path) {
-        Ok(contents) => match ron::from_str(&contents) {
-            Ok(appearance) => appearance,
-            Err(error) => {
-                eprintln!("Could not parse {SETTINGS_PATH}: {error}.");
-                let appearance = Appearance::default();
-                save(&appearance);
-                appearance
-            }
-        },
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let appearance = Appearance::default();
-            save(&appearance);
-            appearance
-        }
-        Err(error) => {
-            eprintln!("Could not read {SETTINGS_PATH}: {error}.");
-            Appearance::default()
-        }
-    }
+pub(super) fn load(context: &crate::core::ProjectContext) -> Appearance {
+    let Ok(path) = context.resolve(SETTINGS_PATH) else {
+        return Appearance::default();
+    };
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|text| ron::from_str(&text).ok())
+        .unwrap_or_default()
 }
 
-pub(super) fn save(appearance: &Appearance) {
-    if let Err(error) = write(appearance, Path::new(SETTINGS_PATH)) {
-        eprintln!("Could not write {SETTINGS_PATH}: {error}.");
+pub(super) fn save(appearance: &Appearance, context: &crate::core::ProjectContext) {
+    let Ok(path) = context.resolve(SETTINGS_PATH) else {
+        return;
+    };
+    if path.exists()
+        && fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| ron::from_str::<Appearance>(&text).ok())
+            .is_none()
+    {
+        return;
+    }
+    if let Err(error) = write(appearance, &path) {
+        eprintln!("Could not save appearance: {error}.");
     }
 }
 
@@ -55,7 +51,12 @@ fn write(appearance: &Appearance, path: &Path) -> Result<(), Box<dyn std::error:
     }
 
     let contents = ron::ser::to_string_pretty(appearance, ron::ser::PrettyConfig::default())?;
-    fs::write(path, format!("{contents}\n"))?;
+    let expected = fs::read(path).ok();
+    crate::core::atomic_write(
+        path,
+        format!("{contents}\n").as_bytes(),
+        expected.as_deref(),
+    )?;
     Ok(())
 }
 
@@ -89,18 +90,18 @@ pub(super) fn draw(
         let valid_resolution = state
             .resolution
             .iter()
-            .all(|value| *value > 0 && value % 2 == 0);
-        let valid_fps = state.fps > 0;
+            .all(|value| *value > 0 && *value <= 8192 && value % 2 == 0);
+        let valid_fps = state.fps > 0 && state.fps <= 1000;
         let valid_margin = state.margin[0] >= 0
             && state.margin[1] >= 0
             && state.margin[0] < state.resolution[0] / 2
             && state.margin[1] < state.resolution[1] / 2;
 
         if !valid_resolution {
-            ui.text_wrapped("Resolution dimensions must be positive, even numbers.");
+            ui.text_wrapped("Resolution dimensions must be even numbers from 2 to 8192.");
         }
         if !valid_fps {
-            ui.text_wrapped("FPS must be greater than zero.");
+            ui.text_wrapped("FPS must be between 1 and 1000.");
         }
         if !valid_margin {
             ui.text_wrapped("Margin must fit inside the resolution.");

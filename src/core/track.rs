@@ -13,12 +13,14 @@ pub type TrackSetter = fn(&hecs::World, hecs::Entity, TrackValue);
 pub type TrackId = u32;
 
 #[derive(Clone, Debug)]
-pub(crate) enum TrackTarget {
+#[doc(hidden)]
+pub enum TrackTarget {
     Property {
         type_id: std::any::TypeId,
         info: &'static TrackInfo,
     },
     Uniform(String),
+    Dynamic(std::sync::Arc<crate::core::PropertySchema>),
     Component {
         target: Box<TrackTarget>,
         channel: u8,
@@ -71,6 +73,7 @@ impl TrackTarget {
                 },
             ) => left_type == right_type && left_info.id == right_info.id,
             (Self::Uniform(left), Self::Uniform(right)) => left == right,
+            (Self::Dynamic(left), Self::Dynamic(right)) => left == right,
             (
                 Self::Component {
                     target: left,
@@ -89,6 +92,7 @@ impl TrackTarget {
         match self {
             Self::Property { info, .. } => info.name,
             Self::Uniform(name) => name,
+            Self::Dynamic(schema) => &schema.name,
             Self::Component { target, .. } => target.name(),
         }
     }
@@ -96,6 +100,10 @@ impl TrackTarget {
     pub(crate) fn get(&self, world: &hecs::World, entity: hecs::Entity) -> TrackValue {
         match self {
             Self::Property { info, .. } => (info.get)(world, entity),
+            Self::Dynamic(schema) => world.get::<&crate::core::Properties>(entity).unwrap().0
+                [&schema.name]
+                .1
+                .clone(),
             Self::Uniform(name) => crate::core::objects::shader_uniform(world, entity, name)
                 .unwrap_or_else(|error| panic!("{error}")),
             Self::Component { target, .. } => target.get(world, entity),
@@ -105,6 +113,15 @@ impl TrackTarget {
     pub(crate) fn set(&self, world: &hecs::World, entity: hecs::Entity, value: TrackValue) {
         match self {
             Self::Property { info, .. } => (info.set)(world, entity, value),
+            Self::Dynamic(schema) => {
+                world
+                    .get::<&mut crate::core::Properties>(entity)
+                    .unwrap()
+                    .0
+                    .get_mut(&schema.name)
+                    .unwrap()
+                    .1 = schema.clamp(value)
+            }
             Self::Uniform(name) => {
                 crate::core::objects::set_shader_uniform(world, entity, name, value)
                     .unwrap_or_else(|error| panic!("{error}"));
@@ -120,22 +137,15 @@ impl TrackTarget {
         match self {
             Self::Property { info, .. } => info.clamp(value),
             Self::Uniform(_) => value,
+            Self::Dynamic(schema) => schema.clamp(value),
             Self::Component { target, .. } => target.clamp(value),
-        }
-    }
-
-    pub(crate) fn property_parts(&self) -> Option<(std::any::TypeId, &'static TrackInfo)> {
-        match self {
-            Self::Property { type_id, info } => Some((*type_id, *info)),
-            Self::Uniform(_) => None,
-            Self::Component { target, .. } => target.property_parts(),
         }
     }
 
     pub(crate) fn uniform_name(&self) -> Option<&str> {
         match self {
             Self::Uniform(name) => Some(name),
-            Self::Property { .. } => None,
+            Self::Property { .. } | Self::Dynamic(_) => None,
             Self::Component { target, .. } => target.uniform_name(),
         }
     }
@@ -779,20 +789,42 @@ fn standalone_trackables(_: &hecs::World, _: hecs::Entity) -> &'static [Trackabl
     std::slice::from_ref(&STANDALONE_TRACKABLE_INFO)
 }
 
+pub(crate) fn standalone_value(
+    world: &SceneWorld,
+    animator: &AnimatorHandle,
+    initial: TrackValue,
+    entity: Option<hecs::Entity>,
+) -> (hecs::Entity, TrackTarget) {
+    animator.assert_finite_scope();
+    let mut node = TreeNode::default();
+    node.activate(0.0);
+    let bundle = (
+        StandaloneTrackValue(initial),
+        Animation::default(),
+        Inspection::new("StandaloneTrack", standalone_trackables),
+        node,
+    );
+    let entity = if let Some(entity) = entity {
+        world.borrow_mut().spawn_at(entity, bundle);
+        entity
+    } else {
+        world.borrow_mut().spawn(bundle)
+    };
+    (
+        entity,
+        TrackTarget::property(
+            std::any::TypeId::of::<StandaloneTrackValue>(),
+            &STANDALONE_TRACK_INFO,
+        ),
+    )
+}
+
 pub(crate) fn standalone_track<T: TrackValueType>(
     world: SceneWorld,
     animator: AnimatorHandle,
     initial: T,
 ) -> TrackHandle<T> {
-    animator.assert_finite_scope();
-    let mut node = TreeNode::default();
-    node.activate(0.0);
-    let entity = world.borrow_mut().spawn((
-        StandaloneTrackValue(initial.into_track_value()),
-        Animation::default(),
-        Inspection::new("StandaloneTrack", standalone_trackables),
-        node,
-    ));
+    let (entity, _) = standalone_value(&world, &animator, initial.into_track_value(), None);
 
     TrackHandle::new(
         world,
@@ -1404,7 +1436,13 @@ pub enum TrackChoices {
 impl TrackInfo {
     /// Restricts a runtime value to this track's numeric bounds.
     pub fn clamp(&self, value: TrackValue) -> TrackValue {
-        match (value, self.limits) {
+        self.limits.clamp(value)
+    }
+}
+
+impl TrackLimits {
+    pub(crate) fn clamp(self, value: TrackValue) -> TrackValue {
+        match (value, self) {
             (TrackValue::F32(value), TrackLimits::F32 { min, max }) => {
                 TrackValue::F32(clamp_numeric(value, min, max))
             }

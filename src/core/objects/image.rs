@@ -17,10 +17,20 @@ impl ImageSource {
         let path = path.as_ref();
         let bytes = std::fs::read(path)
             .unwrap_or_else(|error| panic!("Failed to read image '{}': {error}.", path.display()));
+        Self::decode(path, &bytes).unwrap_or_else(|error| panic!("{error}"))
+    }
+
+    pub(crate) fn decode(path: &Path, bytes: &[u8]) -> Result<Self, String> {
+        if bytes.len() > 64 * 1024 * 1024 {
+            return Err("Image file exceeds 64 MiB.".into());
+        }
         let image = skia_safe::Image::from_encoded(skia_safe::Data::new_copy(&bytes))
-            .unwrap_or_else(|| panic!("Failed to decode image '{}'.", path.display()));
+            .ok_or_else(|| format!("Failed to decode image '{}'.", path.display()))?;
         let width = image.width() as u32;
         let height = image.height() as u32;
+        if u64::from(width) * u64::from(height) > 16_777_216 {
+            return Err("Image exceeds sixteen million pixels.".into());
+        }
         let info = skia_safe::ImageInfo::new(
             (width as i32, height as i32),
             skia_safe::ColorType::RGBA8888,
@@ -28,25 +38,23 @@ impl ImageSource {
             skia_safe::ColorSpace::new_srgb(),
         );
         let mut pixels = vec![[0; 4]; width as usize * height as usize];
-        assert!(
-            image.read_pixels(
-                &info,
-                &mut pixels,
-                width as usize * 4,
-                (0, 0),
-                skia_safe::image::CachingHint::Allow,
-            ),
-            "Failed to read pixels from image '{}'.",
-            path.display()
-        );
+        if !image.read_pixels(
+            &info,
+            &mut pixels,
+            width as usize * 4,
+            (0, 0),
+            skia_safe::image::CachingHint::Allow,
+        ) {
+            return Err(format!("Failed to read image pixels '{}'.", path.display()));
+        }
 
-        Self {
+        Ok(Self {
             image: Some(image),
             pixels: Arc::new(pixels),
             width,
             height,
             path: path.to_string_lossy().into_owned(),
-        }
+        })
     }
 
     pub(crate) fn image(&self) -> Option<&skia_safe::Image> {

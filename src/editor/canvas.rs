@@ -1,8 +1,8 @@
-use crate::renderer::target::{Target, reset_gl};
+use crate::renderer::target::Target;
 
 pub(crate) struct Canvas {
     pub(crate) target: Target,
-    imgui_texture_id: dear_imgui_rs::TextureId,
+    imgui_texture_id: dear_imgui_glow::ExternalTextureId,
 }
 
 impl Canvas {
@@ -33,32 +33,24 @@ impl Canvas {
     ) -> Self {
         let target =
             Target::new(size, depth, skia_context, gl).expect("Editor target must be created.");
-        let imgui_texture_id = imgui_renderer.texture_map_mut().register_texture(
-            target.texture(),
-            size.0,
-            size.1,
-            dear_imgui_rs::TextureFormat::RGBA32,
-        );
+        let imgui_texture_id = imgui_renderer
+            .register_external_texture(glow_imgui::NativeTexture(target.texture().0))
+            .expect("Preview texture must register with ImGui.");
         Self {
             target,
             imgui_texture_id,
         }
     }
-    pub fn draw(
-        &mut self,
-        skia_context: &mut skia_safe::gpu::DirectContext,
-        gl: &glow::Context,
-        window_size: (u32, u32),
-        f: impl FnOnce(&skia_safe::Canvas),
-    ) {
-        self.target.draw_skia(skia_context, f);
-        reset_gl(gl, window_size);
-    }
     pub fn size(&self) -> (u32, u32) {
         self.target.size
     }
     pub fn imgui_texture_id(&self) -> dear_imgui_rs::TextureId {
-        self.imgui_texture_id
+        self.imgui_texture_id.texture_id()
+    }
+    pub(crate) fn unregister(&self, renderer: &mut dear_imgui_glow::GlowRenderer) {
+        renderer
+            .unregister_external_texture(self.imgui_texture_id)
+            .expect("Preview texture must still be registered.");
     }
     pub fn framebuffer(&self) -> glow::NativeFramebuffer {
         self.target.framebuffer()

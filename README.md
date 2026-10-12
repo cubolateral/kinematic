@@ -33,6 +33,18 @@ Kinematic is in early development, so its API may change.
 - FFmpeg-backed MP4 export from the editor. Exported projects are
   encoded as MP4 files in the `output/` directory.
 
+## Lua editor
+
+Run `cargo run --bin kinematic -- examples/lua/2d`, or launch without a path to
+create/open projects from the start screen. Lua 5.4 is embedded. Code buffers
+update the preview after a short pause without saving; the editor includes tabs,
+file management, diagnostics, persistent Inspector bases and optional LuaLS.
+
+See [Lua projects and API](docs/lua.md) for creation, custom drawing/simulations,
+identity, reload, export, LuaLS installation and Rust migration. Complete projects
+are available in [examples/lua](examples/lua). Built-in animation effects have
+been removed; use property tweens for opacity, scale, position and other values.
+
 ## Requirements
 
 - A Rust toolchain with edition 2024 support.
@@ -139,7 +151,7 @@ object lifetime changes, but not inside `repeat`.
 ## Animation groups and loops
 
 `scene.chain(...)` schedules its children in sequence. `scene.all(...)` starts
-all children at the group start, including object attachment and effects; its
+all children at the group start, including object attachment and animations; its
 duration is the longest child. Use a nested `chain` to delay a parallel branch.
 Concurrent animations of the same property are rejected.
 
@@ -543,8 +555,7 @@ seconds in `k_time`, and `k_alpha`. UV `(0, 0)` is the bottom-left pixel. Input
 and output are premultiplied, sRGB-encoded RGBA. Additional canvas samplers use
 `.texture(name, &canvas)`; canvas dependencies are ordered and cycles are
 rejected. Captures are allocated on demand, and `shader_padding` expands them
-for blur or glow. CPU morph capture rejects shader-rendered objects because its
-result depends on the GPU renderer.
+for blur or glow.
 
 Uniform tracks use the normal timeline, easing, repetition, seek, signals,
 snapshots, Timeline, Inspector, and export evaluation. Supported values are
@@ -634,7 +645,7 @@ three, or four values (`round(10)`, `round([10, 30])`, and so on).
 
 `Latex2D` uses the native RaTeX layout engine and embedded KaTeX fonts.
 Formula geometry is cached and drawn as Skia vector paths. Size, fill, stroke,
-transform, and creation effects work like other scene objects.
+and transform use the same property tracks as other scene objects.
 
 ```rust
 let formula = latex_2d()
@@ -642,55 +653,14 @@ let formula = latex_2d()
     .size(64.0)
     .build(s);
 s.world_2d().add(&formula);
-creation().play(&formula);
-formula.morph(r"\sqrt{2}").duration(2.0).play();
+formula.opacity_from(0.0, 1.0).duration(0.5).play();
+formula.text(r"\sqrt{2}").duration(2.0).play();
 ```
 
-`morph` keeps the same object and changes its source when the tween completes,
+The text property changes its source when the tween completes,
 including when seeking backward. Use math source without dollar delimiters.
 Rendering uses display style; full LaTeX documents and packages are unsupported.
 Invalid or unsupported source panics when its geometry is first requested.
-
-## Particle transforms
-
-`morph().play(&from, &to)` replaces an object through particle silhouettes.
-It first turns the source into a silhouette, interpolates particle positions and
-colors, and resolves the destination into its complete appearance.
-Every `spatial = "2d"` object participates automatically: `on_draw` renders only
-its normal appearance, while `Draw2D::visual_bounds` reports the local ink bounds.
-The default bounds are centered on `box_size`; override them for displaced drawing
-or outlines that extend beyond that box.
-
-```rust
-let source = circle().radius(80.0).fill(Color::RED).build(s);
-let target = text_2d()
-    .text("Kinematic")
-    .position(vec2(240.0, 0.0))
-    .fill(Color::BLUE)
-    .build(s);
-s.world_2d().add(&source);
-
-morph()
-    .duration(2.5)
-    .easing(Easing::InOutCubic)
-    .fade_from(false)
-    .play(&source, &target);
-
-target.position_y(120.0).play();
-```
-
-`fade_from` defaults to `true`. Set it to `false` to keep the source visible
-while the destination appears. The source must be attached, and the destination
-may be unattached or attached to the same parent. The destination keeps its own
-local transform. Both objects must contain visible content.
-Shapes, text, groups, and custom drawable objects are sampled through their draw
-callbacks. Appearances are captured when scheduled; later edits do not change the
-captured particle cloud. Masks are limited to 2048 pixels per dimension.
-
-Particle paths are deterministic when seeking, and the original object reappears
-when seeking before the effect.
-The effect type is `Morph`, distinct from the spatial `Transform`
-component and the `Creation`/`Uncreation` effects.
 
 ## Scene tree
 

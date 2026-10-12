@@ -4,7 +4,7 @@ Kinematic is a Rust animation editor and library. The source code is the authori
 
 ## Architecture
 
-- src/core/ contains the reusable public scene, object, animation, effect, project, and component model.
+- src/core/ contains the reusable public scene, object, animation, project, and component model.
 - src/editor/ and src/ui/ contain crate-private editor state and Dear ImGui views.
 - src/app.rs owns SDL, OpenGL, ImGui, and the application loop.
 - src/renderer/ owns MP4 export and reuses the application's existing graphics resources.

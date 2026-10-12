@@ -1,0 +1,7 @@
+{
+    "scenes/custom.lua": {
+        "ribbon": {
+            "position": Vector2((202.90001, 0.0)),
+        },
+    },
+}

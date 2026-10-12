@@ -3,8 +3,7 @@ use crate::core::{
     AnimatorHandle, SceneWorld, SignalFrame, SignalHandle, TrackProperty, TrackTarget, TrackValue,
     TrackValueType, Trackable, Tween,
     components::{
-        Animation, Draw2D, Draw3D, Inspection, Morph, Name, ObjectType, Transform2D, Transform3D,
-        TreeNode,
+        Animation, Draw2D, Draw3D, Inspection, Name, ObjectType, Transform2D, Transform3D, TreeNode,
     },
     objects::{ancestor_entity, deactivate_subtree, is_attached, move_child},
     types::{Vector2, Vector3},
@@ -40,6 +39,9 @@ pub trait Object: hecs::DynamicBundle + Sized + 'static {
     #[doc(hidden)]
     const SPATIAL_2D: bool = false;
 
+    /// Stable constructor name supplied by the object derive macro.
+    const BUILDER_NAME: &'static str = "object";
+
     /// Builds the handler from the spawned entity.
     fn handler(world: SceneWorld, entity: hecs::Entity, animator: AnimatorHandle) -> Self::Handler;
 
@@ -54,6 +56,17 @@ pub trait Object: hecs::DynamicBundle + Sized + 'static {
         object: Self,
         name: Name,
     ) -> Self::Handler {
+        Self::spawn_at(world, animator, object, name, None)
+    }
+
+    #[doc(hidden)]
+    fn spawn_at(
+        world: SceneWorld,
+        animator: AnimatorHandle,
+        object: Self,
+        name: Name,
+        entity: Option<hecs::Entity>,
+    ) -> Self::Handler {
         animator.assert_finite_scope();
         let mut builder = hecs::EntityBuilder::new();
         builder
@@ -64,10 +77,12 @@ pub trait Object: hecs::DynamicBundle + Sized + 'static {
             .add(Snapshots::default())
             .add(name)
             .add(Self::inspection());
-        if Self::SPATIAL_2D {
-            builder.add(Morph::default());
-        }
-        let entity = world.borrow_mut().spawn(builder.build());
+        let entity = if let Some(entity) = entity {
+            world.borrow_mut().spawn_at(entity, builder.build());
+            entity
+        } else {
+            world.borrow_mut().spawn(builder.build())
+        };
         let initial = snapshot_values(&world, entity);
         world
             .borrow()
@@ -470,27 +485,14 @@ fn snapshot_values(world: &SceneWorld, entity: hecs::Entity) -> Vec<SnapshotValu
         .expect("Object handler must contain Inspection metadata.")
         .clone();
 
-    let mut values = Vec::new();
-
-    for trackable in inspection.trackables(&world, entity) {
-        let type_id = (trackable.type_id)();
-
-        for track_info in (trackable.get)() {
-            values.push(SnapshotValue {
-                target: TrackTarget::property(type_id, track_info),
-                value: (track_info.get)(&world, entity),
-            });
-        }
-    }
-
-    for (name, value) in crate::core::objects::shader_uniforms(&world, entity) {
-        values.push(SnapshotValue {
-            target: TrackTarget::uniform(name),
-            value,
-        });
-    }
-
-    values
+    inspection
+        .properties(&world, entity)
+        .into_iter()
+        .map(|target| SnapshotValue {
+            value: target.get(&world, entity),
+            target,
+        })
+        .collect()
 }
 
 /// Pops an object's latest snapshot and builds a tween back to it.
@@ -893,10 +895,15 @@ fn bounds3d_inner(
     shader_padding: bool,
     time: Option<f32>,
 ) -> Option<(glam::Vec3, glam::Vec3)> {
-    let size = world
-        .get::<&Draw3D>(entity)
-        .ok()
-        .map(|draw| (draw.box_size)(world, entity));
+    let bounds = world.get::<&Draw3D>(entity).ok().map(|draw| {
+        draw.logical_bounds.map_or_else(
+            || {
+                let size = (draw.box_size)(world, entity);
+                (-size * 0.5, size * 0.5)
+            },
+            |bounds| bounds(world, entity),
+        )
+    });
     let padding = if shader_padding {
         crate::core::objects::effective_mesh_shader(world, entity)
             .ok()
@@ -905,20 +912,16 @@ fn bounds3d_inner(
     } else {
         0.0
     };
-    let (mut min, mut max) = size.map_or(
+    let (mut min, mut max) = bounds.map_or(
         (
             glam::Vec3::splat(f32::INFINITY),
             glam::Vec3::splat(f32::NEG_INFINITY),
         ),
-        |size| {
-            let padding = if size == glam::Vec3::ZERO {
-                0.0
-            } else {
-                padding
-            };
+        |(min, max)| {
+            let padding = if min == max { 0.0 } else { padding };
             (
-                -size * 0.5 - glam::Vec3::splat(padding),
-                size * 0.5 + glam::Vec3::splat(padding),
+                min - glam::Vec3::splat(padding),
+                max + glam::Vec3::splat(padding),
             )
         },
     );

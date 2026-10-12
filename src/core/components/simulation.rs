@@ -22,6 +22,12 @@ const CHECKPOINT_INTERVAL_SECONDS: u64 = 2;
 pub trait SimulationState: Clone + Send + Sync + 'static {
     /// Advances the state by one project frame.
     fn on_update(&mut self, context: &SimulationContext<'_>);
+
+    /// Propagates a failed step without publishing partial simulation state.
+    fn try_on_update(&mut self, context: &SimulationContext<'_>) -> Result<(), String> {
+        self.on_update(context);
+        Ok(())
+    }
 }
 
 /// Values available while advancing one fixed simulation frame.
@@ -37,6 +43,30 @@ pub struct SimulationContext<'a> {
 }
 
 impl SimulationContext<'_> {
+    pub(crate) fn sample(
+        &self,
+        entity: hecs::Entity,
+        target: &crate::core::TrackTarget,
+    ) -> crate::core::TrackValue {
+        let base = target.get(self.world, entity);
+        self.world
+            .get::<&Animation>(entity)
+            .ok()
+            .and_then(|a| a.sample_target(target, self.time, base.clone()))
+            .unwrap_or(base)
+    }
+
+    pub(crate) fn state<S: SimulationState>(&self, entity: hecs::Entity) -> Result<S, String> {
+        self.world
+            .get::<&Simulation>(entity)
+            .map_err(|e| e.to_string())?
+            .current
+            .state()
+            .downcast_ref::<S>()
+            .cloned()
+            .ok_or_else(|| "Dependency has a different simulation state type.".into())
+    }
+
     /// Samples a trackable component at this step's project time.
     pub fn get<T: Trackable + hecs::Component + Clone>(&self) -> T {
         let component = (*self
@@ -105,7 +135,7 @@ pub trait SimulationState3D: SimulationState {
 
 trait ErasedSimulation: Send + Sync {
     fn clone_box(&self) -> Box<dyn ErasedSimulation>;
-    fn on_update(&mut self, context: &SimulationContext<'_>);
+    fn on_update(&mut self, context: &SimulationContext<'_>) -> Result<(), String>;
     fn state(&self) -> &dyn Any;
     fn state_mut(&mut self) -> &mut dyn Any;
     fn draw_2d(
@@ -145,8 +175,8 @@ impl<S: SimulationState> ErasedSimulation for State<S> {
         Box::new(self.clone())
     }
 
-    fn on_update(&mut self, context: &SimulationContext<'_>) {
-        self.0.on_update(context);
+    fn on_update(&mut self, context: &SimulationContext<'_>) -> Result<(), String> {
+        self.0.try_on_update(context)
     }
 
     fn state(&self) -> &dyn Any {
@@ -166,8 +196,8 @@ impl<S: SimulationState2D> ErasedSimulation for State2D<S> {
         Box::new(self.clone())
     }
 
-    fn on_update(&mut self, context: &SimulationContext<'_>) {
-        self.0.on_update(context);
+    fn on_update(&mut self, context: &SimulationContext<'_>) -> Result<(), String> {
+        self.0.try_on_update(context)
     }
 
     fn state(&self) -> &dyn Any {
@@ -195,8 +225,8 @@ impl<S: SimulationState3D> ErasedSimulation for State3D<S> {
         Box::new(self.clone())
     }
 
-    fn on_update(&mut self, context: &SimulationContext<'_>) {
-        self.0.on_update(context);
+    fn on_update(&mut self, context: &SimulationContext<'_>) -> Result<(), String> {
+        self.0.try_on_update(context)
     }
 
     fn state(&self) -> &dyn Any {
@@ -229,7 +259,9 @@ impl ErasedSimulation for EmptyState {
         Box::new(self.clone())
     }
 
-    fn on_update(&mut self, _context: &SimulationContext<'_>) {}
+    fn on_update(&mut self, _context: &SimulationContext<'_>) -> Result<(), String> {
+        Ok(())
+    }
 
     fn state(&self) -> &dyn Any {
         self
@@ -256,7 +288,7 @@ enum SimulationOperation {
     },
     Mutation {
         time: f32,
-        apply: Arc<dyn Fn(&mut dyn Any) + Send + Sync>,
+        apply: Arc<dyn Fn(&mut dyn Any) -> Result<(), String> + Send + Sync>,
     },
 }
 
@@ -284,6 +316,7 @@ pub struct Simulation {
     #[track]
     pub auto_update: bool,
 
+    pub(crate) dependencies: Vec<hecs::Entity>,
     current_frame: u64,
     initial_frame_processed: bool,
     initial: Box<dyn ErasedSimulation>,
@@ -296,6 +329,7 @@ impl Clone for Simulation {
     fn clone(&self) -> Self {
         Self {
             auto_update: self.auto_update,
+            dependencies: self.dependencies.clone(),
             current_frame: self.current_frame,
             initial_frame_processed: self.initial_frame_processed,
             initial: self.initial.clone(),
@@ -311,6 +345,7 @@ impl Default for Simulation {
         let state: Box<dyn ErasedSimulation> = Box::new(EmptyState);
         Self {
             auto_update: true,
+            dependencies: Vec::new(),
             current_frame: 0,
             initial_frame_processed: false,
             initial: state.clone(),
@@ -340,12 +375,31 @@ impl Simulation {
     fn from_erased(state: Box<dyn ErasedSimulation>) -> Self {
         Self {
             auto_update: true,
+            dependencies: Vec::new(),
             current_frame: 0,
             initial_frame_processed: false,
             initial: state.clone(),
             current: state.clone(),
             checkpoints: vec![Checkpoint { frame: 0, state }],
             operations: Vec::new(),
+        }
+    }
+
+    pub(crate) fn copy_history(&mut self, previous: &Self) {
+        self.current_frame = previous.current_frame;
+        self.initial_frame_processed = previous.initial_frame_processed;
+        self.current = previous.current.clone();
+        self.checkpoints = previous.checkpoints.clone();
+    }
+
+    pub(crate) fn map_states<S: SimulationState>(&mut self, mut f: impl FnMut(&mut S)) {
+        for state in std::iter::once(&mut self.initial)
+            .chain(std::iter::once(&mut self.current))
+            .chain(self.checkpoints.iter_mut().map(|c| &mut c.state))
+        {
+            if let Some(state) = state.state_mut().downcast_mut::<S>() {
+                f(state);
+            }
         }
     }
 
@@ -383,6 +437,17 @@ impl Simulation {
         time: f32,
         mutation: impl Fn(&mut S) + Send + Sync + 'static,
     ) {
+        self.schedule_fallible_mutation(time, move |state| {
+            mutation(state);
+            Ok(())
+        });
+    }
+
+    pub(crate) fn schedule_fallible_mutation<S: SimulationState>(
+        &mut self,
+        time: f32,
+        mutation: impl Fn(&mut S) -> Result<(), String> + Send + Sync + 'static,
+    ) {
         assert!(
             self.initial.state_mut().is::<S>(),
             "Simulation state must match the state associated with its object."
@@ -394,7 +459,7 @@ impl Simulation {
                     state
                         .downcast_mut::<S>()
                         .expect("Simulation mutation state type must remain stable."),
-                );
+                )
             }),
         });
         self.reset_replay();
@@ -407,6 +472,7 @@ impl Simulation {
         self.checkpoints.truncate(1);
     }
 
+    #[cfg(test)]
     pub(crate) fn seek(
         &mut self,
         world: &hecs::World,
@@ -414,10 +480,34 @@ impl Simulation {
         target_frame: u64,
         fps: u32,
         start_time: f32,
+        auto_update_at: impl FnMut(f32) -> bool,
+    ) -> Result<(), String> {
+        self.seek_slice(
+            world,
+            entity,
+            target_frame,
+            fps,
+            start_time,
+            auto_update_at,
+            None,
+            &mut |_| Ok(true),
+        )
+        .map(|_| ())
+    }
+
+    pub(crate) fn seek_slice(
+        &mut self,
+        world: &hecs::World,
+        entity: hecs::Entity,
+        target_frame: u64,
+        fps: u32,
+        start_time: f32,
         mut auto_update_at: impl FnMut(f32) -> bool,
-    ) {
+        deadline: Option<std::time::Instant>,
+        before_step: &mut dyn FnMut(f32) -> Result<bool, String>,
+    ) -> Result<bool, String> {
         if target_frame == self.current_frame && self.initial_frame_processed {
-            return;
+            return Ok(true);
         }
 
         if target_frame < self.current_frame || target_frame > self.current_frame + 1 {
@@ -445,6 +535,9 @@ impl Simulation {
         let dt = frame_dt(fps);
         let checkpoint_interval = u64::from(fps.max(1)) * CHECKPOINT_INTERVAL_SECONDS;
         if !self.initial_frame_processed {
+            if !before_step(start_time)? {
+                return Ok(false);
+            }
             self.run_frame(
                 self.frame_operations(0, dt, start_time),
                 auto_update_at(start_time),
@@ -455,12 +548,18 @@ impl Simulation {
                     frame: 0,
                     dt,
                 },
-            );
+            )?;
             self.initial_frame_processed = true;
         }
         while self.current_frame < target_frame {
+            if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
+                return Ok(false);
+            }
+            let time = start_time + (self.current_frame + 1) as f32 * dt;
+            if !before_step(time)? {
+                return Ok(false);
+            }
             self.current_frame += 1;
-            let time = start_time + self.current_frame as f32 * dt;
             self.run_frame(
                 self.frame_operations(self.current_frame, dt, start_time),
                 auto_update_at(time),
@@ -471,11 +570,74 @@ impl Simulation {
                     frame: self.current_frame,
                     dt,
                 },
-            );
+            )?;
             if self.current_frame.is_multiple_of(checkpoint_interval) {
                 self.save_checkpoint();
             }
         }
+        Ok(true)
+    }
+
+    pub(crate) fn seek_entity(
+        world: &hecs::World,
+        entity: hecs::Entity,
+        time: f32,
+        fps: u32,
+        deadline: Option<std::time::Instant>,
+    ) -> Result<bool, String> {
+        let node = world
+            .get::<&super::TreeNode>(entity)
+            .map_err(|e| e.to_string())?;
+        let start = node.lifetime[0];
+        if time < start {
+            return Ok(true);
+        }
+        let time = time.min(node.lifetime[1]);
+        drop(node);
+        let target = crate::core::frame_index((time - start).max(0.0), fps);
+        let mut simulation = {
+            let mut stored = world.get::<&mut Self>(entity).map_err(|e| e.to_string())?;
+            let simulation = std::mem::take(&mut *stored);
+            stored.auto_update = simulation.auto_update;
+            simulation
+        };
+        let dependencies = simulation.dependencies.clone();
+        let fallback = simulation.auto_update;
+        let track = <Self as Trackable>::track(0);
+        let result = simulation.seek_slice(
+            world,
+            entity,
+            target,
+            fps,
+            start,
+            |time| {
+                world
+                    .get::<&Animation>(entity)
+                    .ok()
+                    .and_then(|animation| {
+                        animation.sample(
+                            std::any::TypeId::of::<Self>(),
+                            track,
+                            time,
+                            crate::core::TrackValue::Bool(fallback),
+                        )
+                    })
+                    .and_then(<bool as crate::core::TrackValueType>::from_track_value)
+                    .unwrap_or(fallback)
+            },
+            deadline,
+            &mut |time| {
+                for dependency in &dependencies {
+                    // A dependency step completes before publishing its dependent's step.
+                    if !Self::seek_entity(world, *dependency, time, fps, deadline)? {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            },
+        );
+        *world.get::<&mut Self>(entity).map_err(|e| e.to_string())? = simulation;
+        result
     }
 
     fn save_checkpoint(&mut self) {
@@ -516,7 +678,7 @@ impl Simulation {
         operations: Vec<SimulationOperation>,
         auto_update: bool,
         context: SimulationContext<'_>,
-    ) {
+    ) -> Result<(), String> {
         let has_update = operations
             .iter()
             .any(|operation| matches!(operation, SimulationOperation::Update { .. }));
@@ -525,19 +687,20 @@ impl Simulation {
             .any(|operation| matches!(operation, SimulationOperation::Checkpoint { .. }));
         for operation in operations {
             match operation {
-                SimulationOperation::Update { .. } => self.current.on_update(&context),
+                SimulationOperation::Update { .. } => self.current.on_update(&context)?,
                 SimulationOperation::Checkpoint { .. } => {}
                 SimulationOperation::Mutation { apply, .. } => {
-                    apply(self.current.state_mut());
+                    apply(self.current.state_mut())?;
                 }
             }
         }
         if auto_update && !has_update {
-            self.current.on_update(&context);
+            self.current.on_update(&context)?;
         }
         if has_checkpoint {
             self.save_checkpoint();
         }
+        Ok(())
     }
 
     /// Draws the current 2D state as a [`Draw2D`](super::Draw2D) callback.
@@ -715,7 +878,9 @@ mod tests {
     ) {
         let mut world = hecs::World::new();
         let entity = world.spawn((Animation::default(),));
-        simulation.seek(&world, entity, target_frame, fps, 0.0, auto_update_at);
+        simulation
+            .seek(&world, entity, target_frame, fps, 0.0, auto_update_at)
+            .unwrap();
     }
 
     #[test]

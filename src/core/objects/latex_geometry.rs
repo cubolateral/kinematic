@@ -6,16 +6,9 @@ use ratex_types::{display_item::DisplayItem, path_command::PathCommand};
 
 use crate::core::types::{Color, Vector2};
 
-#[derive(Clone, PartialEq, Eq)]
-pub(super) struct FormulaGlyph {
-    font: String,
-    char_code: u32,
-}
-
 pub(super) struct FormulaPart {
     pub path: skia_safe::Path,
     pub color: Option<Color>,
-    pub glyph: Option<FormulaGlyph>,
 }
 
 pub(super) struct FormulaGeometry {
@@ -81,7 +74,7 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
         let offset = -geometry.size * 0.5;
         for part in &mut geometry.parts {
             part.path = part.path.with_offset((offset.x, offset.y));
-            // Include glyph overhangs in selection and particle capture bounds.
+            // Include glyph overhangs in selection bounds.
             let bounds = part.path.compute_tight_bounds();
             geometry.size.x = geometry
                 .size
@@ -143,10 +136,6 @@ fn emit(
                         .with_transform(&skia_safe::Matrix::scale((scale, scale)))
                         .with_offset((*x as f32, *y as f32)),
                     color,
-                    glyph: Some(FormulaGlyph {
-                        font: font.clone(),
-                        char_code: *char_code,
-                    }),
                 });
             }
         }
@@ -163,7 +152,6 @@ fn emit(
                     None,
                 ),
                 color,
-                glyph: None,
             });
         }
         DisplayItem::Line {
@@ -191,7 +179,6 @@ fn emit(
                         None,
                     ),
                     color,
-                    glyph: None,
                 });
                 offset += dash * 2.0;
             }
@@ -211,7 +198,6 @@ fn emit(
                     parts.push(FormulaPart {
                         path: path.with_offset((*x as f32, *y as f32)),
                         color,
-                        glyph: None,
                     });
                 }
             };

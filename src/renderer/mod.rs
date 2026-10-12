@@ -25,22 +25,30 @@ struct Export {
 }
 
 pub struct Renderer {
+    output_directory: std::path::PathBuf,
     export: Option<Export>,
     readback_buffers: Option<[glow::NativeBuffer; READBACK_BUFFER_COUNT]>,
     message: Option<String>,
     frame_size: usize,
     progress: f32,
+    succeeded: bool,
 }
 
 impl Renderer {
     pub fn new(resolution: (u32, u32)) -> Self {
         Self {
+            output_directory: "output".into(),
             export: None,
             readback_buffers: None,
             message: None,
             frame_size: frame_size(resolution).unwrap_or(0),
             progress: 0.0,
+            succeeded: false,
         }
+    }
+
+    pub(crate) fn set_project_root(&mut self, root: &std::path::Path) {
+        self.output_directory = root.join("output");
     }
 
     pub fn start(
@@ -56,6 +64,7 @@ impl Renderer {
                 self.export = Some(export);
                 self.message = None;
                 self.progress = 0.0;
+                self.succeeded = false;
                 true
             }
             Err(error) => {
@@ -81,7 +90,13 @@ impl Renderer {
         project_name: &str,
         resolution: (u32, u32),
     ) {
-        match save_screenshot(gl, framebuffer, project_name, resolution) {
+        match save_screenshot(
+            gl,
+            framebuffer,
+            project_name,
+            resolution,
+            &self.output_directory,
+        ) {
             Ok(path) => {
                 self.message = Some(format!("Screenshot saved: {}.", path.display()));
             }
@@ -146,6 +161,7 @@ impl Renderer {
         }
 
         self.message = Some(format!("Export completed: {}.", output_path.display()));
+        self.succeeded = true;
 
         Ok(FrameResult::Finished)
     }
@@ -153,6 +169,10 @@ impl Renderer {
     pub fn fail(&mut self, error: &RenderError) {
         let _ = self.discard_export();
         self.message = Some(error.to_string());
+    }
+
+    pub(crate) fn succeeded(&self) -> bool {
+        self.succeeded
     }
 
     pub fn progress(&self) -> f32 {
@@ -189,8 +209,8 @@ impl Renderer {
 
         let frame_size = frame_size(resolution)?;
 
-        std::fs::create_dir_all("output")?;
-        let output_path = available_output_path(project_name, "mp4");
+        std::fs::create_dir_all(&self.output_directory)?;
+        let output_path = available_path(&self.output_directory, project_name, "mp4");
 
         let encoder = Encoder::new(&output_path, resolution, fps, silent)?;
         let frame_count = frame_count(duration, fps);
@@ -326,10 +346,6 @@ fn validate_project(
     Ok(())
 }
 
-fn available_output_path(name: &str, extension: &str) -> std::path::PathBuf {
-    available_path(std::path::Path::new("output"), name, extension)
-}
-
 fn available_path(directory: &std::path::Path, name: &str, extension: &str) -> std::path::PathBuf {
     let initial = directory.join(format!("{name}.{extension}"));
     if !initial.exists() {
@@ -359,6 +375,7 @@ fn save_screenshot(
     framebuffer: glow::NativeFramebuffer,
     project_name: &str,
     resolution: (u32, u32),
+    output_directory: &std::path::Path,
 ) -> Result<std::path::PathBuf, RenderError> {
     validate_project(project_name, resolution, 1, 0.0)?;
     let size = frame_size(resolution)?;
@@ -402,8 +419,12 @@ fn save_screenshot(
         .encode(None, skia_safe::EncodedImageFormat::PNG, None)
         .ok_or_else(|| RenderError::Graphics("Screenshot PNG encoding failed.".to_owned()))?;
 
-    std::fs::create_dir_all("output")?;
-    let path = available_output_path(&format!("{project_name}-screenshot"), "png");
+    std::fs::create_dir_all(output_directory)?;
+    let path = available_path(
+        output_directory,
+        &format!("{project_name}-screenshot"),
+        "png",
+    );
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)

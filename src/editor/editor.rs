@@ -1,10 +1,6 @@
 use crate::{
     core::{
-        Project, ProjectSettings, Scene, TrackInfo, TrackValue,
-        objects::{
-            ObjectHandler,
-            appearance::{AppearanceEdit, refresh_appearance},
-        },
+        Project, ProjectSettings, Scene, TrackInfo, TrackValue, objects::ObjectHandler,
         types::Vector2,
     },
     editor::{
@@ -17,17 +13,52 @@ use crate::{
 
 #[derive(Default)]
 pub(crate) struct Performance {
+    pub prepare_ms: f64,
+    pub replay_ms: f64,
+    pub apply_ms: f64,
     pub update_ms: f32,
     pub render_ms: f32,
     pub avoided: u64,
-    pub particles: usize,
 }
 
 struct EditorScene {
-    scene: Scene,
+    scene: SceneInstance,
     start: f32,
     end: f32,
     inspector_edits: InspectorEdits,
+}
+
+enum SceneInstance {
+    Native(Scene),
+    Lua(crate::scripting::LuaScene),
+}
+impl std::ops::Deref for SceneInstance {
+    type Target = Scene;
+    fn deref(&self) -> &Scene {
+        match self {
+            Self::Native(scene) => scene,
+            Self::Lua(scene) => &scene.scene,
+        }
+    }
+}
+impl std::ops::DerefMut for SceneInstance {
+    fn deref_mut(&mut self) -> &mut Scene {
+        match self {
+            Self::Native(scene) => scene,
+            Self::Lua(scene) => &mut scene.scene,
+        }
+    }
+}
+impl SceneInstance {
+    fn evaluate(&self, time: f32) -> Result<(), String> {
+        match self {
+            Self::Native(scene) => {
+                scene.update(time);
+                Ok(())
+            }
+            Self::Lua(scene) => scene.update(time).map_err(|e| e.to_string()),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -154,18 +185,10 @@ impl InspectorEdits {
             return;
         }
         let world = scene.world();
-        let edits = saved
-            .iter()
-            .filter_map(|saved| match (&saved.key.target, saved.track) {
-                (InspectorTarget::Property { component, .. }, Some(track)) => {
+        for saved in saved {
+            match (&saved.key.target, saved.track) {
+                (InspectorTarget::Property { .. }, Some(track)) => {
                     (track.set)(&world, saved.key.entity, saved.original.clone());
-                    Some(AppearanceEdit {
-                        entity: saved.key.entity,
-                        component: *component,
-                        track,
-                        before: saved.current.clone(),
-                        value: saved.original.clone(),
-                    })
                 }
                 (InspectorTarget::Uniform(name), None) => {
                     crate::core::objects::set_shader_uniform(
@@ -175,12 +198,10 @@ impl InspectorEdits {
                         saved.original.clone(),
                     )
                     .unwrap_or_else(|error| panic!("{error}"));
-                    None
                 }
                 _ => unreachable!(),
-            })
-            .collect::<Vec<_>>();
-        refresh_appearance(&world, &edits);
+            }
+        }
         scene.invalidate();
     }
 }
@@ -234,8 +255,19 @@ impl Default for EditorView2D {
     }
 }
 
+struct PendingLua {
+    save_manifest: bool,
+    revision: u64,
+    seek: Option<(usize, f32)>,
+    candidates: Vec<(usize, crate::scripting::LuaScene)>,
+    manifest: Option<(crate::scripting::Manifest, Vec<usize>)>,
+}
+
 pub(crate) struct Editor {
     project: Project,
+    pub(crate) lua_project: Option<crate::scripting::LuaProject>,
+    pub(crate) documents: Option<crate::editor::documents::Documents>,
+    pending_lua: Option<PendingLua>,
     scenes: Vec<EditorScene>,
     active_scene: usize,
     focused_scene: Option<usize>,
@@ -280,12 +312,101 @@ impl Editor {
         project.validate();
 
         let scenes = create_scenes(
+            &project.context,
             &project.scenes,
             project.settings.resolution,
             project.settings.fps,
             project.settings.margin,
         );
-        let cache = EditorCache::load();
+        Self::with_scenes(
+            project,
+            scenes,
+            imgui_renderer,
+            skia_context,
+            gl,
+            three_context,
+        )
+    }
+
+    pub(crate) fn new_lua(
+        project: crate::scripting::LuaProject,
+        imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
+        skia_context: &mut skia_safe::gpu::DirectContext,
+        gl: &std::rc::Rc<glow::Context>,
+        three_context: three_d::Context,
+    ) -> Result<Self, String> {
+        let mut documents = crate::editor::documents::Documents::new(
+            project.context.clone(),
+            &project.definitions(),
+        )?;
+        for path in &project.manifest.scenes {
+            if let Err(error) = documents.open(path) {
+                documents.diagnostics.push(error);
+            }
+        }
+        let sources = documents.sources();
+        let scenes = project
+            .manifest
+            .scenes
+            .iter()
+            .map(|path| {
+                let scene = match crate::scripting::LuaScene::load_registered(
+                    project.context.clone(),
+                    path,
+                    sources.clone(),
+                    project.manifest.resolution,
+                    project.manifest.fps,
+                    project.manifest.margin,
+                    project.extensions.clone(),
+                ) {
+                    Ok(scene) => SceneInstance::Lua(scene),
+                    Err(error) => {
+                        documents.diagnostics.push(error.to_string());
+                        documents.status =
+                            "Scene failed. Correct the script to build its preview.".into();
+                        SceneInstance::Native(Scene::new_candidate(
+                            &path.display().to_string(),
+                            project.manifest.resolution,
+                        ))
+                    }
+                };
+                EditorScene {
+                    scene,
+                    start: 0.0,
+                    end: 0.0,
+                    inspector_edits: InspectorEdits::default(),
+                }
+            })
+            .collect::<Vec<_>>();
+        let native = Project {
+            name: project.manifest.name.clone(),
+            context: project.context.clone(),
+            settings: project.manifest.settings(),
+            scenes: Vec::new(),
+        };
+        let mut editor = Self::with_scenes(
+            native,
+            scenes,
+            imgui_renderer,
+            skia_context,
+            gl,
+            three_context,
+        );
+        editor.documents = Some(documents);
+        editor.lua_project = Some(project);
+        Ok(editor)
+    }
+
+    fn with_scenes(
+        project: Project,
+        mut scenes: Vec<EditorScene>,
+        imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
+        skia_context: &mut skia_safe::gpu::DirectContext,
+        gl: &std::rc::Rc<glow::Context>,
+        three_context: three_d::Context,
+    ) -> Self {
+        recalculate_scene_ranges(&mut scenes);
+        let cache = EditorCache::load(&project.context);
         let focused_scene = (scenes.len() > 1)
             .then(|| {
                 cache
@@ -321,10 +442,14 @@ impl Editor {
             skia_context,
             gl,
         );
-        let renderer = Renderer::new(project.settings.resolution);
+        let mut renderer = Renderer::new(project.settings.resolution);
+        renderer.set_project_root(project.context.root());
 
         let mut editor = Self {
             project,
+            lua_project: None,
+            documents: None,
+            pending_lua: None,
             scenes,
             active_scene: focused_scene.unwrap_or(0),
             focused_scene,
@@ -373,8 +498,123 @@ impl Editor {
         editor
     }
 
+    fn poll_scripts(&mut self) {
+        let Some(documents) = &mut self.documents else {
+            return;
+        };
+        if !documents.poll() {
+            return;
+        }
+        if self.is_exporting {
+            documents.status = "Edits pending until export completes.".into();
+            return;
+        }
+        let started = std::time::Instant::now();
+        self.performance.replay_ms = 0.0;
+        let result = (|| {
+            let sources = documents.sources();
+            let project = self.lua_project.as_ref().unwrap();
+            let manifest_changed = documents
+                .changed
+                .contains(std::path::Path::new("kinematic.ron"));
+            let manifest = if manifest_changed {
+                let text = sources
+                    .get(std::path::Path::new("kinematic.ron"))
+                    .cloned()
+                    .map(Ok)
+                    .unwrap_or_else(|| {
+                        std::fs::read_to_string(project.context.root().join("kinematic.ron"))
+                    })
+                    .map_err(|e| e.to_string())?;
+                let manifest: crate::scripting::Manifest =
+                    ron::from_str(&text).map_err(|e| e.to_string())?;
+                manifest.validate(&project.context)?;
+                manifest
+            } else {
+                project.manifest.clone()
+            };
+            let settings_changed = manifest.settings() != project.manifest.settings();
+            let mut candidates = Vec::new();
+            let mut order = Vec::new();
+            let mut next_index = self.scenes.len();
+            for path in &manifest.scenes {
+                let index = project
+                    .manifest
+                    .scenes
+                    .iter()
+                    .position(|old| old == path)
+                    .unwrap_or_else(|| {
+                        let index = next_index;
+                        next_index += 1;
+                        index
+                    });
+                order.push(index);
+                if let Some(EditorScene {
+                    scene: SceneInstance::Lua(scene),
+                    ..
+                }) = self.scenes.get(index)
+                {
+                    if settings_changed
+                        || documents
+                            .changed
+                            .iter()
+                            .any(|path| scene.dependencies().contains(path))
+                    {
+                        let candidate = scene
+                            .prepare_settings_pending(
+                                sources.clone(),
+                                manifest.resolution,
+                                manifest.fps,
+                                manifest.margin,
+                            )
+                            .map_err(|e| e.to_string())?;
+                        candidates.push((index, candidate));
+                    }
+                } else {
+                    let candidate = crate::scripting::LuaScene::load_registered(
+                        project.context.clone(),
+                        path,
+                        sources.clone(),
+                        manifest.resolution,
+                        manifest.fps,
+                        manifest.margin,
+                        project.extensions.clone(),
+                    )
+                    .map_err(|e| e.to_string())?;
+                    candidates.push((index, candidate));
+                }
+            }
+            Ok::<_, String>(PendingLua {
+                save_manifest: false,
+                revision: documents.revision,
+                seek: None,
+                candidates,
+                manifest: manifest_changed.then_some((manifest, order)),
+            })
+        })();
+        self.performance.prepare_ms = started.elapsed().as_secs_f64() * 1000.0;
+        documents.applied = documents.revision;
+        match result {
+            Ok(pending) => {
+                documents.replaying = true;
+                self.pending_lua = Some(pending);
+                documents.status = "Validating drawing and resources.".into();
+            }
+            Err(error) => {
+                documents.status = "Edits failed; showing the last valid revision.".into();
+                documents.diagnostics = vec![error];
+            }
+        }
+    }
+
     pub fn update(&mut self) {
+        self.poll_scripts();
         self.window_timer.tick();
+
+        if self.pending_lua.is_some() && !self.is_exporting {
+            self.accumulator = 0.0;
+            return;
+        }
 
         if self.pending_screenshot {
             self.canvas_timer.tick();
@@ -408,6 +648,230 @@ impl Editor {
         }
     }
 
+    fn restore_seek_time(&mut self, seek: Option<(usize, f32)>) {
+        if let Some((index, _)) = seek {
+            let scene = &self.scenes[index];
+            self.timeline.go_to(
+                scene.scene.time()
+                    + if self.focused_scene.is_some() {
+                        0.0
+                    } else {
+                        scene.start
+                    },
+            );
+            self.timeline.pause();
+        }
+    }
+
+    pub(crate) fn apply_pending_lua(
+        &mut self,
+        imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
+        skia: &mut skia_safe::gpu::DirectContext,
+        gl: &std::rc::Rc<glow::Context>,
+    ) {
+        if self.is_exporting {
+            return;
+        }
+        let Some(mut pending) = self.pending_lua.take() else {
+            return;
+        };
+        if self
+            .documents
+            .as_ref()
+            .is_none_or(|docs| docs.revision != pending.revision)
+        {
+            self.documents.as_mut().unwrap().replaying = false;
+            self.restore_seek_time(pending.seek);
+            return;
+        }
+        for (index, candidate) in &pending.candidates {
+            let time = pending
+                .seek
+                .filter(|(target, _)| target == index)
+                .map_or_else(
+                    || {
+                        self.scenes
+                            .get(*index)
+                            .map_or(0.0, |scene| scene.scene.time())
+                    },
+                    |(_, time)| time,
+                )
+                .min(candidate.duration());
+            let started = std::time::Instant::now();
+            let result = candidate.update_slice(time);
+            self.performance.replay_ms += started.elapsed().as_secs_f64() * 1000.0;
+            match result {
+                Ok(true) => {}
+                Ok(false) => {
+                    self.documents.as_mut().unwrap().status = format!(
+                        "Replaying simulations at {time:.2} s: {} steps. Editing or Cancel discards this candidate.",
+                        candidate.simulation_steps()
+                    );
+                    self.pending_lua = Some(pending);
+                    return;
+                }
+                Err(error) => {
+                    self.restore_seek_time(pending.seek);
+                    let docs = self.documents.as_mut().unwrap();
+                    docs.replaying = false;
+                    docs.status = "Replay failed. Showing the last valid revision.".into();
+                    docs.diagnostics.push(error.to_string());
+                    return;
+                }
+            }
+        }
+        let gpu_started = std::time::Instant::now();
+        let uploads = self.canvases.geometry_uploads;
+        let upload_ms = self.canvases.geometry_upload_ms;
+        let result = pending
+            .candidates
+            .iter()
+            .try_for_each(|(_, scene)| self.canvases.validate(scene.scene(), skia));
+        let validation_ms = gpu_started.elapsed().as_secs_f64() * 1000.0;
+        let applied_at = std::time::Instant::now();
+        if result.is_err() {
+            self.restore_seek_time(pending.seek);
+        }
+        let documents = self.documents.as_mut().unwrap();
+        if let Err(error) = result {
+            documents.replaying = false;
+            documents.status = "Drawing failed. Showing the last valid revision.".into();
+            documents.diagnostics.push(error);
+            return;
+        }
+        if pending.save_manifest {
+            let project = self.lua_project.as_mut().unwrap();
+            let previous = project.manifest.clone();
+            project.manifest = pending.manifest.as_ref().unwrap().0.clone();
+            if let Err(error) = project.save() {
+                project.manifest = previous;
+                documents.replaying = false;
+                documents.status =
+                    "Manifest save conflicted. Showing the last valid revision.".into();
+                documents.diagnostics.push(error);
+                return;
+            }
+        }
+        for (_, candidate) in &mut pending.candidates {
+            if let Err(error) = candidate.persist_prepared() {
+                documents.replaying = false;
+                documents.status = "Save conflicted. Showing the last valid revision.".into();
+                documents.diagnostics.push(error.to_string());
+                return;
+            }
+        }
+        documents.replaying = false;
+        if pending.seek.is_none() {
+            documents.diagnostics.clear();
+            documents.changed.clear();
+        }
+        for (index, candidate) in pending.candidates {
+            if index >= self.scenes.len() {
+                self.scenes.push(EditorScene {
+                    scene: SceneInstance::Lua(candidate),
+                    start: 0.0,
+                    end: 0.0,
+                    inspector_edits: InspectorEdits::default(),
+                });
+            } else if let SceneInstance::Lua(scene) = &mut self.scenes[index].scene {
+                scene.apply_reload(candidate);
+                documents.console.extend(scene.console());
+                documents.diagnostics.extend(scene.warnings());
+            } else {
+                self.scenes[index].scene = SceneInstance::Lua(candidate);
+            }
+        }
+        documents
+            .console
+            .drain(..documents.console.len().saturating_sub(500));
+        documents.status = if documents.changed.is_empty() {
+            "Preview is current."
+        } else {
+            "Showing the active revision; source edits remain pending."
+        }
+        .into();
+        let local_time = self.scenes[self.active_scene].scene.time();
+        let mut preserved_time = None;
+        if let Some((manifest, order)) = pending.manifest {
+            let local_time = self.scenes[self.active_scene].scene.time();
+            let next_active = order.iter().position(|index| *index == self.active_scene);
+            self.focused_scene = self
+                .focused_scene
+                .and_then(|focus| order.iter().position(|index| *index == focus));
+            if let Some((selected, entity)) = self.selection.get() {
+                self.selection.clear();
+                if let Some(index) = order.iter().position(|old| *old == selected) {
+                    self.selection.select(index, entity);
+                }
+            }
+            let mut previous = std::mem::take(&mut self.scenes)
+                .into_iter()
+                .map(Some)
+                .collect::<Vec<_>>();
+            self.scenes = order
+                .iter()
+                .map(|index| previous[*index].take().unwrap())
+                .collect();
+            self.project.name = manifest.name.clone();
+            let settings = manifest.settings();
+            if settings.resolution != self.project.settings.resolution {
+                self.resize_project_targets(&settings, imgui_renderer, skia, gl);
+            }
+            self.timeline.set_fps(settings.fps);
+            self.project.settings = settings;
+            self.lua_project.as_mut().unwrap().accept_manifest(manifest);
+            let duration = recalculate_scene_ranges(&mut self.scenes);
+            if let Some(active) = next_active {
+                self.active_scene = active;
+                preserved_time = Some(if self.focused_scene.is_some() {
+                    local_time
+                } else {
+                    self.scenes[active].start + local_time.min(self.scenes[active].scene.duration())
+                });
+            } else {
+                self.active_scene = 0;
+                preserved_time = Some(0.0_f32.min(duration));
+            }
+        }
+        let duration = recalculate_scene_ranges(&mut self.scenes);
+        let preserved_time = preserved_time.unwrap_or_else(|| {
+            if self.focused_scene.is_some() {
+                local_time
+            } else {
+                self.scenes[self.active_scene].start + local_time
+            }
+        });
+        self.timeline
+            .set_duration(self.focused_scene.map_or(duration, |index| {
+                self.scenes[index].end - self.scenes[index].start
+            }));
+        self.evaluated = None;
+        self.rendered = None;
+        self.editor_rendered = None;
+        self.editor_3d_rendered = None;
+        self.render_error = None;
+        if let Some((index, entity)) = self.selection.get() {
+            if !self.scenes[index].scene.world().contains(entity) {
+                self.selection.clear();
+            }
+        }
+        self.timeline.go_to(preserved_time);
+        self.update_active_scene(self.timeline.time());
+        self.performance.apply_ms = applied_at.elapsed().as_secs_f64() * 1000.0;
+        if pending.seek.is_none() {
+            let stats = &self.performance;
+            let documents = self.documents.as_mut().unwrap();
+            documents.console.push(format!(
+                "Reload: Lua {:.2} ms; replay {:.2} ms; apply {:.2} ms; GPU validation {:.2} ms; mesh uploads {} ({:.2} ms); previous frame render {:.2} ms.",
+                stats.prepare_ms, stats.replay_ms, stats.apply_ms, validation_ms,
+                self.canvases.geometry_uploads - uploads, self.canvases.geometry_upload_ms - upload_ms, stats.render_ms,
+            ));
+            documents
+                .console
+                .drain(..documents.console.len().saturating_sub(500));
+        }
+    }
+
     pub fn draw(
         &mut self,
         skia_context: &mut skia_safe::gpu::DirectContext,
@@ -415,6 +879,9 @@ impl Editor {
         window_size: (u32, u32),
         mode: EditorMode,
     ) {
+        if self.render_error.is_some() {
+            return;
+        }
         let scene = &self.scenes[self.active_scene].scene;
         let key = scene.render_key();
         if self.rendered == Some(key) {
@@ -424,7 +891,6 @@ impl Editor {
             }
         } else {
             let started = std::time::Instant::now();
-            crate::core::objects::particle::DRAW_COUNT.set(0);
             let result = self
                 .canvases
                 .render(scene, &mut self.preview.target, skia_context);
@@ -437,13 +903,10 @@ impl Editor {
                     self.is_exporting = false;
                     self.pending_export_time = None;
                 }
-                self.preview.draw(skia_context, gl, window_size, |canvas| {
-                    canvas.clear(skia_safe::colors::BLACK);
-                });
+                self.timeline.pause();
                 return;
             }
             self.render_error = None;
-            self.performance.particles = crate::core::objects::particle::DRAW_COUNT.get();
             self.rendered = Some(key);
             self.performance.render_ms = started.elapsed().as_secs_f32() * 1000.0;
             crate::renderer::target::reset_gl(gl, window_size);
@@ -458,7 +921,7 @@ impl Editor {
             self.renderer.screenshot(
                 gl,
                 self.preview.framebuffer(),
-                self.project.name,
+                &self.project.name,
                 self.project.settings.resolution,
             );
             self.pending_screenshot = false;
@@ -498,7 +961,7 @@ impl Editor {
 
     fn start_export(&mut self, silent: bool) {
         let started = self.renderer.start(
-            self.project.name,
+            &self.project.name,
             self.project.settings.resolution,
             self.project.settings.fps,
             self.timeline.duration(),
@@ -512,11 +975,21 @@ impl Editor {
         self.timeline.go_to_start();
         self.reset_animated_inspector_edits();
         self.evaluated = None;
+        self.is_exporting = true;
         self.update_active_scene(0.0);
+        if self.render_error.is_some() {
+            self.renderer.cancel();
+            self.is_exporting = false;
+            return;
+        }
         self.pending_export_time = None;
         self.pending_project_settings = None;
         self.is_exporting = true;
         self.accumulator = 0.0;
+    }
+
+    pub(crate) fn export_succeeded(&self) -> bool {
+        self.renderer.succeeded()
     }
 
     pub fn is_exporting(&self) -> bool {
@@ -568,7 +1041,7 @@ impl Editor {
                 .focused_scene
                 .map(|index| self.scenes[index].scene.name().to_owned()),
         }
-        .save();
+        .save(&self.project.context);
         self.renderer.shutdown(gl);
     }
 
@@ -584,15 +1057,22 @@ impl Editor {
         self.project.settings.margin
     }
 
-    pub(crate) fn project_info(&self) -> (&'static str, ProjectSettings) {
-        (self.project.name, self.project.settings)
+    pub(crate) fn context(&self) -> &crate::core::ProjectContext {
+        &self.project.context
+    }
+    pub(crate) fn cached_view(&self) -> (EditorMode, bool) {
+        let cache = EditorCache::load(&self.project.context);
+        (cache.mode, cache.fullscreen)
+    }
+
+    pub(crate) fn project_info(&self) -> (&str, ProjectSettings) {
+        (&self.project.name, self.project.settings)
     }
 
     pub(crate) fn request_project_settings(&mut self, settings: ProjectSettings) {
         if self.is_exporting {
             return;
         }
-        settings.save();
         self.pending_project_settings = Some(settings);
     }
 
@@ -611,29 +1091,77 @@ impl Editor {
             return;
         }
 
-        self.renderer.shutdown(gl);
-        let preview = Canvas::new(settings.resolution, imgui_renderer, skia_context, gl);
-        let editor_2d = Canvas::new(settings.resolution, imgui_renderer, skia_context, gl);
-        let editor_3d = Canvas::new_3d(settings.resolution, imgui_renderer, skia_context, gl);
-        imgui_renderer
-            .texture_map_mut()
-            .remove(self.preview.imgui_texture_id());
-        imgui_renderer
-            .texture_map_mut()
-            .remove(self.editor_2d.imgui_texture_id());
-        imgui_renderer
-            .texture_map_mut()
-            .remove(self.editor_3d.imgui_texture_id());
-        self.preview = preview;
-        self.editor_2d = editor_2d;
-        self.editor_view_2d = EditorView2D::default();
-        self.editor_rendered = None;
-        self.editor_3d = editor_3d;
-        self.editor_view_3d = EditorView3D::default();
-        self.editor_3d_rendered = None;
-        self.pending_editor_3d_size = None;
-        self.renderer = Renderer::new(settings.resolution);
+        if let Some(project) = &self.lua_project {
+            let documents = self.documents.as_mut().unwrap();
+            if self.pending_lua.is_some() || !documents.changed.is_empty() {
+                documents.status =
+                    "Apply or resolve source edits before changing project settings.".into();
+                return;
+            }
+            let started = std::time::Instant::now();
+            let prepared = (|| {
+                let mut manifest = project.manifest.clone();
+                manifest.resolution = settings.resolution;
+                manifest.fps = settings.fps;
+                manifest.margin = settings.margin;
+                manifest.validate(&project.context)?;
+                let sources = documents.sources();
+                let mut candidates = Vec::new();
+                for (index, entry) in self.scenes.iter().enumerate() {
+                    let scene = match &entry.scene {
+                        SceneInstance::Lua(scene) => scene.prepare_settings_pending(
+                            sources.clone(),
+                            settings.resolution,
+                            settings.fps,
+                            settings.margin,
+                        ),
+                        SceneInstance::Native(_) => crate::scripting::LuaScene::load_registered(
+                            project.context.clone(),
+                            &manifest.scenes[index],
+                            sources.clone(),
+                            settings.resolution,
+                            settings.fps,
+                            settings.margin,
+                            project.extensions.clone(),
+                        ),
+                    }
+                    .map_err(|error| error.to_string())?;
+                    candidates.push((index, scene));
+                }
+                Ok::<_, String>((manifest, candidates))
+            })();
+            self.performance.prepare_ms = started.elapsed().as_secs_f64() * 1000.0;
+            self.performance.replay_ms = 0.0;
+            match prepared {
+                Ok((manifest, candidates)) => {
+                    documents.revision += 1;
+                    documents.applied = documents.revision;
+                    documents.replaying = true;
+                    documents.status = "Preparing project settings before saving.".into();
+                    self.pending_lua = Some(PendingLua {
+                        save_manifest: true,
+                        revision: documents.revision,
+                        seek: None,
+                        candidates,
+                        manifest: Some((manifest, (0..self.scenes.len()).collect())),
+                    });
+                }
+                Err(error) => documents.diagnostics.push(error),
+            }
+            return;
+        }
+        if !ProjectSettings::is_valid(&settings) {
+            self.render_error = Some("Invalid project settings.".into());
+            return;
+        }
+        if let Err(error) = settings.save(&self.project.context) {
+            self.render_error = Some(error.to_string());
+            return;
+        }
+        let time = self.timeline.time();
+        self.resize_project_targets(&settings, imgui_renderer, skia_context, gl);
         self.scenes = create_scenes(
+            &self.project.context,
             &self.project.scenes,
             settings.resolution,
             settings.fps,
@@ -644,17 +1172,47 @@ impl Editor {
             |index| self.scenes[index].end - self.scenes[index].start,
         );
         let loop_enabled = self.timeline.loop_enabled();
+        let playing = self.timeline.is_playing();
         self.timeline = Timeline::new(duration, settings.fps);
         self.timeline.set_loop(loop_enabled);
         self.project.settings = settings;
         self.active_scene = self.focused_scene.unwrap_or(0);
-        self.selection.clear();
+        if self.lua_project.is_none() {
+            self.selection.clear();
+        }
+        if playing {
+            self.timeline.play();
+        }
         self.render_error = None;
         self.pending_export_time = None;
         self.pending_screenshot = false;
         self.is_exporting = false;
         self.accumulator = 0.0;
-        self.update_active_scene(0.0);
+        self.update_active_scene(time.min(duration));
+    }
+
+    fn resize_project_targets(
+        &mut self,
+        settings: &ProjectSettings,
+        imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
+        skia_context: &mut skia_safe::gpu::DirectContext,
+        gl: &std::rc::Rc<glow::Context>,
+    ) {
+        self.renderer.shutdown(gl);
+        let preview = Canvas::new(settings.resolution, imgui_renderer, skia_context, gl);
+        let editor_2d = Canvas::new(settings.resolution, imgui_renderer, skia_context, gl);
+        let editor_3d = Canvas::new_3d(settings.resolution, imgui_renderer, skia_context, gl);
+        self.preview.unregister(imgui_renderer);
+        self.editor_2d.unregister(imgui_renderer);
+        self.editor_3d.unregister(imgui_renderer);
+        self.preview = preview;
+        self.editor_2d = editor_2d;
+        self.editor_rendered = None;
+        self.editor_3d = editor_3d;
+        self.editor_3d_rendered = None;
+        self.pending_editor_3d_size = None;
+        self.renderer = Renderer::new(settings.resolution);
+        self.renderer.set_project_root(self.project.context.root());
     }
 
     pub fn scene_mut(&mut self) -> &mut Scene {
@@ -679,7 +1237,7 @@ impl Editor {
     ) -> impl Iterator<
         Item = (
             usize,
-            &'static str,
+            &str,
             [f32; 2],
             &[crate::core::scene_file::ScheduledEvent],
         ),
@@ -708,17 +1266,40 @@ impl Editor {
             return;
         }
 
+        if let SceneInstance::Lua(scene) = &self.scenes[scene_index].scene {
+            if self.pending_lua.is_some()
+                || self
+                    .documents
+                    .as_ref()
+                    .is_some_and(|docs| !docs.changed.is_empty())
+            {
+                self.documents.as_mut().unwrap().status =
+                    "Apply or resolve source edits before changing event durations.".into();
+                return;
+            }
+            match scene.prepare_event_duration(event_index, duration) {
+                Ok(candidate) => self.queue_lua_change(scene_index, candidate),
+                Err(error) => self
+                    .documents
+                    .as_mut()
+                    .unwrap()
+                    .diagnostics
+                    .push(error.to_string()),
+            }
+            return;
+        }
         self.scenes[scene_index]
             .scene
             .set_event_duration(event_index, duration);
 
         let factory = self.project.scenes[scene_index];
         let mut replacement = factory(
+            &self.project.context,
             self.project.settings.resolution,
             self.project.settings.margin,
         );
         replacement.set_fps(self.project.settings.fps);
-        self.scenes[scene_index].scene = replacement;
+        self.scenes[scene_index].scene = SceneInstance::Native(replacement);
 
         let duration = recalculate_scene_ranges(&mut self.scenes);
 
@@ -782,6 +1363,77 @@ impl Editor {
 
     pub(crate) fn selected_object(&self) -> Option<(usize, hecs::Entity)> {
         self.selection.get()
+    }
+
+    pub(crate) fn lua_inspector_values(
+        &self,
+        index: usize,
+        entity: hecs::Entity,
+    ) -> Option<(
+        bool,
+        Vec<(
+            crate::core::TrackTarget,
+            TrackValue,
+            Option<TrackValue>,
+            TrackValue,
+        )>,
+    )> {
+        match &self.scenes[index].scene {
+            SceneInstance::Lua(scene) => scene.inspector_values(entity),
+            _ => None,
+        }
+    }
+    pub(crate) fn set_lua_override(
+        &mut self,
+        index: usize,
+        entity: hecs::Entity,
+        target: &crate::core::TrackTarget,
+        value: Option<TrackValue>,
+    ) {
+        if self.is_exporting {
+            return;
+        }
+        if self.pending_lua.is_some()
+            || self
+                .documents
+                .as_ref()
+                .is_some_and(|docs| !docs.changed.is_empty())
+        {
+            self.documents.as_mut().unwrap().status =
+                "Apply or resolve source edits before changing base values.".into();
+            return;
+        }
+        if let SceneInstance::Lua(scene) = &self.scenes[index].scene {
+            match scene.prepare_override(entity, target, value) {
+                Ok(Some(candidate)) => self.queue_lua_change(index, candidate),
+                Ok(None) => {
+                    self.rendered = None;
+                    self.editor_rendered = None;
+                    self.editor_3d_rendered = None;
+                }
+                Err(error) => self
+                    .documents
+                    .as_mut()
+                    .unwrap()
+                    .diagnostics
+                    .push(error.to_string()),
+            }
+        }
+    }
+
+    fn queue_lua_change(&mut self, index: usize, candidate: crate::scripting::LuaScene) {
+        let documents = self.documents.as_mut().unwrap();
+        documents.revision += 1;
+        documents.applied = documents.revision;
+        documents.replaying = true;
+        documents.status = "Validating the edited base and drawing before saving.".into();
+        self.pending_lua = Some(PendingLua {
+            save_manifest: false,
+            revision: documents.revision,
+            seek: None,
+            candidates: vec![(index, candidate)],
+            manifest: None,
+        });
     }
 
     pub(crate) fn inspector_scene_mut(
@@ -1103,16 +1755,8 @@ impl Editor {
         &mut self.editor_2d
     }
 
-    pub(crate) fn editor_2d_texture_id(&self) -> dear_imgui_rs::TextureId {
-        self.editor_2d.imgui_texture_id()
-    }
-
     pub(crate) fn editor_3d_mut(&mut self) -> &mut Canvas {
         &mut self.editor_3d
-    }
-
-    pub(crate) fn editor_3d_texture_id(&self) -> dear_imgui_rs::TextureId {
-        self.editor_3d.imgui_texture_id()
     }
 
     pub(crate) fn request_editor_3d_size(&mut self, size: [f32; 2]) {
@@ -1157,9 +1801,7 @@ impl Editor {
             return;
         }
         let replacement = Canvas::new_3d(size, imgui_renderer, skia_context, gl);
-        imgui_renderer
-            .texture_map_mut()
-            .remove(self.editor_3d.imgui_texture_id());
+        self.editor_3d.unregister(imgui_renderer);
         self.editor_3d = replacement;
         self.editor_3d_rendered = None;
     }
@@ -1308,8 +1950,61 @@ impl Editor {
         .clamp(0.0, scene.end - scene.start);
         let identity = scene.scene.render_key().0;
         if self.evaluated != Some((identity, local_time)) {
+            if !self.is_exporting
+                && self.pending_lua.is_none()
+                && (scene.scene.time() - local_time).abs() > 4.0 / self.project.settings.fps as f32
+            {
+                if let SceneInstance::Lua(lua) = &scene.scene {
+                    if lua.has_simulations() {
+                        match lua.prepare_seek() {
+                            Ok(candidate) => {
+                                let documents = self.documents.as_mut().unwrap();
+                                documents.replaying = true;
+                                documents.status = "Replaying the active revision. Cancel keeps the previous preview.".into();
+                                self.pending_lua = Some(PendingLua {
+                                    save_manifest: false,
+                                    revision: documents.revision,
+                                    candidates: vec![(active_scene, candidate)],
+                                    manifest: None,
+                                    seek: Some((active_scene, local_time)),
+                                });
+                            }
+                            Err(error) => self
+                                .documents
+                                .as_mut()
+                                .unwrap()
+                                .diagnostics
+                                .push(error.to_string()),
+                        }
+                        return;
+                    }
+                }
+            }
             let started = std::time::Instant::now();
-            scene.scene.update(local_time);
+            if let Err(error) = scene.scene.evaluate(local_time) {
+                self.timeline.pause();
+                self.render_error = Some(error.clone());
+                if self.is_exporting {
+                    self.renderer.cancel();
+                    self.is_exporting = false;
+                    self.pending_export_time = None;
+                }
+                if let Some(documents) = &mut self.documents {
+                    if documents.diagnostics.last() != Some(&error) {
+                        documents.diagnostics.push(error);
+                    }
+                }
+                return;
+            }
+            if let SceneInstance::Lua(scene) = &scene.scene {
+                if let Some(documents) = &mut self.documents {
+                    documents.console.extend(scene.console());
+                    documents
+                        .console
+                        .drain(..documents.console.len().saturating_sub(500));
+                }
+            }
+            self.render_error = None;
             self.performance.update_ms = started.elapsed().as_secs_f32() * 1000.0;
             self.evaluated = Some((identity, local_time));
         }
@@ -1330,6 +2025,7 @@ fn active_scene_at(scenes: &[EditorScene], time: f32) -> usize {
 }
 
 fn create_scenes(
+    context: &crate::core::ProjectContext,
     factories: &[crate::core::SceneFactory],
     resolution: (u32, u32),
     fps: u32,
@@ -1340,11 +2036,11 @@ fn create_scenes(
     factories
         .iter()
         .map(|create_scene| {
-            let mut scene = create_scene(resolution, margin);
+            let mut scene = create_scene(context, resolution, margin);
             scene.set_fps(fps);
             let end = start + scene.duration();
             let editor_scene = EditorScene {
-                scene,
+                scene: SceneInstance::Native(scene),
                 start,
                 end,
                 inspector_edits: InspectorEdits::default(),
@@ -1388,7 +2084,13 @@ mod tests {
     #[test]
     fn scene_factories_create_ordered_project_ranges() {
         let factories: [crate::core::SceneFactory; 2] = [opening, ending];
-        let scenes = create_scenes(&factories, (1280, 720), 60, (64, 64));
+        let scenes = create_scenes(
+            &crate::core::ProjectContext::new(".").unwrap(),
+            &factories,
+            (1280, 720),
+            60,
+            (64, 64),
+        );
 
         assert_eq!(scenes[0].scene.name(), "opening");
         assert_eq!(
@@ -1413,13 +2115,13 @@ mod tests {
     fn scenes_advance_at_the_end_of_each_range() {
         let scenes = vec![
             EditorScene {
-                scene: Scene::new(),
+                scene: SceneInstance::Native(Scene::new()),
                 start: 0.0,
                 end: 2.0,
                 inspector_edits: InspectorEdits::default(),
             },
             EditorScene {
-                scene: Scene::new(),
+                scene: SceneInstance::Native(Scene::new()),
                 start: 2.0,
                 end: 5.0,
                 inspector_edits: InspectorEdits::default(),
@@ -1436,13 +2138,13 @@ mod tests {
     fn recalculating_ranges_uses_rebuilt_scene_durations() {
         let mut scenes = vec![
             EditorScene {
-                scene: Scene::new(),
+                scene: SceneInstance::Native(Scene::new()),
                 start: 10.0,
                 end: 12.0,
                 inspector_edits: InspectorEdits::default(),
             },
             EditorScene {
-                scene: Scene::new(),
+                scene: SceneInstance::Native(Scene::new()),
                 start: 12.0,
                 end: 15.0,
                 inspector_edits: InspectorEdits::default(),

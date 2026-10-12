@@ -1,6 +1,7 @@
 /target
 
-# Ignore examples output.
+# Ignore example exports.
 /output
 /imgui.ini
-/.kinematic
+**/.kinematic
+*.log

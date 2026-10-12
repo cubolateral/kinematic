@@ -181,6 +181,30 @@ impl ScheduledTween {
 impl Schedule {
     fn from_task(task: Task) -> Self {
         match task {
+            Task::RuntimeTween {
+                rotation,
+                entity,
+                target,
+                from,
+                to,
+                duration,
+                easing,
+                mask,
+                relative,
+                implicit,
+            } => Self::tween(ScheduledTween {
+                start: 0.0,
+                entity,
+                target,
+                from,
+                to,
+                duration,
+                easing,
+                mask,
+                relative,
+                implicit,
+                rotation,
+            }),
             Task::Tween {
                 entity,
                 type_id,

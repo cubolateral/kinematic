@@ -1,4 +1,3 @@
-use crate::core::components::{Inspection, Morph};
 use crate::core::objects::draw_canvas2d;
 use crate::prelude::*;
 use crate::renderer::plan::{active_subtree, canvas_order, order_dependencies, visible_subtree_3d};
@@ -229,7 +228,7 @@ fn camera_lens_rejects_invalid_ranges() {
 }
 
 #[test]
-fn spatial_tracks_snapshots_and_lifetime_are_seekable_without_morph() {
+fn spatial_tracks_snapshots_and_lifetime_are_seekable() {
     struct Setup(Option<PrismHandler>);
     impl SceneBuilder for Setup {
         fn build(&mut self, scene: &mut Scene) {
@@ -265,15 +264,6 @@ fn spatial_tracks_snapshots_and_lifetime_are_seekable_without_morph() {
     assert!(!active_subtree(&scene.world(), scene.root().entity()).contains(&cube.entity()));
     scene.update(0.0);
     assert!(active_subtree(&scene.world(), scene.root().entity()).contains(&cube.entity()));
-    let world = scene.world();
-    assert!(world.get::<&Morph>(cube.entity()).is_err());
-    assert!(!<Prism as Object>::SPATIAL_2D);
-    let inspection = world.get::<&Inspection>(cube.entity()).unwrap();
-    assert!(
-        (inspection.get)(&world, cube.entity())
-            .iter()
-            .all(|c| c.name != "Morph")
-    );
     assert_eq!(cube.name(), "Prism");
     assert!(scene.pick(Vector2::ZERO).is_none());
     let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
@@ -469,8 +459,9 @@ fn canvas3d_focus_camera_moves_and_looks_at_the_target() {
     let position = vec3(3.0, 2.0, 1.0);
     let target = vec3(-1.0, 4.0, -2.0);
 
-    let tween = canvas.focus_camera(position, target);
-    let camera = tween.endpoint(&Camera3D::default(), true);
+    canvas.focus_camera(position, target).play();
+    let world = scene.world();
+    let camera = world.get::<&Camera3D>(canvas.entity()).unwrap();
     assert_eq!(camera.camera_position, position);
     assert!(
         (camera.camera_rotation * Vector3::NEG_Z)

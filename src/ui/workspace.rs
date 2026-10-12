@@ -1,37 +1,38 @@
-use super::{inspector, preview, scene_tree, settings, timeline};
+use super::{code, inspector, preview, scene_tree, settings, timeline};
+use dear_imgui_rs::{DockLayout, DockLayoutApply, DockSplit};
 
-const TIMELINE_HEIGHT_RATIO: f32 = 0.35;
-const LEFT_PANEL_WIDTH_RATIO: f32 = 0.25;
-const PREVIEW_WIDTH_RATIO: f32 = 0.75;
-
-pub(super) fn apply_default_layout(ui: &dear_imgui_rs::Ui, dock: dear_imgui_rs::Id) {
-    dear_imgui_rs::DockBuilder::remove_node(ui, dock);
-    dear_imgui_rs::DockBuilder::add_node(ui, dock, dear_imgui_rs::DockNodeFlags::NONE);
-    dear_imgui_rs::DockBuilder::set_node_size(ui, dock, ui.main_viewport().work_size());
-
-    let (bottom_node, top_node) = dear_imgui_rs::DockBuilder::split_node(
-        ui,
-        dock,
-        dear_imgui_rs::SplitDirection::Down,
-        TIMELINE_HEIGHT_RATIO,
+pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
+    let layout = DockLayout::split(
+        DockSplit::Down,
+        0.35,
+        DockLayout::split(
+            DockSplit::Left,
+            0.25,
+            tabs([scene_tree::WINDOW_NAME, code::FILES_WINDOW, "Project"]),
+            tabs([
+                timeline::WINDOW_NAME,
+                code::DIAGNOSTICS_WINDOW,
+                code::CONSOLE_WINDOW,
+            ]),
+        ),
+        DockLayout::split(
+            DockSplit::Right,
+            0.75,
+            DockLayout::split(
+                DockSplit::Left,
+                0.5,
+                tabs([code::WINDOW_NAME]),
+                tabs([preview::WINDOW_NAME]),
+            ),
+            tabs([inspector::WINDOW_NAME, settings::WINDOW_NAME]),
+        ),
     );
-    let (left_node, timeline_node) = dear_imgui_rs::DockBuilder::split_node(
-        ui,
-        bottom_node,
-        dear_imgui_rs::SplitDirection::Left,
-        LEFT_PANEL_WIDTH_RATIO,
-    );
-    let (preview_node, details_node) = dear_imgui_rs::DockBuilder::split_node(
-        ui,
-        top_node,
-        dear_imgui_rs::SplitDirection::Right,
-        PREVIEW_WIDTH_RATIO,
-    );
+    ui.dockspace()
+        .layout(&layout, DockLayoutApply::IfMissing)
+        .build()
+        .expect("Workspace layout must be valid.");
+}
 
-    dear_imgui_rs::DockBuilder::dock_window(ui, scene_tree::WINDOW_NAME, left_node);
-    dear_imgui_rs::DockBuilder::dock_window(ui, preview::WINDOW_NAME, preview_node);
-    dear_imgui_rs::DockBuilder::dock_window(ui, inspector::WINDOW_NAME, details_node);
-    dear_imgui_rs::DockBuilder::dock_window(ui, settings::WINDOW_NAME, details_node);
-    dear_imgui_rs::DockBuilder::dock_window(ui, timeline::WINDOW_NAME, timeline_node);
-    dear_imgui_rs::DockBuilder::finish(ui, dock);
+fn tabs<const N: usize>(names: [&str; N]) -> DockLayout {
+    DockLayout::tabs(names.map(|name| dear_imgui_rs::WindowKey::new(name, name).unwrap()))
 }

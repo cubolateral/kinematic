@@ -80,14 +80,15 @@ pub fn scene(
 
     quote! {
         #(#attributes)*
-        #visibility fn #name(resolution: (u32, u32), margin: (u32, u32)) -> kinematic::core::Scene {
+        #visibility fn #name(context: &kinematic::core::ProjectContext, resolution: (u32, u32), margin: (u32, u32)) -> kinematic::core::Scene {
             struct #builder_name;
 
             impl kinematic::core::SceneBuilder for #builder_name {
                 fn build(&mut self, #inputs) #body
             }
 
-            let mut scene = kinematic::core::Scene::new_named(stringify!(#name), resolution);
+            let mut scene = kinematic::core::Scene::new_in_project(context, stringify!(#name), resolution)
+                .expect("Scene event file must be valid.");
             scene.set_margin(margin);
             scene.build(&mut #builder_name);
             scene

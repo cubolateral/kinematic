@@ -1,5 +1,4 @@
 pub mod components;
-pub mod effects;
 pub mod objects;
 pub mod types;
 
@@ -7,6 +6,8 @@ mod animator;
 mod easing;
 mod frame;
 mod project;
+mod project_context;
+mod properties;
 mod random;
 mod scene;
 pub(crate) mod scene_file;
@@ -19,6 +20,8 @@ pub use animator::*;
 pub use easing::*;
 pub(crate) use frame::*;
 pub use project::*;
+pub use project_context::*;
+pub use properties::*;
 pub use random::*;
 pub use scene::*;
 pub use signal::*;

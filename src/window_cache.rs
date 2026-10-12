@@ -23,8 +23,10 @@ impl Default for WindowCache {
 }
 
 impl WindowCache {
-    pub(crate) fn load() -> Self {
-        let path = Path::new(CACHE_PATH);
+    pub(crate) fn load_in(context: &crate::core::ProjectContext) -> Self {
+        let Ok(path) = context.resolve(CACHE_PATH) else {
+            return Self::default();
+        };
         match std::fs::read_to_string(path) {
             Ok(contents) => match ron::from_str(&contents) {
                 Ok(cache) if Self::is_valid(&cache) => cache,
@@ -59,9 +61,11 @@ impl WindowCache {
         self.maximized = false;
     }
 
-    pub(crate) fn save(&self) {
-        if let Err(error) = write(self, Path::new(CACHE_PATH)) {
-            eprintln!("Could not write {CACHE_PATH}: {error}.");
+    pub(crate) fn save_in(&self, context: &crate::core::ProjectContext) {
+        if let Ok(path) = context.resolve(CACHE_PATH) {
+            if let Err(error) = write(self, &path) {
+                eprintln!("Could not save window layout: {error}.");
+            }
         }
     }
 

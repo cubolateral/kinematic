@@ -10,6 +10,20 @@ use crate::core::{
 /// [`Self::Repeat`] loops a finite cycle without advancing the containing timeline.
 #[derive(Clone)]
 pub enum Task {
+    /// Interpolates a runtime property using the shared animation scheduler.
+    #[doc(hidden)]
+    RuntimeTween {
+        rotation: Option<(Vector3, f32)>,
+        entity: hecs::Entity,
+        target: crate::core::TrackTarget,
+        from: TrackValue,
+        to: TrackValue,
+        duration: f32,
+        easing: Easing,
+        mask: u8,
+        relative: u8,
+        implicit: bool,
+    },
     /// Interpolates one tracked component field over a duration.
     Tween {
         entity: hecs::Entity,

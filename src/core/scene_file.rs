@@ -16,12 +16,20 @@ pub(crate) struct ScheduledEvent {
     pub(crate) duration: f32,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub(crate) struct SceneFile {
     pub(crate) events: Vec<TimeEvent>,
 }
 
 impl SceneFile {
+    pub(crate) fn read(path: &Path) -> std::io::Result<Self> {
+        match std::fs::read_to_string(path) {
+            Ok(text) => ron::from_str(&text).map_err(std::io::Error::other),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(error) => Err(error),
+        }
+    }
+
     pub(crate) fn load(name: &str) -> Self {
         let path = scene_path(name);
         match std::fs::read_to_string(&path) {
@@ -30,7 +38,6 @@ impl SceneFile {
                 Err(error) => {
                     eprintln!("Could not parse {}: {error}.", path.display());
                     let file = Self::default();
-                    file.save_to(&path);
                     file
                 }
             },
@@ -50,7 +57,7 @@ impl SceneFile {
         self.save_to(&scene_path(name));
     }
 
-    fn save_to(&self, path: &Path) {
+    pub(crate) fn save_to(&self, path: &Path) {
         if let Err(error) = write(self, path) {
             eprintln!("Could not write {}: {error}.", path.display());
         }
@@ -73,7 +80,12 @@ fn write(file: &SceneFile, path: &Path) -> Result<(), Box<dyn std::error::Error>
         std::fs::create_dir_all(directory)?;
     }
     let contents = ron::ser::to_string_pretty(file, ron::ser::PrettyConfig::default())?;
-    std::fs::write(path, format!("{contents}\n"))?;
+    let expected = std::fs::read(path).ok();
+    crate::core::atomic_write(
+        path,
+        format!("{contents}\n").as_bytes(),
+        expected.as_deref(),
+    )?;
     Ok(())
 }
 

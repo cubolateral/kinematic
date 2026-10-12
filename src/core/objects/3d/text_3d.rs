@@ -12,12 +12,8 @@ use lyon_tessellation::{
 };
 
 use crate::core::{
-    Tween,
     components::{Draw3D, GeometryKey, Material, RenderContext3D, Transform3D},
-    objects::{
-        Font, ObjectHandler, TextShape, global_matrix3d,
-        string_morph::{ContentMorph, fade_string},
-    },
+    objects::{Font, TextShape, global_matrix3d},
     types::Vector3,
 };
 
@@ -77,7 +73,7 @@ impl Text3DShape {
     fn geometry_key(&self, text: &str) -> GeometryKey {
         let mut hash = DefaultHasher::new();
         text.hash(&mut hash);
-        self.font.path().hash(&mut hash);
+        self.font.resource_key().hash(&mut hash);
         self.size.to_bits().hash(&mut hash);
         self.align.to_bits().hash(&mut hash);
         self.thickness.to_bits().hash(&mut hash);
@@ -122,16 +118,6 @@ impl Text3DBuilder {
     }
 }
 
-impl Text3DHandler {
-    /// Cross-fades the current string into `text` on the same object.
-    pub fn fade(&self, text: impl Into<String>) -> Tween<Text3D> {
-        let from = self.get(Text3DShape::text_property());
-        let to = text.into();
-        let tween = self.text(to.clone());
-        fade_string(tween, self.entity(), from, to)
-    }
-}
-
 fn text_3d_box(world: &hecs::World, entity: hecs::Entity) -> Vector3 {
     let shape = world.get::<&Text3DShape>(entity).unwrap();
     (text_box(&shape.text_shape(&shape.text)) / TEXT_GEOMETRY_SCALE).extend(shape.depth.abs())
@@ -160,22 +146,7 @@ fn draw_text_object(
     validate_text_shape(&shape)?;
     let material = world.get::<&Material>(entity).unwrap();
     let transform = global_matrix3d(world, entity);
-    let progress = world
-        .get::<&ContentMorph>(entity)
-        .ok()
-        .filter(|morph| morph.active && morph.progress > 0.0)
-        .and_then(|morph| {
-            morph.transitions[morph.transition as usize].fade_layers(morph.progress.clamp(0.0, 1.0))
-        });
-
-    if let Some(layers) = progress {
-        let transform = text_transform(&shape, transform);
-        for (text, opacity) in layers {
-            draw_text_geometry(&shape, &text, opacity, &material, transform, context)?;
-        }
-    } else {
-        draw_text_3d(&shape, &material, transform, context)?;
-    }
+    draw_text_3d(&shape, &material, transform, context)?;
     Ok(())
 }
 
@@ -196,29 +167,11 @@ pub fn draw_text_3d(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     validate_text_shape(shape)?;
-    draw_text_geometry(
-        shape,
-        &shape.text,
-        1.0,
-        material,
-        text_transform(shape, transform),
-        context,
-    )
-}
-
-fn draw_text_geometry(
-    shape: &Text3DShape,
-    text: &str,
-    opacity: f32,
-    material: &Material,
-    transform: glam::Mat4,
-    context: &mut RenderContext3D<'_>,
-) -> Result<(), String> {
-    if opacity <= 0.0 || text.is_empty() {
+    let text = &shape.text;
+    let transform = text_transform(shape, transform);
+    if material.opacity <= 0.0 || text.is_empty() {
         return Ok(());
     }
-    let mut material = material.clone();
-    material.opacity *= opacity;
     context.render_material(
         shape.geometry_key(text),
         || {
@@ -229,7 +182,7 @@ fn draw_text_geometry(
             )
         },
         transform,
-        &material,
+        material,
     )
 }
 
@@ -448,24 +401,5 @@ mod tests {
             extruded_path_mesh(&path, (shape.size * TEXT_TESSELLATION_TOLERANCE).max(0.05));
 
         assert!(polygonal.vertex_count() < detailed.vertex_count());
-    }
-
-    #[test]
-    fn fade_keeps_the_same_text_object() {
-        let mut scene = Scene::new();
-        let text = text_3d().text("From").build(&mut scene);
-        let entity = text.entity();
-
-        text.fade("To").play();
-
-        assert_eq!(text.entity(), entity);
-        assert_eq!(scene.world().query::<&Text3DShape>().iter().count(), 1);
-        scene.update(1.0);
-        assert_eq!(text.text.get(), "To");
-    }
-
-    #[test]
-    fn text_3d_is_not_morphable() {
-        assert!(!<Text3D as crate::core::objects::Object>::SPATIAL_2D);
     }
 }

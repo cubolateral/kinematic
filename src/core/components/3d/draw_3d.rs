@@ -226,6 +226,8 @@ pub struct RenderContext3D<'a> {
     mesh_shader_used: bool,
     direct_geometry_access: bool,
     scene_time: f32,
+    pub(crate) geometry_uploads: u64,
+    pub(crate) geometry_upload_ms: f64,
 }
 
 impl<'a> RenderContext3D<'a> {
@@ -257,6 +259,8 @@ impl<'a> RenderContext3D<'a> {
             mesh_shader_used: false,
             direct_geometry_access: false,
             scene_time,
+            geometry_uploads: 0,
+            geometry_upload_ms: 0.0,
         }
     }
 
@@ -303,12 +307,16 @@ impl<'a> RenderContext3D<'a> {
             .geometries
             .entry(key)
             .or_insert_with(|| {
+                let started = std::time::Instant::now();
                 let cpu = create();
-                CachedGeometry {
+                let geometry = CachedGeometry {
                     mesh: three_d::Mesh::new(self.three_d, &cpu),
                     outline: None,
                     attributes: MeshAttributes::new(&cpu),
-                }
+                };
+                self.geometry_uploads += 1;
+                self.geometry_upload_ms += started.elapsed().as_secs_f64() * 1000.0;
+                geometry
             })
             .mesh
     }
@@ -520,6 +528,7 @@ impl<'a> RenderContext3D<'a> {
             return;
         }
 
+        let started = std::time::Instant::now();
         let cpu = create();
         if needs_mesh {
             self.geometries.insert(
@@ -534,6 +543,8 @@ impl<'a> RenderContext3D<'a> {
             self.geometries.get_mut(&key).unwrap().outline =
                 Some(MeshOutline::new(self.three_d, &cpu));
         }
+        self.geometry_uploads += 1;
+        self.geometry_upload_ms += started.elapsed().as_secs_f64() * 1000.0;
     }
 
     fn render_outline(&mut self, key: GeometryKey, transformation: glam::Mat4, data: &Material) {
@@ -788,6 +799,8 @@ pub struct Draw3D {
 
     /// Returns the object's local bounding-box size.
     pub box_size: fn(&hecs::World, hecs::Entity) -> glam::Vec3,
+    /// Overrides centered bounds for displaced local geometry.
+    pub logical_bounds: Option<fn(&hecs::World, hecs::Entity) -> (glam::Vec3, glam::Vec3)>,
 }
 
 impl Default for Draw3D {
@@ -796,6 +809,7 @@ impl Default for Draw3D {
             visibility: true,
             on_draw: |_, _, _| Ok(()),
             box_size: |_, _| glam::Vec3::ZERO,
+            logical_bounds: None,
         }
     }
 }

@@ -3,13 +3,8 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
-    Tween,
     components::{Draw3D, GeometryKey, Material, RenderContext3D, Transform3D},
-    objects::{
-        ObjectHandler, global_matrix3d,
-        latex_geometry::geometry,
-        string_morph::{ContentMorph, fade_string},
-    },
+    objects::{global_matrix3d, latex_geometry::geometry},
     types::Vector3,
 };
 
@@ -88,16 +83,6 @@ impl Default for Latex3D {
     }
 }
 
-impl Latex3DHandler {
-    /// Cross-fades the current formula source into `text` on the same object.
-    pub fn fade(&self, text: impl Into<String>) -> Tween<Latex3D> {
-        let from = self.get(Latex3DShape::text_property());
-        let to = text.into();
-        let tween = self.text(to.clone());
-        fade_string(tween, self.entity(), from, to)
-    }
-}
-
 fn latex_3d_box(world: &hecs::World, entity: hecs::Entity) -> Vector3 {
     let shape = world.get::<&Latex3DShape>(entity).unwrap();
     (geometry(&shape.text).size * shape.size.max(0.0) + glam::Vec2::splat(shape.thickness.max(0.0)))
@@ -126,22 +111,7 @@ fn draw_latex_object(
     validate_latex_shape(&shape)?;
     let material = world.get::<&Material>(entity).unwrap();
     let transform = global_matrix3d(world, entity);
-    let progress = world
-        .get::<&ContentMorph>(entity)
-        .ok()
-        .filter(|morph| morph.active && morph.progress > 0.0)
-        .and_then(|morph| {
-            morph.transitions[morph.transition as usize].fade_layers(morph.progress.clamp(0.0, 1.0))
-        });
-
-    if let Some(layers) = progress {
-        let transform = latex_transform(&shape, transform);
-        for (text, opacity) in layers {
-            draw_formula(&shape, &text, opacity, &material, transform, context)?;
-        }
-    } else {
-        draw_latex_3d(&shape, &material, transform, context)?;
-    }
+    draw_latex_3d(&shape, &material, transform, context)?;
     Ok(())
 }
 
@@ -157,31 +127,14 @@ pub fn draw_latex_3d(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     validate_latex_shape(shape)?;
-    draw_formula(
-        shape,
-        &shape.text,
-        1.0,
-        material,
-        latex_transform(shape, transform),
-        context,
-    )
-}
-
-fn draw_formula(
-    shape: &Latex3DShape,
-    text: &str,
-    opacity: f32,
-    material: &Material,
-    transform: glam::Mat4,
-    context: &mut RenderContext3D<'_>,
-) -> Result<(), String> {
-    if opacity <= 0.0 || text.is_empty() {
+    let text = &shape.text;
+    let transform = latex_transform(shape, transform);
+    if material.opacity <= 0.0 || text.is_empty() {
         return Ok(());
     }
     let formula = geometry(text);
     for (index, part) in formula.parts.iter().enumerate() {
         let mut material = material.clone();
-        material.opacity *= opacity;
         material.albedo = part.color.unwrap_or(material.albedo);
         context.render_material(
             shape.geometry_key(text, index),
@@ -223,23 +176,5 @@ mod tests {
         assert!(normals.iter().any(|normal| normal.z > 0.9));
         assert!(normals.iter().any(|normal| normal.z < -0.9));
         assert!(normals.iter().any(|normal| normal.z.abs() < 0.1));
-    }
-
-    #[test]
-    fn fade_keeps_the_same_formula_object() {
-        let mut scene = Scene::new();
-        let formula = latex_3d().text("x").build(&mut scene);
-        let entity = formula.entity();
-
-        formula.fade("y").play();
-
-        assert_eq!(formula.entity(), entity);
-        scene.update(1.0);
-        assert_eq!(formula.text.get(), "y");
-    }
-
-    #[test]
-    fn latex_3d_is_not_morphable() {
-        assert!(!<Latex3D as crate::core::objects::Object>::SPATIAL_2D);
     }
 }

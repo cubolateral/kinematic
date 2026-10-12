@@ -2,7 +2,6 @@ mod animation;
 mod inspection;
 mod name;
 mod node;
-mod particle;
 mod simulation;
 #[path = "3d/mod.rs"]
 mod three_d;
@@ -15,7 +14,6 @@ pub(crate) use animation::*;
 pub use inspection::*;
 pub use name::*;
 pub(crate) use node::*;
-pub use particle::*;
 pub use simulation::*;
 pub use three_d::*;
 pub use two_d::*;

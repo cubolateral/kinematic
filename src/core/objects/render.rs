@@ -2,7 +2,7 @@ use crate::core::{
     components::{Camera2D, Camera3D, Camera3DMode, Draw2D, Draw3D, Filter, Simulation, TreeNode},
     objects::{
         CanvasSettings, CanvasTexture, GlobalTransform, ProjectionSource, bounds3d,
-        draw_projection_2d, global_matrix3d, global_transform, local_transform,
+        draw_projection_2d, global_matrix3d, local_transform,
     },
     types::Vector2,
 };
@@ -11,18 +11,6 @@ use std::collections::HashMap;
 pub(crate) struct ImageShaderImage {
     pub(crate) image: skia_safe::Image,
     pub(crate) bounds: skia_safe::Rect,
-}
-
-#[derive(Clone, Copy)]
-enum AppearanceActivity {
-    Evaluated,
-    At { root: hecs::Entity, time: f32 },
-}
-
-#[derive(Clone, Copy)]
-struct AppearanceMode {
-    activity: AppearanceActivity,
-    root_opacity: f32,
 }
 
 pub(crate) fn draw_entity(
@@ -55,58 +43,20 @@ fn draw_entity_with_parent(
     camera_base: Option<&skia_safe::M44>,
     follows_camera: bool,
 ) {
-    draw_entity_with_mode(
-        world,
-        entity,
-        parent,
-        canvas,
-        images,
-        shader_images,
-        skip_shader,
-        None,
-        camera_base,
-        follows_camera,
-    );
-}
-
-fn draw_entity_with_mode(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    parent: GlobalTransform,
-    canvas: &skia_safe::Canvas,
-    images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
-    shader_images: Option<&HashMap<hecs::Entity, ImageShaderImage>>,
-    skip_shader: Option<hecs::Entity>,
-    appearance: Option<AppearanceMode>,
-    camera_base: Option<&skia_safe::M44>,
-    follows_camera: bool,
-) {
     if world.get::<&CanvasSettings>(entity).is_ok() {
         return;
     }
     let node = world
         .get::<&TreeNode>(entity)
         .expect("Drawn object must contain a Node component.");
-    let active = match appearance.map(|mode| mode.activity) {
-        Some(AppearanceActivity::At { root, .. }) if entity == root => true,
-        Some(AppearanceActivity::At { time, .. }) => {
-            node.lifetime[0] <= time && time < node.lifetime[1]
-        }
-        _ => node.is_activated,
-    };
-    if !active {
+    if !node.is_activated {
         return;
     }
 
     let Ok(draw) = world.get::<&Draw2D>(entity) else {
         return;
     };
-    let opacity = appearance
-        .filter(
-            |mode| matches!(mode.activity, AppearanceActivity::At { root, .. } if root == entity),
-        )
-        .map_or(draw.opacity, |mode| mode.root_opacity)
-        .clamp(0.0, 1.0);
+    let opacity = draw.opacity.clamp(0.0, 1.0);
     if !draw.visibility || opacity <= 0.0 {
         return;
     }
@@ -127,8 +77,7 @@ fn draw_entity_with_mode(
         apply_global_transform(parent, global, canvas);
     }
 
-    if appearance.is_none()
-        && skip_shader != Some(entity)
+    if skip_shader != Some(entity)
         && let Some(shader_image) = shader_images.and_then(|images| images.get(&entity))
     {
         canvas.draw_image_rect(
@@ -141,11 +90,6 @@ fn draw_entity_with_mode(
         return;
     }
 
-    if appearance.is_none() && draw_creation_appearance(world, entity, canvas, opacity) {
-        canvas.restore_to_count(save_count);
-        return;
-    }
-
     let mixes_camera_spaces = follows_camera
         && camera_base.is_some()
         && (opacity < 1.0 || filtered)
@@ -153,18 +97,16 @@ fn draw_entity_with_mode(
     let bounds = if mixes_camera_spaces {
         None
     } else if children.len() == 0 || opacity < 1.0 || filtered {
-        appearance
-            .and_then(|mode| appearance_bounds(world, entity, mode.activity))
-            .or_else(|| visual_bounds(world, entity, global, transform_matrix(global).invert()))
+        visual_bounds(world, entity, global, transform_matrix(global).invert())
     } else {
         None
     };
     let composites = children.len() != 0 || world.get::<&Simulation>(entity).is_ok();
     if !filtered && (!composites || opacity >= 1.0) {
-        draw_object_appearance(world, entity, canvas, opacity, images, appearance.is_none());
+        draw_object(world, entity, canvas, opacity, images);
 
         for child in children {
-            draw_entity_with_mode(
+            draw_entity_with_parent(
                 world,
                 child,
                 global,
@@ -172,7 +114,6 @@ fn draw_entity_with_mode(
                 images,
                 shader_images,
                 skip_shader,
-                appearance,
                 camera_base,
                 follows_camera,
             );
@@ -186,10 +127,10 @@ fn draw_entity_with_mode(
             layer = layer.bounds(bounds);
         }
         let layer_count = canvas.save_layer(&layer);
-        draw_object_appearance(world, entity, canvas, 1.0, images, appearance.is_none());
+        draw_object(world, entity, canvas, 1.0, images);
 
         for child in children {
-            draw_entity_with_mode(
+            draw_entity_with_parent(
                 world,
                 child,
                 global,
@@ -197,7 +138,6 @@ fn draw_entity_with_mode(
                 images,
                 shader_images,
                 skip_shader,
-                appearance,
                 camera_base,
                 follows_camera,
             );
@@ -218,59 +158,31 @@ fn subtree_ignores_camera(world: &hecs::World, entity: hecs::Entity) -> bool {
     })
 }
 
-fn draw_object_appearance(
+fn draw_object(
     world: &hecs::World,
     entity: hecs::Entity,
     canvas: &skia_safe::Canvas,
     opacity: f32,
     images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
-    present_effects: bool,
 ) {
-    if present_effects {
-        if world
-            .get::<&crate::core::objects::TextShape>(entity)
-            .is_ok()
-            && crate::core::objects::text_2d::draw_text_effect(world, entity, canvas, opacity)
-        {
-            return;
-        }
-        if world
-            .get::<&crate::core::objects::Latex2DShape>(entity)
-            .is_ok()
-            && crate::core::objects::draw_latex_effect(world, entity, canvas, opacity)
-        {
-            return;
-        }
-    }
     let draw = world.get::<&Draw2D>(entity).unwrap();
     (draw.on_draw)(world, entity, canvas, opacity);
     draw_projection_2d_entity(world, entity, canvas, opacity, images);
 }
 
-fn appearance_bounds(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    activity: AppearanceActivity,
-) -> Option<skia_safe::Rect> {
+fn subtree_visual_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::Rect> {
     let draw = world.get::<&Draw2D>(entity).ok()?;
-    let explicit_root = matches!(activity, AppearanceActivity::At { root, .. } if root == entity);
-    if !draw.visibility || (!explicit_root && draw.opacity <= 0.0) {
+    if !draw.visibility || draw.opacity <= 0.0 {
         return None;
     }
     let own = (draw.visual_bounds)(world, entity);
     let mut bounds = (!own.is_empty()).then_some(own);
     for child in children_by_z_index(world, entity) {
         let node = world.get::<&TreeNode>(child).unwrap();
-        let active = match activity {
-            AppearanceActivity::Evaluated => node.is_activated,
-            AppearanceActivity::At { time, .. } => {
-                node.lifetime[0] <= time && time < node.lifetime[1]
-            }
-        };
-        if !active {
+        if !node.is_activated {
             continue;
         }
-        let Some(child_bounds) = appearance_bounds(world, child, activity) else {
+        let Some(child_bounds) = subtree_visual_bounds(world, child) else {
             continue;
         };
         let transformed = transform_matrix(local_transform(world, child))
@@ -312,166 +224,13 @@ fn image_filter(filter: &Filter) -> Option<skia_safe::ImageFilter> {
     image_filter
 }
 
-fn draw_creation_appearance(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    canvas: &skia_safe::Canvas,
-    opacity: f32,
-) -> bool {
-    use crate::core::{components::Morph, objects::CreationDraw, types::Color};
-    use std::hash::{Hash, Hasher};
-
-    let morph = world.get::<&Morph>(entity).unwrap();
-    if !morph.particles_enabled || morph.progress >= 1.0 {
-        return false;
-    }
-    let Some(bounds) = appearance_bounds(world, entity, AppearanceActivity::Evaluated) else {
-        return false;
-    };
-    let mut recorder = skia_safe::PictureRecorder::new();
-    let target = recorder.begin_recording(bounds, false);
-    if let Some(inverse) = transform_matrix(local_transform(world, entity)).invert() {
-        target.concat(&inverse);
-    }
-    draw_entity_with_mode(
-        world,
-        entity,
-        GlobalTransform::default(),
-        target,
-        None,
-        None,
-        None,
-        Some(AppearanceMode {
-            activity: AppearanceActivity::Evaluated,
-            root_opacity: 1.0,
-        }),
-        None,
-        false,
-    );
-    let Some(picture) = recorder.finish_recording_as_picture(None) else {
-        return false;
-    };
-    let density = (2048.0 / bounds.width().max(bounds.height()).max(1.0)).min(2.0);
-    let dimensions = (
-        (bounds.width() * density).ceil().max(1.0) as i32,
-        (bounds.height() * density).ceil().max(1.0) as i32,
-    );
-    let Some(mut surface) = skia_safe::surfaces::raster_n32_premul(dimensions) else {
-        return false;
-    };
-    surface.canvas().clear(skia_safe::colors::TRANSPARENT);
-    surface.canvas().scale((density, density));
-    surface.canvas().translate((-bounds.left, -bounds.top));
-    surface.canvas().draw_picture(&picture, None, None);
-    let pixels = surface.peek_pixels().unwrap();
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    pixels.bytes().unwrap().hash(&mut hasher);
-    let visual_key = hasher.finish();
-    let pixel_color = |point: Vector2| {
-        let x = ((point.x - bounds.left) * density) as i32;
-        let y = ((point.y - bounds.top) * density) as i32;
-        if x < 0 || y < 0 || x >= dimensions.0 || y >= dimensions.1 {
-            return Color::TRANSPARENT;
-        }
-        let color = pixels.get_color((x, y));
-        Color::new(
-            color.r() as f32 / 255.0,
-            color.g() as f32 / 255.0,
-            color.b() as f32 / 255.0,
-            color.a() as f32 / 255.0,
-        )
-    };
-    let style = world
-        .get::<&crate::core::components::Style>(entity)
-        .map_or_else(
-            |_| crate::core::components::Style::default(),
-            |style| (*style).clone(),
-        );
-    CreationDraw {
-        entity,
-        cache_slot: 0,
-        bounds,
-        visual_key,
-        style: &style,
-        pixel_color: Some(&pixel_color),
-        morph: &morph,
-        opacity,
-        canvas,
-    }
-    .render(|target, target_opacity| {
-        let layer = target.save_layer_alpha_f(bounds, target_opacity);
-        target.draw_picture(&picture, None, None);
-        target.restore_to_count(layer);
-    })
-}
-
-pub(crate) fn capture_appearance(
-    world: &hecs::World,
-    entity: hecs::Entity,
-    parent: hecs::Entity,
-    time: f32,
-    opacity: f32,
-) -> crate::core::objects::particle::Silhouette {
-    assert!(
-        !subtree_has_image_shader(world, entity),
-        "Image-shader objects cannot be captured for morphs without a renderer."
-    );
-    let activity = AppearanceActivity::At { root: entity, time };
-    let local_bounds = appearance_bounds(world, entity, activity)
-        .unwrap_or_else(|| skia_safe::Rect::from_xywh(0.0, 0.0, 1.0, 1.0));
-    let mut bounds = transform_matrix(local_transform(world, entity))
-        .map_rect(local_bounds)
-        .0;
-    bounds.outset((2.0, 2.0));
-    let mut recorder = skia_safe::PictureRecorder::new();
-    let canvas = recorder.begin_recording(bounds, false);
-    draw_entity_with_mode(
-        world,
-        entity,
-        global_transform(world, parent),
-        canvas,
-        None,
-        None,
-        None,
-        Some(AppearanceMode {
-            activity,
-            root_opacity: opacity,
-        }),
-        None,
-        false,
-    );
-    let picture = recorder.finish_recording_as_picture(None).unwrap();
-    crate::core::objects::particle::Silhouette::capture(bounds, |canvas| {
-        canvas.draw_picture(&picture, None, None);
-    })
-}
-
-fn subtree_has_image_shader(world: &hecs::World, entity: hecs::Entity) -> bool {
-    world
-        .get::<&crate::core::objects::ImageShaderData>(entity)
-        .is_ok()
-        || crate::core::objects::child_iter(world, entity)
-            .any(|child| subtree_has_image_shader(world, child))
-}
-
 fn visual_bounds(
     world: &hecs::World,
     entity: hecs::Entity,
     global: GlobalTransform,
     inverse: Option<skia_safe::Matrix>,
 ) -> Option<skia_safe::Rect> {
-    use crate::core::components::Morph;
-    use crate::core::objects::{Latex2DShape, TextShape, particle::ParticleTransform};
     let inverse = inverse?;
-    if world
-        .get::<&Morph>(entity)
-        .is_ok_and(|m| m.particles_enabled)
-        || world.get::<&ParticleTransform>(entity).is_ok()
-        || world.get::<&TextShape>(entity).is_ok()
-        || world.get::<&Latex2DShape>(entity).is_ok()
-    {
-        return None;
-    }
     let draw = world.get::<&Draw2D>(entity).ok()?;
     let local = (draw.visual_bounds)(world, entity);
     let mut bounds = if !local.is_empty() {
@@ -722,8 +481,11 @@ fn logical_bounds_inner(
     }
     let draw = world.get::<&Draw2D>(entity).ok()?;
     let size = (draw.box_size)(world, entity);
-    let own = (size.x > 0.0 && size.y > 0.0)
-        .then(|| skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y));
+    let bounds = draw.logical_bounds.map_or_else(
+        || skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y),
+        |bounds| bounds(world, entity),
+    );
+    let own = (!bounds.is_empty()).then_some(bounds);
     let children = crate::core::objects::child_iter(world, entity)
         .filter(|child| {
             world.get::<&TreeNode>(*child).is_ok_and(|node| {
@@ -960,7 +722,7 @@ pub(crate) fn image_shader_bounds(
     entity: hecs::Entity,
     padding: f32,
 ) -> Option<skia_safe::Rect> {
-    let mut bounds = appearance_bounds(world, entity, AppearanceActivity::Evaluated)?;
+    let mut bounds = subtree_visual_bounds(world, entity)?;
     bounds.outset((padding, padding));
     Some(bounds)
 }
@@ -975,7 +737,7 @@ pub(crate) fn draw_image_shader_source(
     let saved = canvas.save();
     if let Some(inverse) = transform_matrix(local_transform(world, entity)).invert() {
         canvas.concat(&inverse);
-        draw_entity_with_mode(
+        draw_entity_with_parent(
             world,
             entity,
             GlobalTransform::default(),
@@ -983,7 +745,6 @@ pub(crate) fn draw_image_shader_source(
             Some(images),
             Some(shader_images),
             Some(entity),
-            None,
             None,
             false,
         );
@@ -1393,19 +1154,5 @@ mod shader_capture_tests {
             })
             .is_some()
         );
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "Image-shader objects cannot be captured for morphs without a renderer."
-    )]
-    fn cpu_morph_capture_rejects_image_shaders() {
-        let shader = ImageShader::new("#version 330 core\nvoid main() {}");
-        let mut scene = Scene::new_with_resolution((64, 64));
-        let object = rect().shader(&shader).build(&mut scene);
-        let canvas = scene.world_2d();
-        canvas.add(&object);
-        scene.update(0.0);
-        capture_appearance(&scene.world(), object.entity(), canvas.entity(), 0.0, 1.0);
     }
 }

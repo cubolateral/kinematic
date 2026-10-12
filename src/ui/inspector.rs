@@ -3,10 +3,7 @@ use crate::{
         TrackChoices, TrackInfo, TrackLimits, TrackValue,
         components::{Animation, Inspection, Name, TreeNode},
         normalized_quaternion,
-        objects::{
-            CanvasSettings, ProjectionSource, SphereShape,
-            appearance::{AppearanceEdit, refresh_appearance},
-        },
+        objects::{CanvasSettings, ProjectionSource, SphereShape},
     },
     editor::{Editor, InspectorTrack},
 };
@@ -67,6 +64,53 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         };
 
         let _object_id = ui.push_id(&format!("{scene_index}:{}", entity.to_bits()));
+        if let Some((persistent, fields)) = editor.lua_inspector_values(scene_index, entity) {
+            ui.text_disabled(if persistent {
+                "Base values apply before animation."
+            } else {
+                "Temporary edits. Add an explicit ID to persist."
+            });
+            let _disabled = ui.begin_disabled_with_cond(is_exporting);
+            for (target, script, override_value, evaluated) in fields {
+                let _id = ui.push_id(target.name());
+                let mut value = override_value.clone().unwrap_or_else(|| script.clone());
+                let track = match &target {
+                    crate::core::TrackTarget::Property { info, .. } => Some(*info),
+                    _ => None,
+                };
+                let edit = edit_value(
+                    ui,
+                    state,
+                    target.name(),
+                    &mut value,
+                    track,
+                    override_value.is_some(),
+                );
+                if edit.changed {
+                    value = target.clamp(value);
+                    let valid = match &target {
+                        crate::core::TrackTarget::Dynamic(schema) => {
+                            schema.validate(&value).is_ok()
+                        }
+                        _ => value.validate().is_ok(),
+                    };
+                    if valid {
+                        editor.set_lua_override(scene_index, entity, &target, Some(value));
+                    }
+                }
+                if edit.reset {
+                    editor.set_lua_override(scene_index, entity, &target, None);
+                }
+                if override_value.is_some() {
+                    ui.text_disabled(format!("Script: {script}. Override saved."));
+                }
+                if evaluated != override_value.unwrap_or(script) {
+                    ui.text_disabled(format!("Evaluated: {evaluated}."));
+                }
+            }
+            return;
+        }
+
         let (scene, inspector_edits) = editor.inspector_scene_mut(scene_index);
         let world = scene.world();
         let Ok(inspection) = world.get::<&Inspection>(entity) else {
@@ -129,7 +173,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             }
         }
 
-        let mut edits = Vec::new();
+        let mut changed = false;
         for trackable in inspection.trackables(&world, entity) {
             ui.separator_with_text(trackable.name);
 
@@ -160,13 +204,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                         value.clone(),
                         animated,
                     );
-                    edits.push(AppearanceEdit {
-                        entity,
-                        component,
-                        track,
-                        before,
-                        value,
-                    });
+                    changed = true;
                 }
                 if edit.reset {
                     inspector_edits.reset(scene, key.clone());
@@ -219,8 +257,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 });
             }
         }
-        refresh_appearance(&world, &edits);
-        if !edits.is_empty() || uniform_changed {
+        if changed || uniform_changed {
             scene.invalidate();
         }
     });
@@ -263,17 +300,11 @@ fn edit_value(
         ) else {
             return ValueEdit::default();
         };
-        ui.table_setup_column_stretch_weight(
-            "Name",
-            dear_imgui_rs::TableColumnFlags::empty(),
-            0.4,
-            None,
-        );
+        ui.table_setup_column_stretch_weight("Name", dear_imgui_rs::TableColumnFlags::empty(), 0.4);
         ui.table_setup_column_stretch_weight(
             "Value",
             dear_imgui_rs::TableColumnFlags::empty(),
             0.6,
-            None,
         );
         ui.table_next_column();
         let position = ui.cursor_screen_pos();
@@ -637,7 +668,11 @@ mod tests {
     fn compound_fields_fit_a_narrow_inspector_and_keep_rotation_on_mode_change() {
         let mut context = dear_imgui_rs::Context::create();
         context.set_ini_filename(None::<&str>).unwrap();
-        context.font_atlas_mut().build();
+        context
+            .font_atlas()
+            .try_claim_legacy_renderer()
+            .unwrap()
+            .build();
         context.io_mut().set_display_size([320.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
         let mut state = State::default();
@@ -686,7 +721,7 @@ mod tests {
                         assert!(ui.item_rect_size()[1] >= ui.frame_height() * 5.0);
                     }
                 });
-            context.render();
+            context.end_frame();
             for rotation in state.rotations.values_mut() {
                 rotation.mode = 1;
             }

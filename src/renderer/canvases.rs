@@ -25,6 +25,8 @@ use std::{
 };
 
 pub(crate) struct Canvases {
+    pub(crate) geometry_uploads: u64,
+    pub(crate) geometry_upload_ms: f64,
     targets: HashMap<CanvasTexture, Target>,
     geometries: HashMap<GeometryKey, CachedGeometry>,
     mesh_programs: MeshProgramCache,
@@ -51,6 +53,8 @@ pub(crate) struct Canvases {
 impl Canvases {
     pub fn new(context: three_d::Context, gl: &Rc<glow::Context>) -> Self {
         Self {
+            geometry_uploads: 0,
+            geometry_upload_ms: 0.0,
             targets: HashMap::new(),
             geometries: HashMap::new(),
             mesh_programs: HashMap::new(),
@@ -80,6 +84,17 @@ impl Canvases {
         }
     }
 
+    pub(crate) fn validate(
+        &mut self,
+        scene: &Scene,
+        skia: &mut skia_safe::gpu::DirectContext,
+    ) -> Result<(), String> {
+        self.frame += 1;
+        let plan = canvas_plan_for(scene, scene.view_texture().entity)?;
+        self.render_targets(scene, &plan.order, &plan.sources, skia)?;
+        scene.check_runtime()
+    }
+
     pub fn render(
         &mut self,
         scene: &Scene,
@@ -93,6 +108,7 @@ impl Canvases {
         };
         self.render_targets(scene, &order, &sources, skia)?;
 
+        scene.check_runtime()?;
         self.images.clear();
         for key in &self.used_geometries {
             self.geometry_usage.insert(*key, self.frame);
@@ -266,6 +282,8 @@ impl Canvases {
                             .map_err(std::io::Error::other)?;
                     }
                 }
+                self.geometry_uploads += render.geometry_uploads;
+                self.geometry_upload_ms += render.geometry_upload_ms;
                 Ok::<_, std::io::Error>(())
             })
             .map_err(|error| error.to_string())?;
@@ -407,6 +425,8 @@ impl Canvases {
                                         .map_err(std::io::Error::other)?;
                                 }
                             }
+                            self.geometry_uploads += render.geometry_uploads;
+                            self.geometry_upload_ms += render.geometry_upload_ms;
                             Ok::<_, std::io::Error>(())
                         })
                         .map_err(|error| error.to_string())?;

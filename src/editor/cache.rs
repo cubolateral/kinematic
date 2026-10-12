@@ -42,18 +42,12 @@ pub(crate) enum EditorMode {
     Three,
 }
 
-pub(crate) fn load_editor_mode() -> EditorMode {
-    EditorCache::load().mode
-}
-
-pub(crate) fn load_editor_fullscreen() -> bool {
-    EditorCache::load().fullscreen
-}
-
 impl EditorCache {
-    pub(super) fn load() -> Self {
-        let path = Path::new(CACHE_PATH);
-        match std::fs::read_to_string(path) {
+    pub(super) fn load(context: &crate::core::ProjectContext) -> Self {
+        let Ok(path) = context.resolve(CACHE_PATH) else {
+            return Self::default();
+        };
+        match std::fs::read_to_string(&path) {
             Ok(contents) => match ron::from_str(&contents) {
                 Ok(cache) if Self::is_valid(&cache) => cache,
                 Ok(_) => {
@@ -73,8 +67,19 @@ impl EditorCache {
         }
     }
 
-    pub(super) fn save(&self) {
-        if let Err(error) = write(self, Path::new(CACHE_PATH)) {
+    pub(super) fn save(&self, context: &crate::core::ProjectContext) {
+        let Ok(path) = context.resolve(CACHE_PATH) else {
+            return;
+        };
+        if path.exists()
+            && std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|text| ron::from_str::<Self>(&text).ok())
+                .is_none()
+        {
+            return;
+        }
+        if let Err(error) = write(self, &path) {
             eprintln!("Could not write {CACHE_PATH}: {error}.");
         }
     }

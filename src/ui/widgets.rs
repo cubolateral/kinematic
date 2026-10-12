@@ -22,14 +22,14 @@ pub(super) fn draw_panel_rect(
 }
 
 pub(super) fn text_size(ui: &dear_imgui_rs::Ui, text: &str) -> [f32; 2] {
-    ui.current_font()
-        .calc_text_size(ui.current_font_size(), f32::MAX, f32::MAX, text)
+    ui.calc_text_size(text)
 }
 
 pub(super) fn hide_single_window_tab(ui: &dear_imgui_rs::Ui) {
     ui.set_next_window_class(
-        &dear_imgui_rs::WindowClass::default()
-            .dock_node_flags_override_set(dear_imgui_rs::DockFlags::AUTO_HIDE_TAB_BAR),
+        &dear_imgui_rs::WindowClass::default().dock_node_flags_override_set(
+            dear_imgui_rs::WindowClassDockNodeFlags::AUTO_HIDE_TAB_BAR,
+        ),
     );
 }
 

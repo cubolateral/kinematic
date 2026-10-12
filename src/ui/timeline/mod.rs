@@ -18,7 +18,12 @@ pub(super) use state::State;
 
 pub(super) const WINDOW_NAME: &str = "Timeline";
 
-pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) -> bool {
+pub(super) fn draw(
+    editor: &mut Editor,
+    ui: &dear_imgui_rs::Ui,
+    state: &mut State,
+    keyboard: bool,
+) -> bool {
     let is_exporting = editor.is_exporting();
     let mut toggle_fullscreen = false;
 
@@ -26,7 +31,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         state.cancel_interactions();
     }
 
-    shortcuts(editor.timeline_mut(), ui, !is_exporting);
+    shortcuts(editor.timeline_mut(), ui, !is_exporting && keyboard);
     hide_single_window_tab(ui);
 
     ui.window(WINDOW_NAME).build(|| {

@@ -1,6 +1,8 @@
 //! Dear ImGui editor shell and panel composition.
 
+mod code;
 mod controls;
+pub(crate) use code::ProjectAction;
 mod export;
 mod icons;
 mod inspector;
@@ -18,6 +20,7 @@ pub(super) const CORNER_RADIUS: f32 = 4.0;
 
 pub(crate) struct Ui {
     needs_initial_layout: bool,
+    code: code::State,
     font: dear_imgui_rs::FontId,
     appearance: theme::Appearance,
     is_fullscreen: bool,
@@ -59,10 +62,11 @@ impl Ui {
 
         Self {
             needs_initial_layout: true,
+            code: code::State::default(),
             font: theme::initialize(context),
-            appearance: settings::load(),
-            is_fullscreen: crate::editor::load_editor_fullscreen(),
-            preview: preview::State::new(crate::editor::load_editor_mode()),
+            appearance: theme::Appearance::default(),
+            is_fullscreen: false,
+            preview: preview::State::new(crate::editor::EditorMode::default()),
             inspector: inspector::State::default(),
             settings: settings::State::default(),
             timeline: timeline::State::default(),
@@ -79,7 +83,8 @@ impl Ui {
         let _theme = self.appearance.push(ui);
         let _font = ui.push_font(self.font);
         let io = ui.io();
-        let plain_keyboard_input = !io.want_text_input()
+        let plain_keyboard_input = !self.code.focused
+            && !io.want_text_input()
             && !ui.is_any_item_active()
             && !io.key_ctrl()
             && !io.key_shift()
@@ -109,14 +114,16 @@ impl Ui {
         if export_started {
             self.preview.show_preview();
         }
-        let dock = ui.dockspace_over_main_viewport();
+        workspace::draw(ui);
 
         let initial_layout = self.needs_initial_layout;
         if initial_layout {
-            workspace::apply_default_layout(ui, dock);
             self.needs_initial_layout = false;
         }
 
+        if let Some(documents) = &mut editor.documents {
+            self.code.draw(documents, ui);
+        }
         let is_exporting = editor.is_exporting();
         let fullscreen_button = {
             let _disabled = ui.begin_disabled_with_cond(is_exporting);
@@ -124,11 +131,11 @@ impl Ui {
                 self.preview.edit_canvas(editor.selected_canvas());
             }
             if settings::draw(&mut self.appearance, &mut self.settings, editor, ui) {
-                settings::save(&self.appearance);
+                settings::save(&self.appearance, editor.context());
             }
             preview::draw(editor, ui, &mut self.preview);
             inspector::draw(editor, ui, &mut self.inspector);
-            timeline::draw(editor, ui, &mut self.timeline)
+            timeline::draw(editor, ui, &mut self.timeline, !self.code.focused)
         };
 
         if initial_layout {
@@ -140,6 +147,38 @@ impl Ui {
         }
 
         reload_shortcut || reload_button
+    }
+
+    pub(crate) fn prepare_documents(
+        &mut self,
+        context: &dear_imgui_rs::Context,
+        editor: Option<&Editor>,
+    ) {
+        self.code
+            .prepare(context, editor.and_then(|e| e.documents.as_ref()));
+    }
+    pub(crate) fn draw_projects(&mut self, editor: Option<&mut Editor>, ui: &dear_imgui_rs::Ui) {
+        self.code.projects(editor, ui);
+    }
+    pub(crate) fn request_exit(&mut self) {
+        self.code.request_exit();
+    }
+    pub(crate) fn take_project_action(&mut self) -> Option<ProjectAction> {
+        self.code.take_action()
+    }
+    pub(crate) fn project_error(&mut self, error: String) {
+        self.code.error = Some(error);
+    }
+    pub(crate) fn restore_project_view(&mut self, editor: &Editor) {
+        let (mode, fullscreen) = editor.cached_view();
+        self.appearance = settings::load(editor.context());
+        self.settings = settings::State::default();
+        self.preview = preview::State::new(mode);
+        self.is_fullscreen = fullscreen;
+    }
+
+    pub(crate) fn reset_project(&mut self) {
+        self.code.reset();
     }
 
     pub fn apply_scale(&self, context: &mut dear_imgui_rs::Context) {

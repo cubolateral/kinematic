@@ -57,6 +57,10 @@ impl Timeline {
         self.loop_enabled
     }
 
+    pub(crate) fn set_fps(&mut self, fps: u32) {
+        self.frame_duration = 1.0 / fps.max(1) as f32;
+    }
+
     pub fn set_loop(&mut self, enabled: bool) {
         self.loop_enabled = enabled;
     }

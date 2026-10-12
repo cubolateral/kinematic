@@ -2,6 +2,7 @@ pub mod core;
 pub(crate) mod editor;
 pub mod prelude;
 pub(crate) mod renderer;
+pub mod scripting;
 pub(crate) mod ui;
 pub mod utilities;
 

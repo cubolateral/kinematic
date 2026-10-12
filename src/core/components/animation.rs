@@ -38,7 +38,15 @@ impl Animation {
         time: f32,
         base: TrackValue,
     ) -> Option<TrackValue> {
-        let target = TrackTarget::property(type_id, track_info);
+        self.sample_target(&TrackTarget::property(type_id, track_info), time, base)
+    }
+
+    pub(crate) fn sample_target(
+        &self,
+        target: &TrackTarget,
+        time: f32,
+        base: TrackValue,
+    ) -> Option<TrackValue> {
         let mut result = None;
         let mut value = base;
         for track in &self.tracks {
@@ -53,37 +61,6 @@ impl Animation {
             }
         }
         result
-    }
-
-    pub(crate) fn replace_values(
-        &mut self,
-        type_id: std::any::TypeId,
-        track_info: &'static TrackInfo,
-        before: &TrackValue,
-        value: &TrackValue,
-    ) {
-        for track in &mut self.tracks {
-            if track
-                .track
-                .target
-                .same_field(&TrackTarget::property(type_id, track_info))
-            {
-                let channel = track.track.target.channel();
-                for keyframe in &mut track.track.keyframes {
-                    let replace = |current: &mut TrackValue| match channel {
-                        Some(channel) if current.channel(channel) == before.channel(channel) => {
-                            *current = current.with_channel(value, channel);
-                        }
-                        None if *current == *before => *current = value.clone(),
-                        _ => {}
-                    };
-                    replace(&mut keyframe.value);
-                    if let Some((_, original)) = &mut keyframe.original_end {
-                        replace(original);
-                    }
-                }
-            }
-        }
     }
 
     pub(crate) fn target_mut(&mut self, target: TrackTarget) -> &mut Track {

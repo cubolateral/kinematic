@@ -24,7 +24,8 @@ struct ScheduledSignal {
     callback: SignalCallback,
 }
 
-struct SignalOverride {
+#[derive(Clone)]
+pub(crate) struct SignalOverride {
     entity: hecs::Entity,
     target: TrackTarget,
     value: TrackValue,
@@ -39,6 +40,14 @@ pub(crate) struct SignalContext {
 }
 
 impl SignalContext {
+    pub(crate) fn checkpoint(&self) -> Vec<SignalOverride> {
+        self.overrides.borrow().clone()
+    }
+
+    pub(crate) fn restore_checkpoint(&self, checkpoint: Vec<SignalOverride>) {
+        *self.overrides.borrow_mut() = checkpoint;
+    }
+
     pub(crate) fn add(
         self: &std::rc::Rc<Self>,
         target: hecs::Entity,
@@ -95,7 +104,12 @@ impl SignalContext {
         self.record_target_override(entity, TrackTarget::uniform(name), value);
     }
 
-    fn record_target_override(&self, entity: hecs::Entity, target: TrackTarget, value: TrackValue) {
+    pub(crate) fn record_target_override(
+        &self,
+        entity: hecs::Entity,
+        target: TrackTarget,
+        value: TrackValue,
+    ) {
         if !self.evaluating.get() {
             return;
         }

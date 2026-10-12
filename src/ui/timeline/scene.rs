@@ -39,7 +39,7 @@ pub(super) fn draw(
         .map(|(index, name, range, events)| {
             (
                 index,
-                name,
+                name.to_owned(),
                 range,
                 events
                     .iter()

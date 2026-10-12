@@ -31,6 +31,9 @@ pub struct Draw2D {
     /// Returns the object's logical local bounding-box size.
     pub box_size: fn(&hecs::World, hecs::Entity) -> Vector2,
 
+    /// Overrides centered logical bounds for displaced custom geometry.
+    pub logical_bounds: Option<fn(&hecs::World, hecs::Entity) -> skia_safe::Rect>,
+
     /// Returns the object's local visual bounds, including displaced ink and outlines.
     pub visual_bounds: fn(&hecs::World, hecs::Entity) -> skia_safe::Rect,
 }
@@ -45,6 +48,7 @@ impl Default for Draw2D {
             on_draw: |_, _, _, _| {},
             box_size: |_, _| Vector2::ZERO,
             visual_bounds: centered_box_bounds,
+            logical_bounds: None,
         }
     }
 }

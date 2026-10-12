@@ -113,6 +113,27 @@ impl Image3DHandler {
     }
 }
 
+pub(crate) fn reuse_image_texture(
+    previous: &hecs::World,
+    next: &mut hecs::World,
+    entity: hecs::Entity,
+) {
+    let texture = previous.get::<&Image3DTexture>(entity).ok();
+    let source = previous.get::<&ImageSource>(entity).ok();
+    let replacement = next.get::<&ImageSource>(entity).ok();
+    let same = source
+        .as_ref()
+        .and_then(|s| s.image())
+        .zip(replacement.as_ref().and_then(|s| s.image()))
+        .is_some_and(|(a, b)| a.unique_id() == b.unique_id());
+    drop(replacement);
+    if same {
+        if let Some(texture) = texture {
+            next.insert_one(entity, (*texture).clone()).unwrap();
+        }
+    }
+}
+
 fn draw_image_object(
     world: &hecs::World,
     entity: hecs::Entity,

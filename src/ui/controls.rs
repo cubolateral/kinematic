@@ -13,9 +13,7 @@ pub(super) fn text_button_colored(ui: &Ui, label: &str, size: [f32; 2], color: S
 
     let clicked = ui.invisible_button(label, size);
     let (min, max) = ui.item_rect();
-    let text_size =
-        ui.current_font()
-            .calc_text_size(ui.current_font_size(), f32::MAX, f32::MAX, label);
+    let text_size = ui.calc_text_size(label);
     let text_position = [
         min[0] + (max[0] - min[0] - text_size[0]) * 0.5,
         min[1] + (max[1] - min[1] - text_size[1]) * 0.5,

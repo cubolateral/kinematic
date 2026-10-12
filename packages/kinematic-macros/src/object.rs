@@ -349,7 +349,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 mut f: impl FnMut(
                     kinematic::hecs::TypeInfo,
                 ) -> Option<std::ptr::NonNull<u8>>,
-            ) -> Result<Self, kinematic::hecs::MissingComponent> {
+            ) -> std::result::Result<Self, kinematic::hecs::MissingComponent> {
                 #(
                     let #bundle_pointer_idents = f(
                         kinematic::hecs::TypeInfo::of::<#field_types>(),
@@ -519,6 +519,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         impl #object_trait for #object_name {
             type Handler = #handler_name;
             const SPATIAL_2D: bool = #morphable;
+            const BUILDER_NAME: &'static str = #alias;
 
             fn handler(world: #scene_world_type, entity: hecs::Entity, animator: #animator_handle_type) -> Self::Handler {
                 #object_name::handler(world, entity, animator)

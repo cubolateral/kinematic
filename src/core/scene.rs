@@ -2,7 +2,6 @@ use crate::core::scene_file::{SceneFile, ScheduledEvent, TimeEvent};
 use crate::core::{
     Animator, Scheduling, Task, TrackHandle, TrackValueType, TrackableInfo, Tween,
     components::{Animation, Draw2D, Inspection, Name, Simulation, TreeNode, View},
-    frame_index,
     objects::{
         Canvas2D, Canvas2DBuilder, Canvas2DHandler, Canvas3D, Canvas3DBuilder, Canvas3DHandler,
         Object, ObjectHandler, RootHandler, camera_matrix2d, canvas_2d, canvas_3d,
@@ -35,8 +34,13 @@ fn root_trackables(_: &hecs::World, _: hecs::Entity) -> &'static [TrackableInfo]
     &TRACKABLES
 }
 
+pub(crate) trait SceneRuntime {
+    fn check(&self) -> Result<(), String>;
+}
+
 pub struct Scene {
-    name: &'static str,
+    name: String,
+    runtime_owner: Option<std::rc::Rc<dyn SceneRuntime>>,
     world: SceneWorld,
     root: hecs::Entity,
     world_2d: hecs::Entity,
@@ -47,6 +51,7 @@ pub struct Scene {
     scene_file: SceneFile,
     scheduled_events: Vec<ScheduledEvent>,
     persist_events: bool,
+    event_path: Option<std::path::PathBuf>,
     revision: std::cell::Cell<u64>,
     plan_revision: std::cell::Cell<u64>,
     runtime: std::cell::RefCell<Option<Runtime>>,
@@ -81,14 +86,14 @@ impl Scene {
     }
 
     #[doc(hidden)]
-    pub fn new_named(name: &'static str, resolution: (u32, u32)) -> Self {
+    pub fn new_named(name: &str, resolution: (u32, u32)) -> Self {
         Self::new_inner(name, resolution, true, None)
     }
 
     /// Creates a named scene using fully configured built-in canvas builders.
     #[doc(hidden)]
     pub fn new_named_with_canvases(
-        name: &'static str,
+        name: &str,
         world_2d: Canvas2DBuilder,
         world_3d: Canvas3DBuilder,
     ) -> Self {
@@ -96,7 +101,7 @@ impl Scene {
     }
 
     fn new_inner(
-        name: &'static str,
+        name: &str,
         resolution: (u32, u32),
         persist_events: bool,
         canvases: Option<(Canvas2DBuilder, Canvas3DBuilder)>,
@@ -129,7 +134,8 @@ impl Scene {
         }
 
         let mut scene = Self {
-            name,
+            name: name.to_owned(),
+            runtime_owner: None,
             world,
             root,
             world_2d: root,
@@ -144,6 +150,7 @@ impl Scene {
             },
             scheduled_events: Vec::new(),
             persist_events,
+            event_path: None,
             revision: std::cell::Cell::new(0),
             plan_revision: std::cell::Cell::new(0),
             runtime: std::cell::RefCell::new(None),
@@ -166,6 +173,147 @@ impl Scene {
         scene
     }
 
+    /// Creates a named scene whose event data belongs to an explicit project root.
+    pub fn new_in_project(
+        context: &crate::core::ProjectContext,
+        name: &str,
+        resolution: (u32, u32),
+    ) -> std::io::Result<Self> {
+        let path = context.resolve(format!(".kinematic/scenes/{name}.ron"))?;
+        let mut scene = Self::new_inner(name, resolution, false, None);
+        scene.scene_file = SceneFile::read(&path)?;
+        scene.event_path = Some(path);
+        scene.persist_events = true;
+        Ok(scene)
+    }
+
+    pub(crate) fn new_candidate(name: &str, resolution: (u32, u32)) -> Self {
+        Self::new_inner(name, resolution, false, None)
+    }
+
+    pub(crate) fn finish_build(&mut self) -> f32 {
+        self.animator.take_schedule().compile(self)
+    }
+
+    pub(crate) fn animator_handle(&self) -> crate::core::AnimatorHandle {
+        self.animator.handle().active()
+    }
+
+    pub(crate) fn world_handle(&self) -> SceneWorld {
+        std::rc::Rc::clone(&self.world)
+    }
+
+    pub(crate) fn keep_runtime(&mut self, owner: std::rc::Rc<dyn SceneRuntime>) {
+        self.runtime_owner = Some(owner);
+    }
+
+    pub(crate) fn check_runtime(&self) -> Result<(), String> {
+        self.runtime_owner
+            .as_ref()
+            .map_or(Ok(()), |runtime| runtime.check())
+    }
+    pub(crate) fn revision_after(&self, previous: &Scene) {
+        self.revision.set(previous.render_key().1.wrapping_add(1));
+        self.plan_revision
+            .set(previous.plan_revision().wrapping_add(1));
+    }
+
+    pub(crate) fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    pub(crate) fn set_identity(&mut self, identity: u64) {
+        self.world
+            .borrow()
+            .get::<&mut SceneIdentity>(self.root)
+            .unwrap()
+            .0 = identity;
+    }
+
+    pub(crate) fn reconcile(
+        &mut self,
+        candidate: &mut Scene,
+        changed: &std::collections::BTreeSet<hecs::Entity>,
+        removed: &[hecs::Entity],
+    ) {
+        self.animator
+            .handle()
+            .signals()
+            .restore_overrides(&self.world.borrow());
+        {
+            let mut active = self.world.borrow_mut();
+            let mut next = candidate.world.borrow_mut();
+            for entity in removed {
+                let _ = active.despawn(*entity);
+            }
+            let identity = active
+                .remove_one::<SceneIdentity>(self.root)
+                .expect("Active scene must have an identity.");
+            for entity in changed.iter().copied().chain([
+                candidate.root,
+                candidate.world_2d,
+                candidate.world_3d,
+            ]) {
+                if !next.contains(entity) {
+                    continue;
+                }
+                let bundle = next
+                    .take(entity)
+                    .expect("Validated candidate entity must exist.");
+                active.spawn_at(entity, bundle);
+            }
+            active.insert_one(self.root, identity).unwrap();
+            invalidate_lifetimes(&active);
+        }
+        std::mem::swap(&mut self.animator, &mut candidate.animator);
+        std::mem::swap(&mut self.animator_time, &mut candidate.animator_time);
+        std::mem::swap(&mut self.scheduled_events, &mut candidate.scheduled_events);
+        std::mem::swap(&mut self.scene_file, &mut candidate.scene_file);
+        self.name = candidate.name.clone();
+        self.fps = candidate.fps;
+        self.margin = candidate.margin;
+        self.runtime_owner = candidate.runtime_owner.take();
+        self.time.set(candidate.time.get());
+        self.revision.set(candidate.revision.get());
+        self.plan_revision.set(candidate.plan_revision.get());
+        *self.runtime.borrow_mut() = None;
+        self.invalidate();
+    }
+
+    pub(crate) fn begin_schedule(
+        &mut self,
+        simultaneous: bool,
+        repeating: bool,
+    ) -> (Animator, crate::core::AnimatorHandle) {
+        let group = self.animator.group(
+            if simultaneous {
+                Scheduling::Parallel
+            } else {
+                Scheduling::Sequential
+            },
+            repeating,
+        );
+        let previous = group.handle().activate();
+        (std::mem::replace(&mut self.animator, group), previous)
+    }
+
+    pub(crate) fn end_schedule(
+        &mut self,
+        scope: (Animator, crate::core::AnimatorHandle),
+        repeating: bool,
+        parallel: bool,
+    ) {
+        let group = std::mem::replace(&mut self.animator, scope.0);
+        group.handle().restore(scope.1);
+        let mut schedule = group.take_schedule();
+        schedule.parallel = parallel;
+        self.animator.handle().schedule(if repeating {
+            schedule.repeated()
+        } else {
+            schedule
+        });
+    }
+
     pub(crate) fn view_texture(&self) -> crate::core::objects::CanvasTexture {
         if self.root().is_view_2d() {
             self.world_2d().texture()
@@ -178,6 +326,20 @@ impl Scene {
     ///
     /// This updates scene state only; rendering remains in [`Self::draw`].
     pub fn update(&self, time: f32) {
+        self.try_update(time)
+            .unwrap_or_else(|error| panic!("{error}"));
+    }
+
+    /// Evaluates a scene while propagating fallible extension callbacks.
+    pub fn try_update(&self, time: f32) -> Result<(), String> {
+        self.update_slice(time, None).map(|_| ())
+    }
+
+    pub(crate) fn update_slice(
+        &self,
+        time: f32,
+        deadline: Option<std::time::Instant>,
+    ) -> Result<bool, String> {
         self.time.set(time);
         let generation = self.structure_revision();
         if self
@@ -236,38 +398,9 @@ impl Scene {
                 if !node.is_activated {
                     continue;
                 }
-                let start_time = node.lifetime[0];
                 drop(node);
-
-                let local_time = (time - start_time).max(0.0);
-                let target_frame = frame_index(local_time, self.fps);
-                let animation = world.get::<&Animation>(*entity).ok();
-                let fallback = world
-                    .get::<&Simulation>(*entity)
-                    .map_or(true, |simulation| simulation.auto_update);
-                let track_info = <Simulation as crate::core::Trackable>::track(0);
-                if let Ok(mut simulation) = world.get::<&mut Simulation>(*entity) {
-                    simulation.seek(
-                        &world,
-                        *entity,
-                        target_frame,
-                        self.fps,
-                        start_time,
-                        |sample_time| {
-                            animation
-                                .as_ref()
-                                .and_then(|animation| {
-                                    animation.sample(
-                                        std::any::TypeId::of::<Simulation>(),
-                                        track_info,
-                                        sample_time,
-                                        crate::core::TrackValue::Bool(fallback),
-                                    )
-                                })
-                                .and_then(bool::from_track_value)
-                                .unwrap_or(fallback)
-                        },
-                    );
+                if !Simulation::seek_entity(&world, *entity, time, self.fps, deadline)? {
+                    return Ok(false);
                 }
             }
         }
@@ -276,6 +409,22 @@ impl Scene {
 
         signals.evaluate(&self.world, time, self.fps);
         self.revision.set(self.revision.get().wrapping_add(1));
+        Ok(true)
+    }
+
+    pub(crate) fn event_definitions(&self) -> SceneFile {
+        self.scene_file.clone()
+    }
+    pub(crate) fn set_event_definitions(&mut self, file: SceneFile) {
+        self.scene_file = file;
+    }
+
+    pub(crate) fn restore_time(&self, time: f32) {
+        self.time.set(time);
+        for node in self.world.borrow().query::<&mut TreeNode>().iter() {
+            node.update(time);
+        }
+        *self.runtime.borrow_mut() = None;
     }
 
     pub(crate) fn invalidate(&self) {
@@ -530,8 +679,8 @@ impl Scene {
         self.time.get()
     }
 
-    pub(crate) fn name(&self) -> &'static str {
-        self.name
+    pub(crate) fn name(&self) -> &str {
+        &self.name
     }
 
     /// Adds a task to the current scene timeline.
@@ -798,20 +947,18 @@ impl Scene {
 
     fn save_events(&self) {
         if self.persist_events {
-            self.scene_file.save(self.name);
+            if let Some(path) = &self.event_path {
+                self.scene_file.save_to(path);
+            } else {
+                self.scene_file.save(&self.name);
+            }
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::core::{
-        Easing,
-        components::*,
-        effects::{Effect, creation, uncreation},
-        objects::*,
-        types::*,
-    };
+    use crate::core::{Easing, components::*, objects::*, types::*};
 
     use super::*;
 
@@ -1004,7 +1151,7 @@ mod tests {
         assert_eq!(animated.get_position().x, 2.5);
     }
 
-    fn scene_with_event(name: &'static str, event_name: &str, duration: f32) -> Scene {
+    fn scene_with_event(name: &str, event_name: &str, duration: f32) -> Scene {
         let mut scene = Scene::new_named(name, (1920, 1080));
         scene.event(event_name);
         let index = scene
@@ -2403,167 +2550,6 @@ mod tests {
     }
 
     #[test]
-    fn creation_effects_toggle_particles_at_their_boundaries() {
-        struct CreationScene;
-
-        impl SceneBuilder for CreationScene {
-            fn build(&mut self, scene: &mut Scene) {
-                let circle = circle().build(scene);
-                scene.world_2d().add(&circle);
-
-                creation().duration(2.0).play(&circle);
-                uncreation().duration(2.0).play(&circle);
-            }
-        }
-
-        let mut scene = Scene::new();
-        assert_eq!(scene.build(&mut CreationScene), 4.0);
-
-        scene.update(0.0);
-        {
-            let world = scene.world();
-            let mut query = world.query::<(&Morph,)>();
-            let (morph,) = query.iter().next().unwrap();
-
-            assert_eq!(morph.progress, 0.0);
-            assert!(morph.particles_enabled);
-        }
-
-        scene.update(3.0);
-        {
-            let world = scene.world();
-            let mut query = world.query::<(&Morph, &Draw2D)>();
-            let (morph, draw) = query.iter().next().unwrap();
-
-            assert!(morph.particles_enabled);
-            assert_eq!(draw.opacity, 1.0);
-        }
-
-        scene.update(4.0);
-        {
-            let world = scene.world();
-            let mut query = world.query::<(&Morph, &Draw2D)>();
-            let (morph, draw) = query.iter().next().unwrap();
-
-            assert_eq!(morph.progress, 0.0);
-            assert!(!morph.particles_enabled);
-            assert_eq!(draw.opacity, 0.0);
-        }
-
-        scene.update(3.0);
-        let world = scene.world();
-        let mut query = world.query::<(&Morph, &Draw2D)>();
-        let (morph, draw) = query.iter().next().unwrap();
-
-        assert!(morph.particles_enabled);
-        assert_eq!(draw.opacity, 1.0);
-    }
-
-    #[test]
-    fn effect_state_is_not_exposed_by_object_inspection() {
-        let mut scene = Scene::new();
-        let rect = rect().build(&mut scene);
-        let world = scene.world();
-        let inspection = world.get::<&Inspection>(rect.entity()).unwrap();
-        let components = (inspection.get)(&world, rect.entity());
-
-        assert!(components.iter().all(|component| component.name != "Morph"));
-        let style = components
-            .iter()
-            .find(|component| component.name == "Style")
-            .unwrap();
-        assert!((style.get)().iter().all(|track| track.name != "progress"));
-    }
-
-    #[test]
-    fn creation_particles_form_the_object_silhouette_before_completion() {
-        struct CreationScene;
-
-        impl SceneBuilder for CreationScene {
-            fn build(&mut self, scene: &mut Scene) {
-                let rect = rect().size(vec2(16.0, 16.0)).fill(Color::RED).build(scene);
-                scene.world_2d().add(&rect);
-
-                creation().play(&rect);
-            }
-        }
-
-        let mut scene = Scene::new();
-        scene.build(&mut CreationScene);
-        let mut surface = skia_safe::surfaces::raster_n32_premul((64, 64)).unwrap();
-
-        scene.update(0.0);
-        surface.canvas().clear(skia_safe::colors::TRANSPARENT);
-        surface.canvas().translate((32.0, 32.0));
-        scene.draw(surface.canvas());
-        assert_eq!(surface.peek_pixels().unwrap().get_color((32, 32)).a(), 0);
-
-        scene.update(2.4);
-        surface.canvas().clear(skia_safe::colors::TRANSPARENT);
-        scene.draw(surface.canvas());
-        let pixels = surface.peek_pixels().unwrap();
-        assert!(pixels.get_color((32, 32)).a() > 0);
-        assert_eq!(pixels.get_color((8, 8)).a(), 0);
-
-        scene.update(2.5);
-        surface.canvas().clear(skia_safe::colors::TRANSPARENT);
-        scene.draw(surface.canvas());
-        let center = surface.peek_pixels().unwrap().get_color((32, 32));
-        assert_eq!(center.r(), 255);
-        assert_eq!(center.a(), 255);
-    }
-
-    #[test]
-    fn creation_renders_particle_silhouettes_for_every_styled_object() {
-        struct StyledObjectsScene;
-
-        impl SceneBuilder for StyledObjectsScene {
-            fn build(&mut self, scene: &mut Scene) {
-                scene.all(|scene| {
-                    let circle = circle()
-                        .radius(8.0)
-                        .position(vec2(-32.0, 0.0))
-                        .fill(Color::RED)
-                        .build(scene);
-                    let rect = rect()
-                        .size(vec2(16.0, 16.0))
-                        .fill(Color::GREEN)
-                        .build(scene);
-                    let text = text_2d()
-                        .text("A")
-                        .size(20.0)
-                        .position(vec2(32.0, 0.0))
-                        .fill(Color::BLUE)
-                        .build(scene);
-                    scene.world_2d().add(&circle);
-                    scene.world_2d().add(&rect);
-                    scene.world_2d().add(&text);
-
-                    creation().play(&circle);
-                    creation().play(&rect);
-                    creation().play(&text);
-                });
-            }
-        }
-
-        let mut scene = Scene::new();
-        scene.build(&mut StyledObjectsScene);
-        scene.update(2.4);
-        let mut surface = skia_safe::surfaces::raster_n32_premul((128, 64)).unwrap();
-        surface.canvas().clear(skia_safe::colors::TRANSPARENT);
-        surface.canvas().translate((64.0, 32.0));
-        scene.draw(surface.canvas());
-        let pixels = surface.peek_pixels().unwrap();
-
-        let has_alpha =
-            |left, right| (0..64).any(|y| (left..right).any(|x| pixels.get_color((x, y)).a() > 0));
-
-        assert!(has_alpha(20, 44));
-        assert!(has_alpha(52, 76));
-        assert!(has_alpha(84, 108));
-    }
-
-    #[test]
     fn nested_groups_keep_scene_objects_on_their_local_timeline() {
         struct NestedGroupsScene;
 
@@ -2767,7 +2753,11 @@ mod tests {
 
     #[test]
     fn scene_macro_preserves_the_create_time_as_the_node_start() {
-        let scene = delayed_object_scene((1920, 1080), (64, 64));
+        let scene = delayed_object_scene(
+            &crate::core::ProjectContext::new(".").unwrap(),
+            (1920, 1080),
+            (64, 64),
+        );
 
         assert_eq!(scene.name(), "delayed_object_scene");
         assert_eq!(scene.duration(), 33.0);
