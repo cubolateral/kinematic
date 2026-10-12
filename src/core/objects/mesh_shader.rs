@@ -191,7 +191,7 @@ fn valid_uniform_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::test_support::*;
 
     #[test]
     fn inherited_shader_values_allow_compatible_local_overrides() {
@@ -249,7 +249,7 @@ mod tests {
             group: Option<Group3DHandler>,
             child: Option<PrismHandler>,
         }
-        impl SceneBuilder for Build {
+        impl Build {
             fn build(&mut self, scene: &mut Scene) {
                 let shader = MeshShader::fragment("void main() { outColor = vec4(amount); }");
                 let group = group_3d()
@@ -281,7 +281,10 @@ mod tests {
             group: None,
             child: None,
         };
-        scene.build(&mut build);
+        {
+            build.build(&mut scene);
+            scene.finish_build()
+        };
         scene.update(1.0);
         let group = build.group.unwrap();
         let child = build.child.unwrap();

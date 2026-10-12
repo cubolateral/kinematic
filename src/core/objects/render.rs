@@ -1115,7 +1115,7 @@ pub(crate) fn camera_outline_points2d(
 #[cfg(test)]
 mod shader_capture_tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::test_support::*;
 
     #[test]
     fn group_blur_filters_its_subtree() {

@@ -1,6 +1,6 @@
 use super::Canvases;
-use crate::prelude::*;
 use crate::renderer::target::{Target, reset_gl};
+use crate::test_support::*;
 use glow::HasContext;
 
 /// Exercises real GPU interop; run with SDL_VIDEODRIVER=offscreen when available.

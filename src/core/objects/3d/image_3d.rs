@@ -191,7 +191,7 @@ pub fn draw_image_3d(
 mod tests {
     use crate::{
         core::objects::image::write_test_image,
-        prelude::{Color, Object3DHandler, Scene, image_3d, vec2, vec3},
+        test_support::{Color, Object3DHandler, Scene, image_3d, vec2, vec3},
     };
 
     #[test]

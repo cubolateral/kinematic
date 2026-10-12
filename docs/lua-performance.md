@@ -1,6 +1,6 @@
 # Lua performance benchmarks
 
-Run `cargo bench --bench lua` from the repository root. The runner uses the
+Run `cargo test --release --bin kinematic lua_benchmark -- --ignored --nocapture` from the repository root. The runner uses the
 release profile, three warmup operations and seven timed samples. CSV output
 reports median, minimum and maximum microseconds per operation. No additional
 benchmark dependency is required.
@@ -59,7 +59,7 @@ No LuaLS implementation changes were made.
 
 The startup panic occurred when a saved nonzero timeline position triggered a
 Lua simulation seek before `Editor::new_lua` had installed its documents.
-Both native and Lua constructors now evaluate only after their state is ready.
+The Lua constructor evaluates only after its state is ready.
 The graphics regression opens Life with the timeline saved at 1.5 seconds.
 
 The follow-up has five rounds, numbered 6–10 in the CSV filenames:
@@ -85,10 +85,10 @@ The follow-up has five rounds, numbered 6–10 in the CSV filenames:
 Reproduce scene measurements:
 
 ```sh
-cargo bench --bench lua
-cargo bench --bench lua --profile dev
-KINEMATIC_BENCH_FILTER=life cargo bench --bench lua --profile dev
-CARGO_PROFILE_DEV_OPT_LEVEL=0 cargo bench --bench lua --profile dev
+cargo test --release --bin kinematic lua_benchmark -- --ignored --nocapture
+cargo test --bin kinematic lua_benchmark -- --ignored --nocapture
+KINEMATIC_BENCH_FILTER=life cargo test --bin kinematic lua_benchmark -- --ignored --nocapture
+CARGO_PROFILE_DEV_OPT_LEVEL=0 cargo test --bin kinematic lua_benchmark -- --ignored --nocapture
 ```
 
 The last command measures development without optimizations. Debug results for
@@ -98,8 +98,8 @@ full suite. Round 9 includes the subsequently reverted signal-index candidate.
 Reproduce the ignored graphics regression and frame benchmark:
 
 ```sh
-SDL_VIDEODRIVER=offscreen cargo test --lib lua_simulation_startup_and_frames -- --ignored --nocapture
-SDL_VIDEODRIVER=offscreen cargo test --release --lib lua_simulation_startup_and_frames -- --ignored --nocapture
+SDL_VIDEODRIVER=offscreen cargo test --bin kinematic lua_simulation_startup_and_frames -- --ignored --nocapture
+SDL_VIDEODRIVER=offscreen cargo test --release --bin kinematic lua_simulation_startup_and_frames -- --ignored --nocapture
 ```
 
 This uses the Life source at 640×480 and 60 FPS, extends its duration to ten

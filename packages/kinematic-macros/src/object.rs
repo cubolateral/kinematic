@@ -69,16 +69,16 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             .into();
         }
     };
-    let builder_component_trait = quote!(kinematic::core::objects::ObjectBuilderComponent);
-    let inspection_type = quote!(kinematic::core::components::Inspection);
-    let object_trait = quote!(kinematic::core::objects::Object);
-    let object_handler_trait = quote!(kinematic::core::objects::ObjectHandler);
-    let handler_root_type = quote!(kinematic::core::objects::HandlerRoot);
-    let object_trackable_trait = quote!(kinematic::core::objects::ObjectTrackable);
-    let scene_world_type = quote!(kinematic::core::SceneWorld);
-    let animator_handle_type = quote!(kinematic::core::AnimatorHandle);
-    let trackable_info_type = quote!(kinematic::core::TrackableInfo);
-    let trackable_trait = quote!(kinematic::core::Trackable);
+    let builder_component_trait = quote!(crate::core::objects::ObjectBuilderComponent);
+    let inspection_type = quote!(crate::core::components::Inspection);
+    let object_trait = quote!(crate::core::objects::Object);
+    let object_handler_trait = quote!(crate::core::objects::ObjectHandler);
+    let handler_root_type = quote!(crate::core::objects::HandlerRoot);
+    let object_trackable_trait = quote!(crate::core::objects::ObjectTrackable);
+    let scene_world_type = quote!(crate::core::SceneWorld);
+    let animator_handle_type = quote!(crate::core::AnimatorHandle);
+    let trackable_info_type = quote!(crate::core::TrackableInfo);
+    let trackable_trait = quote!(crate::core::Trackable);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
@@ -156,10 +156,10 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
     let spatial_impl = match spatial.as_str() {
         "2d" => quote! {
-            impl kinematic::core::objects::Object2DHandler for #handler_name {}
+            impl crate::core::objects::Object2DHandler for #handler_name {}
         },
         "3d" => quote! {
-            impl kinematic::core::objects::Object3DHandler for #handler_name {}
+            impl crate::core::objects::Object3DHandler for #handler_name {}
         },
         _ => quote! {},
     };
@@ -167,8 +167,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let supports_image_shader = morphable || image_shader;
     let image_shader_methods = supports_image_shader.then(|| quote! {
         /// Applies a shared GLSL image shader to this object's rendered image.
-        pub fn shader(mut self, shader: &kinematic::core::objects::ImageShader) -> Self {
-            self.image_shader = Some(kinematic::core::objects::ImageShaderData::new(shader.clone()));
+        pub fn shader(mut self, shader: &crate::core::objects::ImageShader) -> Self {
+            self.image_shader = Some(crate::core::objects::ImageShaderData::new(shader.clone()));
             self
         }
 
@@ -176,7 +176,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         pub fn uniform(
             mut self,
             name: impl Into<std::string::String>,
-            value: impl Into<kinematic::core::objects::ImageShaderUniform>,
+            value: impl Into<crate::core::objects::ImageShaderUniform>,
         ) -> Self {
             self.image_shader
                 .as_mut()
@@ -189,7 +189,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         pub fn texture(
             mut self,
             name: impl Into<std::string::String>,
-            canvas: &impl kinematic::core::objects::ProjectionCanvas,
+            canvas: &impl crate::core::objects::ProjectionCanvas,
         ) -> Self {
             self.image_shader
                 .as_mut()
@@ -210,9 +210,9 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let mesh_shader_methods = (spatial == "3d").then(|| {
         quote! {
             /// Applies a shared GLSL mesh shader to this object's geometry.
-            pub fn mesh_shader(mut self, shader: &kinematic::core::objects::MeshShader) -> Self {
+            pub fn mesh_shader(mut self, shader: &crate::core::objects::MeshShader) -> Self {
                 self.mesh_shader = Some(
-                    kinematic::core::objects::MeshShaderData::with_shader(shader.clone())
+                    crate::core::objects::MeshShaderData::with_shader(shader.clone())
                 );
                 self
             }
@@ -221,7 +221,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             pub fn mesh_uniform(
                 mut self,
                 name: impl Into<std::string::String>,
-                value: impl Into<kinematic::core::objects::MeshShaderUniform>,
+                value: impl Into<crate::core::objects::MeshShaderUniform>,
             ) -> Self {
                 self.mesh_shader
                     .get_or_insert_with(Default::default)
@@ -242,7 +242,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         || quote! {},
         |state| {
             quote! {
-                impl kinematic::core::objects::SimulationObject for #object_name {
+                impl crate::core::objects::SimulationObject for #object_name {
                     type State = #state;
                 }
 
@@ -252,24 +252,24 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                         &self,
                         read: impl FnOnce(&#state) -> Result,
                     ) -> Result {
-                        kinematic::core::objects::read_simulation_state(self, read)
+                        crate::core::objects::read_simulation_state(self, read)
                     }
 
                     /// Writes directly to the current state, without adding a timeline operation.
                     ///
                     /// Use this from a signal to affect drawing in the same frame.
                     pub fn write_simulation_now(&self, write: impl FnOnce(&mut #state)) {
-                        kinematic::core::objects::write_simulation_state(self, write);
+                        crate::core::objects::write_simulation_state(self, write);
                     }
 
                     /// Schedules one explicit simulation update at the current timeline time.
                     pub fn update(&self) {
-                        kinematic::core::objects::schedule_simulation_update(self);
+                        crate::core::objects::schedule_simulation_update(self);
                     }
 
                     /// Saves a replay checkpoint at the current timeline time.
                     pub fn checkpoint(&self) {
-                        kinematic::core::objects::schedule_simulation_checkpoint(self);
+                        crate::core::objects::schedule_simulation_checkpoint(self);
                     }
 
                     /// Schedules a replayable state write at the current timeline time.
@@ -277,7 +277,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                         &self,
                         write: impl Fn(&mut #state) + Send + Sync + 'static,
                     ) {
-                        kinematic::core::objects::schedule_simulation_write(self, write);
+                        crate::core::objects::schedule_simulation_write(self, write);
                     }
                 }
             }
@@ -285,8 +285,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     );
 
     let expanded = quote! {
-        unsafe impl kinematic::hecs::DynamicBundle for #object_name {
-            fn has<T: kinematic::hecs::Component>(&self) -> bool {
+        unsafe impl hecs::DynamicBundle for #object_name {
+            fn has<T: hecs::Component>(&self) -> bool {
                 false #(|| std::any::TypeId::of::<#field_types>() == std::any::TypeId::of::<T>())*
             }
 
@@ -295,31 +295,31 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
 
             fn with_ids<T>(&self, f: impl FnOnce(&[std::any::TypeId]) -> T) -> T {
-                <Self as kinematic::hecs::Bundle>::with_static_ids(f)
+                <Self as hecs::Bundle>::with_static_ids(f)
             }
 
-            fn type_info(&self) -> Vec<kinematic::hecs::TypeInfo> {
-                <Self as kinematic::hecs::Bundle>::with_static_type_info(|info| info.to_vec())
+            fn type_info(&self) -> Vec<hecs::TypeInfo> {
+                <Self as hecs::Bundle>::with_static_type_info(|info| info.to_vec())
             }
 
             unsafe fn put(
                 mut self,
-                mut f: impl FnMut(*mut u8, kinematic::hecs::TypeInfo),
+                mut f: impl FnMut(*mut u8, hecs::TypeInfo),
             ) {
                 #(
                     f(
                         (&mut self.#field_idents as *mut #field_types).cast::<u8>(),
-                        kinematic::hecs::TypeInfo::of::<#field_types>(),
+                        hecs::TypeInfo::of::<#field_types>(),
                     );
                     std::mem::forget(self.#field_idents);
                 )*
             }
         }
 
-        unsafe impl kinematic::hecs::Bundle for #object_name {
+        unsafe impl hecs::Bundle for #object_name {
             fn with_static_ids<T>(f: impl FnOnce(&[std::any::TypeId]) -> T) -> T {
-                static ELEMENTS: kinematic::hecs::spin::Lazy<[std::any::TypeId; #field_count]> =
-                    kinematic::hecs::spin::Lazy::new(|| {
+                static ELEMENTS: hecs::spin::Lazy<[std::any::TypeId; #field_count]> =
+                    hecs::spin::Lazy::new(|| {
                         let mut types = [#((
                             std::mem::align_of::<#field_types>(),
                             std::any::TypeId::of::<#field_types>(),
@@ -339,22 +339,22 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 f(&*ELEMENTS)
             }
 
-            fn with_static_type_info<T>(f: impl FnOnce(&[kinematic::hecs::TypeInfo]) -> T) -> T {
-                let mut info = [#(kinematic::hecs::TypeInfo::of::<#field_types>()),*];
+            fn with_static_type_info<T>(f: impl FnOnce(&[hecs::TypeInfo]) -> T) -> T {
+                let mut info = [#(hecs::TypeInfo::of::<#field_types>()),*];
                 info.sort_unstable();
                 f(&info)
             }
 
             unsafe fn get(
                 mut f: impl FnMut(
-                    kinematic::hecs::TypeInfo,
+                    hecs::TypeInfo,
                 ) -> Option<std::ptr::NonNull<u8>>,
-            ) -> std::result::Result<Self, kinematic::hecs::MissingComponent> {
+            ) -> std::result::Result<Self, hecs::MissingComponent> {
                 #(
                     let #bundle_pointer_idents = f(
-                        kinematic::hecs::TypeInfo::of::<#field_types>(),
+                        hecs::TypeInfo::of::<#field_types>(),
                     )
-                    .ok_or_else(kinematic::hecs::MissingComponent::new::<#field_types>)?
+                    .ok_or_else(hecs::MissingComponent::new::<#field_types>)?
                     .cast::<#field_types>()
                     .as_ptr();
                 )*
@@ -370,8 +370,8 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         #visibility struct #builder_name {
             object: #object_name,
             name: std::string::String,
-            image_shader: Option<kinematic::core::objects::ImageShaderData>,
-            mesh_shader: Option<kinematic::core::objects::MeshShaderData>,
+            image_shader: Option<crate::core::objects::ImageShaderData>,
+            mesh_shader: Option<crate::core::objects::MeshShaderData>,
         }
 
         impl #builder_name {
@@ -391,7 +391,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
 
             /// Spawns the configured object as inactive in `scene` and returns its handler.
-            pub fn build(self, s: &mut kinematic::core::Scene) -> #handler_name {
+            pub fn build(self, s: &mut crate::core::Scene) -> #handler_name {
                 s.spawn_object_with_shaders::<#object_name>(
                     self.object,
                     self.name,
@@ -459,7 +459,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 
         impl #handler_name {
             /// Creates an identical object in the supplied scene.
-            pub fn copy(&self, s: &mut kinematic::core::Scene) -> #handler_name {
+            pub fn copy(&self, s: &mut crate::core::Scene) -> #handler_name {
                 let (object, name) = {
                     let world = self.world.borrow();
                     let object = #object_name {
@@ -474,13 +474,13 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 let image_shader = self
                     .world
                     .borrow()
-                    .get::<&kinematic::core::objects::ImageShaderData>(self.entity)
+                    .get::<&crate::core::objects::ImageShaderData>(self.entity)
                     .ok()
                     .map(|shader| (*shader).clone());
                 let mesh_shader = self
                     .world
                     .borrow()
-                    .get::<&kinematic::core::objects::MeshShaderData>(self.entity)
+                    .get::<&crate::core::objects::MeshShaderData>(self.entity)
                     .ok()
                     .map(|shader| (*shader).clone());
                 #builder_name {

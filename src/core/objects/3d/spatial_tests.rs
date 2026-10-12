@@ -1,6 +1,6 @@
 use crate::core::objects::draw_canvas2d;
-use crate::prelude::*;
 use crate::renderer::plan::{active_subtree, canvas_order, order_dependencies, visible_subtree_3d};
+use crate::test_support::*;
 
 #[test]
 fn primitive_3d_builders_expose_outline_material_fields() {
@@ -230,7 +230,7 @@ fn camera_lens_rejects_invalid_ranges() {
 #[test]
 fn spatial_tracks_snapshots_and_lifetime_are_seekable() {
     struct Setup(Option<PrismHandler>);
-    impl SceneBuilder for Setup {
+    impl Setup {
         fn build(&mut self, scene: &mut Scene) {
             let canvas = canvas_3d().resolution((64, 64)).build(scene);
             let cube = cube().build(scene);
@@ -248,7 +248,10 @@ fn spatial_tracks_snapshots_and_lifetime_are_seekable() {
     }
     let mut scene = Scene::new();
     let mut setup = Setup(None);
-    scene.build(&mut setup);
+    {
+        setup.build(&mut scene);
+        scene.finish_build()
+    };
     let cube = setup.0.unwrap();
     scene.update(1.0);
     assert_eq!(
@@ -491,7 +494,7 @@ fn orthogonal_camera_projects_and_picks_with_parallel_rays() {
 #[test]
 fn root_view_track_switches_between_builtin_worlds() {
     struct SwitchView;
-    impl SceneBuilder for SwitchView {
+    impl SwitchView {
         fn build(&mut self, scene: &mut Scene) {
             scene.root().view_2d(false).immediate();
             scene.wait(2.0);
@@ -502,7 +505,10 @@ fn root_view_track_switches_between_builtin_worlds() {
     let mut scene = Scene::new();
     let world_2d = scene.world_2d().texture();
     let world_3d = scene.world_3d().texture();
-    scene.build(&mut SwitchView);
+    {
+        SwitchView.build(&mut scene);
+        scene.finish_build()
+    };
 
     scene.update(0.0);
     assert_eq!(scene.view_texture(), world_3d);

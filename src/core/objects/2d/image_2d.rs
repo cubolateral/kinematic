@@ -118,7 +118,7 @@ pub fn draw_image_2d(
 mod tests {
     use crate::{
         core::objects::image::write_test_image,
-        prelude::{Color, Object2DHandler, Scene, image_2d, vec2},
+        test_support::{Color, Object2DHandler, Scene, image_2d, vec2},
     };
 
     #[test]

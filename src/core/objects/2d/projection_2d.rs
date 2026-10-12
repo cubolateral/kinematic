@@ -91,7 +91,7 @@ pub(crate) fn draw_projection_2d(
 #[cfg(test)]
 mod tests {
     use super::draw_projection_2d;
-    use crate::prelude::*;
+    use crate::test_support::*;
 
     #[test]
     fn projection_clips_rounding_and_draws_style_over_the_image() {

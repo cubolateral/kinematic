@@ -38,30 +38,15 @@ pub(crate) struct Ui {
 fn draw_top_bar(
     editor: &mut Editor,
     ui: &dear_imgui_rs::Ui,
-    enabled: bool,
     code: &mut code::State,
     settings: &mut settings::State,
-) -> (bool, bool) {
+) -> bool {
     let Some(_bar) = ui.begin_main_menu_bar() else {
-        return (false, false);
+        return false;
     };
     draw_project_menu(code, settings, ui);
-    let button_size = ui.frame_height();
-    let spacing = unsafe { ui.style().item_spacing() }[0];
-    ui.set_cursor_pos_x(
-        ui.cursor_pos_x() + ui.content_region_avail_width() - button_size * 2.0 - spacing,
-    );
-    let clicked = {
-        let _disabled = ui.begin_disabled_with_cond(!enabled);
-        controls::text_button(ui, icons::HAMMER, [button_size; 2])
-    };
-
-    if ui.is_item_hovered() {
-        ui.tooltip_text("Rebuild and reload [B]");
-    }
-
-    ui.same_line();
-    (clicked, export::draw(editor, ui))
+    ui.set_cursor_pos_x(ui.cursor_pos_x() + ui.content_region_avail_width() - ui.frame_height());
+    export::draw(editor, ui)
 }
 
 fn draw_project_menu(
@@ -106,12 +91,7 @@ impl Ui {
         }
     }
 
-    pub fn draw(
-        &mut self,
-        editor: &mut Editor,
-        ui: &mut dear_imgui_rs::Ui,
-        can_reload: bool,
-    ) -> bool {
+    pub fn draw(&mut self, editor: &mut Editor, ui: &mut dear_imgui_rs::Ui) {
         let _theme = self.appearance.push(ui);
         let _font = ui.push_font(self.font);
         let io = ui.io();
@@ -125,11 +105,6 @@ impl Ui {
         let fullscreen_shortcut = plain_keyboard_input
             && (self.is_fullscreen || !editor.is_exporting())
             && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::F, false);
-        let reload_shortcut = plain_keyboard_input
-            && can_reload
-            && !editor.is_exporting()
-            && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::B, false);
-
         if self.is_fullscreen {
             let fullscreen_button = preview::draw_fullscreen(editor, ui);
 
@@ -138,16 +113,10 @@ impl Ui {
                 ui.set_window_focus(Some(inspector::WINDOW_NAME));
             }
 
-            return reload_shortcut;
+            return;
         }
 
-        let (reload_button, export_started) = draw_top_bar(
-            editor,
-            ui,
-            can_reload && !editor.is_exporting(),
-            &mut self.code,
-            &mut self.settings,
-        );
+        let export_started = draw_top_bar(editor, ui, &mut self.code, &mut self.settings);
         if export_started {
             self.preview.show_preview();
         }
@@ -182,8 +151,6 @@ impl Ui {
         if fullscreen_shortcut || fullscreen_button {
             self.is_fullscreen = true;
         }
-
-        reload_shortcut || reload_button
     }
 
     pub(crate) fn prepare_documents(

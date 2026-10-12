@@ -156,7 +156,7 @@ pub fn draw_latex_3d(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Object3DHandler, Scene};
+    use crate::test_support::{Object3DHandler, Scene};
 
     #[test]
     fn depth_is_trackable_and_part_of_the_local_box() {

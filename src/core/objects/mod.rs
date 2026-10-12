@@ -7,6 +7,7 @@ mod node;
 mod object;
 mod regular_polygon;
 mod render;
+#[cfg(test)]
 mod simulation;
 #[path = "3d/mod.rs"]
 mod three_d;
@@ -26,6 +27,7 @@ pub use node::*;
 pub use object::*;
 pub(crate) use regular_polygon::regular_polygon_vertices;
 pub use render::object_box;
+#[cfg(test)]
 pub use simulation::*;
 pub use three_d::*;
 pub use two_d::*;

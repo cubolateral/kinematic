@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(crate) struct TimeEvent {
@@ -29,64 +29,6 @@ impl SceneFile {
             Err(error) => Err(error),
         }
     }
-
-    pub(crate) fn load(name: &str) -> Self {
-        let path = scene_path(name);
-        match std::fs::read_to_string(&path) {
-            Ok(contents) => match ron::from_str(&contents) {
-                Ok(file) => file,
-                Err(error) => {
-                    eprintln!("Could not parse {}: {error}.", path.display());
-                    let file = Self::default();
-                    file
-                }
-            },
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                let file = Self::default();
-                file.save_to(&path);
-                file
-            }
-            Err(error) => {
-                eprintln!("Could not read {}: {error}.", path.display());
-                Self::default()
-            }
-        }
-    }
-
-    pub(crate) fn save(&self, name: &str) {
-        self.save_to(&scene_path(name));
-    }
-
-    pub(crate) fn save_to(&self, path: &Path) {
-        if let Err(error) = write(self, path) {
-            eprintln!("Could not write {}: {error}.", path.display());
-        }
-    }
-}
-
-fn scene_path(name: &str) -> PathBuf {
-    #[cfg(not(test))]
-    let root = Path::new("kinematic/scenes").to_path_buf();
-    #[cfg(test)]
-    let root = std::env::temp_dir()
-        .join(format!("kinematic-scene-tests-{}", std::process::id()))
-        .join("scenes");
-
-    root.join(format!("{name}.ron"))
-}
-
-fn write(file: &SceneFile, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(directory) = path.parent() {
-        std::fs::create_dir_all(directory)?;
-    }
-    let contents = ron::ser::to_string_pretty(file, ron::ser::PrettyConfig::default())?;
-    let expected = std::fs::read(path).ok();
-    crate::core::atomic_write(
-        path,
-        format!("{contents}\n").as_bytes(),
-        expected.as_deref(),
-    )?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -114,7 +56,10 @@ mod tests {
             ],
         };
 
-        write(&file, &path).unwrap();
+        let contents =
+            ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default()).unwrap();
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(&path, contents).unwrap();
 
         let contents = std::fs::read_to_string(&path).unwrap();
         let loaded: SceneFile = ron::from_str(&contents).unwrap();

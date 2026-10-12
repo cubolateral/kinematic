@@ -322,7 +322,7 @@ pub(crate) fn shader_uniforms(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::test_support::*;
 
     fn shader() -> ImageShader {
         ImageShader::new("#version 330 core\nvoid main() { k_color = vec4(1.0); }")
@@ -370,7 +370,7 @@ mod tests {
         struct Build {
             object: Option<RectHandler>,
         }
-        impl SceneBuilder for Build {
+        impl Build {
             fn build(&mut self, scene: &mut Scene) {
                 let object = rect()
                     .shader(&shader())
@@ -391,7 +391,13 @@ mod tests {
 
         let mut scene = Scene::new();
         let mut build = Build { object: None };
-        assert_eq!(scene.build(&mut build), 2.0);
+        assert_eq!(
+            {
+                build.build(&mut scene);
+                scene.finish_build()
+            },
+            2.0
+        );
         let object = build.object.unwrap();
         scene.update(1.0);
         assert_eq!(object.get_uniform::<f32>("u_progress"), 0.5);
@@ -407,7 +413,7 @@ mod tests {
         struct Build {
             object: Option<RectHandler>,
         }
-        impl SceneBuilder for Build {
+        impl Build {
             fn build(&mut self, scene: &mut Scene) {
                 let object = rect()
                     .shader(&shader())
@@ -433,7 +439,10 @@ mod tests {
 
         let mut scene = Scene::new();
         let mut build = Build { object: None };
-        scene.build(&mut build);
+        {
+            build.build(&mut scene);
+            scene.finish_build()
+        };
         let object = build.object.unwrap();
         scene.update(0.5);
         assert_eq!(object.get_uniform::<f32>("u_progress"), 0.9);
@@ -479,7 +488,7 @@ mod tests {
     #[test]
     fn concurrent_uniform_writes_use_the_latest_tween() {
         struct Build(Option<RectHandler>);
-        impl SceneBuilder for Build {
+        impl Build {
             fn build(&mut self, scene: &mut Scene) {
                 let object = rect()
                     .shader(&shader())
@@ -496,7 +505,10 @@ mod tests {
 
         let mut scene = Scene::new();
         let mut build = Build(None);
-        scene.build(&mut build);
+        {
+            build.build(&mut scene);
+            scene.finish_build()
+        };
         scene.update(0.5);
         assert_eq!(build.0.unwrap().get_uniform::<f32>("value"), 1.0);
     }

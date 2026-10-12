@@ -233,7 +233,7 @@ impl PlanCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::test_support::*;
 
     #[test]
     fn plans_survive_frames_and_scene_switches_and_follow_lifetimes() {

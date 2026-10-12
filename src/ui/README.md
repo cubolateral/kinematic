@@ -36,7 +36,7 @@ The Timeline is split as follows:
 - Access shared selection and playback through `Editor`.
 - Keep drawing helpers stateless and place them in `widgets.rs` only when more
   than one panel uses them.
-- Do not move editor-only types into the public API.
+- Keep editor types internal to the binary.
 - Do not let preview overlays enter exported frames.
 
 ## Common changes

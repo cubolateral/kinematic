@@ -1,11 +1,6 @@
 use glow::HasContext;
 
-use crate::{
-    core::{Project, SceneFactory},
-    editor::Editor,
-    ui::Ui,
-    window_cache::WindowCache,
-};
+use crate::{editor::Editor, ui::Ui, window_cache::WindowCache};
 
 pub struct App {
     ui: Ui,
@@ -17,7 +12,6 @@ pub struct App {
     _gl_context: sdl3::video::GLContext,
     window: sdl3::video::Window,
     sdl: sdl3::Sdl,
-    project: Option<Project>,
     lua_project: Option<Result<crate::scripting::LuaProject, String>>,
     window_cache: WindowCache,
     export_only: bool,
@@ -120,29 +114,11 @@ impl App {
             _gl_context: gl_context,
             gl,
             skia_context,
-            project: None,
             lua_project: None,
             window_cache,
             export_only: false,
             export_result: None,
         }
-    }
-
-    /// Selects the project name and ordered scene factories to run.
-    pub fn project(mut self, name: &'static str, scenes: Vec<SceneFactory>) -> Self {
-        self.project = Some(Project::new(name, scenes));
-        self
-    }
-
-    /// Selects a native project with an explicit asset, settings and output root.
-    pub fn project_in(
-        mut self,
-        context: crate::core::ProjectContext,
-        name: &str,
-        scenes: Vec<SceneFactory>,
-    ) -> std::io::Result<Self> {
-        self.project = Some(Project::new_in(context, name, scenes)?);
-        Ok(self)
     }
 
     /// Opens a Lua project when the editor starts.
@@ -151,10 +127,14 @@ impl App {
         self
     }
 
-    /// Opens a Lua project with any native object registrations supplied by the host.
-    pub fn lua_project(mut self, project: crate::scripting::LuaProject) -> Self {
-        self.lua_project = Some(Ok(project));
-        self
+    fn remember_project(&mut self, editor: Option<&Editor>) {
+        if !self.export_only {
+            if let Err(error) =
+                crate::storage::save_current_project(editor.map(|e| e.context().root()))
+            {
+                self.ui.project_error(error);
+            }
+        }
     }
 
     fn save_layout(&mut self) {
@@ -217,15 +197,7 @@ impl App {
     /// Runs the configured project editor.
     pub fn run(&mut self) {
         let three_context = self.three_context();
-        let mut editor = self.project.take().map(|project| {
-            Editor::new(
-                project,
-                &mut self.imgui_renderer,
-                &mut self.skia_context,
-                &self.gl,
-                three_context.clone(),
-            )
-        });
+        let mut editor = None;
         if let Some(project) = self.lua_project.take() {
             match project.and_then(|project| {
                 Editor::new_lua(
@@ -241,6 +213,9 @@ impl App {
             }
         }
 
+        if editor.is_some() {
+            self.remember_project(editor.as_ref());
+        }
         if let Some(editor) = &editor {
             self.ui.restore_project_view(editor);
             self.restore_window(editor.context());
@@ -253,8 +228,6 @@ impl App {
             }
         }
         let mut events = self.sdl.event_pump().unwrap();
-        let reload = crate::reload::Reload::new();
-        let mut restart = false;
 
         'running: loop {
             for event in events.poll_iter() {
@@ -271,12 +244,7 @@ impl App {
 
             if let Some(editor) = &mut editor {
                 if let Some(settings) = editor.take_pending_project_settings() {
-                    editor.apply_project_settings(
-                        settings,
-                        &mut self.imgui_renderer,
-                        &mut self.skia_context,
-                        &self.gl,
-                    );
+                    editor.apply_project_settings(settings);
                 }
                 if let Some(size) = editor.take_pending_editor_3d_size() {
                     editor.resize_editor_3d(
@@ -329,13 +297,7 @@ impl App {
 
             let ui = self.imgui.frame();
             if let Some(editor) = &mut editor {
-                if self.ui.draw(
-                    editor,
-                    ui,
-                    !reload.is_building() && editor.lua_project.is_none(),
-                ) {
-                    reload.request();
-                }
+                self.ui.draw(editor, ui);
                 if let Some([x, y]) = editor.take_pending_mouse_warp() {
                     self.sdl.mouse().warp_mouse_in_window(&self.window, x, y);
                 }
@@ -398,6 +360,7 @@ impl App {
                         crate::scripting::release_unused();
                         self.ui.reset_project();
                         editor = next;
+                        self.remember_project(editor.as_ref());
                         if let Some(editor) = &editor {
                             self.ui.restore_project_view(editor);
                             self.restore_window(editor.context());
@@ -405,11 +368,6 @@ impl App {
                     }
                     Err(error) => self.ui.project_error(error),
                 }
-            }
-
-            if reload.should_restart() {
-                restart = true;
-                break 'running;
             }
         }
 
@@ -426,10 +384,6 @@ impl App {
         self.save_layout();
         self.imgui_renderer.shutdown(&mut self.imgui).unwrap();
         self.imgui_sdl.shutdown(&mut self.imgui).unwrap();
-
-        if restart {
-            reload.restart();
-        }
     }
 }
 

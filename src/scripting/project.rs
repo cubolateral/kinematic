@@ -60,7 +60,6 @@ pub struct LuaProject {
     pub context: ProjectContext,
     pub manifest: Manifest,
     saved: Vec<u8>,
-    pub(crate) extensions: Vec<super::native::NativeObject>,
 }
 impl LuaProject {
     pub fn open(root: impl AsRef<Path>) -> Result<Self, String> {
@@ -73,7 +72,6 @@ impl LuaProject {
             context,
             manifest,
             saved,
-            extensions: Vec::new(),
         })
     }
     pub fn create(
@@ -128,7 +126,6 @@ impl LuaProject {
             context,
             manifest,
             saved,
-            extensions: Vec::new(),
         })
     }
     pub(crate) fn accept_manifest(&mut self, manifest: Manifest) {
@@ -153,41 +150,18 @@ impl LuaProject {
         self.saved = contents;
         Ok(())
     }
-    /// Registers a Rust object and its generated property metadata for `s:native(name, options)`.
-    pub fn register<T: crate::core::objects::Object + Default>(&mut self) -> Result<(), String> {
-        let object = super::native::native::<T>();
-        if super::native::objects()
-            .iter()
-            .chain(&self.extensions)
-            .any(|v| v.name == object.name)
-        {
-            return Err(format!(
-                "Object builder '{}' is already registered.",
-                object.name
-            ));
-        }
-        self.extensions.push(object);
-        Ok(())
-    }
-
-    /// Generates LuaLS documentation including registered native objects.
-    pub fn definitions(&self) -> String {
-        super::definitions::registered(&self.extensions)
-    }
-
     pub fn load_scenes(&self, sources: &Sources) -> Result<Vec<LuaScene>, String> {
         self.manifest
             .scenes
             .iter()
             .map(|path| {
-                LuaScene::load_registered(
+                LuaScene::load(
                     self.context.clone(),
                     path,
                     sources.clone(),
                     self.manifest.resolution,
                     self.manifest.fps,
                     self.manifest.margin,
-                    self.extensions.clone(),
                 )
                 .map_err(|e| e.to_string())
             })

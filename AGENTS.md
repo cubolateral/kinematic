@@ -1,21 +1,21 @@
 # Kinematic — Contributor Guide
 
-Kinematic is a Rust animation editor and library. The source code is the authority for concrete APIs, panels, object types, and implementation details. Keep this file limited to stable rules so it should rarely need updates.
+Kinematic is an animation editor for Lua projects, implemented in Rust. The source code is the authority for concrete APIs, panels, object types, and implementation details. Keep this file limited to stable rules so it should rarely need updates.
 
 ## Architecture
 
-- src/core/ contains the reusable public scene, object, animation, project, and component model.
+- src/core/ contains the internal scene, object, animation, project, and component model.
 - src/editor/ and src/ui/ contain crate-private editor state and Dear ImGui views.
 - src/app.rs owns SDL, OpenGL, ImGui, and the application loop.
 - src/renderer/ owns MP4 export and reuses the application's existing graphics resources.
-- packages/kinematic-macros/ contains the procedural macros used by the public API.
+- packages/kinematic-macros/ contains the procedural macros used by internal objects and components.
 - Keep windowing, rendering-loop ownership, and editor interaction out of core.
 
 ## Stable contracts
 
-- SceneBuilder declares scene contents and schedules work through Scene; it does not own the application loop or editor state.
+- Lua declares scene contents and schedules work through Scene; it does not own the application loop or editor state.
 - Animator compiles Task values into animation data. Scene::update(time) evaluates that data. Drawing must not mutate animation state.
-- User-facing objects are created with generated lowercase builder functions such as circle(). Objects have typed handlers, a default type name, and inactive Node metadata until attached to a group.
+- Lua objects use internal generated lowercase builders such as circle(). Objects have typed handlers, a default type name, and inactive Node metadata until attached to a group.
 - Every scene has a named internal root container available through Scene::root(). Types deriving Node attach subtrees at the animator's current time through their generated handlers. ObjectHandler::remove ends its lifetime without deleting entities or tree edges, so seeking backward can restore it.
 - Inactive nodes must be ignored by scene evaluation, rendering, hit testing, and editor views.
 - Objects are ECS bundles implementing Object. The derive macro generates builders and typed handlers. #[trackable] fields are exposed directly on those types; do not introduce component-level handlers for convenience.
@@ -27,8 +27,8 @@ Kinematic is a Rust animation editor and library. The source code is the authori
 
 ## API and style boundaries
 
-- src/lib.rs and src/prelude.rs are the public API boundary. Do not expose editor internals to simplify a local change.
-- Keep convenience reexports in prelude.rs; avoid adding public API solely for internal implementation needs.
+- The binary is the only user interface. Projects and scenes are written exclusively in Lua.
+- Keep Rust modules and macros internal; do not add a library target or Rust scene declaration API.
 - For crate items, import with use crate::... and do not use absolute paths beginning with ::. Qualified paths are fine for external dependencies.
 - Preserve the separation between project definition, animation evaluation, rendering, and editor controls unless intentionally changing the architecture.
 - Keep comments and string literals concise, start them with an uppercase letter, and end them with punctuation.

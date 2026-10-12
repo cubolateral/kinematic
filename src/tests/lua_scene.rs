@@ -1,4 +1,4 @@
-use kinematic::{
+use crate::{
     core::{ProjectContext, components::Transform2D, objects::CircleShape},
     scripting::{LuaScene, Sources},
 };
@@ -169,7 +169,7 @@ end)
     assert_eq!(world.get::<&Transform2D>(a).unwrap().scale.x, 0.5);
     assert_eq!(
         world
-            .get::<&kinematic::core::components::Draw2D>(a)
+            .get::<&crate::core::components::Draw2D>(a)
             .unwrap()
             .opacity,
         0.5
@@ -178,7 +178,7 @@ end)
 
 #[test]
 fn removing_a_shader_on_reload_removes_its_components() {
-    use kinematic::core::objects::MeshShaderData;
+    use crate::core::objects::MeshShaderData;
     let source = r#"
 local k = require('kinematic')
 return k.scene('Shader', function(s)
@@ -236,7 +236,7 @@ end)
         scene
             .scene()
             .world()
-            .get::<&kinematic::core::components::Draw2D>(b)
+            .get::<&crate::core::components::Draw2D>(b)
             .unwrap()
             .opacity,
         1.0
@@ -277,50 +277,7 @@ end)
     scene.update(0.25).unwrap();
     let world = scene.scene().world();
     let transform = world
-        .get::<&kinematic::core::components::Transform3D>(scene.entity("spin").unwrap())
+        .get::<&crate::core::components::Transform3D>(scene.entity("spin").unwrap())
         .unwrap();
-    assert!(
-        (transform.rotation * kinematic::glam::Vec3::X - kinematic::glam::Vec3::Y).length() < 0.001
-    );
-}
-
-#[derive(Default, kinematic::prelude::Object)]
-#[object(spatial = "2d", builder = "host_dot")]
-struct HostDot {
-    #[trackable]
-    shape: CircleShape,
-    #[trackable]
-    transform: Transform2D,
-    #[trackable]
-    draw: kinematic::core::components::Draw2D,
-}
-
-#[test]
-fn registered_native_objects_share_generated_fields_and_definitions() {
-    use kinematic::scripting::LuaProject;
-    let root =
-        std::env::temp_dir().join(format!("kinematic-native-extension-{}", std::process::id()));
-    let mut project = LuaProject::create(&root, "Native extension", false).unwrap();
-    project.register::<HostDot>().unwrap();
-    assert!(project.register::<HostDot>().is_err());
-    assert!(project.definitions().contains("name: 'host_dot'"));
-    assert!(
-        project
-            .definitions()
-            .contains("---@class Kinematic.HostDot")
-    );
-    let source = [(PathBuf::from("scenes/intro.lua"), "local k=require('kinematic'); return k.scene('Host',function(s) local dot=s:native('host_dot',{id='dot',radius=7}); s:world_2d():add(dot); s:wait(1) end)".into())].into();
-    let scenes = project.load_scenes(&source).unwrap();
-    let entity = scenes[0].entity("dot").unwrap();
-    assert_eq!(
-        scenes[0]
-            .scene()
-            .world()
-            .get::<&CircleShape>(entity)
-            .unwrap()
-            .radius,
-        7.0
-    );
-    drop(scenes);
-    std::fs::remove_dir_all(root).unwrap();
+    assert!((transform.rotation * glam::Vec3::X - glam::Vec3::Y).length() < 0.001);
 }

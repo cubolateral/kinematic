@@ -1,6 +1,5 @@
 mod container;
 mod object;
-mod scene;
 mod track_enum;
 mod trackable;
 
@@ -26,10 +25,4 @@ pub fn derive_trackable(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(TrackEnum)]
 pub fn derive_track_enum(input: TokenStream) -> TokenStream {
     track_enum::derive_track_enum(input)
-}
-
-/// Turns a scene-building function into a Kinematic scene factory.
-#[proc_macro_attribute]
-pub fn scene(attribute: TokenStream, input: TokenStream) -> TokenStream {
-    scene::scene(attribute, input)
 }

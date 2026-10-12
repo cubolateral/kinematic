@@ -19,7 +19,7 @@ mod tween;
 pub use animator::*;
 pub use easing::*;
 pub(crate) use frame::*;
-pub use project::*;
+pub(crate) use project::*;
 pub use project_context::*;
 pub use properties::*;
 pub use random::*;

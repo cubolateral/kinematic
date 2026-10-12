@@ -34,17 +34,6 @@ impl Default for Latex2DShape {
 /// Supports mathematical LaTeX accepted by RaTeX in display style.
 /// Invalid or unsupported source panics when its geometry is first requested.
 ///
-/// ```
-/// use kinematic::prelude::*;
-///
-/// let mut scene = Scene::new();
-/// let formula = latex_2d()
-///     .text(r"\frac{1}{2}")
-///     .size(64.0)
-///     .build(&mut scene);
-/// scene.world_2d().add(&formula);
-/// formula.text(r"\sqrt{2}").duration(2.0).play();
-/// ```
 #[derive(Object)]
 #[object(spatial = "2d", builder = "latex_2d")]
 pub struct Latex2D {
@@ -131,7 +120,7 @@ impl Default for Latex2D {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
+    use crate::test_support::*;
 
     fn pixels(scene: &Scene) -> Vec<skia_safe::Color> {
         let mut surface = skia_safe::surfaces::raster_n32_premul((640, 320)).unwrap();

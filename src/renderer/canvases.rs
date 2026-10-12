@@ -755,7 +755,7 @@ mod graphics_tests;
 #[cfg(test)]
 mod tests {
     use super::camera;
-    use crate::prelude::*;
+    use crate::test_support::*;
     use three_d::Viewer;
 
     #[test]

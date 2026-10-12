@@ -1,15 +1,15 @@
 # Lua projects
 
-Build the editor with `cargo build --bin kinematic`. Lua 5.4 is embedded; no Lua
-installation is needed. Open the start screen with `cargo run --bin kinematic`,
-or select a project directly:
+Build the editor with `cargo build --release`. Lua 5.4 is embedded; no Lua
+installation is needed. `cargo run --release` restores the current project,
+or opens an empty workspace when none is saved. Select a project directly with:
 
 ```sh
-cargo run --bin kinematic -- examples/lua/2d
-cargo run --bin kinematic -- --new /tmp/my-animation "My animation"
-cargo run --bin kinematic -- --new /tmp/my-3d-animation "My 3D animation" --3d
-cargo run --bin kinematic -- --check examples/lua/simulation
-cargo run --bin kinematic -- --render examples/lua/3d
+cargo run --release -- examples/lua/2d
+cargo run --release -- --new /tmp/my-animation "My animation"
+cargo run --release -- --new /tmp/my-3d-animation "My 3D animation" --3d
+cargo run --release -- --check examples/lua/simulation
+cargo run --release -- --render examples/lua/3d
 ```
 
 Rendering needs an OpenGL 3.3 desktop session and FFmpeg on `PATH`. `--check`
@@ -53,7 +53,7 @@ file, line and column; Console retains at most 500 lines and suppresses
 consecutive identical prints. Runtime failures keep
 the previous preview visible. Expensive simulation replay proceeds in short
 slices and can be cancelled. Spaces, arrows, B, F and Esc in text inputs do not
-control playback, rebuild, fullscreen or application exit.
+control playback, fullscreen or application exit.
 
 LuaLS is optional for execution. Install it yourself, set `KINEMATIC_LUALS` to
 its executable, use an existing Neovim Mason installation, or put
@@ -123,8 +123,7 @@ handles as other tracks. Enum values use the Rust variant names.
 | `s:track(initial, id)` | Independent animated value, usable as a simulation input. |
 
 Tweens default to one second and the native easing default. During construction,
-preparing a tween advances its property's builder value to the target, as in
-Rust, so later tasks and `get()` can use it; only `play` schedules evaluation.
+preparing a tween advances its property's builder value to the target, so later tasks and `get()` can use it; only `play` schedules evaluation.
 `k.ease` uses lowercase snake case names such as `linear`, `cubic_out` and
 `sine_in_out`. Nested repeats and ambiguous concurrent writes within repeats are
 rejected by the native scheduler. Keyframes remain in timeline order.
@@ -149,7 +148,7 @@ position. Global queries are `global_position`, `global_rotation`,
 `save()` pushes a snapshot, `restore(nil,seconds,easing)` pops it, and
 `reset(seconds,easing)` returns to builder values. These return tasks for `play`.
 
-Built-in effects have been removed from both Rust and Lua, including fade, grow,
+Built-in effects have been removed, including fade, grow,
 creation, write, morph and text/LaTeX transitions. Animate opacity, scale,
 position, text and other properties manually.
 
@@ -252,9 +251,33 @@ canvas dependencies are checked for cycles and cross-scene references.
 shader. `k.mesh_shader {fragment=glsl,vertex=optional_glsl}` accepts inline code,
 or `fragment_path`/`vertex_path`. Object options include `shader`, `uniforms`,
 `textures` and `shader_padding`. Animate uniforms through `obj:uniform("name")`.
-The GLSL contract is the native one documented in the [README](../README.md).
+The GLSL contract is described below.
 Compilation failure preserves the active preview. Mesh/image/font/shader content
 is immutable within an applied revision, including during export.
+
+### GLSL contract
+
+Image shaders are complete GLSL 3.30 fragment shaders. The engine supplies
+`k_image`, pixel-sized `k_resolution`, scene seconds in `k_time`, and `k_alpha`.
+UV `(0, 0)` is the bottom-left pixel. Input and output are premultiplied,
+sRGB-encoded RGBA. Canvas samplers declared in `textures` follow the canvas
+dependency order; cycles are rejected. `shader_padding` expands captures for
+blur or glow.
+
+Mesh shader sources omit `#version`. The standard vertex stage exposes
+`k_world_position`, `k_normal` and `k_uv`. A custom vertex stage uses `position`
+and optional `normal`/`uv_coordinates` attributes, and must actively use
+`modelMatrix` and `viewProjection`. Optional engine uniforms are `normalMatrix`,
+`viewMatrix`, `projectionMatrix`, `cameraPosition`, `sceneTime`, linear
+`materialColor`, `hasNormal` and `hasUv`. Custom mesh shaders replace standard
+material lighting. GPU deformation retains CPU geometry bounds; expand them
+with `shader_padding` for selection and culling.
+
+Group mesh shaders and uniforms are inherited by descendants. A child's own
+shader takes precedence; compatible local uniforms override inherited ones.
+Declare uniform bindings in object options before animating them. Uniforms
+support booleans, numbers, vectors, quaternions, quads and colors; strings and
+enums have no GLSL representation. Canvas textures remain fixed per revision.
 
 ## Identity, reload and overrides
 
@@ -293,27 +316,6 @@ advance by exactly `1/fps`; UI/selection overlays never enter output. Runtime or
 drawing errors cancel export and remove the incomplete output through the native
 exporter's failure path.
 
-## Rust hosting and migration
-
-Existing native scenes still use `#[scene]` and `SceneBuilder`. `SceneFactory`
-now receives `&ProjectContext` before resolution/margins; the macro supplies the
-new signature. `Project`/`Scene` names are owned strings. Use
-`app().project_in(context,name,scenes)?` to choose an explicit native root.
-Native projects retain `kinematic/project.ron`; Lua uses only `kinematic.ron`.
-
-A host can open `LuaProject`, call `register::<MyObject>()?`, and run
-`app().lua_project(project).run()`. Lua then calls
-`s:native("my_builder", options)`. The same derive-generated metadata controls
-field bindings, validation and `project.definitions()` for LuaLS. Duplicate
-builder registration is rejected. Rust extensions remain appropriate for
-external capabilities; custom geometry/simulations do not require them.
-
-Code using the removed effects module, particle/morph types, text `.fade`/
-`.morph`, or effect builder methods must switch to direct property tweens.
-Custom draw structs using complete literals should supply the new optional
-`logical_bounds` callback or use `..Default::default()`. Core/runtime contracts
-remain independent of Lua VM storage and editor window ownership.
-
 ## Execution limits
 
 Each scene VM has a 64 MiB memory limit and instruction-hook deadlines. Build/
@@ -325,7 +327,7 @@ they do not make native Rust/GPU work interruptible. Images are limited to
 64 MiB encoded and sixteen million decoded pixels, meshes to one million vertices
 and three million indices, and drawing submissions/text have explicit caps.
 Project/canvas dimensions are limited to 8192 pixels and project FPS to 1000.
-Use project files only from trusted sources when invoking native extensions.
+
 
 Reload timing is reported in Console: Lua construction, simulation replay,
 application, GPU validation, geometry builds/uploads and the previous frame's

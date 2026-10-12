@@ -27,3 +27,6 @@ pub(crate) fn release_unused() {
     resources::release_unused();
     drawing::release_unused();
 }
+
+#[cfg(test)]
+mod benchmark;

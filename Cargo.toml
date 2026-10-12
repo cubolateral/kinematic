@@ -3,10 +3,8 @@ name = "kinematic"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-
-[[bench]]
-name = "lua"
-harness = false
+publish = false
+autolib = false
 
 [dependencies]
 kinematic-macros = { path = "packages/kinematic-macros" }

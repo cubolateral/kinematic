@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use kinematic::{hecs, prelude::*};
+use crate::test_support::*;
 
 #[derive(Clone, Trackable)]
 struct Settings {

@@ -1,4 +1,4 @@
-use kinematic::prelude::*;
+use crate::test_support::*;
 
 #[test]
 fn two_dimensional_anchors_align_objects() {

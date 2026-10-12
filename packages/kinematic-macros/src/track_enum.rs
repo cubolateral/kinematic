@@ -34,23 +34,23 @@ pub fn derive_track_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStr
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
     quote! {
-        impl #impl_generics kinematic::core::TrackValueType for #name #type_generics #where_clause {
+        impl #impl_generics crate::core::TrackValueType for #name #type_generics #where_clause {
             type Input = Self;
 
-            const CHOICES: kinematic::core::TrackChoices =
-                kinematic::core::TrackChoices::Enum(
-                    <Self as kinematic::core::TrackEnum>::VARIANTS,
+            const CHOICES: crate::core::TrackChoices =
+                crate::core::TrackChoices::Enum(
+                    <Self as crate::core::TrackEnum>::VARIANTS,
                 );
 
-            fn into_track_value(self) -> kinematic::core::TrackValue {
-                kinematic::core::TrackValue::Enum(match self {
+            fn into_track_value(self) -> crate::core::TrackValue {
+                crate::core::TrackValue::Enum(match self {
                     #(Self::#variant_names => stringify!(#variant_names)),*
                 })
             }
 
-            fn from_track_value(value: kinematic::core::TrackValue) -> Option<Self> {
+            fn from_track_value(value: crate::core::TrackValue) -> Option<Self> {
                 match value {
-                    kinematic::core::TrackValue::Enum(value) => match value {
+                    crate::core::TrackValue::Enum(value) => match value {
                         #(stringify!(#variant_names) => Some(Self::#variant_names),)*
                         _ => None,
                     },
@@ -59,7 +59,7 @@ pub fn derive_track_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStr
             }
         }
 
-        impl #impl_generics kinematic::core::TrackEnum for #name #type_generics #where_clause {
+        impl #impl_generics crate::core::TrackEnum for #name #type_generics #where_clause {
             const VARIANTS: &'static [&'static str] = &[#(stringify!(#variant_names)),*];
         }
     }

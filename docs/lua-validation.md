@@ -1,5 +1,33 @@
 # Lua validation
 
+## Executable migration validation
+
+Validated on October 12, 2026:
+
+- `cargo fmt --check` and `cargo check --workspace` passed.
+- `cargo test --workspace` passed outside the sandbox: 300 binary tests and
+  three macro tests; five optional tests were ignored by the default suite.
+  Inside the sandbox, only the external LuaLS initialization timed out.
+- The two optional Lua editor graphics tests passed with
+  `SDL_VIDEODRIVER=offscreen`, covering simulation startup/seeking, reload,
+  selection, Inspector persistence, project settings, project switching and
+  frozen-revision MP4 export verified with FFprobe.
+- `cargo run --release -- --check examples/lua/simulation` validated both scenes
+  (three and four seconds).
+- The release executable opened an empty workspace, opened a temporary copy
+  of the existing simulation project, and restored it on a subsequent launch
+  without arguments. Its Lua source files remained byte-identical. These
+  short offscreen launches were terminated after checking startup; graceful
+  desktop interaction was not manually exercised.
+- Cargo metadata contains only the Kinematic binary and the internal
+  procedural macro target, with publication disabled for both packages.
+
+Manual desktop interaction, Windows/macOS, the separate renderer graphics test,
+manual LaTeX review and performance benchmarks were not rerun for this migration.
+The remaining sections record earlier validation, not new migration results.
+
+## Earlier Lua integration validation
+
 Validated on Linux x86_64 (Arch kernel 7.1.8), Rust 1.94.1, the existing
 SDL/OpenGL desktop session, and FFmpeg 9.0.1. Lua 5.4 is embedded. The installed
 Lua Language Server was exercised as a real child process.
@@ -7,11 +35,11 @@ Lua Language Server was exercised as a real child process.
 ## Automated checks
 
 - `cargo fmt --check`.
-- `cargo check --workspace --all-targets`, including the editor and native examples.
+- `cargo check --workspace --all-targets`, including the editor and internal runtime tests.
 - `cargo test --workspace`: 301 passing tests, no failures. The default suite
   excludes two GPU tests, one manual LaTeX layout review and one illustrative
   event doctest.
-- `cargo test --lib graphics -- --ignored --nocapture --test-threads=1`:
+- `cargo test --bin kinematic graphics -- --ignored --nocapture --test-threads=1`:
   both GPU tests pass in the desktop session.
 - `cargo build --bin kinematic`.
 
@@ -64,8 +92,7 @@ and test caches were kept outside the repository.
 ## Validation limits
 
 Keyboard/clipboard, IME, drag interactions and each individual CTE command were
-not manually exercised. Native examples were compiled; the graphics suite covers
-native rendering without opening every example interactively. The manual LaTeX
+not manually exercised. The graphics suite covers internal Rust rendering. The manual LaTeX
 layout review remains excluded. Windows and macOS were not tested.
 
 The callback fingerprint parser follows the vendored Lua 5.4 bytecode format;

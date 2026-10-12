@@ -16,10 +16,6 @@ pub struct Sources {
     files: Rc<RefCell<BTreeMap<PathBuf, Arc<[u8]>>>>,
 }
 impl Sources {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     pub(crate) fn read(&self, context: &ProjectContext, path: &Path) -> std::io::Result<Vec<u8>> {
         let full = context.resolve(path)?;
         if let Some(text) = self.text.get(path) {

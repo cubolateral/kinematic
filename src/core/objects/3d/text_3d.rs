@@ -355,7 +355,7 @@ pub(crate) fn extruded_path_mesh(path: &skia_safe::Path, tolerance: f32) -> thre
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::{Object3DHandler, Scene, vec3};
+    use crate::test_support::{Object3DHandler, Scene, vec3};
 
     #[test]
     fn depth_is_trackable_and_part_of_the_local_box() {

@@ -1,4 +1,4 @@
-use kinematic::prelude::*;
+use crate::test_support::*;
 
 #[derive(Object, Node)]
 #[object(spatial = "2d", builder = "custom_container")]

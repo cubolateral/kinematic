@@ -1,4 +1,4 @@
-use kinematic::{core::ProjectContext, scripting::LuaScene};
+use crate::{core::ProjectContext, scripting::LuaScene};
 use std::{hint::black_box, path::PathBuf, time::Instant};
 
 fn load(source: &str) -> LuaScene {
@@ -45,7 +45,9 @@ fn objects(kind: &str, behavior: &str) -> String {
     )
 }
 
-fn main() {
+#[test]
+#[ignore = "Runs the Lua performance benchmark."]
+fn lua_benchmark() {
     println!("case,median_us,min_us,max_us");
     let static_source = objects("circle", "");
     measure("load_1000_2d", 5, || {
@@ -77,7 +79,7 @@ fn main() {
             scene.update(black_box(frame as f32 / 60.0)).unwrap();
         });
     }
-    let life = include_str!("../examples/lua/simulation/scenes/life.lua");
+    let life = include_str!("../../examples/lua/simulation/scenes/life.lua");
     {
         let source = format!(
             "local k=require('kinematic'); local cache={{}} \
@@ -116,11 +118,9 @@ fn main() {
             .unwrap();
     });
     let scene = load(life);
-    let mut surface = kinematic::skia_safe::surfaces::raster_n32_premul((640, 480)).unwrap();
+    let mut surface = skia_safe::surfaces::raster_n32_premul((640, 480)).unwrap();
     measure("life_draw_raster", 60, || {
-        surface
-            .canvas()
-            .clear(kinematic::skia_safe::colors::TRANSPARENT);
+        surface.canvas().clear(skia_safe::colors::TRANSPARENT);
         scene.scene().draw(surface.canvas());
         black_box(&mut surface);
     });

@@ -1,4 +1,4 @@
-use kinematic::{hecs, prelude::*};
+use crate::test_support::*;
 
 #[derive(Clone)]
 struct CustomShape {

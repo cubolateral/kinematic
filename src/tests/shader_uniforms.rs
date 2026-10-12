@@ -1,10 +1,10 @@
-use kinematic::prelude::*;
+use crate::test_support::*;
 
 struct UniformScene {
     object: Option<RectHandler>,
 }
 
-impl SceneBuilder for UniformScene {
+impl UniformScene {
     fn build(&mut self, scene: &mut Scene) {
         let shader = ImageShader::new(
             "#version 330 core\nin vec2 k_uv; out vec4 k_color; uniform float u_progress; void main() { k_color = vec4(u_progress); }",
@@ -30,7 +30,10 @@ impl SceneBuilder for UniformScene {
 fn public_uniform_api_uses_the_normal_timeline() {
     let mut scene = Scene::new();
     let mut builder = UniformScene { object: None };
-    scene.build(&mut builder);
+    {
+        builder.build(&mut scene);
+        scene.finish_build()
+    };
     let object = builder.object.unwrap();
 
     scene.update(1.0);

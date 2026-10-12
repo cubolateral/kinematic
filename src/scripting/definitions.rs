@@ -3,13 +3,9 @@ use crate::core::{Scene, TrackValue};
 
 /// Generates LuaLS definitions from the same object metadata used by the runtime.
 pub fn definitions() -> String {
-    registered(&[])
-}
-
-pub(crate) fn registered(extensions: &[native::NativeObject]) -> String {
     let mut output = include_str!("api.lua").to_owned();
     let mut classes = std::collections::BTreeSet::new();
-    for object in native::objects().iter().chain(extensions) {
+    for object in native::objects() {
         let mut scene = Scene::new();
         let entity = scene.world_mut().spawn(());
         (object.spawn)(&mut scene, entity);
@@ -38,14 +34,6 @@ pub(crate) fn registered(extensions: &[native::NativeObject]) -> String {
                     field_type(field, &world, entity)
                 ));
             }
-        }
-        if extensions
-            .iter()
-            .any(|extension| extension.name == object.name)
-        {
-            output.push_str(&format!("---@overload fun(self: Kinematic.Scene, name: '{}', options: Kinematic.{class}Options): Kinematic.{class}\n", object.name));
-            output.push_str("function Scene:native(name, options) end\n");
-            continue;
         }
         output.push_str(&format!("---@param options Kinematic.{class}Options\n---@return Kinematic.{class}\nfunction Scene:{}(options) end\n",object.name));
     }

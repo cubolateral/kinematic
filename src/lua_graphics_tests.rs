@@ -19,7 +19,7 @@ fn frame(app: &mut App, editor: &mut Editor) {
     app.ui.apply_scale(&mut app.imgui);
     app.imgui_sdl.new_frame(&mut app.imgui).unwrap();
     let ui = app.imgui.frame();
-    app.ui.draw(editor, ui, false);
+    app.ui.draw(editor, ui);
     app.ui.draw_projects(Some(editor), ui);
     let frame = app
         .imgui
@@ -252,12 +252,7 @@ fn lua_editor_reload_switch_and_frozen_export() {
         settle(&mut app, &mut editor);
         let mut settings = editor.project_info().1;
         settings.resolution = (100, 80);
-        editor.apply_project_settings(
-            settings,
-            &mut app.imgui_renderer,
-            &mut app.skia_context,
-            &app.gl,
-        );
+        editor.apply_project_settings(settings);
         settle(&mut app, &mut editor);
         assert_eq!(
             LuaProject::open(editor.context().root())

@@ -13,11 +13,6 @@ use crate::core::{
 /// Shared ECS world used by scenes and their handlers.
 pub type SceneWorld = std::rc::Rc<std::cell::RefCell<hecs::World>>;
 
-/// Builds scene entities and schedules their animation timeline.
-pub trait SceneBuilder {
-    fn build(&mut self, scene: &mut Scene);
-}
-
 /// Runtime ECS scene containing render nodes and compiled animation tracks.
 pub(crate) struct SceneIdentity(pub(crate) u64, std::sync::atomic::AtomicU64);
 
@@ -50,8 +45,6 @@ pub struct Scene {
     animator: Animator,
     scene_file: SceneFile,
     scheduled_events: Vec<ScheduledEvent>,
-    persist_events: bool,
-    event_path: Option<std::path::PathBuf>,
     revision: std::cell::Cell<u64>,
     plan_revision: std::cell::Cell<u64>,
     runtime: std::cell::RefCell<Option<Runtime>>,
@@ -77,33 +70,17 @@ impl Scene {
 
     /// Creates a scene whose built-in worlds use `resolution`.
     pub fn new_with_resolution(resolution: (u32, u32)) -> Self {
-        Self::new_inner("Scene", resolution, false, None)
+        Self::new_inner("Scene", resolution, None)
     }
 
     /// Creates a scene using fully configured builders for its built-in canvases.
     pub fn new_with_canvases(world_2d: Canvas2DBuilder, world_3d: Canvas3DBuilder) -> Self {
-        Self::new_inner("Scene", (0, 0), false, Some((world_2d, world_3d)))
-    }
-
-    #[doc(hidden)]
-    pub fn new_named(name: &str, resolution: (u32, u32)) -> Self {
-        Self::new_inner(name, resolution, true, None)
-    }
-
-    /// Creates a named scene using fully configured built-in canvas builders.
-    #[doc(hidden)]
-    pub fn new_named_with_canvases(
-        name: &str,
-        world_2d: Canvas2DBuilder,
-        world_3d: Canvas3DBuilder,
-    ) -> Self {
-        Self::new_inner(name, (0, 0), true, Some((world_2d, world_3d)))
+        Self::new_inner("Scene", (0, 0), Some((world_2d, world_3d)))
     }
 
     fn new_inner(
         name: &str,
         resolution: (u32, u32),
-        persist_events: bool,
         canvases: Option<(Canvas2DBuilder, Canvas3DBuilder)>,
     ) -> Self {
         let animator_time = std::rc::Rc::new(std::cell::Cell::new(0.0));
@@ -143,14 +120,8 @@ impl Scene {
             animator_time: std::rc::Rc::clone(&animator_time),
             time: std::cell::Cell::new(0.0),
             animator,
-            scene_file: if persist_events {
-                SceneFile::load(name)
-            } else {
-                SceneFile::default()
-            },
+            scene_file: SceneFile::default(),
             scheduled_events: Vec::new(),
-            persist_events,
-            event_path: None,
             revision: std::cell::Cell::new(0),
             plan_revision: std::cell::Cell::new(0),
             runtime: std::cell::RefCell::new(None),
@@ -173,22 +144,8 @@ impl Scene {
         scene
     }
 
-    /// Creates a named scene whose event data belongs to an explicit project root.
-    pub fn new_in_project(
-        context: &crate::core::ProjectContext,
-        name: &str,
-        resolution: (u32, u32),
-    ) -> std::io::Result<Self> {
-        let path = context.resolve(format!("kinematic/scenes/{name}.ron"))?;
-        let mut scene = Self::new_inner(name, resolution, false, None);
-        scene.scene_file = SceneFile::read(&path)?;
-        scene.event_path = Some(path);
-        scene.persist_events = true;
-        Ok(scene)
-    }
-
     pub(crate) fn new_candidate(name: &str, resolution: (u32, u32)) -> Self {
-        Self::new_inner(name, resolution, false, None)
+        Self::new_inner(name, resolution, None)
     }
 
     pub(crate) fn finish_build(&mut self) -> f32 {
@@ -659,18 +616,6 @@ impl Scene {
                 .is_ok_and(|s| s.dimension == crate::core::objects::CanvasDimension::Two)
     }
 
-    /// Populates the scene and compiles the builder's animation timeline.
-    ///
-    /// Returns the duration of the resulting timeline.
-    pub fn build(&mut self, builder: &mut dyn SceneBuilder) -> f32 {
-        self.animator = Animator::with_scene_time(std::rc::Rc::clone(&self.animator_time));
-        self.scheduled_events.clear();
-
-        builder.build(self);
-
-        self.animator.take_schedule().compile(self)
-    }
-
     pub(crate) fn duration(&self) -> f32 {
         self.animator.duration()
     }
@@ -699,7 +644,6 @@ impl Scene {
     /// timeline during seeking, and can be read with [`TrackHandle::get`].
     ///
     /// ```
-    /// # use kinematic::prelude::*;
     /// # let mut scene = Scene::new();
     /// let counter = scene.track(0_u32);
     /// counter.to(10).duration(2.0).play();
@@ -720,10 +664,8 @@ impl Scene {
     /// Waits for the duration stored for a named scene event.
     ///
     /// The duration is relative to the active scheduling position, like
-    /// [`Self::wait`]. Named scenes persist durations in
-    /// `kinematic/scenes/<scene_name>.ron`. Missing events are created with
-    /// zero duration. The Timeline displays the wait as a draggable event span;
-    /// committing a drag rebuilds that scene through its factory.
+    /// [`Self::wait`]. Lua manages persistence and rebuilds after Timeline edits.
+    /// Missing events have zero duration.
     ///
     /// Events cannot be used inside [`Self::repeat`].
     ///
@@ -745,7 +687,6 @@ impl Scene {
                     name: name.to_owned(),
                     duration: 0.0,
                 });
-                self.save_events();
                 (self.scene_file.events.len() - 1, 0.0)
             }
         };
@@ -933,26 +874,6 @@ impl Scene {
 
     pub(crate) fn events(&self) -> &[ScheduledEvent] {
         &self.scheduled_events
-    }
-
-    pub(crate) fn set_event_duration(&mut self, index: usize, duration: f32) {
-        let event = self
-            .scene_file
-            .events
-            .get_mut(index)
-            .expect("Event index must belong to this scene.");
-        event.duration = duration.max(0.0);
-        self.save_events();
-    }
-
-    fn save_events(&self) {
-        if self.persist_events {
-            if let Some(path) = &self.event_path {
-                self.scene_file.save_to(path);
-            } else {
-                self.scene_file.save(&self.name);
-            }
-        }
     }
 }
 
@@ -1152,16 +1073,12 @@ mod tests {
     }
 
     fn scene_with_event(name: &str, event_name: &str, duration: f32) -> Scene {
-        let mut scene = Scene::new_named(name, (1920, 1080));
-        scene.event(event_name);
-        let index = scene
-            .scene_file
-            .events
-            .iter()
-            .position(|event| event.name == event_name)
-            .unwrap();
-        scene.set_event_duration(index, duration);
-        Scene::new_named(name, (1920, 1080))
+        let mut scene = Scene::new_candidate(name, (1920, 1080));
+        scene.scene_file.events.push(TimeEvent {
+            name: event_name.into(),
+            duration,
+        });
+        scene
     }
 
     #[test]
@@ -1197,7 +1114,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Events cannot be used inside repeat cycles.")]
     fn event_is_rejected_inside_repeat() {
-        let mut scene = Scene::new_named("event_repeat", (1920, 1080));
+        let mut scene = Scene::new_candidate("event_repeat", (1920, 1080));
 
         scene.repeat(|scene| scene.event("intro"));
     }
@@ -1866,15 +1783,6 @@ mod tests {
         );
     }
 
-    #[crate::scene]
-    fn delayed_object_scene(scene: &mut Scene) {
-        let circle = circle().build(scene);
-
-        scene.wait(32.0);
-        scene.world_2d().add(&circle);
-        scene.wait(1.0);
-    }
-
     #[test]
     fn object_builder_sets_component_values_and_preserves_object_defaults() {
         let default = Text2D::default();
@@ -2185,7 +2093,7 @@ mod tests {
     fn handler_tween_play_registers_in_scene_animator() {
         struct HandlerTweenScene;
 
-        impl SceneBuilder for HandlerTweenScene {
+        impl HandlerTweenScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().fill(Color::RED).build(scene);
                 scene.world_2d().add(&circle);
@@ -2199,7 +2107,13 @@ mod tests {
         }
 
         let mut scene = Scene::new();
-        assert_eq!(scene.build(&mut HandlerTweenScene), 1.0);
+        assert_eq!(
+            {
+                HandlerTweenScene.build(&mut scene);
+                scene.finish_build()
+            },
+            1.0
+        );
 
         scene.update(0.5);
         let world = scene.world();
@@ -2398,7 +2312,7 @@ mod tests {
     fn object_handler_restores_saved_states_in_lifo_order() {
         struct SnapshotScene;
 
-        impl SceneBuilder for SnapshotScene {
+        impl SnapshotScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().fill(Color::RED).build(scene);
                 scene.world_2d().add(&circle);
@@ -2413,7 +2327,13 @@ mod tests {
         }
 
         let mut scene = Scene::new();
-        assert_eq!(scene.build(&mut SnapshotScene), 4.0);
+        assert_eq!(
+            {
+                SnapshotScene.build(&mut scene);
+                scene.finish_build()
+            },
+            4.0
+        );
 
         scene.update(3.0);
         {
@@ -2499,7 +2419,7 @@ mod tests {
     fn immediate_restore_preserves_the_preceding_track_transition() {
         struct ImmediateRestoreScene;
 
-        impl SceneBuilder for ImmediateRestoreScene {
+        impl ImmediateRestoreScene {
             fn build(&mut self, scene: &mut Scene) {
                 let camera = scene.world_2d();
 
@@ -2510,7 +2430,13 @@ mod tests {
         }
 
         let mut scene = Scene::new();
-        assert_eq!(scene.build(&mut ImmediateRestoreScene), 1.0);
+        assert_eq!(
+            {
+                ImmediateRestoreScene.build(&mut scene);
+                scene.finish_build()
+            },
+            1.0
+        );
 
         scene.update(0.5);
         {
@@ -2533,7 +2459,7 @@ mod tests {
     fn handler_tween_merges_updates_to_the_same_track() {
         struct ComponentTweenScene;
 
-        impl SceneBuilder for ComponentTweenScene {
+        impl ComponentTweenScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().build(scene);
                 scene.world_2d().add(&circle);
@@ -2546,7 +2472,13 @@ mod tests {
         }
 
         let mut scene = Scene::new();
-        assert_eq!(scene.build(&mut ComponentTweenScene), 1.0);
+        assert_eq!(
+            {
+                ComponentTweenScene.build(&mut scene);
+                scene.finish_build()
+            },
+            1.0
+        );
 
         scene.update(1.0);
         let world = scene.world();
@@ -2560,7 +2492,7 @@ mod tests {
     fn nested_groups_keep_scene_objects_on_their_local_timeline() {
         struct NestedGroupsScene;
 
-        impl SceneBuilder for NestedGroupsScene {
+        impl NestedGroupsScene {
             fn build(&mut self, scene: &mut Scene) {
                 let root = circle().build(scene);
                 scene.world_2d().add(&root);
@@ -2606,7 +2538,13 @@ mod tests {
         }
 
         let mut scene = Scene::new();
-        assert_eq!(scene.build(&mut NestedGroupsScene), 8.0);
+        assert_eq!(
+            {
+                NestedGroupsScene.build(&mut scene);
+                scene.finish_build()
+            },
+            8.0
+        );
 
         let world = scene.world();
         let mut lifetimes: Vec<_> = world
@@ -2672,7 +2610,7 @@ mod tests {
     fn object_lifetime_follows_the_animator_time_and_reactivates_when_seeking_back() {
         struct LifetimeScene;
 
-        impl SceneBuilder for LifetimeScene {
+        impl LifetimeScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().build(scene);
                 let rect = rect().build(scene);
@@ -2686,7 +2624,10 @@ mod tests {
         }
 
         let mut scene = Scene::new();
-        let duration = scene.build(&mut LifetimeScene);
+        let duration = {
+            LifetimeScene.build(&mut scene);
+            scene.finish_build()
+        };
 
         assert_eq!(duration, 3.0);
 
@@ -2730,7 +2671,7 @@ mod tests {
     fn object_added_in_parallel_uses_the_group_start() {
         struct ParallelLifetimeScene;
 
-        impl SceneBuilder for ParallelLifetimeScene {
+        impl ParallelLifetimeScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().build(scene);
 
@@ -2745,7 +2686,13 @@ mod tests {
 
         let mut scene = Scene::new();
 
-        assert_eq!(scene.build(&mut ParallelLifetimeScene), 6.0);
+        assert_eq!(
+            {
+                ParallelLifetimeScene.build(&mut scene);
+                scene.finish_build()
+            },
+            6.0
+        );
 
         let world = scene.world();
         let mut query = world.query::<(hecs::Entity, &TreeNode)>();
@@ -2756,44 +2703,5 @@ mod tests {
 
         assert_eq!(node.lifetime, [0.0, f32::INFINITY]);
         assert!(node.is_activated);
-    }
-
-    #[test]
-    fn scene_macro_preserves_the_create_time_as_the_node_start() {
-        let scene = delayed_object_scene(
-            &crate::core::ProjectContext::new(".").unwrap(),
-            (1920, 1080),
-            (64, 64),
-        );
-
-        assert_eq!(scene.name(), "delayed_object_scene");
-        assert_eq!(scene.duration(), 33.0);
-
-        scene.update(31.0);
-        {
-            let world = scene.world();
-            let mut query = world.query::<(hecs::Entity, &TreeNode)>();
-            let (_, node) = query
-                .iter()
-                .find(|(entity, node)| {
-                    !node.is_root && world.get::<&CanvasSettings>(*entity).is_err()
-                })
-                .unwrap();
-
-            assert_eq!(node.lifetime, [32.0, f32::INFINITY]);
-            assert!(!node.is_activated);
-        }
-
-        scene.update(32.0);
-        let world = scene.world();
-        let mut query = world.query::<&TreeNode>();
-
-        assert!(
-            query
-                .iter()
-                .find(|node| !node.is_root)
-                .unwrap()
-                .is_activated
-        );
     }
 }

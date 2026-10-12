@@ -87,11 +87,11 @@ fn limits_tokens(field: &syn::Field, args: &TrackArgs) -> syn::Result<proc_macro
                 "Track limits are only supported for `f32`, `i32`, and `u32`.",
             ));
         }
-        return Ok(quote!(kinematic::core::TrackLimits::None));
+        return Ok(quote!(crate::core::TrackLimits::None));
     };
 
     if args.min.is_none() && args.max.is_none() {
-        return Ok(quote!(kinematic::core::TrackLimits::None));
+        return Ok(quote!(crate::core::TrackLimits::None));
     }
 
     let integer = kind != "f32";
@@ -148,7 +148,7 @@ fn limits_tokens(field: &syn::Field, args: &TrackArgs) -> syn::Result<proc_macro
         .map_or_else(|| quote!(None), |value| quote!(Some(#value)));
     let variant = format_ident!("{}", kind.to_uppercase());
     Ok(quote! {
-        kinematic::core::TrackLimits::#variant {
+        crate::core::TrackLimits::#variant {
             min: #min,
             max: #max,
         }
@@ -189,20 +189,20 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let struct_name = &input.ident;
     let handler_fields_name = format_ident!("__{}HandlerFields", struct_name);
     let tween_fields_trait = format_ident!("__Kinematic{}TweenFields", struct_name);
-    let builder_component_trait = quote!(kinematic::core::objects::ObjectBuilderComponent);
-    let handler_context_trait = quote!(kinematic::core::objects::HandlerContext);
-    let object_trackable_trait = quote!(kinematic::core::objects::ObjectTrackable);
-    let scene_world_type = quote!(kinematic::core::SceneWorld);
-    let animator_handle_type = quote!(kinematic::core::AnimatorHandle);
-    let track_handle_type = quote!(kinematic::core::TrackHandle);
-    let track_id_type = quote!(kinematic::core::TrackId);
-    let track_info_type = quote!(kinematic::core::TrackInfo);
-    let trackable_info_type = quote!(kinematic::core::TrackableInfo);
-    let trackable_trait = quote!(kinematic::core::Trackable);
-    let track_value_type_trait = quote!(kinematic::core::TrackValueType);
-    let tween_type = quote!(kinematic::core::Tween);
-    let track_property_type = quote!(kinematic::core::TrackProperty);
-    let vector3_type = quote!(kinematic::core::types::Vector3);
+    let builder_component_trait = quote!(crate::core::objects::ObjectBuilderComponent);
+    let handler_context_trait = quote!(crate::core::objects::HandlerContext);
+    let object_trackable_trait = quote!(crate::core::objects::ObjectTrackable);
+    let scene_world_type = quote!(crate::core::SceneWorld);
+    let animator_handle_type = quote!(crate::core::AnimatorHandle);
+    let track_handle_type = quote!(crate::core::TrackHandle);
+    let track_id_type = quote!(crate::core::TrackId);
+    let track_info_type = quote!(crate::core::TrackInfo);
+    let trackable_info_type = quote!(crate::core::TrackableInfo);
+    let trackable_trait = quote!(crate::core::Trackable);
+    let track_value_type_trait = quote!(crate::core::TrackValueType);
+    let tween_type = quote!(crate::core::Tween);
+    let track_property_type = quote!(crate::core::TrackProperty);
+    let vector3_type = quote!(crate::core::types::Vector3);
 
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {

@@ -29,14 +29,14 @@ struct EditorScene {
 }
 
 enum SceneInstance {
-    Native(Scene),
+    Empty(Scene),
     Lua(crate::scripting::LuaScene),
 }
 impl std::ops::Deref for SceneInstance {
     type Target = Scene;
     fn deref(&self) -> &Scene {
         match self {
-            Self::Native(scene) => scene,
+            Self::Empty(scene) => scene,
             Self::Lua(scene) => &scene.scene,
         }
     }
@@ -44,7 +44,7 @@ impl std::ops::Deref for SceneInstance {
 impl std::ops::DerefMut for SceneInstance {
     fn deref_mut(&mut self) -> &mut Scene {
         match self {
-            Self::Native(scene) => scene,
+            Self::Empty(scene) => scene,
             Self::Lua(scene) => &mut scene.scene,
         }
     }
@@ -52,7 +52,7 @@ impl std::ops::DerefMut for SceneInstance {
 impl SceneInstance {
     fn evaluate(&self, time: f32) -> Result<(), String> {
         match self {
-            Self::Native(scene) => {
+            Self::Empty(scene) => {
                 scene.update(time);
                 Ok(())
             }
@@ -301,35 +301,6 @@ pub(crate) struct Editor {
 }
 
 impl Editor {
-    pub fn new(
-        project: Project,
-        imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
-        skia_context: &mut skia_safe::gpu::DirectContext,
-        gl: &std::rc::Rc<glow::Context>,
-        three_context: three_d::Context,
-    ) -> Self {
-        println!("Project initialized: {}", project.name);
-        project.validate();
-
-        let scenes = create_scenes(
-            &project.context,
-            &project.scenes,
-            project.settings.resolution,
-            project.settings.fps,
-            project.settings.margin,
-        );
-        let mut editor = Self::with_scenes(
-            project,
-            scenes,
-            imgui_renderer,
-            skia_context,
-            gl,
-            three_context,
-        );
-        editor.update_active_scene(editor.timeline.time());
-        editor
-    }
-
     pub(crate) fn new_lua(
         project: crate::scripting::LuaProject,
         imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
@@ -339,7 +310,7 @@ impl Editor {
     ) -> Result<Self, String> {
         let mut documents = crate::editor::documents::Documents::new(
             project.context.clone(),
-            &project.definitions(),
+            &crate::scripting::definitions(),
         )?;
         for path in &project.manifest.scenes {
             if let Err(error) = documents.open(path) {
@@ -352,21 +323,20 @@ impl Editor {
             .scenes
             .iter()
             .map(|path| {
-                let scene = match crate::scripting::LuaScene::load_registered(
+                let scene = match crate::scripting::LuaScene::load(
                     project.context.clone(),
                     path,
                     sources.clone(),
                     project.manifest.resolution,
                     project.manifest.fps,
                     project.manifest.margin,
-                    project.extensions.clone(),
                 ) {
                     Ok(scene) => SceneInstance::Lua(scene),
                     Err(error) => {
                         documents.diagnostics.push(error.to_string());
                         documents.status =
                             "Scene failed. Correct the script to build its preview.".into();
-                        SceneInstance::Native(Scene::new_candidate(
+                        SceneInstance::Empty(Scene::new_candidate(
                             &path.display().to_string(),
                             project.manifest.resolution,
                         ))
@@ -380,14 +350,13 @@ impl Editor {
                 }
             })
             .collect::<Vec<_>>();
-        let native = Project {
+        let metadata = Project {
             name: project.manifest.name.clone(),
             context: project.context.clone(),
             settings: project.manifest.settings(),
-            scenes: Vec::new(),
         };
         let mut editor = Self::with_scenes(
-            native,
+            metadata,
             scenes,
             imgui_renderer,
             skia_context,
@@ -572,14 +541,13 @@ impl Editor {
                         candidates.push((index, candidate));
                     }
                 } else {
-                    let candidate = crate::scripting::LuaScene::load_registered(
+                    let candidate = crate::scripting::LuaScene::load(
                         project.context.clone(),
                         path,
                         sources.clone(),
                         manifest.resolution,
                         manifest.fps,
                         manifest.margin,
-                        project.extensions.clone(),
                     )
                     .map_err(|e| e.to_string())?;
                     candidates.push((index, candidate));
@@ -1081,13 +1049,7 @@ impl Editor {
         self.pending_project_settings.take()
     }
 
-    pub(crate) fn apply_project_settings(
-        &mut self,
-        settings: ProjectSettings,
-        imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
-        skia_context: &mut skia_safe::gpu::DirectContext,
-        gl: &std::rc::Rc<glow::Context>,
-    ) {
+    pub(crate) fn apply_project_settings(&mut self, settings: ProjectSettings) {
         if self.is_exporting || settings == self.project.settings {
             return;
         }
@@ -1116,14 +1078,13 @@ impl Editor {
                             settings.fps,
                             settings.margin,
                         ),
-                        SceneInstance::Native(_) => crate::scripting::LuaScene::load_registered(
+                        SceneInstance::Empty(_) => crate::scripting::LuaScene::load(
                             project.context.clone(),
                             &manifest.scenes[index],
                             sources.clone(),
                             settings.resolution,
                             settings.fps,
                             settings.margin,
-                            project.extensions.clone(),
                         ),
                     }
                     .map_err(|error| error.to_string())?;
@@ -1151,45 +1112,6 @@ impl Editor {
             }
             return;
         }
-        if !ProjectSettings::is_valid(&settings) {
-            self.render_error = Some("Invalid project settings.".into());
-            return;
-        }
-        if let Err(error) = settings.save(&self.project.context) {
-            self.render_error = Some(error.to_string());
-            return;
-        }
-        let time = self.timeline.time();
-        self.resize_project_targets(&settings, imgui_renderer, skia_context, gl);
-        self.scenes = create_scenes(
-            &self.project.context,
-            &self.project.scenes,
-            settings.resolution,
-            settings.fps,
-            settings.margin,
-        );
-        let duration = self.focused_scene.map_or_else(
-            || self.scenes.last().map_or(0.0, |scene| scene.end),
-            |index| self.scenes[index].end - self.scenes[index].start,
-        );
-        let loop_enabled = self.timeline.loop_enabled();
-        let playing = self.timeline.is_playing();
-        self.timeline = Timeline::new(duration, settings.fps);
-        self.timeline.set_loop(loop_enabled);
-        self.project.settings = settings;
-        self.active_scene = self.focused_scene.unwrap_or(0);
-        if self.lua_project.is_none() {
-            self.selection.clear();
-        }
-        if playing {
-            self.timeline.play();
-        }
-        self.render_error = None;
-        self.pending_export_time = None;
-        self.pending_screenshot = false;
-        self.is_exporting = false;
-        self.accumulator = 0.0;
-        self.update_active_scene(time.min(duration));
     }
 
     fn resize_project_targets(
@@ -1289,27 +1211,6 @@ impl Editor {
             }
             return;
         }
-        self.scenes[scene_index]
-            .scene
-            .set_event_duration(event_index, duration);
-
-        let factory = self.project.scenes[scene_index];
-        let mut replacement = factory(
-            &self.project.context,
-            self.project.settings.resolution,
-            self.project.settings.margin,
-        );
-        replacement.set_fps(self.project.settings.fps);
-        self.scenes[scene_index].scene = SceneInstance::Native(replacement);
-
-        let duration = recalculate_scene_ranges(&mut self.scenes);
-
-        self.selection.clear();
-        self.timeline
-            .set_duration(self.focused_scene.map_or(duration, |index| {
-                self.scenes[index].end - self.scenes[index].start
-            }));
-        self.update_active_scene(self.timeline.time());
     }
 
     pub(crate) fn focused_scene_index(&self) -> Option<usize> {
@@ -2025,33 +1926,6 @@ fn active_scene_at(scenes: &[EditorScene], time: f32) -> usize {
         .unwrap_or(scenes.len() - 1)
 }
 
-fn create_scenes(
-    context: &crate::core::ProjectContext,
-    factories: &[crate::core::SceneFactory],
-    resolution: (u32, u32),
-    fps: u32,
-    margin: (u32, u32),
-) -> Vec<EditorScene> {
-    let mut start = 0.0;
-
-    factories
-        .iter()
-        .map(|create_scene| {
-            let mut scene = create_scene(context, resolution, margin);
-            scene.set_fps(fps);
-            let end = start + scene.duration();
-            let editor_scene = EditorScene {
-                scene: SceneInstance::Native(scene),
-                start,
-                end,
-                inspector_edits: InspectorEdits::default(),
-            };
-            start = end;
-            editor_scene
-        })
-        .collect()
-}
-
 fn recalculate_scene_ranges(scenes: &mut [EditorScene]) -> f32 {
     let mut start = 0.0;
     for scene in scenes {
@@ -2066,63 +1940,19 @@ fn recalculate_scene_ranges(scenes: &mut [EditorScene]) -> f32 {
 mod tests {
     use super::*;
     use crate::core::objects::ObjectHandler;
-    use crate::prelude::{ImageShader, rect};
-
-    #[crate::scene]
-    fn opening(scene: &mut Scene) {
-        assert_eq!(
-            scene.margin().top_left(),
-            crate::core::types::vec2(-576.0, -296.0)
-        );
-        scene.wait(2.0);
-    }
-
-    #[crate::scene]
-    fn ending(scene: &mut Scene) {
-        scene.wait(3.0);
-    }
-
-    #[test]
-    fn scene_factories_create_ordered_project_ranges() {
-        let factories: [crate::core::SceneFactory; 2] = [opening, ending];
-        let scenes = create_scenes(
-            &crate::core::ProjectContext::new(".").unwrap(),
-            &factories,
-            (1280, 720),
-            60,
-            (64, 64),
-        );
-
-        assert_eq!(scenes[0].scene.name(), "opening");
-        assert_eq!(
-            scenes[0].scene.margin().top_left(),
-            crate::core::types::vec2(-576.0, -296.0)
-        );
-        assert_eq!([scenes[0].start, scenes[0].end], [0.0, 2.0]);
-        assert_eq!(
-            scenes[0]
-                .scene
-                .world()
-                .get::<&crate::core::objects::CanvasSettings>(scenes[0].scene.world_2d().entity(),)
-                .unwrap()
-                .resolution,
-            (1280, 720)
-        );
-        assert_eq!(scenes[1].scene.name(), "ending");
-        assert_eq!([scenes[1].start, scenes[1].end], [2.0, 5.0]);
-    }
+    use crate::test_support::{ImageShader, rect};
 
     #[test]
     fn scenes_advance_at_the_end_of_each_range() {
         let scenes = vec![
             EditorScene {
-                scene: SceneInstance::Native(Scene::new()),
+                scene: SceneInstance::Empty(Scene::new()),
                 start: 0.0,
                 end: 2.0,
                 inspector_edits: InspectorEdits::default(),
             },
             EditorScene {
-                scene: SceneInstance::Native(Scene::new()),
+                scene: SceneInstance::Empty(Scene::new()),
                 start: 2.0,
                 end: 5.0,
                 inspector_edits: InspectorEdits::default(),
@@ -2139,13 +1969,13 @@ mod tests {
     fn recalculating_ranges_uses_rebuilt_scene_durations() {
         let mut scenes = vec![
             EditorScene {
-                scene: SceneInstance::Native(Scene::new()),
+                scene: SceneInstance::Empty(Scene::new()),
                 start: 10.0,
                 end: 12.0,
                 inspector_edits: InspectorEdits::default(),
             },
             EditorScene {
-                scene: SceneInstance::Native(Scene::new()),
+                scene: SceneInstance::Empty(Scene::new()),
                 start: 12.0,
                 end: 15.0,
                 inspector_edits: InspectorEdits::default(),

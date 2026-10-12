@@ -1,4 +1,4 @@
-use kinematic::{hecs, prelude::*};
+use crate::test_support::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TrackEnum)]
 enum PlaybackMode {
@@ -49,7 +49,7 @@ struct PlaybackScene {
     playback: Option<PlaybackObjectHandler>,
 }
 
-impl SceneBuilder for PlaybackScene {
+impl PlaybackScene {
     fn build(&mut self, scene: &mut Scene) {
         let playback = playback().build(scene);
         scene.world_2d().add(&playback);
@@ -73,7 +73,7 @@ impl SceneBuilder for PlaybackScene {
 #[test]
 fn track_enum_provides_values_and_variant_metadata() {
     assert_eq!(
-        <PlaybackMode as kinematic::core::TrackEnum>::VARIANTS,
+        <PlaybackMode as crate::core::TrackEnum>::VARIANTS,
         &["Once", "Loop", "PingPong"]
     );
     assert_eq!(
@@ -112,7 +112,13 @@ fn enum_tracks_are_discrete_and_keep_typed_handler_api() {
 
     let mut scene = Scene::new();
     let mut builder = PlaybackScene::default();
-    assert_eq!(scene.build(&mut builder), 2.0);
+    assert_eq!(
+        {
+            builder.build(&mut scene);
+            scene.finish_build()
+        },
+        2.0
+    );
     let playback = builder.playback.unwrap();
 
     scene.update(1.999);

@@ -1,11 +1,11 @@
 # Lua implementation inventory
 
-The Rust source remains authoritative. This inventory was taken before adding
-bindings, from `src/lib.rs`, `src/prelude.rs`, and their public modules.
+Projects and scenes are written in Lua. Rust source remains authoritative for
+the internal runtime and the object metadata exposed to Lua.
 
-| Family | Existing API to integrate |
+| Family | Internal runtime family |
 | --- | --- |
-| Application | App, scene factories, SceneBuilder, project settings, export. |
+| Application | Executable, Lua project loading, project settings, export. |
 | Values | Vector2, Vector3, Quaternion, Color, Quad, geometry Rect, Random, Easing. |
 | 2D objects | Circle, Ellipse, Rect, RegularPolygon2D, Line2D, Image2D, Text2D, Latex2D, Group2D, Container2D, Canvas2D, Projection2D. |
 | 3D objects | Sphere, Torus, Prism, Pyramid, Plane, RegularPolygon3D, Line3D, Image3D, Text3D, Latex3D, Light3D, Group3D, Container3D, Canvas3D, Projection3D. |
@@ -15,11 +15,10 @@ bindings, from `src/lib.rs`, `src/prelude.rs`, and their public modules.
 | Hierarchy | Root, Node, attach, ordering, parent/ancestor, local/global transforms, anchors, logical/visual bounds, lifetime removal. |
 | State | Snapshot, save/restore/reset, temporal signals, fixed-step simulation, manual updates, scheduled writes and checkpoints. |
 | Resources | Images, fonts, LaTeX, CanvasTexture, ProjectionSource, ImageShader, MeshShader, uniforms, mesh geometry, materials and lights. |
-| Extension | Object/Node/Trackable/TrackEnum derives, native object registration, custom 2D paths and 3D meshes. |
+| Extension | Lua components and objects, custom 2D paths and 3D meshes. |
 
 Native property names, types, limits and choices must come from generated
-metadata, rather than a second handwritten catalogue. External hecs, Skia,
-glam and three-d reexports do not imply full Lua bindings for those libraries.
+metadata, rather than a second handwritten catalogue. The internal hecs, Skia, glam and three-d dependencies have no public Rust API.
 
 Built-in effects and particle transitions were removed by the maintainer.
-Animate opacity, position, scale and other tracks explicitly in Rust or Lua.
+Animate opacity, position, scale and other tracks explicitly in Lua.

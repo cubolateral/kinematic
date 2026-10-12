@@ -32,7 +32,6 @@ pub(crate) struct Runtime {
     pub(super) animator: RefCell<AnimatorHandle>,
     definitions: RefCell<BTreeMap<String, Definition>>,
     previous: BTreeMap<String, Definition>,
-    extensions: Vec<native::NativeObject>,
     pub(super) anonymous: Cell<u64>,
     pub(super) building: Cell<bool>,
     drawing: Cell<bool>,
@@ -91,18 +90,6 @@ impl LuaScene {
         fps: u32,
         margin: (u32, u32),
     ) -> Result<Self> {
-        Self::load_registered(context, path, sources, resolution, fps, margin, Vec::new())
-    }
-
-    pub(crate) fn load_registered(
-        context: ProjectContext,
-        path: impl AsRef<Path>,
-        sources: Sources,
-        resolution: (u32, u32),
-        fps: u32,
-        margin: (u32, u32),
-        extensions: Vec<native::NativeObject>,
-    ) -> Result<Self> {
         Self::prepare(
             context,
             path.as_ref().to_owned(),
@@ -114,7 +101,6 @@ impl LuaScene {
             Vec::new(),
             None,
             None,
-            extensions,
         )
     }
 
@@ -129,7 +115,6 @@ impl LuaScene {
         allocated: Vec<hecs::Entity>,
         identity: Option<u64>,
         overrides: Option<super::overrides::Overrides>,
-        extensions: Vec<native::NativeObject>,
     ) -> Result<Self> {
         if fps == 0
             || fps > 1000
@@ -202,7 +187,6 @@ impl LuaScene {
             dependencies: RefCell::new(BTreeSet::new()),
             definitions: RefCell::new(BTreeMap::new()),
             previous,
-            extensions,
             anonymous: Cell::new(0),
             building: Cell::new(true),
             drawing: Cell::new(false),
@@ -389,6 +373,7 @@ impl LuaScene {
     }
 
     /// Returns the entity of an explicit scene-local ID.
+    #[cfg(test)]
     pub fn entity(&self, id: &str) -> Option<hecs::Entity> {
         self.runtime.definitions.borrow().get(id).map(|d| d.entity)
     }
@@ -526,6 +511,7 @@ impl LuaScene {
         self.scene.duration()
     }
     /// Returns the active source revision.
+    #[cfg(test)]
     pub fn revision(&self) -> u64 {
         self.revision
     }
@@ -539,6 +525,7 @@ impl LuaScene {
     }
 
     /// Prepares and validates a revision, then reconciles entities at the current time.
+    #[cfg(test)]
     pub fn reload(&mut self, sources: Sources) -> Result<()> {
         let candidate = self.prepare_reload(sources)?;
         self.apply_reload(candidate);
@@ -571,6 +558,7 @@ impl LuaScene {
             })
     }
 
+    #[cfg(test)]
     pub(crate) fn prepare_reload(&self, sources: Sources) -> Result<Self> {
         let candidate = self.prepare_reload_pending(sources)?;
         candidate.update(self.scene.time().min(candidate.duration()))?;
@@ -611,7 +599,6 @@ impl LuaScene {
             allocated,
             Some(self.scene.render_key().0),
             overrides,
-            self.runtime.extensions.clone(),
         )?;
         {
             let previous = self.scene.world();
@@ -986,18 +973,6 @@ impl UserData for SceneHandle {
                 this.runtime()?.spawn_native(lua, native, options)
             });
         }
-        methods.add_method("native", |lua, this, (name, options): (String, Table)| {
-            let runtime = this.runtime()?;
-            let native = runtime
-                .extensions
-                .iter()
-                .find(|object| object.name == name)
-                .copied()
-                .ok_or_else(|| {
-                    mlua::Error::runtime(format!("Native builder '{name}' is not registered."))
-                })?;
-            runtime.spawn_native(lua, native, options)
-        });
         for (name, which) in [("root", 0), ("world_2d", 1), ("world_3d", 2)] {
             methods.add_method(name, move |_, this, ()| {
                 let runtime = this.runtime()?;

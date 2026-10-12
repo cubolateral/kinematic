@@ -115,7 +115,6 @@ pub(super) fn property(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prelude::*;
 
     #[test]
     fn lookup_matches_enumerated_properties() {
