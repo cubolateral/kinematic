@@ -72,21 +72,20 @@ impl SimulationState for ScriptState {
     ) -> std::result::Result<(), String> {
         let result = (|| {
             let runtime = runtime(self.runtime)?;
-            let callbacks = runtime
-                .callbacks
-                .borrow()
+            let callbacks = runtime.callbacks.borrow();
+            let callbacks = callbacks
                 .get(&self.entity)
-                .cloned()
                 .ok_or_else(|| mlua::Error::runtime("Simulation callback is unavailable."))?;
-            let Some(update) = callbacks.update else {
+            let Some(update) = &callbacks.update else {
                 return Ok(());
             };
             let lua = &runtime.lua;
-            let frame = lua.create_table()?;
+            let frame = lua.create_table_with_capacity(0, 3)?;
             frame.set("time", context.time)?;
             frame.set("index", context.frame)?;
             frame.set("dt", context.dt)?;
-            let inputs = lua.create_table()?;
+            let inputs =
+                lua.create_table_with_capacity(0, callbacks.inputs.len() + callbacks.states.len())?;
             for (name, entity, target) in &callbacks.inputs {
                 inputs.set(
                     name.as_str(),

@@ -4,9 +4,9 @@ return k.scene("Canvas composition", function(s)
     local source = s:canvas_3d {id = "source", resolution = {320, 240}}
     s:root():add(source)
     
-    local cube = s:cube {id = "cube", albedo = k.color("#34D399")}
+    local cube = s:cube {id = "cube", albedo = k.color("#008CFF"),size = k.vec3(1.0, 2.0, 1.0)}
     source:add(cube)
-    local group = s:group_2d {id = "group", opacity = 0.85}
+    local group = s:group_2d {id = "group", opacity = 1}
     s:world_2d():add(group)
     local projection = s:projection_2d {
         id = "screen", source = source:texture(), size = k.vec2(480, 360),

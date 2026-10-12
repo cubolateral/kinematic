@@ -1,10 +1,10 @@
 use super::value::ValueHandle;
 use crate::core::Random;
 use mlua::{Lua, Result, UserData, UserDataMethods, Value};
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 #[derive(Clone, Debug)]
-pub(crate) enum Snapshot {
+pub(super) enum Snapshot {
     Nil,
     Bool(bool),
     Integer(i64),
@@ -16,17 +16,20 @@ pub(crate) enum Snapshot {
     Font(super::resources::FontHandle),
     Mesh(super::drawing::MeshHandle),
     Matrix(super::drawing::Matrix),
-    Table(Vec<(Snapshot, Snapshot)>),
+    Table(Arc<[(Snapshot, Snapshot)]>),
 }
 impl Snapshot {
     pub fn read(value: Value) -> Result<Self> {
-        Self::capture(value, "state", &mut BTreeSet::new(), 0)
+        Self::capture(value, &mut Vec::new(), &mut BTreeSet::new(), 0)
     }
-    fn capture(value: Value, path: &str, seen: &mut BTreeSet<usize>, depth: usize) -> Result<Self> {
+    fn capture(
+        value: Value,
+        path: &mut Vec<Value>,
+        seen: &mut BTreeSet<usize>,
+        depth: usize,
+    ) -> Result<Self> {
         if depth > 64 {
-            return Err(mlua::Error::runtime(format!(
-                "Snapshot nesting exceeds 64 at {path}."
-            )));
+            return Err(Self::error("Snapshot nesting exceeds 64", path));
         }
         Ok(match value {
             Value::Nil => Self::Nil,
@@ -54,41 +57,58 @@ impl Snapshot {
             }
             Value::Table(table) => {
                 if !seen.insert(table.to_pointer() as usize) {
-                    return Err(mlua::Error::runtime(format!(
-                        "Cycles and shared table references are not supported at {path}."
-                    )));
-                }
-                if table.metatable().is_some() {
-                    return Err(mlua::Error::runtime(format!(
-                        "Snapshot table at {path} cannot have a metatable."
-                    )));
-                }
-                let mut entries = Vec::new();
-                for pair in table.pairs::<Value, Value>() {
-                    let (key, value) = pair?;
-                    let key_name = match &key {
-                        Value::String(v) => v.to_str()?.to_string(),
-                        Value::Integer(v) => v.to_string(),
-                        _ => {
-                            return Err(mlua::Error::runtime(format!(
-                                "Snapshot key at {path} must be a string or integer."
-                            )));
-                        }
-                    };
-                    entries.push((
-                        Self::capture(key, path, seen, depth + 1)?,
-                        Self::capture(value, &format!("{path}.{key_name}"), seen, depth + 1)?,
+                    return Err(Self::error(
+                        "Cycles and shared table references are not supported",
+                        path,
                     ));
                 }
-                entries.sort_by_key(|(key, _)| format!("{key:?}"));
-                Self::Table(entries)
+                if table.metatable().is_some() {
+                    return Err(Self::error("Snapshot table cannot have a metatable", path));
+                }
+                let mut entries = Vec::new();
+                table.for_each::<Value, Value>(|key, value| {
+                    if !matches!(key, Value::String(_) | Value::Integer(_)) {
+                        return Err(Self::error(
+                            "Snapshot key must be a string or integer",
+                            path,
+                        ));
+                    }
+                    let saved_key = Self::capture(key.clone(), path, seen, depth + 1)?;
+                    path.push(key);
+                    let saved_value = Self::capture(value, path, seen, depth + 1)?;
+                    path.pop();
+                    entries.push((saved_key, saved_value));
+                    Ok(())
+                })?;
+                entries.sort_unstable_by(|(a, _), (b, _)| match (a, b) {
+                    (Self::Integer(a), Self::Integer(b)) => a.cmp(b),
+                    (Self::String(a), Self::String(b)) => a.cmp(b),
+                    (Self::Integer(_), Self::String(_)) => std::cmp::Ordering::Less,
+                    (Self::String(_), Self::Integer(_)) => std::cmp::Ordering::Greater,
+                    _ => unreachable!("Snapshot keys must be strings or integers."),
+                });
+                Self::Table(entries.into())
             }
             _ => {
-                return Err(mlua::Error::runtime(format!(
-                    "Unsupported snapshot value at {path}."
-                )));
+                return Err(Self::error("Unsupported snapshot value", path));
             }
         })
+    }
+    fn error(message: &str, keys: &[Value]) -> mlua::Error {
+        use std::fmt::Write;
+        let mut path = String::from("state");
+        for key in keys {
+            match key {
+                Value::Integer(index) => {
+                    let _ = write!(path, ".{index}");
+                }
+                Value::String(name) => {
+                    let _ = write!(path, ".{}", name.to_string_lossy());
+                }
+                _ => unreachable!("Snapshot keys must be strings or integers."),
+            }
+        }
+        mlua::Error::runtime(format!("{message} at {path}."))
     }
     pub fn value(&self, lua: &Lua) -> Result<Value> {
         use mlua::IntoLua;
@@ -105,15 +125,24 @@ impl Snapshot {
             Self::Mesh(v) => v.clone().into_lua(lua),
             Self::Matrix(v) => v.clone().into_lua(lua),
             Self::Table(entries) => {
-                let table = lua.create_table()?;
-                for (key, value) in entries {
-                    table.set(key.value(lua)?, value.value(lua)?)?;
-                }
+                let table = if entries.iter().enumerate().all(|(index, (key, _))| {
+                    matches!(key, Self::Integer(key) if *key == index as i64 + 1)
+                }) {
+                    lua.create_sequence_from(entries.iter().map(|(_, value)| value))?
+                } else {
+                    lua.create_table_from(entries.iter().map(|(key, value)| (key, value)))?
+                };
                 Ok(Value::Table(table))
             }
         }
     }
 }
+impl mlua::IntoLua for &Snapshot {
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        self.value(lua)
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct RandomHandle(pub Random);
 impl UserData for RandomHandle {
@@ -173,6 +202,39 @@ impl UserData for RandomHandle {
 mod tests {
     use super::*;
     #[test]
+    fn table_order_is_deterministic_for_mixed_keys() {
+        let lua = Lua::new();
+        let a = Snapshot::read(lua.load("return {[10]=1,[2]=2,z=3,a=4}").eval().unwrap()).unwrap();
+        let b = Snapshot::read(lua.load("return {a=4,z=3,[2]=2,[10]=1}").eval().unwrap()).unwrap();
+        assert_eq!(format!("{a:?}"), format!("{b:?}"));
+        let table = a.value(&lua).unwrap();
+        assert_eq!(table.as_table().unwrap().get::<i64>(10).unwrap(), 1);
+        assert_eq!(table.as_table().unwrap().get::<i64>("a").unwrap(), 4);
+    }
+    #[test]
+    fn dense_and_sparse_tables_round_trip() {
+        let lua = Lua::new();
+        for source in [
+            "return {10, {20, 30}, false}",
+            "return {[-1]=4, [2]=5, [100]=6, name='x'}",
+        ] {
+            let saved = Snapshot::read(lua.load(source).eval().unwrap()).unwrap();
+            let restored = Snapshot::read(saved.value(&lua).unwrap()).unwrap();
+            assert_eq!(format!("{saved:?}"), format!("{restored:?}"));
+        }
+        let invalid = lua
+            .load("return {nested={values={function() end}}}")
+            .eval()
+            .unwrap();
+        assert!(
+            Snapshot::read(invalid)
+                .unwrap_err()
+                .to_string()
+                .contains("state.nested.values.1")
+        );
+    }
+
+    #[test]
     fn snapshots_are_deep_and_reject_hidden_state() {
         let lua = Lua::new();
         let original: Value = lua
@@ -180,6 +242,14 @@ mod tests {
             .eval()
             .unwrap();
         let saved = Snapshot::read(original.clone()).unwrap();
+        let copy = saved.clone();
+        if let (Snapshot::Table(a), Snapshot::Table(b)) = (&saved, &copy) {
+            assert!(Arc::ptr_eq(a, b));
+        } else {
+            panic!("Expected table snapshots.");
+        }
+        let restored = copy.value(&lua).unwrap();
+        restored.as_table().unwrap().set("count", 50).unwrap();
         original.as_table().unwrap().set("count", 99).unwrap();
         assert_eq!(
             saved

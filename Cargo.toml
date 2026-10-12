@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bench]]
+name = "lua"
+harness = false
+
 [dependencies]
 kinematic-macros = { path = "packages/kinematic-macros" }
 
@@ -38,3 +42,7 @@ members = ["packages/*"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+
+# Keep development builds responsive while retaining debug checks and symbols.
+[profile.dev]
+opt-level = 1

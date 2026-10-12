@@ -1,0 +1,5 @@
+case,median_us,min_us,max_us
+life_step,574.186,570.788,581.187
+life_seek,49382.194,49260.897,49557.471
+life_reload,4348.339,4289.272,4715.482
+life_draw_raster,1413.268,1402.654,1421.566

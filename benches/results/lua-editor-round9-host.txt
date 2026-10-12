@@ -1,0 +1,9 @@
+
+running 1 test
+Simulation startup: app=274.105 ms, construction=305.403 ms, preview=450.620 ms.
+Simulation editor frames: median=16.007 ms, p95=18.441 ms, max=19.992 ms.
+Simulation stages: update=1.213 ms, render=3.245 ms (medians).
+test app::lua_graphics_tests::lua_simulation_startup_and_frames ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 276 filtered out; finished in 6.39s
+

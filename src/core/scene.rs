@@ -1284,7 +1284,11 @@ mod tests {
     fn multiple_signals_save_a_property_original_only_once() {
         let mut scene = Scene::new();
         let object = circle().position(vec2(3.0, 0.0)).build(&mut scene);
+        let other = circle().position(vec2(4.0, 0.0)).build(&mut scene);
         scene.world_2d().add(&object);
+        scene.world_2d().add(&other);
+        let other_target = other.clone();
+        let other_signal = other.signal(move |_, _| other_target.set_position(vec2(30.0, 0.0)));
         let first = object.clone();
         let first_signal = object.signal(move |_, _| first.set_position(vec2(10.0, 0.0)));
         let second = object.clone();
@@ -1292,12 +1296,15 @@ mod tests {
         scene.wait(1.0);
         first_signal.stop();
         second_signal.stop();
+        other_signal.stop();
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(0.5);
         assert_eq!(object.get_position(), vec2(20.0, 0.0));
+        assert_eq!(other.get_position(), vec2(30.0, 0.0));
         scene.update(1.0);
         assert_eq!(object.get_position(), vec2(3.0, 0.0));
+        assert_eq!(other.get_position(), vec2(4.0, 0.0));
     }
 
     #[test]

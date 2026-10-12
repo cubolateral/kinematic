@@ -318,14 +318,16 @@ impl Editor {
             project.settings.fps,
             project.settings.margin,
         );
-        Self::with_scenes(
+        let mut editor = Self::with_scenes(
             project,
             scenes,
             imgui_renderer,
             skia_context,
             gl,
             three_context,
-        )
+        );
+        editor.update_active_scene(editor.timeline.time());
+        editor
     }
 
     pub(crate) fn new_lua(
@@ -394,6 +396,7 @@ impl Editor {
         );
         editor.documents = Some(documents);
         editor.lua_project = Some(project);
+        editor.update_active_scene(editor.timeline.time());
         Ok(editor)
     }
 
@@ -445,7 +448,7 @@ impl Editor {
         let mut renderer = Renderer::new(project.settings.resolution);
         renderer.set_project_root(project.context.root());
 
-        let mut editor = Self {
+        Self {
             project,
             lua_project: None,
             documents: None,
@@ -493,9 +496,7 @@ impl Editor {
             pending_project_settings: None,
             margin_visible: cache.margin_visible,
             timeline_tracks_expanded: cache.timeline_tracks_expanded,
-        };
-        editor.update_active_scene(timeline_time);
-        editor
+        }
     }
 
     fn poll_scripts(&mut self) {

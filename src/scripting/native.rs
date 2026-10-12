@@ -89,3 +89,46 @@ pub(crate) fn properties(world: &hecs::World, entity: hecs::Entity) -> Vec<Track
         .map(|inspection| inspection.properties(world, entity))
         .unwrap_or_default()
 }
+
+pub(super) fn property(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    name: &str,
+) -> Option<TrackTarget> {
+    let inspection = world.get::<&Inspection>(entity).ok()?;
+    for component in inspection.trackables(world, entity) {
+        if let Some(info) = (component.get)().iter().find(|info| info.name == name) {
+            return Some(TrackTarget::property((component.type_id)(), info));
+        }
+    }
+    if let Ok(properties) = world.get::<&crate::core::Properties>(entity)
+        && let Some((schema, _)) = properties.0.get(name)
+    {
+        return Some(TrackTarget::Dynamic(schema.clone()));
+    }
+    shader_uniforms(world, entity)
+        .into_iter()
+        .find(|(uniform, _)| uniform == name)
+        .map(|(name, _)| TrackTarget::uniform(name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prelude::*;
+
+    #[test]
+    fn lookup_matches_enumerated_properties() {
+        let mut scene = Scene::new();
+        let circle = circle().build(&mut scene);
+        let world = scene.world();
+        for target in properties(&world, circle.entity()) {
+            assert!(
+                property(&world, circle.entity(), target.name())
+                    .unwrap()
+                    .same(&target)
+            );
+        }
+        assert!(property(&world, circle.entity(), "missing").is_none());
+    }
+}

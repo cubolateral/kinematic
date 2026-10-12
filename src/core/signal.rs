@@ -44,6 +44,23 @@ impl SignalContext {
         self.overrides.borrow().clone()
     }
 
+    pub(crate) fn snapshot_values(
+        &self,
+        world: &hecs::World,
+    ) -> Vec<(hecs::Entity, TrackTarget, TrackValue)> {
+        self.overrides
+            .borrow()
+            .iter()
+            .map(|saved| {
+                (
+                    saved.entity,
+                    saved.target.clone(),
+                    saved.target.get(world, saved.entity),
+                )
+            })
+            .collect()
+    }
+
     pub(crate) fn restore_checkpoint(&self, checkpoint: Vec<SignalOverride>) {
         *self.overrides.borrow_mut() = checkpoint;
     }

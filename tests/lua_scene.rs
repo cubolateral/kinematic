@@ -211,8 +211,14 @@ fn a_failed_frame_restores_previous_tracks_and_successful_signals() {
 local k = require('kinematic')
 return k.scene('Transaction', function(s)
     local a = s:circle {id='a', radius=10}
+    local b = s:circle {id='b', radius=20}
     s:world_2d():add(a)
-    a:signal(function(obj, frame) obj.radius:set(10 + frame.time) end)
+    s:world_2d():add(b)
+    a:signal(function(obj, frame)
+        obj.radius:set(10 + frame.time)
+        b.radius:set(20 + frame.time)
+        if frame.time > 1 then b.opacity:set(0) end
+    end)
     a:signal(function(_, frame) if frame.time > 1 then error('Failed frame.') end end)
     s:play(a.position:to(k.vec2(100, 0), 2, k.ease.linear))
 end)
@@ -221,6 +227,20 @@ end)
     let a = scene.entity("a").unwrap();
     scene.update(0.5).unwrap();
     assert!(scene.update(1.5).is_err());
+    let b = scene.entity("b").unwrap();
+    assert_eq!(
+        scene.scene().world().get::<&CircleShape>(b).unwrap().radius,
+        20.5
+    );
+    assert_eq!(
+        scene
+            .scene()
+            .world()
+            .get::<&kinematic::core::components::Draw2D>(b)
+            .unwrap()
+            .opacity,
+        1.0
+    );
     assert_eq!(
         scene.scene().world().get::<&CircleShape>(a).unwrap().radius,
         10.5

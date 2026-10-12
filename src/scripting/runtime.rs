@@ -333,18 +333,17 @@ impl LuaScene {
         let overrides = signals.checkpoint();
         let values = {
             let world = self.scene.world();
-            world
+            let mut values = signals.snapshot_values(&world);
+            for (entity, animation) in world
+                .query::<(hecs::Entity, &crate::core::components::Animation)>()
                 .iter()
-                .flat_map(|entity| {
-                    native::properties(&world, entity.entity())
-                        .into_iter()
-                        .map(|target| {
-                            let value = target.get(&world, entity.entity());
-                            (entity.entity(), target, value)
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>()
+            {
+                for track in &animation.tracks {
+                    let target = &track.track.target;
+                    values.push((entity, target.clone(), target.get(&world, entity)));
+                }
+            }
+            values
         };
         let result = engine(|| self.scene.try_update(time))
             .and_then(|r| r.map_err(mlua::Error::runtime))
@@ -357,6 +356,7 @@ impl LuaScene {
             });
         if let Err(error) = result {
             let mut world = self.scene.world_mut();
+            signals.restore_overrides(&world);
             for (entity, state) in saved {
                 world
                     .insert_one(entity, state)
@@ -1116,9 +1116,7 @@ impl ObjectHandle {
     }
     pub(super) fn property(&self, name: &str) -> Result<PropertyHandle> {
         let runtime = self.runtime()?;
-        let target = native::properties(&runtime.world.borrow().borrow(), self.entity)
-            .into_iter()
-            .find(|target| target.name() == name)
+        let target = native::property(&runtime.world.borrow().borrow(), self.entity, name)
             .ok_or_else(|| mlua::Error::runtime(format!("Unknown object property '{name}'.")))?;
         Ok(PropertyHandle {
             object: self.clone(),
@@ -1786,6 +1784,7 @@ end)
                     .unwrap()
             })
     }
+
     #[test]
     fn simulation_seek_visual_reload_and_logic_replay() {
         let mut scene = load(SOURCE);

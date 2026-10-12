@@ -1,1 +1,1 @@
-(version: 1, name: "Lua Simulation", scenes: ["scenes/life.lua", "scenes/counter.lua"], resolution: (640, 360), fps: 30, margin: (0, 0))
+(version: 1, name: "Lua Simulation", scenes: ["scenes/life.lua", "scenes/counter.lua"], resolution: (640, 360), fps: 60, margin: (0, 0))

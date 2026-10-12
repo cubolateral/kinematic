@@ -275,7 +275,7 @@ impl ErasedSimulation for EmptyState {
 #[derive(Clone)]
 struct Checkpoint {
     frame: u64,
-    state: Box<dyn ErasedSimulation>,
+    state: Arc<Box<dyn ErasedSimulation>>,
 }
 
 #[derive(Clone)]
@@ -350,7 +350,10 @@ impl Default for Simulation {
             initial_frame_processed: false,
             initial: state.clone(),
             current: state.clone(),
-            checkpoints: vec![Checkpoint { frame: 0, state }],
+            checkpoints: vec![Checkpoint {
+                frame: 0,
+                state: Arc::new(state),
+            }],
             operations: Vec::new(),
         }
     }
@@ -380,7 +383,10 @@ impl Simulation {
             initial_frame_processed: false,
             initial: state.clone(),
             current: state.clone(),
-            checkpoints: vec![Checkpoint { frame: 0, state }],
+            checkpoints: vec![Checkpoint {
+                frame: 0,
+                state: Arc::new(state),
+            }],
             operations: Vec::new(),
         }
     }
@@ -395,7 +401,11 @@ impl Simulation {
     pub(crate) fn map_states<S: SimulationState>(&mut self, mut f: impl FnMut(&mut S)) {
         for state in std::iter::once(&mut self.initial)
             .chain(std::iter::once(&mut self.current))
-            .chain(self.checkpoints.iter_mut().map(|c| &mut c.state))
+            .chain(
+                self.checkpoints
+                    .iter_mut()
+                    .map(|c| Arc::make_mut(&mut c.state)),
+            )
         {
             if let Some(state) = state.state_mut().downcast_mut::<S>() {
                 f(state);
@@ -523,7 +533,7 @@ impl Simulation {
                 });
             if let Some((index, checkpoint)) = checkpoint {
                 self.current_frame = checkpoint.frame;
-                self.current = checkpoint.state.clone();
+                self.current = checkpoint.state.clone_box();
                 self.initial_frame_processed = index > 0;
             } else if target_frame < self.current_frame {
                 self.current_frame = 0;
@@ -646,7 +656,7 @@ impl Simulation {
         }) {
             self.checkpoints.push(Checkpoint {
                 frame: self.current_frame,
-                state: self.current.clone(),
+                state: Arc::new(self.current.clone()),
             });
         }
     }

@@ -46,6 +46,89 @@ fn settle(app: &mut App, editor: &mut Editor) {
 }
 
 #[test]
+#[ignore = "Requires SDL/OpenGL; measures simulation startup and editor frames."]
+fn lua_simulation_startup_and_frames() {
+    let root =
+        std::env::temp_dir().join(format!("kinematic-simulation-bench-{}", std::process::id()));
+    let mut project = LuaProject::create(&root, "Simulation benchmark", false).unwrap();
+    project.manifest.resolution = (640, 480);
+    project.manifest.fps = 60;
+    project.save().unwrap();
+    std::fs::write(
+        root.join("scenes/intro.lua"),
+        include_str!("../examples/lua/simulation/scenes/life.lua")
+            .replace("s:wait(3)", "s:wait(10)"),
+    )
+    .unwrap();
+    std::fs::create_dir_all(root.join(".kinematic/cache")).unwrap();
+    std::fs::write(
+        root.join(".kinematic/cache/editor.ron"),
+        "(timeline_time: 1.5)",
+    )
+    .unwrap();
+    let started = Instant::now();
+    let mut app = App::new();
+    app.window.hide();
+    let app_ready = started.elapsed();
+    let three = app.three_context();
+    let mut editor = Editor::new_lua(
+        project,
+        &mut app.imgui_renderer,
+        &mut app.skia_context,
+        &app.gl,
+        three,
+    )
+    .unwrap();
+    app.ui.restore_project_view(&editor);
+    let constructed = started.elapsed();
+    settle(&mut app, &mut editor);
+    println!(
+        "Simulation startup: app={:.3} ms, construction={:.3} ms, preview={:.3} ms.",
+        app_ready.as_secs_f64() * 1000.0,
+        constructed.as_secs_f64() * 1000.0,
+        started.elapsed().as_secs_f64() * 1000.0
+    );
+    assert_eq!(editor.scene(0).time(), 1.5);
+    let mut times = Vec::new();
+    let mut updates = Vec::new();
+    let mut renders = Vec::new();
+    for index in 0..180 {
+        let time = (90 + index) as f32 / 60.0;
+        editor.timeline_mut().go_to(time);
+        std::thread::sleep(Duration::from_millis(17));
+        let started = Instant::now();
+        frame(&mut app, &mut editor);
+        app.skia_context.submit(skia_safe::gpu::SyncCpu::Yes);
+        app.window.gl_swap_window();
+        times.push(started.elapsed().as_secs_f64() * 1000.0);
+        assert!((editor.scene(0).time() - time).abs() < 0.0001);
+        updates.push(editor.performance.update_ms);
+        renders.push(editor.performance.render_ms);
+    }
+    times.sort_by(f64::total_cmp);
+    updates.sort_by(f32::total_cmp);
+    renders.sort_by(f32::total_cmp);
+    println!(
+        "Simulation editor frames: median={:.3} ms, p95={:.3} ms, max={:.3} ms.",
+        times[90], times[171], times[179]
+    );
+    println!(
+        "Simulation stages: update={:.3} ms, render={:.3} ms (medians).",
+        updates[90], renders[90]
+    );
+    assert!(editor.render_error().is_none());
+    editor.shutdown(&app.gl, app.ui.editor_mode(), app.ui.is_fullscreen());
+    editor.preview_mut().unregister(&mut app.imgui_renderer);
+    editor.editor_2d_mut().unregister(&mut app.imgui_renderer);
+    editor.editor_3d_mut().unregister(&mut app.imgui_renderer);
+    drop(editor);
+    app.imgui_renderer.shutdown(&mut app.imgui).unwrap();
+    app.imgui_sdl.shutdown(&mut app.imgui).unwrap();
+    drop(app);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 #[ignore = "Requires SDL/OpenGL and FFmpeg; exercises the actual editor and CTE."]
 fn lua_editor_reload_switch_and_frozen_export() {
     let root = std::env::temp_dir().join(format!("kinematic-editor-smoke-{}", std::process::id()));
