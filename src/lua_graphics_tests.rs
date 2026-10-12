@@ -60,9 +60,9 @@ fn lua_simulation_startup_and_frames() {
             .replace("s:wait(3)", "s:wait(10)"),
     )
     .unwrap();
-    std::fs::create_dir_all(root.join(".kinematic/cache")).unwrap();
+    std::fs::create_dir_all(root.join("kinematic/cache")).unwrap();
     std::fs::write(
-        root.join(".kinematic/cache/editor.ron"),
+        root.join("kinematic/cache/editor.ron"),
         "(timeline_time: 1.5)",
     )
     .unwrap();

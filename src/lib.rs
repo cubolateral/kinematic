@@ -10,6 +10,7 @@ extern crate self as kinematic;
 
 mod app;
 mod reload;
+mod storage;
 mod window_cache;
 
 pub use app::*;

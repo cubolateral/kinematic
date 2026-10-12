@@ -666,6 +666,7 @@ mod tests {
 
     #[test]
     fn compound_fields_fit_a_narrow_inspector_and_keep_rotation_on_mode_change() {
+        let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
         context.set_ini_filename(None::<&str>).unwrap();
         context

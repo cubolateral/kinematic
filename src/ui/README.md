@@ -6,10 +6,11 @@ interaction details belong in the panel modules, not in `ui/mod.rs`.
 
 ## Module map
 
+- `browser.rs`: Internal folder picker with asynchronous listing and navigation.
 - `theme.rs`: Appearance state, font loading, colors, scale, and style geometry.
 - `workspace.rs`: Default docking layout. It refers to panels through their
   `WINDOW_NAME` constants.
-- `settings.rs`: Project and appearance configuration panel.
+- `settings.rs`: Internal floating settings window opened from the Projects menu.
 - `widgets.rs`: Small drawing and measurement helpers shared by panels.
 - `scene_tree.rs`: Active scene hierarchy and entity selection.
 - `inspector.rs`: Read-only inspection of the selected entity.

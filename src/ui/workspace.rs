@@ -1,4 +1,4 @@
-use super::{code, inspector, preview, scene_tree, settings, timeline};
+use super::{code, inspector, preview, scene_tree, timeline};
 use dear_imgui_rs::{DockLayout, DockLayoutApply, DockSplit};
 
 pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
@@ -8,7 +8,7 @@ pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
         DockLayout::split(
             DockSplit::Left,
             0.25,
-            tabs([scene_tree::WINDOW_NAME, code::FILES_WINDOW, "Project"]),
+            tabs([scene_tree::WINDOW_NAME, code::FILES_WINDOW]),
             tabs([
                 timeline::WINDOW_NAME,
                 code::DIAGNOSTICS_WINDOW,
@@ -24,7 +24,7 @@ pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
                 tabs([code::WINDOW_NAME]),
                 tabs([preview::WINDOW_NAME]),
             ),
-            tabs([inspector::WINDOW_NAME, settings::WINDOW_NAME]),
+            tabs([inspector::WINDOW_NAME]),
         ),
     );
     ui.dockspace()

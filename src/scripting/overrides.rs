@@ -2,7 +2,7 @@ use crate::core::{ProjectContext, TrackChoices, TrackTarget, TrackValue};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf};
 
-pub(super) const PATH: &str = ".kinematic/overrides.ron";
+pub(super) const PATH: &str = "kinematic/overrides.ron";
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) enum SavedValue {
     Bool(bool),

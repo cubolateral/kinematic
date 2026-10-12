@@ -84,7 +84,7 @@ fn main() {
 Scene factories run in vector order. Each scene starts as soon as the previous
 scene reaches the end of its timeline. Resolution and frame rate default to
 1280 x 720 and 60 FPS. Change them in the editor's Configuration panel;
-Kinematic stores them in `.kinematic/project.ron`.
+Kinematic stores them in `kinematic/project.ron`.
 
 ### Positioning 2D objects
 
@@ -132,7 +132,7 @@ fn introduction(s: &mut Scene) {
 ```
 
 Kinematic stores the durations for this scene in
-`.kinematic/scenes/introduction.ron`:
+`kinematic/scenes/introduction.ron`:
 
 ```ron
 (
@@ -751,3 +751,9 @@ cargo test --workspace
 ## License
 
 Kinematic is available under the [MIT License](LICENSE).
+
+Editor appearance, window geometry, and docking layout are global. They live in
+`.kinematic/` inside the user data directory: `$XDG_DATA_HOME` (or
+`~/.local/share`) on Linux, `~/Library/Application Support` on macOS, and
+`%APPDATA%` on Windows. Project metadata stays in the project’s `kinematic/`
+directory. Legacy files migrate automatically; conflicting files are preserved.

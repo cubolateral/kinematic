@@ -38,7 +38,7 @@ impl App {
         gl_attributes.set_context_version(3, 3);
         gl_attributes.set_context_profile(sdl3::video::GLProfile::Core);
 
-        let window_cache = WindowCache::default();
+        let window_cache = WindowCache::load();
         let mut window_builder =
             video_subsystem.window("Kinematic", window_cache.size.0, window_cache.size.1);
         if let Some((x, y)) = window_cache.position {
@@ -69,6 +69,11 @@ impl App {
         imgui.set_ini_filename(None::<std::path::PathBuf>).unwrap();
 
         let ui = Ui::new(&mut imgui);
+        if let Ok(path) = crate::storage::global_path("cache/layout.ini") {
+            if let Ok(text) = std::fs::read_to_string(path) {
+                imgui.load_ini_settings(&text);
+            }
+        }
 
         // The window and current GL context outlive backend teardown.
         let imgui_sdl = unsafe {
@@ -152,22 +157,26 @@ impl App {
         self
     }
 
-    fn save_layout(&mut self, context: &crate::core::ProjectContext) {
+    fn save_layout(&mut self) {
         let mut text = String::new();
         self.imgui.save_ini_settings(&mut text);
-        if let Ok(path) = context.resolve(".kinematic/cache/layout.ini") {
+        if let Ok(path) = crate::storage::global_path("cache/layout.ini") {
             let expected = std::fs::read(&path).ok();
             let _ = crate::core::atomic_write(&path, text.as_bytes(), expected.as_deref());
         }
     }
 
     fn restore_window(&mut self, context: &crate::core::ProjectContext) {
-        if let Ok(path) = context.resolve(".kinematic/cache/layout.ini") {
+        if let Err(error) = crate::storage::migrate_globals(context) {
+            eprintln!("Could not migrate global settings: {error}.");
+        }
+        self.ui.reload_appearance();
+        if let Ok(path) = crate::storage::global_path("cache/layout.ini") {
             if let Ok(text) = std::fs::read_to_string(path) {
                 self.imgui.load_ini_settings(&text);
             }
         }
-        let cache = WindowCache::load_in(context);
+        let cache = WindowCache::load();
         let _ = self.window.set_size(cache.size.0, cache.size.1);
         if let Some((x, y)) = cache.position {
             self.window.set_position(
@@ -371,8 +380,8 @@ impl App {
                 match result {
                     Ok(next) => {
                         if let Some(mut previous) = editor.take() {
-                            self.window_cache.save_in(previous.context());
-                            self.save_layout(previous.context());
+                            self.window_cache.save();
+                            self.save_layout();
                             previous.shutdown(
                                 &self.gl,
                                 self.ui.editor_mode(),
@@ -406,8 +415,6 @@ impl App {
 
         self.ui.reset_project();
         if let Some(mut editor) = editor {
-            self.window_cache.save_in(editor.context());
-            self.save_layout(editor.context());
             editor.shutdown(&self.gl, self.ui.editor_mode(), self.ui.is_fullscreen());
             editor.preview_mut().unregister(&mut self.imgui_renderer);
             editor.editor_2d_mut().unregister(&mut self.imgui_renderer);
@@ -415,6 +422,8 @@ impl App {
         }
         crate::scripting::release_unused();
         self.window_cache.update(&self.window);
+        self.window_cache.save();
+        self.save_layout();
         self.imgui_renderer.shutdown(&mut self.imgui).unwrap();
         self.imgui_sdl.shutdown(&mut self.imgui).unwrap();
 

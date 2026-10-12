@@ -59,7 +59,7 @@ LuaLS is optional for execution. Install it yourself, set `KINEMATIC_LUALS` to
 its executable, use an existing Neovim Mason installation, or put
 `lua-language-server` on `PATH` (in that search order). Nothing is downloaded.
 Each project owns an asynchronous server, with generated API definitions and
-logs in `.kinematic/cache/luals`. User LuaLS settings are not overwritten.
+logs in `kinematic/cache/luals`. User LuaLS settings are not overwritten.
 Completion is available with Ctrl+Space, documentation with F1, definition with
 F12, and signatures through the Signature button. Buffers and version numbers
 are sent to the server; stale replies are discarded. UTF-8/UTF-16 positions are
@@ -87,7 +87,7 @@ end)
 
 Native constructor names and directly exposed properties come from the Rust
 `Object` and `Trackable` macros. The generated file
-`.kinematic/cache/luals/kinematic.lua` lists their types, and
+`kinematic/cache/luals/kinematic.lua` lists their types, and
 [the inventory](lua-parity.md) lists the API families. Constructors include
 `circle`, `ellipse`, `rect`, `regular_polygon_2d`, `line_2d`, `image_2d`,
 `text_2d`, `latex_2d`, `group_2d`, `container_2d`, `canvas_2d`, `projection_2d`,
@@ -277,14 +277,14 @@ currently replays that affected instance from its start; unrelated history is
 preserved. Cancelled or failed candidates never replace active callbacks/state.
 
 Inspector shows the script base, saved override and evaluated value separately.
-For explicit IDs, editing a base persists to `.kinematic/overrides.ron`, keyed by
+For explicit IDs, editing a base persists to `kinematic/overrides.ron`, keyed by
 scene path, object ID and property name. Overrides enter before animations are
 constructed; they do not overwrite keyframes or freeze evaluated tracks.
 Restore removes the saved entry. Incompatible/orphaned entries remain in the file
 with diagnostics. Objects without IDs have explicitly temporary edits. Resolve
 pending source edits before changing saved bases or event durations, so those
 operations cannot silently discard a newer buffer. Event durations are stored in
-`.kinematic/events`, separate from sources and the manifest.
+`kinematic/events`, separate from sources and the manifest.
 
 Export uses the last successfully applied preview revision, including applied
 unsaved buffers. New edits remain pending until export finishes/cancels. Buffers
@@ -299,7 +299,7 @@ Existing native scenes still use `#[scene]` and `SceneBuilder`. `SceneFactory`
 now receives `&ProjectContext` before resolution/margins; the macro supplies the
 new signature. `Project`/`Scene` names are owned strings. Use
 `app().project_in(context,name,scenes)?` to choose an explicit native root.
-Native projects retain `.kinematic/project.ron`; Lua uses only `kinematic.ron`.
+Native projects retain `kinematic/project.ron`; Lua uses only `kinematic.ron`.
 
 A host can open `LuaProject`, call `register::<MyObject>()?`, and run
 `app().lua_project(project).run()`. Lua then calls

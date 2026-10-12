@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-const CACHE_PATH: &str = ".kinematic/cache/window.ron";
+const CACHE_PATH: &str = "cache/window.ron";
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
@@ -23,8 +23,8 @@ impl Default for WindowCache {
 }
 
 impl WindowCache {
-    pub(crate) fn load_in(context: &crate::core::ProjectContext) -> Self {
-        let Ok(path) = context.resolve(CACHE_PATH) else {
+    pub(crate) fn load() -> Self {
+        let Ok(path) = crate::storage::global_path(CACHE_PATH) else {
             return Self::default();
         };
         match std::fs::read_to_string(path) {
@@ -61,8 +61,8 @@ impl WindowCache {
         self.maximized = false;
     }
 
-    pub(crate) fn save_in(&self, context: &crate::core::ProjectContext) {
-        if let Ok(path) = context.resolve(CACHE_PATH) {
+    pub(crate) fn save(&self) {
+        if let Ok(path) = crate::storage::global_path(CACHE_PATH) {
             if let Err(error) = write(self, &path) {
                 eprintln!("Could not save window layout: {error}.");
             }

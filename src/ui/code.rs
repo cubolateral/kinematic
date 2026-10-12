@@ -1,3 +1,4 @@
+use super::browser;
 use crate::editor::{Editor, documents::Documents};
 use dear_imgui_cte::{CteUiExt, Language, TextEditor};
 use std::{collections::BTreeMap, path::PathBuf};
@@ -26,7 +27,9 @@ struct Tab {
 #[derive(Default)]
 pub(super) struct State {
     tabs: BTreeMap<PathBuf, Tab>,
+    pub(super) projects_open: bool,
     root: String,
+    browser: Option<browser::State>,
     name: String,
     three_d: bool,
     file_path: String,
@@ -88,6 +91,8 @@ impl State {
         self.jump = None;
         self.error = None;
         self.focused = false;
+        self.projects_open = true;
+        self.browser = None;
     }
     pub fn request_exit(&mut self) {
         self.pending = Some(Pending::Project(ProjectAction::Exit));
@@ -96,32 +101,57 @@ impl State {
         self.ready.take()
     }
     pub fn projects(&mut self, mut editor: Option<&mut Editor>, ui: &dear_imgui_rs::Ui) {
-        ui.window("Project").build(|| {
-            ui.input_text("Directory", &mut self.root).build();
-            if ui.button("Open project") {
-                self.pending = Some(Pending::Project(ProjectAction::Open(
-                    self.root.clone().into(),
-                )));
+        if self.projects_open {
+            let mut open = true;
+            ui.window("Projects")
+                .opened(&mut open)
+                .flags(dear_imgui_rs::WindowFlags::NO_DOCKING)
+                .size([440.0, 250.0], dear_imgui_rs::Condition::FirstUseEver)
+                .build(|| {
+                    ui.text("Directory");
+                    let style = ui.clone_style();
+                    let browse_width =
+                        ui.calc_text_size("Browse")[0] + style.frame_padding()[0] * 2.0;
+                    ui.set_next_item_width(
+                        (ui.content_region_avail_width() - browse_width - style.item_spacing()[0])
+                            .max(1.0),
+                    );
+                    ui.input_text("##ProjectDirectory", &mut self.root).build();
+                    ui.same_line();
+                    if ui.button_with_size("Browse", [browse_width, 0.0]) {
+                        self.browse();
+                    }
+                    if ui.button("Open project") {
+                        self.pending = Some(Pending::Project(ProjectAction::Open(
+                            self.root.clone().into(),
+                        )));
+                    }
+                    ui.input_text("Name", &mut self.name).build();
+                    ui.checkbox("3D template", &mut self.three_d);
+                    if ui.button("Create project") {
+                        self.pending = Some(Pending::Project(ProjectAction::Create(
+                            self.root.clone().into(),
+                            self.name.clone(),
+                            self.three_d,
+                        )));
+                    }
+                    if editor.is_some() {
+                        ui.same_line();
+                        if ui.button("Close project") {
+                            self.pending = Some(Pending::Project(ProjectAction::Close));
+                        }
+                    }
+                    if let Some(error) = &self.error {
+                        ui.text_wrapped(error);
+                    }
+                });
+            self.projects_open = open;
+        }
+        if let Some(browser) = &mut self.browser {
+            if let Some(result) = browser.draw(ui) {
+                self.finish_browse(result);
             }
-            ui.input_text("Name", &mut self.name).build();
-            ui.checkbox("3D template", &mut self.three_d);
-            if ui.button("Create project") {
-                self.pending = Some(Pending::Project(ProjectAction::Create(
-                    self.root.clone().into(),
-                    self.name.clone(),
-                    self.three_d,
-                )));
-            }
-            if editor.is_some() {
-                ui.same_line();
-                if ui.button("Close project") {
-                    self.pending = Some(Pending::Project(ProjectAction::Close));
-                }
-            }
-            if let Some(error) = &self.error {
-                ui.text_wrapped(error);
-            }
-        });
+        }
         if let Some(pending) = self.pending.clone() {
             let dirty = editor
                 .as_ref()
@@ -172,6 +202,23 @@ impl State {
                 if let Some(error) = &self.error {
                     ui.text_wrapped(error);
                 }
+            }
+        }
+    }
+    fn browse(&mut self) {
+        match browser::State::new(&self.root) {
+            Ok(browser) => self.browser = Some(browser),
+            Err(error) => self.error = Some(format!("Could not browse directories: {error}.")),
+        }
+    }
+    fn finish_browse(&mut self, path: Option<PathBuf>) {
+        self.browser = None;
+        if let Some(path) = path {
+            if let Some(path) = path.to_str() {
+                self.root = path.to_owned();
+                self.error = None;
+            } else {
+                self.error = Some("Directory path must be valid UTF-8.".into());
             }
         }
     }
@@ -564,7 +611,27 @@ fn diagnostic_location(error: &str) -> Option<(&str, usize, usize)> {
 
 #[cfg(test)]
 mod tests {
-    use super::diagnostic_location;
+    use super::{State, diagnostic_location};
+
+    #[test]
+    fn browsing_selects_a_directory_without_opening_and_cancel_preserves_it() {
+        let mut state = State::default();
+        state.root = std::env::temp_dir().to_str().unwrap().to_owned();
+        state.browse();
+        assert!(state.browser.is_some());
+        let selected = std::env::temp_dir().join("Project with spaces");
+        state.finish_browse(Some(selected.clone()));
+        assert_eq!(state.root, selected.to_str().unwrap());
+        assert!(state.browser.is_none());
+        assert!(state.pending.is_none());
+        assert!(state.take_action().is_none());
+        state.browse();
+        state.finish_browse(None);
+        assert_eq!(state.root, selected.to_str().unwrap());
+        assert!(state.browser.is_none());
+        assert!(state.error.is_none());
+    }
+
     #[test]
     fn diagnostic_navigation_preserves_paths_and_columns() {
         assert_eq!(

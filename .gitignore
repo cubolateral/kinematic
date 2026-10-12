@@ -5,3 +5,6 @@
 /imgui.ini
 **/.kinematic
 *.log
+
+# Ignore generated project metadata.
+**/kinematic

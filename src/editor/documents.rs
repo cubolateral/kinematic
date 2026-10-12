@@ -299,12 +299,12 @@ impl Documents {
     }
 }
 fn watched(path: &Path) -> bool {
-    if path == Path::new(".kinematic/overrides.ron") || path.starts_with(".kinematic/events") {
+    if path == Path::new("kinematic/overrides.ron") || path.starts_with("kinematic/events") {
         return true;
     }
     !path.components().any(|part| {
         part.as_os_str().to_str().is_some_and(|s| {
-            matches!(s, ".git" | "target" | "output" | ".kinematic")
+            matches!(s, ".git" | "target" | "output" | ".kinematic" | "kinematic")
                 || s.starts_with(".kinematic-save-")
                 || s.ends_with('~')
                 || s.ends_with(".swp")

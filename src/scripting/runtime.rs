@@ -220,7 +220,7 @@ impl LuaScene {
         runtime
             .dependencies
             .borrow_mut()
-            .insert(PathBuf::from(".kinematic/overrides.ron"));
+            .insert(PathBuf::from("kinematic/overrides.ron"));
         let file = if let Some(text) = runtime.sources.get(&events) {
             ron::from_str(text).map_err(mlua::Error::external)?
         } else {
@@ -2025,7 +2025,7 @@ end)
 }
 
 fn event_path(path: &Path) -> PathBuf {
-    Path::new(".kinematic/events")
+    Path::new("kinematic/events")
         .join(path)
         .with_extension("ron")
 }

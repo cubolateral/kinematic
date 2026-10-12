@@ -66,7 +66,7 @@ impl SceneFile {
 
 fn scene_path(name: &str) -> PathBuf {
     #[cfg(not(test))]
-    let root = Path::new(".kinematic/scenes").to_path_buf();
+    let root = Path::new("kinematic/scenes").to_path_buf();
     #[cfg(test)]
     let root = std::env::temp_dir()
         .join(format!("kinematic-scene-tests-{}", std::process::id()))

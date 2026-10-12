@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-const CACHE_PATH: &str = ".kinematic/cache/editor.ron";
+const CACHE_PATH: &str = "kinematic/cache/editor.ron";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]

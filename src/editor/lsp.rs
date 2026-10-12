@@ -51,7 +51,7 @@ fn executable() -> PathBuf {
 impl Client {
     pub fn start(root: ProjectContext, definitions: &str) -> Result<Self, String> {
         let cache = root
-            .resolve(".kinematic/cache/luals")
+            .resolve("kinematic/cache/luals")
             .map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
         let mut child = Command::new(executable())
@@ -112,7 +112,7 @@ impl Client {
             }
         });
         let library = root
-            .resolve(".kinematic/cache/luals")
+            .resolve("kinematic/cache/luals")
             .map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&library).map_err(|e| e.to_string())?;
         std::fs::write(library.join("kinematic.lua"), definitions).map_err(|e| e.to_string())?;
@@ -215,7 +215,7 @@ impl Client {
                 let _ = self
                     .send
                     .send(json!({"jsonrpc":"2.0","method":"initialized","params":{}}));
-                let library = self.root.root().join(".kinematic/cache/luals");
+                let library = self.root.root().join("kinematic/cache/luals");
                 let _=self.send.send(json!({"jsonrpc":"2.0","method":"workspace/didChangeConfiguration","params":{"settings":{"Lua":{"runtime":{"version":"Lua 5.4"},"workspace":{"library":[library],"checkThirdParty":false}}}}}));
                 for mut message in self.queued.drain(..) {
                     if self.utf8 {
@@ -233,7 +233,7 @@ impl Client {
                 if let Some(id) = value.get("id") {
                     let result = if method == "workspace/configuration" {
                         Value::Array(value.pointer("/params/items").and_then(Value::as_array).map_or(Vec::new(),|items|items.iter().map(|item| {
-                        let settings=json!({"runtime":{"version":"Lua 5.4"},"workspace":{"library":[self.root.root().join(".kinematic/cache/luals")],"checkThirdParty":false}});
+                        let settings=json!({"runtime":{"version":"Lua 5.4"},"workspace":{"library":[self.root.root().join("kinematic/cache/luals")],"checkThirdParty":false}});
                         match item["section"].as_str().unwrap_or("") { "Lua"=>settings, "Lua.workspace"=>settings["workspace"].clone(), "Lua.runtime"=>settings["runtime"].clone(), _=>Value::Null }
                     }).collect()))
                     } else {

@@ -1,5 +1,6 @@
 //! Dear ImGui editor shell and panel composition.
 
+mod browser;
 mod code;
 mod controls;
 pub(crate) use code::ProjectAction;
@@ -16,6 +17,9 @@ mod workspace;
 
 use crate::editor::Editor;
 
+#[cfg(test)]
+static IMGUI_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub(super) const CORNER_RADIUS: f32 = 4.0;
 
 pub(crate) struct Ui {
@@ -31,10 +35,17 @@ pub(crate) struct Ui {
     scene_tree: scene_tree::State,
 }
 
-fn draw_top_bar(editor: &mut Editor, ui: &dear_imgui_rs::Ui, enabled: bool) -> (bool, bool) {
+fn draw_top_bar(
+    editor: &mut Editor,
+    ui: &dear_imgui_rs::Ui,
+    enabled: bool,
+    code: &mut code::State,
+    settings: &mut settings::State,
+) -> (bool, bool) {
     let Some(_bar) = ui.begin_main_menu_bar() else {
         return (false, false);
     };
+    draw_project_menu(code, settings, ui);
     let button_size = ui.frame_height();
     let spacing = unsafe { ui.style().item_spacing() }[0];
     ui.set_cursor_pos_x(
@@ -53,6 +64,25 @@ fn draw_top_bar(editor: &mut Editor, ui: &dear_imgui_rs::Ui, enabled: bool) -> (
     (clicked, export::draw(editor, ui))
 }
 
+fn draw_project_menu(
+    code: &mut code::State,
+    settings: &mut settings::State,
+    ui: &dear_imgui_rs::Ui,
+) {
+    if let Some(_menu) = ui.begin_menu("Projects") {
+        if ui.menu_item("Open / Create Project") {
+            code.projects_open = true;
+        }
+        if ui.menu_item("Settings") {
+            settings.open = true;
+        }
+        ui.separator();
+        if ui.menu_item("Quit") {
+            code.request_exit();
+        }
+    }
+}
+
 impl Ui {
     pub fn new(context: &mut dear_imgui_rs::Context) -> Self {
         let mut flags = context.io().config_flags();
@@ -60,11 +90,13 @@ impl Ui {
         context.io_mut().set_config_flags(flags);
         context.io_mut().set_config_drag_click_to_input_text(true);
 
+        let mut code = code::State::default();
+        code.projects_open = true;
         Self {
             needs_initial_layout: true,
-            code: code::State::default(),
+            code,
             font: theme::initialize(context),
-            appearance: theme::Appearance::default(),
+            appearance: settings::load(),
             is_fullscreen: false,
             preview: preview::State::new(crate::editor::EditorMode::default()),
             inspector: inspector::State::default(),
@@ -109,8 +141,13 @@ impl Ui {
             return reload_shortcut;
         }
 
-        let (reload_button, export_started) =
-            draw_top_bar(editor, ui, can_reload && !editor.is_exporting());
+        let (reload_button, export_started) = draw_top_bar(
+            editor,
+            ui,
+            can_reload && !editor.is_exporting(),
+            &mut self.code,
+            &mut self.settings,
+        );
         if export_started {
             self.preview.show_preview();
         }
@@ -130,8 +167,8 @@ impl Ui {
             if scene_tree::draw(editor, ui, &mut self.scene_tree) {
                 self.preview.edit_canvas(editor.selected_canvas());
             }
-            if settings::draw(&mut self.appearance, &mut self.settings, editor, ui) {
-                settings::save(&self.appearance, editor.context());
+            if settings::draw(&mut self.appearance, &mut self.settings, Some(editor), ui) {
+                settings::save(&self.appearance);
             }
             preview::draw(editor, ui, &mut self.preview);
             inspector::draw(editor, ui, &mut self.inspector);
@@ -158,6 +195,16 @@ impl Ui {
             .prepare(context, editor.and_then(|e| e.documents.as_ref()));
     }
     pub(crate) fn draw_projects(&mut self, editor: Option<&mut Editor>, ui: &dear_imgui_rs::Ui) {
+        let _theme = self.appearance.push(ui);
+        let _font = ui.push_font(self.font);
+        if editor.is_none() {
+            if let Some(_bar) = ui.begin_main_menu_bar() {
+                draw_project_menu(&mut self.code, &mut self.settings, ui);
+            }
+        }
+        if editor.is_none() && settings::draw(&mut self.appearance, &mut self.settings, None, ui) {
+            settings::save(&self.appearance);
+        }
         self.code.projects(editor, ui);
     }
     pub(crate) fn request_exit(&mut self) {
@@ -169,9 +216,13 @@ impl Ui {
     pub(crate) fn project_error(&mut self, error: String) {
         self.code.error = Some(error);
     }
+    pub(crate) fn reload_appearance(&mut self) {
+        self.appearance = settings::load();
+    }
+
     pub(crate) fn restore_project_view(&mut self, editor: &Editor) {
         let (mode, fullscreen) = editor.cached_view();
-        self.appearance = settings::load(editor.context());
+        self.code.projects_open = false;
         self.settings = settings::State::default();
         self.preview = preview::State::new(mode);
         self.is_fullscreen = fullscreen;

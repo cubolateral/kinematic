@@ -179,7 +179,7 @@ impl Scene {
         name: &str,
         resolution: (u32, u32),
     ) -> std::io::Result<Self> {
-        let path = context.resolve(format!(".kinematic/scenes/{name}.ron"))?;
+        let path = context.resolve(format!("kinematic/scenes/{name}.ron"))?;
         let mut scene = Self::new_inner(name, resolution, false, None);
         scene.scene_file = SceneFile::read(&path)?;
         scene.event_path = Some(path);
@@ -721,7 +721,7 @@ impl Scene {
     ///
     /// The duration is relative to the active scheduling position, like
     /// [`Self::wait`]. Named scenes persist durations in
-    /// `.kinematic/scenes/<scene_name>.ron`. Missing events are created with
+    /// `kinematic/scenes/<scene_name>.ron`. Missing events are created with
     /// zero duration. The Timeline displays the wait as a draggable event span;
     /// committing a drag rebuilds that scene through its factory.
     ///
