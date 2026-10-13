@@ -8,6 +8,7 @@ use kinematic_macros::{Object, Trackable};
 
 #[derive(Clone, Trackable)]
 pub struct SphereShape {
+    /// Radius in local coordinates.
     #[track(min = 0.0)]
     pub radius: f32,
     pub segments: u32,

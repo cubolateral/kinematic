@@ -83,6 +83,9 @@ pub trait Object: hecs::DynamicBundle + Sized + 'static {
     /// Stable constructor name supplied by the object derive macro.
     const BUILDER_NAME: &'static str = "object";
 
+    /// Lua documentation supplied by the object derive macro.
+    const DOCUMENTATION: &'static str = "";
+
     /// Builds the handler from the spawned entity.
     fn handler(world: SceneWorld, entity: hecs::Entity, animator: AnimatorHandle) -> Self::Handler;
 

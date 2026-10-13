@@ -784,6 +784,7 @@ struct StandaloneTrackValue(TrackValue);
 static STANDALONE_TRACK_INFO: TrackInfo = TrackInfo {
     id: 0,
     name: "value",
+    documentation: "Tracked value.",
     limits: TrackLimits::None,
     choices: TrackChoices::None,
     get: |world, entity| {
@@ -1134,6 +1135,7 @@ mod tests {
     static TEST_TRACK_INFO: TrackInfo = TrackInfo {
         id: 0,
         name: "value",
+        documentation: "Tracked value.",
         limits: TrackLimits::None,
         choices: TrackChoices::None,
         get: |_, _| TrackValue::F32(0.0),
@@ -1143,6 +1145,7 @@ mod tests {
     static BOUNDED_TRACK_INFO: TrackInfo = TrackInfo {
         id: 0,
         name: "value",
+        documentation: "Tracked value.",
         limits: TrackLimits::F32 {
             min: Some(0.0),
             max: Some(1.0),
@@ -1438,6 +1441,8 @@ pub struct TrackInfo {
     pub id: TrackId,
     /// Human-readable field name used by tooling and debugging.
     pub name: &'static str,
+    /// Field documentation shared by Lua definitions and editor assistance.
+    pub documentation: &'static str,
     /// Optional numeric bounds shared by animation and editing.
     pub limits: TrackLimits,
     /// Optional choices presented by editor controls.

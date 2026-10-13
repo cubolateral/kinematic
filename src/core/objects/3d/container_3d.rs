@@ -17,8 +17,10 @@ pub enum LayoutDirection3D {
 /// Procedural spacing and anchoring for a three-dimensional container.
 #[derive(Clone, Debug, Default, Trackable)]
 pub struct Layout3D {
+    /// Spacing between children on each layout axis in local coordinates.
     #[track]
     pub gap: Vector3,
+    /// Axis and direction used to arrange the container children.
     #[track]
     pub direction: LayoutDirection3D,
 }

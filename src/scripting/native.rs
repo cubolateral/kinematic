@@ -4,6 +4,7 @@ use crate::core::{Scene, TrackTarget, components::Inspection, objects::*};
 pub(crate) struct NativeObject {
     pub name: &'static str,
     pub object_name: &'static str,
+    pub documentation: &'static str,
     pub methods: &'static [super::methods::LuaMethod],
     pub spawn: fn(&mut Scene, hecs::Entity),
 }
@@ -12,6 +13,7 @@ pub(super) fn native<T: Object + Default>() -> NativeObject {
     NativeObject {
         name: T::BUILDER_NAME,
         object_name: T::inspection().object_name,
+        documentation: T::DOCUMENTATION,
         methods: &[],
         spawn: |scene, entity| {
             T::spawn_at(
@@ -65,6 +67,7 @@ pub(crate) fn objects() -> Vec<NativeObject> {
             objects.push(NativeObject {
                 name: $name,
                 object_name: <$object>::inspection().object_name,
+                documentation: <$object>::DOCUMENTATION,
                 methods: &[],
                 spawn: |scene, entity| {
                     let mut object = <$object>::default();

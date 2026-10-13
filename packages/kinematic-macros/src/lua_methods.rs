@@ -125,6 +125,7 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
             ));
         }
         let name = &signature.ident;
+        let documentation = crate::documentation(&method.attrs);
         let key = name.to_string();
         let count = names.len();
         annotations.push_str(&format!(
@@ -139,6 +140,7 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
             crate::scripting::methods::LuaMethod {
                 name: #key,
                 annotation: #annotations,
+                documentation: #documentation,
                 invoke: |lua, object, args| {
                     use crate::core::objects::ObjectHandler;
                     use mlua::IntoLua;

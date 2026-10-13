@@ -5,6 +5,19 @@ mod trackable;
 
 use proc_macro::TokenStream;
 
+fn documentation(attributes: &[syn::Attribute]) -> proc_macro2::TokenStream {
+    let lines = attributes.iter().filter_map(|attribute| {
+        if !attribute.path().is_ident("doc") {
+            return None;
+        }
+        let syn::Meta::NameValue(value) = &attribute.meta else {
+            return None;
+        };
+        Some(&value.value)
+    });
+    quote::quote!(concat!(#(#lines, "\n",)*))
+}
+
 #[proc_macro_derive(Object, attributes(trackable, object))]
 pub fn derive_object(input: TokenStream) -> TokenStream {
     object::derive_object(input)

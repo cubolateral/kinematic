@@ -2029,6 +2029,7 @@ mod tests {
             TrackInfo {
                 id: 0,
                 name: "animated",
+                documentation: "Tracked value.",
                 limits: TrackLimits::None,
                 choices: TrackChoices::None,
                 get: get::<0>,
@@ -2037,6 +2038,7 @@ mod tests {
             TrackInfo {
                 id: 1,
                 name: "static",
+                documentation: "Tracked value.",
                 limits: TrackLimits::None,
                 choices: TrackChoices::None,
                 get: get::<1>,

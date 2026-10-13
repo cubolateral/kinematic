@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::BTreeMap, path::PathBuf, rc::Rc};
 
 mod diagnostics;
+mod documentation;
 mod files;
 
 pub(super) const WINDOW_NAME: &str = "Code";
@@ -63,11 +64,25 @@ struct Assistance {
     completion_position: Option<Position>,
     hover: Option<Position>,
     hover_position: Option<Position>,
-    hover_text: String,
     changed: bool,
     available: bool,
     error: Option<String>,
 }
+struct DocumentationPopup {
+    position: [f32; 2],
+    size: [f32; 2],
+    last_hover: f64,
+    focused: bool,
+    bounds: [[f32; 2]; 2],
+}
+
+impl DocumentationPopup {
+    fn contains(&self, mouse: [f32; 2]) -> bool {
+        (0..2)
+            .all(|axis| mouse[axis] >= self.bounds[0][axis] && mouse[axis] <= self.bounds[1][axis])
+    }
+}
+
 struct Tab {
     editor: TextEditor,
     version: u64,
@@ -76,8 +91,10 @@ struct Tab {
     signature: String,
     signature_position: Option<Position>,
     documentation: TextEditor,
-    documentation_has_code: bool,
+    documentation_view: documentation::Documentation,
+    documentation_has_content: bool,
     hover_candidate: Option<(Position, f64)>,
+    documentation_popup: Option<DocumentationPopup>,
 }
 impl Tab {
     fn configure(&mut self, settings: &Settings) -> dear_imgui_cte::CteResult<()> {
@@ -206,10 +223,10 @@ impl Tab {
                             documents.edit(path, text);
                             self.version = documents.open[path].version;
                             let mut assistance = self.assistance.borrow_mut();
-                            assistance.hover_text.clear();
+                            self.documentation_popup = None;
                             assistance.hover_position = None;
                             self.hover_candidate = None;
-                            self.documentation_has_code = false;
+                            self.documentation_has_content = false;
                         }
                         Err(error) => *output_error = Some(error.to_string()),
                     }
@@ -255,18 +272,34 @@ impl Tab {
                     None
                 };
                 let mut assistance = self.assistance.borrow_mut();
-                if self.hover_candidate.map(|(position, _)| position) != hovered {
-                    self.hover_candidate = hovered.map(|position| (position, ui.time()));
-                    assistance.hover_position = None;
-                    assistance.hover_text.clear();
-                    self.documentation_has_code = false;
-                }
-                if let Some((position, since)) = self.hover_candidate {
-                    if ui.time() - since >= settings.hover_delay_ms.clamp(200, 2000) as f64 / 1000.0
-                        && assistance.hover_position != Some(position)
-                    {
-                        assistance.hover_position = Some(position);
-                        assistance.hover = Some(position);
+                if let Some(popup) = &mut self.documentation_popup {
+                    let over_popup = popup.contains(ui.io().mouse_pos());
+                    if over_popup || hovered == self.hover_candidate.map(|(position, _)| position) {
+                        popup.last_hover = ui.time();
+                    } else if ui.time() - popup.last_hover > 0.25 {
+                        if popup.focused {
+                            ui.set_window_focus(Some(WINDOW_NAME));
+                            self.editor.focus();
+                        }
+                        self.documentation_popup = None;
+                        self.hover_candidate = None;
+                        assistance.hover_position = None;
+                        self.documentation_has_content = false;
+                    }
+                } else {
+                    if self.hover_candidate.map(|(position, _)| position) != hovered {
+                        self.hover_candidate = hovered.map(|position| (position, ui.time()));
+                        assistance.hover_position = None;
+                        self.documentation_has_content = false;
+                    }
+                    if let Some((position, since)) = self.hover_candidate {
+                        if ui.time() - since
+                            >= settings.hover_delay_ms.clamp(200, 2000) as f64 / 1000.0
+                            && assistance.hover_position != Some(position)
+                        {
+                            assistance.hover_position = Some(position);
+                            assistance.hover = Some(position);
+                        }
                     }
                 }
                 if let Some(error) = assistance.error.take() {
@@ -301,32 +334,73 @@ impl Tab {
                         }
                     }
                 }
-                if hovered.is_some()
-                    && (!assistance.hover_text.is_empty() || self.documentation_has_code)
-                {
-                    ui.tooltip(|| {
-                        if self.documentation_has_code {
-                            let height = (self.documentation.line_count() as f32
-                                * ui.text_line_height_with_spacing()
-                                + 8.0)
-                                .min(240.0);
-                            if let Err(error) = ui
-                                .text_editor(&mut self.documentation, "Documentation source")
-                                .size([480.0, height])
-                                .window_flags(
-                                    dear_imgui_rs::WindowFlags::NO_INPUTS
-                                        | dear_imgui_rs::WindowFlags::NO_SCROLLBAR,
-                                )
-                                .build()
-                            {
-                                *output_error = Some(error.to_string());
-                            }
-                        }
-                        if !assistance.hover_text.is_empty() {
-                            let _wrap = ui.push_text_wrap_pos(ui.cursor_pos()[0] + 480.0);
-                            ui.text(&assistance.hover_text);
+                if self.documentation_has_content {
+                    let popup = self.documentation_popup.get_or_insert_with(|| {
+                        let viewport = ui.window_viewport();
+                        let work_position = viewport.work_pos();
+                        let work_size = viewport.work_size();
+                        let width = 560.0_f32.min(work_size[0]).max(1.0);
+                        let text = self.documentation.text().unwrap_or_default();
+                        let height =
+                            ui.calc_text_size_with_opts(&text, false, (width - 32.0).max(1.0))[1]
+                                + 32.0;
+                        let size = [width, height.min(420.0).min(work_size[1]).max(1.0)];
+                        let mouse = ui.io().mouse_pos();
+                        let position = std::array::from_fn(|axis| {
+                            (mouse[axis] + 12.0).clamp(
+                                work_position[axis],
+                                work_position[axis]
+                                    + (work_size[axis]
+                                        - [width, 420.0_f32.min(work_size[1])][axis])
+                                        .max(0.0),
+                            )
+                        });
+                        DocumentationPopup {
+                            position,
+                            size,
+                            last_hover: ui.time(),
+                            focused: false,
+                            bounds: [position, [position[0] + size[0], position[1] + size[1]]],
                         }
                     });
+                    let _rounding = ui.push_style_var(dear_imgui_rs::StyleVar::WindowRounding(7.0));
+                    let _padding =
+                        ui.push_style_var(dear_imgui_rs::StyleVar::WindowPadding([12.0, 12.0]));
+                    let _border = ui.push_style_var(dear_imgui_rs::StyleVar::WindowBorderSize(1.0));
+                    let background = ui.clone_style().color(dear_imgui_rs::StyleColor::WindowBg);
+                    let _background =
+                        ui.push_style_color(dear_imgui_rs::StyleColor::WindowBg, background);
+                    let _child =
+                        ui.push_style_color(dear_imgui_rs::StyleColor::ChildBg, background);
+                    ui.window("Documentation##Code")
+                        .position(popup.position, dear_imgui_rs::Condition::Always)
+                        .size(popup.size, dear_imgui_rs::Condition::Always)
+                        .flags(
+                            dear_imgui_rs::WindowFlags::NO_DECORATION
+                                | dear_imgui_rs::WindowFlags::NO_MOVE
+                                | dear_imgui_rs::WindowFlags::NO_FOCUS_ON_APPEARING
+                                | dear_imgui_rs::WindowFlags::NO_DOCKING
+                                | dear_imgui_rs::WindowFlags::NO_SAVED_SETTINGS,
+                        )
+                        .build(|| {
+                            let position = ui.window_pos();
+                            let size = ui.window_size();
+                            popup.bounds =
+                                [position, [position[0] + size[0], position[1] + size[1]]];
+                            if let Err(error) =
+                                self.documentation_view
+                                    .draw(ui, &mut self.documentation, font_size)
+                            {
+                                *output_error = Some(error);
+                            }
+                            popup.focused = ui.is_window_focused_with_flags(
+                                dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS,
+                            );
+                            popup.size[1] = (self.documentation_view.height + 24.0)
+                                .min(420.0)
+                                .min(ui.window_viewport().work_size()[1])
+                                .max(1.0);
+                        });
                 }
                 drop(assistance);
                 if focused && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Escape, false) {
@@ -443,7 +517,7 @@ impl State {
                         changes.borrow_mut().changed = true;
                     })?;
                     let mut documentation = TextEditor::try_create(context)?;
-                    documentation.set_language(Some(Language::Lua));
+                    documentation.set_language(None);
                     documentation.set_palette(&editor.palette())?;
                     documentation.set_read_only(true);
                     documentation.set_show_line_numbers(false);
@@ -462,8 +536,10 @@ impl State {
                             signature: String::new(),
                             signature_position: None,
                             documentation,
-                            documentation_has_code: false,
+                            documentation_view: documentation::Documentation::default(),
+                            documentation_has_content: false,
                             hover_candidate: None,
+                            documentation_popup: None,
                         },
                     );
                 }
@@ -728,12 +804,21 @@ impl State {
                 }
                 "textDocument/hover" => {
                     if let Some(tab) = self.tabs.get_mut(&reply.path) {
-                        let mut assistance = tab.assistance.borrow_mut();
+                        let assistance = tab.assistance.borrow();
                         if reply.position == assistance.hover_position.map(|p| (p.line, p.column)) {
-                            let (code, text) = documentation_parts(&assistance_text(&reply.value));
-                            assistance.hover_text = text;
-                            tab.documentation_has_code = !code.is_empty();
-                            if let Err(error) = tab.documentation.set_text(&code) {
+                            tab.documentation_view =
+                                documentation::Documentation::parse(&assistance_text(&reply.value));
+                            let text = &tab.documentation_view.text;
+                            tab.documentation_has_content = !text.is_empty();
+                            let result = tab
+                                .documentation
+                                .set_text(&text)
+                                .and_then(|_| tab.documentation.set_cursor(Position::new(0, 0)))
+                                .and_then(|_| {
+                                    tab.documentation
+                                        .scroll_to_line(0, dear_imgui_cte::ScrollAlignment::Top)
+                                });
+                            if let Err(error) = result {
                                 self.error = Some(error.to_string());
                             }
                         }
@@ -856,6 +941,13 @@ impl State {
                                 footer_height,
                                 &mut self.error,
                             );
+                            self.focused |= ui.is_window_focused_with_flags(
+                                dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS,
+                            );
+                            self.focused |= tab
+                                .documentation_popup
+                                .as_ref()
+                                .is_some_and(|popup| popup.focused);
                             if save_requested {
                                 if let Err(error) = tab.save(documents, &path) {
                                     self.error = Some(error);
@@ -963,23 +1055,9 @@ fn line_diagnostics(value: &serde_json::Value) -> Vec<(usize, bool)> {
     }
     lines.into_iter().collect()
 }
-fn documentation_parts(markdown: &str) -> (String, String) {
-    let mut code = String::new();
-    let mut text = String::new();
-    let mut in_code = false;
-    for line in markdown.lines() {
-        if line.trim_start().starts_with("```") {
-            in_code = !in_code;
-            continue;
-        }
-        if line.trim() == "---" {
-            continue;
-        }
-        let destination = if in_code { &mut code } else { &mut text };
-        destination.push_str(&line.replace("&#x20;", " ").replace("&nbsp;", " "));
-        destination.push('\n');
-    }
-    (code.trim_end().to_owned(), text.trim().to_owned())
+#[cfg(test)]
+fn documentation_text(markdown: &str) -> String {
+    documentation::Documentation::parse(markdown).text
 }
 
 fn tab_label(path: &std::path::Path) -> String {
@@ -1049,6 +1127,17 @@ mod tests {
     fn typing_and_switching_files_keep_the_requested_editor_focused() {
         let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+        #[derive(Default)]
+        struct Clipboard(String);
+        impl dear_imgui_rs::ClipboardBackend for Clipboard {
+            fn get(&mut self) -> Option<String> {
+                Some(self.0.clone())
+            }
+            fn set(&mut self, value: &str) {
+                self.0 = value.to_owned();
+            }
+        }
+        context.set_clipboard_backend(Clipboard::default());
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
@@ -1333,34 +1422,123 @@ mod tests {
             state.tabs[b].assistance.borrow().hover_position,
             Some(dear_imgui_cte::Position::new(0, 0))
         );
-        assert!(!state.tabs[b].documentation_has_code);
+        assert!(!state.tabs[b].documentation_has_content);
         documents.replies.push(crate::editor::lsp::Reply {
             method: "textDocument/hover".into(), path: b.to_owned(), version: documents.open[b].version,
             position: Some((0, 0)), value: serde_json::json!({"contents":{"kind":"markdown","value":"```lua\nfunction circle() end\n```\nDraw a circle."}}),
         });
         state.draw(&mut documents, &settings, context.frame());
         context.end_frame();
-        assert!(state.tabs[b].documentation_has_code);
+        assert!(state.tabs[b].documentation_has_content);
         assert_eq!(
             state.tabs[b].documentation.text().unwrap(),
-            "function circle() end"
-        );
-        assert_eq!(
-            state.tabs[b].assistance.borrow().hover_text,
-            "Draw a circle."
+            "function circle() end\n\nDraw a circle."
         );
         assert!(state.focused);
+        let popup_position = state.tabs[b].documentation_popup.as_ref().unwrap().position;
+        context.io_mut().set_delta_time(0.01);
+        context
+            .io_mut()
+            .add_mouse_pos_event([popup_position[0] + 30.0, popup_position[1] + 65.0]);
+        for _ in 0..3 {
+            state.draw(&mut documents, &settings, context.frame());
+            context.end_frame();
+        }
+        assert_eq!(
+            state.tabs[b].documentation_popup.as_ref().unwrap().position,
+            popup_position
+        );
+        assert!(state.tabs[b].documentation_has_content);
+        let documentation = "function circle() end\n\nDraw a circle.";
+        for pressed in [true, false] {
+            context
+                .io_mut()
+                .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, pressed);
+            state.draw(&mut documents, &settings, context.frame());
+            context.end_frame();
+        }
+        for (key, pressed) in [
+            (dear_imgui_rs::Key::ModCtrl, true),
+            (dear_imgui_rs::Key::A, true),
+            (dear_imgui_rs::Key::A, false),
+            (dear_imgui_rs::Key::C, true),
+            (dear_imgui_rs::Key::C, false),
+            (dear_imgui_rs::Key::ModCtrl, false),
+        ] {
+            context.io_mut().add_key_event(key, pressed);
+            state.draw(&mut documents, &settings, context.frame());
+            context.end_frame();
+        }
+        assert!(state.focused);
+        assert_eq!(context.clipboard_text().as_deref(), Some(documentation));
+        let tab = state.tabs.get_mut(b).unwrap();
+        assert!(tab.documentation.main_cursor_has_selection());
+        tab.documentation.cut();
+        assert_eq!(tab.documentation.text().unwrap(), documentation);
+        let long_documentation =
+            format!("{documentation}\n{}", "Detailed explanation.\n".repeat(80));
+        tab.documentation_view = super::documentation::Documentation::parse(&long_documentation);
+        tab.documentation
+            .set_text(&tab.documentation_view.text)
+            .unwrap();
+        for _ in 0..3 {
+            state.draw(&mut documents, &settings, context.frame());
+            context.end_frame();
+        }
+        context.io_mut().add_mouse_wheel_event([0.0, -8.0]);
+        for _ in 0..3 {
+            state.draw(&mut documents, &settings, context.frame());
+            context.end_frame();
+        }
+        assert!(state.tabs[b].documentation_view.scroll_y > 0.0);
+        assert_eq!(
+            state.tabs[b].documentation_popup.as_ref().unwrap().position,
+            popup_position
+        );
+        assert_eq!(documents.open[b].text, "circle()");
+        let popup = state
+            .tabs
+            .get_mut(b)
+            .unwrap()
+            .documentation_popup
+            .as_mut()
+            .unwrap();
+        popup.position = [850.0, 280.0];
+        popup.size[0] = 400.0;
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        let bounds = state.tabs[b].documentation_popup.as_ref().unwrap().bounds;
+        assert!(bounds[1][0] > 950.0 && bounds[1][1] > 600.0);
+        for point in [
+            [bounds[0][0] + 1.0, bounds[0][1] + 1.0],
+            [bounds[1][0] - 1.0, bounds[1][1] - 1.0],
+            [bounds[1][0] - 8.0, (bounds[0][1] + bounds[1][1]) * 0.5],
+            [(bounds[0][0] + bounds[1][0]) * 0.5, bounds[1][1] - 12.0],
+        ] {
+            context.io_mut().set_delta_time(0.3);
+            context.io_mut().add_mouse_pos_event(point);
+            for _ in 0..2 {
+                state.draw(&mut documents, &settings, context.frame());
+                context.end_frame();
+            }
+            assert!(state.tabs[b].documentation_popup.is_some(), "{point:?}");
+        }
+        context.io_mut().set_delta_time(0.01);
         context.io_mut().add_mouse_pos_event([-100.0, -100.0]);
         state.draw(&mut documents, &settings, context.frame());
         context.end_frame();
-        assert!(!state.tabs[b].documentation_has_code);
+        assert!(state.tabs[b].documentation_has_content);
+        context.io_mut().set_delta_time(0.3);
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        assert!(!state.tabs[b].documentation_has_content);
         drop(state);
         drop(documents);
         std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
-    fn diagnostics_prioritize_errors_and_documentation_separates_code() {
+    fn diagnostics_prioritize_errors_and_documentation_preserves_order() {
         assert_eq!(
             super::line_diagnostics(&serde_json::json!([
                 {"severity": 1, "range": {"start": {"line": 0}}},
@@ -1371,10 +1549,20 @@ mod tests {
             vec![(0, true), (2, false)]
         );
         assert_eq!(
-            super::documentation_parts(
+            super::documentation_text(
                 "```lua\nfunction circle() end\n```\n---\nDraw&#x20;a circle."
             ),
-            ("function circle() end".into(), "Draw a circle.".into())
+            "function circle() end\n\nDraw a circle."
+        );
+        assert_eq!(
+            super::documentation_text("Intro.\n\n```lua\nexample()\n```\n\nDetails.\n\n"),
+            "Intro.\n\nexample()\n\nDetails."
+        );
+        assert_eq!(
+            super::assistance_text(
+                &serde_json::json!({"signatures":[{"label":"function example()"}]})
+            ),
+            "function example()"
         );
         assert_eq!(super::indentation_backspace("        ", 4), Some(4));
         assert_eq!(super::indentation_backspace("      ", 4), Some(4));
@@ -1451,11 +1639,13 @@ fn assistance_text(value: &serde_json::Value) -> String {
         return signatures
             .iter()
             .map(|v| {
-                format!(
-                    "{}\n{}",
-                    v["label"].as_str().unwrap_or(""),
-                    assistance_text(&v["documentation"])
-                )
+                let label = v["label"].as_str().unwrap_or("");
+                let documentation = assistance_text(&v["documentation"]);
+                if documentation.trim().is_empty() {
+                    label.trim().to_owned()
+                } else {
+                    format!("{label}\n{}", documentation.trim())
+                }
             })
             .collect::<Vec<_>>()
             .join("\n");

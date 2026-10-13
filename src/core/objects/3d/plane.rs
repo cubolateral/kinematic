@@ -9,6 +9,7 @@ use kinematic_macros::{Object, Trackable};
 
 #[derive(Clone, Trackable)]
 pub struct PlaneShape {
+    /// Geometry dimensions in local coordinates.
     #[track]
     pub size: Vector2,
 }

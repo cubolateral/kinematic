@@ -64,8 +64,11 @@ its executable, use an existing Neovim Mason installation, or put
 `lua-language-server` on `PATH` (in that search order). Nothing is downloaded.
 Each project owns an asynchronous server, with generated API definitions and
 logs in `kinematic/cache/luals`. User LuaLS settings are not overwritten.
-Completion is available with Ctrl+Space, documentation with F1, definition with
-F12, and signatures through the Signature button. Buffers and version numbers
+Completion is available with Ctrl+Space, documentation by hovering a symbol,
+and definition navigation with Ctrl+click or F12. Signatures appear while typing
+function arguments. The documentation popup stays in place while the pointer
+moves into it, supports scrolling and text selection/copying, and closes after
+the pointer leaves the symbol and popup. Buffers and version numbers
 are sent to the server; stale replies are discarded. UTF-8/UTF-16 positions are
 converted to the editor's character coordinates. Server failure is a diagnostic
 and does not disable basic editing or execution.
@@ -89,7 +92,12 @@ end
 ```
 
 Native constructor names and directly exposed properties come from the Rust
-`Object` and `Trackable` macros. The generated file
+`Object` and `Trackable` macros. Rust `///` comments on objects, tracked fields,
+and exported `#[lua]` methods are included automatically in LuaLS definitions.
+Property defaults and numeric limits come from the runtime metadata, including
+constructor presets. Write documentation next to the Rust declaration; do not
+edit the generated cache. Shared Lua operations are documented in
+`src/scripting/api.lua`. The generated file
 `kinematic/cache/luals/kinematic.lua` lists their types, and
 [the inventory](lua-parity.md) lists the API families. Constructors include
 `circle`, `ellipse`, `rect`, `regular_polygon_2d`, `line_2d`, `image_2d`,

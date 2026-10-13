@@ -8,6 +8,7 @@ use crate::core::{
 #[derive(Clone, Trackable)]
 /// Geometry of an elliptical object.
 pub struct EllipseShape {
+    /// Horizontal and vertical radii in local coordinates.
     #[track]
     pub radius: Vector2,
 }

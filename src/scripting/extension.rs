@@ -121,6 +121,7 @@ impl SimulationState for ScriptState {
     }
 }
 
+/// Scripted 2D object with local drawing, tracked properties, and fixed-step simulation.
 #[derive(Object, Default)]
 #[object(spatial = "2d", builder = "script_2d")]
 pub(super) struct Script2D {
@@ -135,6 +136,7 @@ pub(super) struct Script2D {
     #[trackable]
     pub simulation: Simulation,
 }
+/// Scripted 3D object with mesh drawing, tracked properties, and fixed-step simulation.
 #[derive(Object, Default)]
 #[object(spatial = "3d", builder = "script_3d")]
 pub(super) struct Script3D {

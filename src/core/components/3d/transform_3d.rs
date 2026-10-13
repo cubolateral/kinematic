@@ -8,13 +8,16 @@ use crate::core::{
 /// Local three-dimensional position, rotation and scale.
 #[derive(Clone, Debug, Trackable)]
 pub struct Transform3D {
+    /// Position relative to the parent in local coordinates.
     #[track]
     pub position: Vector3,
     /// Pivot relative to half the entity size. Values are not clamped.
     #[track]
     pub origin: Vector3,
+    /// Local orientation as a quaternion. Use k.axis_angle to construct a rotation.
     #[track]
     pub rotation: Quaternion,
+    /// Local scale multiplier on each axis.
     #[track]
     pub scale: Vector3,
 }

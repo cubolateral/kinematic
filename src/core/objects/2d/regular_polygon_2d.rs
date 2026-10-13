@@ -9,8 +9,10 @@ use crate::core::{
 #[derive(Clone, Trackable)]
 /// Geometry of a regular polygon.
 pub struct RegularPolygon2DShape {
+    /// Geometry dimensions in local coordinates.
     #[track]
     pub size: Vector2,
+    /// Number of sides of the regular polygon, between 3 and 256.
     #[track(min = 3, max = 256)]
     pub sides: u32,
 }

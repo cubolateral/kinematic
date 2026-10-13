@@ -939,6 +939,58 @@ end
             !formatted.contains("---@class") && !formatted.contains("@as Kinematic.Custom_"),
             "Formatting must preserve original project sources."
         );
+        let text = "return function(s)\n  local ball = s:circle {radius=24}\n  ball.radius:get()\n  local label = s:text_2d {text='Hi'}\n  label:fade('Bye'):play(1)\n  local point = k.vec2(1, 2)\n  local center = k.rect(0, 0, 10, 10):middle()\nend\n";
+        client.sync(path, text, 7);
+        for (line, token, expected) in [
+            (1, "circle", "Built-in circular scene object."),
+            (2, "radius", "Radius in local coordinates."),
+            (2, "get", "Reads the current value"),
+            (4, "fade", "Replaces the text and fades"),
+            (5, "vec2", "Creates a two-dimensional value"),
+            (6, "middle", "point of this rectangle"),
+        ] {
+            let column = text.lines().nth(line).unwrap().find(token).unwrap();
+            client.request("textDocument/hover", path, text, 7, line, column);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            let mut contents = None;
+            while std::time::Instant::now() < deadline && contents.is_none() {
+                for reply in client.poll() {
+                    if reply.method == "textDocument/hover"
+                        && reply.position == Some((line, column))
+                    {
+                        contents = Some(reply.value.to_string());
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            let contents = contents.expect("LuaLS must return documentation.");
+            assert!(contents.contains(expected), "{token}: {contents}");
+        }
+        let column = text.lines().nth(4).unwrap().find("fade").unwrap();
+        client.request("textDocument/definition", path, text, 7, 4, column);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut location = None;
+        while std::time::Instant::now() < deadline && location.is_none() {
+            for reply in client.poll() {
+                if reply.method == "textDocument/definition" {
+                    location = Some(reply.value);
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let location = location.unwrap();
+        let location = location.as_array().unwrap().first().unwrap();
+        assert!(location["uri"].as_str().unwrap().ends_with("kinematic.lua"));
+        let line = location["range"]["start"]["line"].as_u64().unwrap() as usize;
+        let definitions = crate::scripting::definitions();
+        assert!(definitions.lines().nth(line).unwrap().contains("fade"));
+        assert!(
+            definitions
+                .lines()
+                .skip(line.saturating_sub(8))
+                .take(8)
+                .any(|line| line.contains("Replaces the text and fades"))
+        );
         drop(client);
         std::fs::remove_dir_all(root).unwrap();
     }

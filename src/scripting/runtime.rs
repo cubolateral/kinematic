@@ -882,7 +882,7 @@ impl Runtime {
     }
 }
 
-fn easing_name(ease: Easing) -> String {
+pub(super) fn easing_name(ease: Easing) -> String {
     let name = format!("{ease:?}");
     if let Some(rest) = name.strip_prefix("InOut") {
         format!("{}_in_out", rest.to_lowercase())

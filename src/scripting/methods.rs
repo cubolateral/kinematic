@@ -9,11 +9,14 @@ use mlua::{Lua, MultiValue, Result, Value};
 pub(crate) struct LuaMethod {
     pub name: &'static str,
     pub annotation: &'static str,
+    pub documentation: &'static str,
     pub invoke: fn(&Lua, &ObjectHandle, MultiValue) -> Result<Value>,
 }
 
 #[kinematic_macros::lua_methods]
 impl Text2DHandler {
+    /// Replaces the text and fades it from transparent to its current opacity.
+    /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
     pub(crate) fn fade(&self, text: String) -> Task {
         let opacity = self

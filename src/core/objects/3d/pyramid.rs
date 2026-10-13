@@ -9,10 +9,13 @@ use kinematic_macros::{Object, Trackable};
 
 #[derive(Clone, Trackable)]
 pub struct PyramidShape {
+    /// Geometry dimensions in local coordinates.
     #[track]
     pub size: Vector3,
+    /// Number of sides of the regular polygon, between 3 and 256.
     #[track(min = 3, max = 256)]
     pub sides: u32,
+    /// Closes the base of the pyramid when true.
     #[track]
     pub cap: bool,
 }

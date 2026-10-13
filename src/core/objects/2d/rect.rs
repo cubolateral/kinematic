@@ -8,8 +8,10 @@ use crate::core::{
 #[derive(Clone, Trackable)]
 /// Geometry of a rectangular object.
 pub struct RectShape {
+    /// Geometry dimensions in local coordinates.
     #[track]
     pub size: Vector2,
+    /// Corner radii in local coordinates, ordered top-left, top-right, bottom-right, bottom-left.
     #[track]
     pub round: Quad,
 }

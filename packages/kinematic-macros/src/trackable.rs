@@ -342,6 +342,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         let field_ty = &field.ty;
         let id = id as u32;
         let field_name = field_ident.to_string();
+        let documentation = crate::documentation(&field.attrs);
         let property_name = format_ident!("{}_property", field_ident);
         let from_method_name = format_ident!("{}_from", field_ident);
         let get_method_name = format_ident!("get_{}", field_ident);
@@ -358,6 +359,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             #track_info_type {
                 id: #id,
                 name: #field_name,
+                documentation: #documentation,
                 limits: #limits,
                 choices: <#field_ty as #track_value_type_trait>::CHOICES,
                 get: |world, entity| {

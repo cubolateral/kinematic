@@ -4,6 +4,7 @@ use syn::{Data, DeriveInput, Fields, parse_macro_input};
 pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let object_name = &input.ident;
+    let documentation = crate::documentation(&input.attrs);
     let visibility = &input.vis;
     let builder_name = format_ident!("{}Builder", object_name);
     let handler_name = format_ident!("{}Handler", object_name);
@@ -520,6 +521,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             type Handler = #handler_name;
             const SPATIAL_2D: bool = #morphable;
             const BUILDER_NAME: &'static str = #alias;
+            const DOCUMENTATION: &'static str = #documentation;
 
             fn handler(world: #scene_world_type, entity: hecs::Entity, animator: #animator_handle_type) -> Self::Handler {
                 #object_name::handler(world, entity, animator)

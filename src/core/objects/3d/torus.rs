@@ -10,12 +10,16 @@ use kinematic_macros::{Object, Trackable};
 
 #[derive(Clone, Trackable)]
 pub struct TorusShape {
+    /// Distance from the torus center to the center of its tube in local units.
     #[track(min = 0.0)]
     pub major_radius: f32,
+    /// Radius of the torus tube in local units.
     #[track(min = 0.0)]
     pub minor_radius: f32,
+    /// Number of subdivisions around the torus ring, between 3 and 256.
     #[track(min = 3, max = 256)]
     pub major_segments: u32,
+    /// Number of subdivisions around the torus tube, between 3 and 256.
     #[track(min = 3, max = 256)]
     pub minor_segments: u32,
 }
