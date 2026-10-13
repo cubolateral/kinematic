@@ -1,4 +1,3 @@
-local k = require("kinematic")
 local cells = {}
 for y = 1, 12 do
     cells[y] = {}
@@ -28,7 +27,7 @@ local life = k.object {
         end
         state.cells = next
     end,
-    bounds = function() return {-200, -120, 400, 240} end,
+    bounds = function() return {x = -200, y = -120, width = 400, height = 240} end,
     draw = function(ctx, properties, state)
         for y, row in ipairs(state.cells) do
             for x, alive in ipairs(row) do
@@ -37,8 +36,8 @@ local life = k.object {
         end
     end,
 }
-return k.scene("Life", function(s)
+return function(s)
     local grid = s:object(life, {id = "life", fill = k.color("#34D399")})
     s:world_2d():add(grid)
     s:wait(3)
-end)
+end

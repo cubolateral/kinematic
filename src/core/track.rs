@@ -610,6 +610,28 @@ impl TrackValue {
             (Self::Vector3(current), Self::Vector3(from), Self::Vector3(to)) => {
                 Self::Vector3(*current + (*to - *from))
             }
+            (Self::I32(current), Self::I32(from), Self::I32(to)) => Self::I32(
+                (*current as i64 + *to as i64 - *from as i64)
+                    .try_into()
+                    .expect("Integer increment overflow."),
+            ),
+            (Self::U32(current), Self::U32(from), Self::U32(to)) => Self::U32(
+                (*current as i64 + *to as i64 - *from as i64)
+                    .try_into()
+                    .expect("Integer increment overflow."),
+            ),
+            (Self::Color(current), Self::Color(from), Self::Color(to)) => Self::Color(
+                std::array::from_fn::<_, 4, _>(|i| {
+                    current.rgba()[i] + to.rgba()[i] - from.rgba()[i]
+                })
+                .into(),
+            ),
+            (Self::Quad(current), Self::Quad(from), Self::Quad(to)) => Self::Quad(Quad::new(
+                current.a + to.a - from.a,
+                current.b + to.b - from.b,
+                current.c + to.c - from.c,
+                current.d + to.d - from.d,
+            )),
             _ => panic!("Relative tweens require scalar or vector values."),
         }
     }

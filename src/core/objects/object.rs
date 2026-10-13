@@ -22,6 +22,47 @@ pub struct Snapshot<Handler> {
     handler: std::marker::PhantomData<Handler>,
 }
 
+pub(crate) fn save_snapshot_destinations(
+    world: &SceneWorld,
+    entity: hecs::Entity,
+    values: Vec<(TrackTarget, TrackValue)>,
+) {
+    world
+        .borrow()
+        .get::<&mut Snapshots>(entity)
+        .expect("Object must contain snapshots.")
+        .saved
+        .push(
+            values
+                .into_iter()
+                .map(|(target, value)| SnapshotValue { target, value })
+                .collect(),
+        );
+}
+
+pub(crate) fn snapshot_destinations(
+    world: &SceneWorld,
+    entity: hecs::Entity,
+    reset: bool,
+) -> Vec<(TrackTarget, TrackValue)> {
+    let world = world.borrow();
+    let mut snapshots = world
+        .get::<&mut Snapshots>(entity)
+        .expect("Object must contain snapshots.");
+    let values = if reset {
+        snapshots.initial.clone()
+    } else {
+        snapshots
+            .saved
+            .pop()
+            .expect("Cannot restore without a saved snapshot.")
+    };
+    values
+        .into_iter()
+        .map(|saved| (saved.target, saved.value))
+        .collect()
+}
+
 #[derive(Default)]
 struct Snapshots {
     initial: Vec<SnapshotValue>,
@@ -870,11 +911,14 @@ pub(crate) fn object_box3d(world: &hecs::World, entity: hecs::Entity) -> glam::V
     object_bounds3d(world, entity).map_or(glam::Vec3::ZERO, |(min, max)| max - min)
 }
 
-fn object_bounds3d(world: &hecs::World, entity: hecs::Entity) -> Option<(Vector3, Vector3)> {
+pub(crate) fn object_bounds3d(
+    world: &hecs::World,
+    entity: hecs::Entity,
+) -> Option<(Vector3, Vector3)> {
     bounds3d_inner(world, entity, false, None)
 }
 
-fn object_bounds3d_at(
+pub(crate) fn object_bounds3d_at(
     world: &hecs::World,
     entity: hecs::Entity,
     time: f32,

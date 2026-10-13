@@ -3,12 +3,16 @@ use crate::core::{Scene, TrackTarget, components::Inspection, objects::*};
 #[derive(Clone, Copy)]
 pub(crate) struct NativeObject {
     pub name: &'static str,
+    pub object_name: &'static str,
+    pub methods: &'static [super::methods::LuaMethod],
     pub spawn: fn(&mut Scene, hecs::Entity),
 }
 
 pub(super) fn native<T: Object + Default>() -> NativeObject {
     NativeObject {
         name: T::BUILDER_NAME,
+        object_name: T::inspection().object_name,
+        methods: &[],
         spawn: |scene, entity| {
             T::spawn_at(
                 scene.world_handle(),
@@ -29,7 +33,10 @@ pub(crate) fn objects() -> Vec<NativeObject> {
         native::<RegularPolygon2D>(),
         native::<Line2D>(),
         native::<Image2D>(),
-        native::<Text2D>(),
+        NativeObject {
+            methods: Text2DHandler::lua_methods(),
+            ..native::<Text2D>()
+        },
         native::<Latex2D>(),
         native::<Group2D>(),
         native::<Container2D>(),
@@ -57,6 +64,8 @@ pub(crate) fn objects() -> Vec<NativeObject> {
         ($name:literal, $object:ty, $sides:expr) => {
             objects.push(NativeObject {
                 name: $name,
+                object_name: <$object>::inspection().object_name,
+                methods: &[],
                 spawn: |scene, entity| {
                     let mut object = <$object>::default();
                     object.shape.sides = $sides;
@@ -106,10 +115,7 @@ pub(super) fn property(
     {
         return Some(TrackTarget::Dynamic(schema.clone()));
     }
-    shader_uniforms(world, entity)
-        .into_iter()
-        .find(|(uniform, _)| uniform == name)
-        .map(|(name, _)| TrackTarget::uniform(name))
+    None
 }
 
 #[cfg(test)]

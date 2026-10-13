@@ -381,10 +381,12 @@ impl Editor {
         let cache = EditorCache::load(&project.context);
         let focused_scene = (scenes.len() > 1)
             .then(|| {
-                cache
-                    .focused_scene
-                    .as_deref()
-                    .and_then(|name| scenes.iter().position(|scene| scene.scene.name() == name))
+                cache.focused_scene.as_deref().and_then(|name| {
+                    scenes.iter().position(|scene| match &scene.scene {
+                        SceneInstance::Lua(scene) => scene.path().to_string_lossy() == name,
+                        SceneInstance::Empty(scene) => scene.name() == name,
+                    })
+                })
             })
             .flatten();
         let duration = focused_scene.map_or_else(
@@ -793,6 +795,13 @@ impl Editor {
             }
             self.timeline.set_fps(settings.fps);
             self.project.settings = settings;
+            if let Some(client) = self
+                .documents
+                .as_mut()
+                .and_then(|documents| documents.lsp.as_mut())
+            {
+                client.set_scenes(&manifest.scenes);
+            }
             self.lua_project.as_mut().unwrap().accept_manifest(manifest);
             let duration = recalculate_scene_ranges(&mut self.scenes);
             if let Some(active) = next_active {
@@ -1013,7 +1022,10 @@ impl Editor {
             timeline_tracks_expanded: self.timeline_tracks_expanded,
             focused_scene: self
                 .focused_scene
-                .map(|index| self.scenes[index].scene.name().to_owned()),
+                .map(|index| match &self.scenes[index].scene {
+                    SceneInstance::Lua(scene) => scene.path().to_string_lossy().into_owned(),
+                    SceneInstance::Empty(scene) => scene.name().to_owned(),
+                }),
         }
         .save(&self.project.context);
         self.renderer.shutdown(gl);

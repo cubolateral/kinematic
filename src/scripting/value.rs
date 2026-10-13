@@ -11,14 +11,13 @@ impl UserData for ValueHandle {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method(MetaMethod::ToString, |_, this, ()| Ok(this.0.to_string()));
         methods.add_meta_method(MetaMethod::Index, |_, this, name: String| {
-            let index = match name.as_str() {
-                "x" | "r" | "a" if !matches!(this.0, TrackValue::Color(_)) => 0,
-                "r" => 0,
-                "y" | "g" | "b" if !matches!(this.0, TrackValue::Color(_)) => 1,
-                "g" => 1,
-                "z" | "b" | "c" => 2,
-                "w" | "a" | "d" => 3,
-                _ => return Err(mlua::Error::runtime("Unknown value component.")),
+            let index = if matches!(this.0, TrackValue::Quaternion(_)) {
+                ["x", "y", "z", "w"]
+                    .iter()
+                    .position(|field| *field == name)
+                    .ok_or_else(|| mlua::Error::runtime("Unknown quaternion component."))?
+            } else {
+                super::animation::channel(&this.0, &name)? as usize
             };
             let channels = match &this.0 {
                 TrackValue::Vector2(v) => vec![v.x, v.y],

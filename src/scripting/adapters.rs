@@ -1,6 +1,7 @@
 use super::{
+    animation::AnimationDefinition,
     extension::{Script2D, Script2DHandler, Script3D, Script3DHandler},
-    runtime::{ObjectHandle, TaskHandle, duration, engine, parse_easing},
+    runtime::{ObjectHandle, engine},
     value::ValueHandle,
 };
 use crate::core::{TrackValue, components::*, objects::*};
@@ -8,7 +9,7 @@ use mlua::{Result, UserData, UserDataMethods};
 use std::rc::Weak;
 
 struct SnapshotHandle {
-    value: Snapshot<Script2DHandler>,
+    value: Vec<(crate::core::TrackTarget, TrackValue)>,
     object: ObjectHandle,
 }
 impl UserData for SnapshotHandle {}
@@ -20,6 +21,22 @@ fn proxy(object: &ObjectHandle) -> Result<Script2DHandler> {
         runtime.animator.borrow().clone(),
     ))
 }
+fn snapshot_values(object: &ObjectHandle) -> Result<Vec<(crate::core::TrackTarget, TrackValue)>> {
+    let runtime = object.runtime()?;
+    super::native::properties(&runtime.world.borrow().borrow(), object.entity)
+        .into_iter()
+        .map(|target| {
+            let value = super::runtime::PropertyHandle {
+                object: object.clone(),
+                target: target.clone(),
+                channel: None,
+            }
+            .value()?;
+            Ok((target, value))
+        })
+        .collect()
+}
+
 fn two_d(object: &ObjectHandle) -> Result<Script2DHandler> {
     let runtime = object.runtime()?;
     let world = runtime.world.borrow();
@@ -85,30 +102,22 @@ pub(super) const ANCHORS: &[(&str, f32, f32, f32)] = &[
 pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
     m.add_method("snapshot", |_, this, ()| {
         Ok(SnapshotHandle {
-            value: proxy(this)?.snapshot(),
+            value: snapshot_values(this)?,
             object: this.clone(),
         })
     });
     m.add_method("save", |_, this, ()| {
-        this.runtime()?.construction()?;
-        let handler = proxy(this)?;
-        engine(|| handler.save())?;
-        Ok(())
+        let runtime = this.runtime()?;
+        runtime.construction()?;
+        let values = snapshot_values(this)?;
+        engine(|| save_snapshot_destinations(&runtime.world.borrow(), this.entity, values))
     });
     m.add_method(
         "restore",
-        |_,
-         this,
-         (snapshot, seconds, ease): (
-            Option<mlua::UserDataRef<SnapshotHandle>>,
-            Option<f32>,
-            Option<String>,
-        )| {
-            this.runtime()?.construction()?;
-            let handler = proxy(this)?;
-            let seconds = duration(seconds.unwrap_or(1.0))?;
-            let ease = parse_easing(ease)?;
-            if let Some(snapshot) = snapshot {
+        |_, this, snapshot: Option<mlua::UserDataRef<SnapshotHandle>>| {
+            let runtime = this.runtime()?;
+            runtime.construction()?;
+            let values = if let Some(snapshot) = snapshot {
                 if !Weak::ptr_eq(&this.runtime, &snapshot.object.runtime)
                     || this.entity != snapshot.object.entity
                 {
@@ -116,30 +125,19 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
                         "Snapshot belongs to a different object.",
                     ));
                 }
-                engine(|| {
-                    TaskHandle(
-                        handler
-                            .restore_snapshot(&snapshot.value)
-                            .duration(seconds)
-                            .easing(ease)
-                            .task(),
-                    )
-                })
+                snapshot.value.clone()
             } else {
-                engine(|| TaskHandle(handler.restore().duration(seconds).easing(ease).task()))
-            }
+                engine(|| snapshot_destinations(&runtime.world.borrow(), this.entity, false))?
+            };
+            Ok(AnimationDefinition::destinations(this.clone(), values))
         },
     );
-    m.add_method(
-        "reset",
-        |_, this, (seconds, ease): (Option<f32>, Option<String>)| {
-            this.runtime()?.construction()?;
-            let handler = proxy(this)?;
-            let time = duration(seconds.unwrap_or(1.0))?;
-            let ease = parse_easing(ease)?;
-            engine(|| TaskHandle(handler.reset().duration(time).easing(ease).task()))
-        },
-    );
+    m.add_method("reset", |_, this, ()| {
+        let runtime = this.runtime()?;
+        runtime.construction()?;
+        let values = engine(|| snapshot_destinations(&runtime.world.borrow(), this.entity, true))?;
+        Ok(AnimationDefinition::destinations(this.clone(), values))
+    });
     m.add_method("children", |_, this, ()| {
         let runtime = this.runtime()?;
         let children = children(&runtime.world.borrow().borrow(), this.entity);
@@ -190,12 +188,52 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             })
         });
     }
-    m.add_method("bounds", |_, this, ()| {
+    m.add_method("box_size", |_, this, ()| {
         Ok(ValueHandle(if is_3d(this)? {
             TrackValue::Vector3(three_d(this)?.box_size())
         } else {
             TrackValue::Vector2(two_d(this)?.box_size())
         }))
+    });
+    m.add_method("bounds", |lua, this, ()| {
+        let runtime = this.runtime()?;
+        let world = runtime.world.borrow();
+        let world = world.borrow();
+        let table = lua.create_table()?;
+        if is_3d(this)? {
+            let (min, max) = if runtime.building.get() {
+                object_bounds3d_at(&world, this.entity, runtime.animator.borrow().time())
+            } else {
+                object_bounds3d(&world, this.entity)
+            }
+            .unwrap_or((glam::Vec3::ZERO, glam::Vec3::ZERO));
+            for (name, value) in [
+                ("x", min.x),
+                ("y", min.y),
+                ("z", min.z),
+                ("width", max.x - min.x),
+                ("height", max.y - min.y),
+                ("depth", max.z - min.z),
+            ] {
+                table.set(name, value)?;
+            }
+        } else {
+            let bounds = if runtime.building.get() {
+                logical_bounds_at(&world, this.entity, runtime.animator.borrow().time())
+            } else {
+                logical_bounds(&world, this.entity)
+            }
+            .unwrap_or_default();
+            for (name, value) in [
+                ("x", bounds.left),
+                ("y", bounds.top),
+                ("width", bounds.width()),
+                ("height", bounds.height()),
+            ] {
+                table.set(name, value)?;
+            }
+        }
+        Ok(table)
     });
     m.add_method("global_matrix", |_, this, ()| {
         let runtime = this.runtime()?;
@@ -270,10 +308,12 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
     });
     m.add_method("type_name", |_, this, ()| {
         let runtime = this.runtime()?;
-        Ok(runtime
-            .world
-            .borrow()
-            .borrow()
+        let world = runtime.world.borrow();
+        let world = world.borrow();
+        if let Ok(script) = world.get::<&super::extension::ScriptObject>(this.entity) {
+            return Ok(script.name.clone());
+        }
+        Ok(world
             .get::<&Inspection>(this.entity)
             .map_err(mlua::Error::external)?
             .object_name
@@ -304,8 +344,15 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             .and_then(|n| n.parent);
         while let Some(entity) = current {
             if world
-                .get::<&Inspection>(entity)
-                .is_ok_and(|i| i.object_name == type_name)
+                .get::<&super::extension::ScriptObject>(entity)
+                .map_or_else(
+                    |_| {
+                        world
+                            .get::<&Inspection>(entity)
+                            .is_ok_and(|i| i.object_name == type_name)
+                    },
+                    |script| script.name == type_name,
+                )
             {
                 return Ok(Some(ObjectHandle {
                     runtime: this.runtime.clone(),
@@ -383,50 +430,52 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             )))
         },
     );
-    m.add_method(
-        "focus_camera",
-        |_,
-         this,
-         (position, target, seconds, ease): (
-            mlua::UserDataRef<ValueHandle>,
-            mlua::UserDataRef<ValueHandle>,
-            Option<f32>,
-            Option<String>,
-        )| {
-            let runtime = this.runtime()?;
-            runtime.construction()?;
-            let (TrackValue::Vector3(position), TrackValue::Vector3(target)) =
-                (&position.0, &target.0)
-            else {
-                return Err(mlua::Error::runtime(
-                    "Camera position and target must be vec3.",
-                ));
-            };
-            if runtime
-                .world
-                .borrow()
-                .borrow()
-                .get::<&Camera3D>(this.entity)
-                .is_err()
-            {
-                return Err(mlua::Error::runtime("Focus requires a 3D canvas."));
+    m.add_method("focus_camera", |lua, this, options: mlua::Table| {
+        let runtime = this.runtime()?;
+        runtime.construction()?;
+        let position = options.get::<mlua::UserDataRef<ValueHandle>>("position")?;
+        let target = options.get::<mlua::UserDataRef<ValueHandle>>("target")?;
+        let (TrackValue::Vector3(position), TrackValue::Vector3(target)) = (&position.0, &target.0)
+        else {
+            return Err(mlua::Error::runtime(
+                "Camera position and target must be vec3.",
+            ));
+        };
+        if !position.is_finite()
+            || !target.is_finite()
+            || position.distance_squared(*target) <= f32::EPSILON
+        {
+            return Err(mlua::Error::runtime(
+                "Camera focus requires finite, distinct points.",
+            ));
+        }
+        if runtime
+            .world
+            .borrow()
+            .borrow()
+            .get::<&Camera3D>(this.entity)
+            .is_err()
+        {
+            return Err(mlua::Error::runtime("Focus requires a 3D canvas."));
+        }
+        for pair in options.clone().pairs::<String, mlua::Value>() {
+            let (key, _) = pair?;
+            if key != "position" && key != "target" {
+                return Err(mlua::Error::runtime("Unknown camera focus argument."));
             }
-            let seconds = duration(seconds.unwrap_or(1.0))?;
-            let ease = parse_easing(ease)?;
-            let handler = Canvas3D::handler(
-                runtime.world.borrow().clone(),
-                this.entity,
-                runtime.animator.borrow().clone(),
-            );
-            engine(|| {
-                TaskHandle(
-                    handler
-                        .focus_camera(*position, *target)
-                        .duration(seconds)
-                        .easing(ease)
-                        .task(),
-                )
-            })
-        },
-    );
+        }
+        let fields = lua.create_table()?;
+        fields.set(
+            "camera_position",
+            ValueHandle(TrackValue::Vector3(*position)),
+        )?;
+        fields.set(
+            "camera_rotation",
+            ValueHandle(TrackValue::Quaternion(glam::Quat::from_rotation_arc(
+                glam::Vec3::NEG_Z,
+                (*target - *position).normalize(),
+            ))),
+        )?;
+        AnimationDefinition::new(this.clone()).append(lua, fields, super::animation::Operation::To)
+    });
 }

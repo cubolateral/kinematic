@@ -141,7 +141,7 @@ fn lua_editor_reload_switch_and_frozen_export() {
         project.manifest.resolution = (96, 64);
         project.manifest.fps = 12;
         project.save().unwrap();
-        let source = "local k=require('kinematic'); return k.scene('Test', function(s) local a=s:circle{id='ball',name='Ball',radius=4}; s:world_2d():add(a); s:wait(0.5) end)";
+        let source = "return function(s) local a=s:circle{id='ball',name='Ball',radius=4}; s:world_2d():add(a); s:wait(0.5) end";
         let path = Path::new("scenes/intro.lua");
         std::fs::write(project.context.root().join(path), source).unwrap();
         let mut editor = Editor::new_lua(
@@ -265,7 +265,7 @@ fn lua_editor_reload_switch_and_frozen_export() {
         let other = Path::new("scenes/other.lua");
         std::fs::write(
             editor.context().root().join(other),
-            "local k=require('kinematic'); return k.scene('Other',function(s) s:wait(1) end)",
+            "return function(s) s:wait(1) end",
         )
         .unwrap();
         let mut manifest = editor.lua_project.as_ref().unwrap().manifest.clone();

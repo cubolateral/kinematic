@@ -37,10 +37,10 @@ fn measure(name: &str, iterations: usize, mut run: impl FnMut()) {
 
 fn objects(kind: &str, behavior: &str) -> String {
     format!(
-        "local k=require('kinematic'); return k.scene('Bench',function(s) \
+        "return function(s) \
          s:all(function() for i=1,1000 do \
          local obj=s:{kind}{{id='o'..i}}; \
-         s:world_{}():add(obj); {behavior} end end); s:wait(10) end)",
+         s:world_{}():add(obj); {behavior} end end); s:wait(10) end",
         if kind == "sphere" { "3d" } else { "2d" }
     )
 }
@@ -57,11 +57,11 @@ fn lua_benchmark() {
         ("static_1000", static_source.clone()),
         (
             "tracks_1000_2d",
-            objects("circle", "s:play(obj.radius:to(20,10,k.ease.linear))"),
+            objects("circle", "obj:to {radius = 20}:play(10, k.ease.linear)"),
         ),
         (
             "tracks_1000_3d",
-            objects("sphere", "s:play(obj.radius:to(20,10,k.ease.linear))"),
+            objects("sphere", "obj:to {radius = 20}:play(10, k.ease.linear)"),
         ),
         (
             "signals_1000",
@@ -82,12 +82,12 @@ fn lua_benchmark() {
     let life = include_str!("../../examples/lua/simulation/scenes/life.lua");
     {
         let source = format!(
-            "local k=require('kinematic'); local cache={{}} \
+            "local cache={{}} \
              for i=1,2000 do cache[i]=i*i end \
              local obj=k.object{{state={{total=0,cache=cache}},inputs={{}}, \
              update=function(state) state.total=state.total+1 end}}; \
-             return k.scene('Cache',function(s) local o=s:object(obj,{{id='cache'}}); \
-             s:world_2d():add(o); s:wait(30) end)"
+             return function(s) local o=s:object(obj,{{id='cache'}}); \
+             s:world_2d():add(o); s:wait(30) end"
         );
         let scene = load(&source);
         let mut frame = 0;

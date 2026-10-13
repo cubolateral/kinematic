@@ -1,6 +1,4 @@
-local k = require("kinematic")
-
-return k.scene("Intro", function(s)
+return function(s)
     local ball = s:circle {
         id = "ball",
         radius = 256,
@@ -10,8 +8,8 @@ return k.scene("Intro", function(s)
 
     s:world_2d():add(ball)
     s:all(function()
-        s:play(ball.position:to(k.vec2(300, 0), 2, k.ease.cubic_out))
-        s:play(ball.radius:to(96, 1))
+        ball:to {position = k.vec2(300, 0)}:play(2, k.ease.cubic_out)
+        ball:to {radius = 96}:play(1)
     end)
 
     s:event("Presentation")
@@ -22,6 +20,6 @@ return k.scene("Intro", function(s)
     end)
     s:wait(3)
     motion:stop()
-    s:play(ball.opacity:to(0, 0.5))
+    ball:to {opacity = 0}:play(0.5)
     ball:remove()
-end)
+end

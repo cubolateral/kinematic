@@ -56,11 +56,12 @@ impl Client {
             .resolve("kinematic/cache/luals")
             .map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
-        std::fs::write(
-            cache.join("components.lua"),
-            include_str!("../scripting/luals.lua"),
-        )
-        .map_err(|e| e.to_string())?;
+        let scenes = crate::scripting::LuaProject::open(root.root())
+            .map(|project| project.manifest.scenes)
+            .unwrap_or_default();
+        write_scene_paths(&root, &scenes)?;
+        std::fs::write(cache.join("components.lua"), luals_plugin(&root))
+            .map_err(|e| e.to_string())?;
         std::fs::write(cache.join("config.json"), lua_settings(&root).to_string())
             .map_err(|e| e.to_string())?;
         let mut child = Command::new(executable())
@@ -158,6 +159,14 @@ impl Client {
             }
         } else {
             self.queued.push(message);
+        }
+    }
+    pub(crate) fn set_scenes(&mut self, paths: &[PathBuf]) {
+        if let Err(error) = write_scene_paths(&self.root, paths) {
+            self.messages.push(error);
+        }
+        for path in self.versions.keys().cloned().collect::<Vec<_>>() {
+            self.close(&path);
         }
     }
     pub fn sync(&mut self, path: &Path, text: &str, version: u64) {
@@ -386,6 +395,34 @@ pub(crate) fn analyzed_path(root: &ProjectContext, path: &Path) -> bool {
         })
         && root.resolve(path).is_ok()
 }
+fn write_scene_paths(root: &ProjectContext, paths: &[PathBuf]) -> Result<(), String> {
+    let contents = paths
+        .iter()
+        .map(|path| root.resolve(path).map(|path| file_uri(&path)))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?
+        .join("\n");
+    std::fs::write(
+        root.root().join("kinematic/cache/luals/scene-paths.txt"),
+        contents,
+    )
+    .map_err(|e| e.to_string())
+}
+
+fn luals_plugin(root: &ProjectContext) -> String {
+    let list = serde_json::to_string(
+        &root
+            .root()
+            .join("kinematic/cache/luals/scene-paths.txt")
+            .to_string_lossy(),
+    )
+    .unwrap();
+    format!(
+        "local function is_scene(uri)\n    local file = io.open({list}, 'r')\n    if not file then return false end\n    for line in file:lines() do\n        if line == uri then file:close(); return true end\n    end\n    file:close()\n    return false\nend\n{}",
+        include_str!("../scripting/luals.lua")
+    )
+}
+
 fn lua_settings(root: &ProjectContext) -> Value {
     json!({
         "runtime": {"version": "Lua 5.4", "plugin": root.root().join("kinematic/cache/luals/components.lua")},
@@ -648,12 +685,13 @@ mod integration_tests {
             "local M = {}\nfunction M.answer() return 42 end\nreturn M\n",
         )
         .unwrap();
+        std::fs::write(root.join("kinematic.ron"), "(version:1,name:\"Test\",scenes:[\"intro.lua\"],resolution:(640,480),fps:60,margin:(0,0))").unwrap();
         let mut client = Client::start(
             ProjectContext::new(&root).unwrap(),
             &crate::scripting::definitions(),
         )
         .unwrap();
-        let text = "local k = require('kinematic')\nreturn k.scene('Test', function(s)\nlocal ball = s:circle { id = 'ball' }\nball.\nend)\n";
+        let text = "\nreturn function(s)\nlocal ball = s:circle { id = 'ball' }\nball.\nend\n";
         let path = Path::new("intro.lua");
         client.sync(path, text, 1);
         client.request("textDocument/completion", path, text, 1, 3, 5);
@@ -708,7 +746,7 @@ mod integration_tests {
             found,
             "LuaLS must navigate across project modules with Unicode."
         );
-        let text = "local k = require('kinematic')\nlocal point = k.vec2(1, 2)\n";
+        let text = "\nlocal point = k.vec2(1, 2)\n";
         client.sync(path, text, 3);
         client.request("textDocument/hover", path, text, 3, 1, 17);
         client.request("textDocument/signatureHelp", path, text, 3, 1, 23);
@@ -749,7 +787,7 @@ mod integration_tests {
         );
         assert!(!client.versions.contains_key(Path::new("notes.txt")));
         assert!(!client.versions.contains_key(Path::new("settings.ron")));
-        let text = "local k = require('kinematic')\nlocal ribbon = k.object { bounds = function() return {0, 0, 10, 10} end }\nreturn k.scene('Typed', function(s)\n  local shape = s:object(ribbon, {id = 'shape'})\n  shape.opacity:set(0)\n  s:play(shape.opacity:to(1, 0.5))\n  local ball = s:circle { radius = 10 }\n  ball.radius:set(5)\n  ball.opacity:set(0)\n  ball.opacity:set('Invalid')\n  missing_name()\nend)\n";
+        let text = "\nlocal ribbon = k.object { bounds = function() return {x = 0, y = 0, width = 10, height = 10} end }\nreturn function(s)\n  local shape = s:object(ribbon, {id = 'shape'})\n  shape.opacity:set(0)\n  shape:to {opacity = 1}:play(0.5)\n  local ball = s:circle { radius = 10 }\n  ball.radius:set(5)\n  ball.opacity:set(0)\n  ball.opacity:set('Invalid')\n  missing_name()\nend\n";
         client.sync(path, text, 5);
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         let mut diagnostics = None;
@@ -791,15 +829,15 @@ mod integration_tests {
             "{diagnostics}"
         );
         let component_path = Path::new("components.lua");
-        let component_text = "local k = require('kinematic')\nlocal motion = k.component { speed = {default = 40}, mode = {default = 'Idle', choices = {'Idle', 'Moving'}} }\nreturn { motion = motion }\n";
+        let component_text = "\nlocal motion = k.component { speed = {default = 40}, mode = {default = 'Idle', choices = {'Idle', 'Moving'}} }\nreturn { motion = motion }\n";
         std::fs::write(root.join(component_path), component_text).unwrap();
         client.sync(component_path, component_text, 1);
-        let text = r#"local k = require('kinematic')
-local components = require('components')
+        let text = r#"local components = require('components')
 local extra = k.component { caption = {default = 'Hello'} }
 local definition = k.object { components = {components.motion, extra} }
 local volume = k.object { dimension = 3 }
-return k.scene('Fields', function(s)
+local counter = k.object { methods = { increment = function(self,amount) return self:by {value=amount} end } }
+return function(s)
   local ball = s:circle { radius = 10 }
   local center = ball.position:get()
   ball:signal(function(obj, frame)
@@ -818,10 +856,14 @@ return k.scene('Fields', function(s)
   custom.speed:set('Invalid')
   custom.mode:set('Invalid')
   local three = s:object(volume, {})
+  local text = s:text_2d {}
+  text:fade('New'):play(1)
+  local count = s:object(counter,{})
+  count:increment(10):play(2)
   three.position:set(k.vec3(1, 2, 3))
   three.missing:set(1)
   missing_name()
-end)
+end
 "#;
         client.sync(path, text, 6);
         let diagnostics = wait_diagnostics(&mut client, path, 6);

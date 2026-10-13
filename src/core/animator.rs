@@ -25,6 +25,7 @@ struct AnimatorState {
     start_time: f32,
     scheduling: Scheduling,
     repeating: bool,
+    parent: Option<std::rc::Weak<std::cell::RefCell<AnimatorState>>>,
 }
 
 impl AnimatorState {
@@ -67,6 +68,7 @@ struct ScheduledRepeat {
     tweens: Vec<ScheduledTween>,
 }
 
+#[derive(Clone)]
 struct ScheduledTween {
     start: f32,
     entity: hecs::Entity,
@@ -517,6 +519,7 @@ impl Animator {
             start_time: 0.0,
             scheduling: Scheduling::Sequential,
             repeating: false,
+            parent: None,
         }));
         let context = std::rc::Rc::new(AnimatorContext {
             time: scene_time,
@@ -543,6 +546,7 @@ impl Animator {
                 state: std::rc::Rc::new(std::cell::RefCell::new(AnimatorState {
                     schedule: Schedule::default(),
                     start_time: state.time(),
+                    parent: Some(std::rc::Rc::downgrade(&self.handle.state)),
                     scheduling,
                     repeating: state.repeating || repeating,
                 })),
@@ -666,6 +670,78 @@ impl AnimatorHandle {
 
     fn sync_scene_time(&self) {
         self.context.time.set(self.state.borrow().time());
+    }
+
+    pub(crate) fn sample_scheduled(
+        &self,
+        world: &hecs::World,
+        entity: hecs::Entity,
+        target: &TrackTarget,
+    ) -> TrackValue {
+        fn append(state: &AnimatorState, entity: hecs::Entity, animation: &mut Animation) {
+            if let Some(parent) = state.parent.as_ref().and_then(|parent| parent.upgrade()) {
+                append(&parent.borrow(), entity, animation);
+            }
+            let mut tweens = state
+                .schedule
+                .tweens
+                .iter()
+                .filter(|t| t.entity == entity)
+                .cloned()
+                .collect::<Vec<_>>();
+            tweens.sort_by(|a, b| a.start.total_cmp(&b.start));
+            for tween in tweens {
+                tween.append(animation, state.start_time);
+            }
+            for repeat in &state.schedule.repeats {
+                let mut initialized: Vec<TrackTarget> = Vec::new();
+                let mut tweens = repeat
+                    .tweens
+                    .iter()
+                    .filter(|t| t.entity == entity)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                tweens.sort_by(|a, b| a.start.total_cmp(&b.start));
+                for tween in tweens {
+                    for channel in 0..tween.from.channels() {
+                        if tween.mask & (1 << channel) == 0 {
+                            continue;
+                        }
+                        let target = if tween.from.channels() == 1 {
+                            tween.target.clone()
+                        } else {
+                            tween.target.clone().component(channel)
+                        };
+                        if initialized.iter().any(|previous| previous.same(&target)) {
+                            continue;
+                        }
+                        initialized.push(target.clone());
+                        let track = animation.target_mut(target);
+                        let start = state.start_time + repeat.start;
+                        track.add_tween(
+                            start,
+                            tween.from.clone(),
+                            tween.from.clone(),
+                            0.0,
+                            Easing::Linear,
+                        );
+                        track.repeat = Some(TrackRepeat {
+                            start,
+                            duration: repeat.duration,
+                        });
+                    }
+                    tween.append(animation, state.start_time + repeat.start);
+                }
+            }
+        }
+        let active = self.active();
+        let state = active.state.borrow();
+        let mut animation = Animation::default();
+        append(&state, entity, &mut animation);
+        let base = target.get(world, entity);
+        animation
+            .sample_target(target, state.time(), base.clone())
+            .unwrap_or(base)
     }
 
     pub(crate) fn play(&self, task: Task) {

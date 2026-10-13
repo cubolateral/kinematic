@@ -152,14 +152,19 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                 .into_iter()
                 .map(vector3)
                 .collect::<Result<Vec<_>>>()?;
-            let indices = options.get::<Vec<u32>>("indices")?;
+            let mut indices = options.get::<Vec<u32>>("indices")?;
             if !indices.len().is_multiple_of(3)
                 || indices.len() > 3_000_000
-                || indices.iter().any(|i| *i as usize >= positions.len())
+                || indices
+                    .iter()
+                    .any(|i| *i == 0 || *i as usize > positions.len())
             {
                 return Err(mlua::Error::runtime(
-                    "Mesh indices must be zero-based valid triangles.",
+                    "Mesh indices must be one-based valid triangles.",
                 ));
+            }
+            for index in &mut indices {
+                *index -= 1;
             }
             let normals = options
                 .get::<Option<Vec<Vec<f32>>>>("normals")?
@@ -465,12 +470,19 @@ fn arguments(
     entity: hecs::Entity,
 ) -> Result<(Table, Value)> {
     let props = runtime.lua.create_table()?;
+    let uniforms = runtime.lua.create_table()?;
     for target in super::native::properties(world, entity) {
-        props.set(
+        let fields = if target.uniform_name().is_some() {
+            &uniforms
+        } else {
+            &props
+        };
+        fields.set(
             target.name(),
             super::value::to_lua(&runtime.lua, target.get(world, entity))?,
         )?;
     }
+    props.set("uniforms", uniforms)?;
     let state = world
         .get::<&Simulation>(entity)
         .ok()
@@ -496,7 +508,8 @@ pub(super) fn bounds_2d(world: &hecs::World, entity: hecs::Entity) -> skia_safe:
             return Ok(skia_safe::Rect::new_empty());
         };
         let (props, state) = arguments(&runtime, world, entity)?;
-        let values = runtime.draw_call(|| callback.call::<Vec<f32>>((props, state)))?;
+        let bounds = runtime.draw_call(|| callback.call::<Table>((props, state)))?;
+        let values = bound_fields(&runtime.lua, bounds, &["x", "y", "width", "height"])?;
         if values.len() != 4 {
             return Err(mlua::Error::runtime(
                 "2D bounds must return {x,y,width,height}.",
@@ -529,26 +542,20 @@ pub(super) fn bounds_3d(world: &hecs::World, entity: hecs::Entity) -> (glam::Vec
             .callbacks
             .borrow()
             .get(&entity)
-            .and_then(|c| c.bounds.clone())
-            .ok_or_else(|| mlua::Error::runtime("3D drawing requires bounds."))?;
-        let (props, state) = arguments(&runtime, world, entity)?;
-        let values = runtime.draw_call(|| callback.call::<Vec<f32>>((props, state)))?;
-        finite(&values)?;
-        let (min, max) = match values.as_slice() {
-            [w, h, d] => {
-                let half = glam::vec3(*w, *h, *d) * 0.5;
-                (-half, half)
-            }
-            [x, y, z, w, h, d] => {
-                let min = glam::vec3(*x, *y, *z);
-                (min, min + glam::vec3(*w, *h, *d))
-            }
-            _ => {
-                return Err(mlua::Error::runtime(
-                    "3D bounds require {width,height,depth} or {x,y,z,width,height,depth}.",
-                ));
-            }
+            .and_then(|c| c.bounds.clone());
+        let Some(callback) = callback else {
+            return Ok((glam::Vec3::ZERO, glam::Vec3::ZERO));
         };
+        let (props, state) = arguments(&runtime, world, entity)?;
+        let bounds = runtime.draw_call(|| callback.call::<Table>((props, state)))?;
+        let values = bound_fields(
+            &runtime.lua,
+            bounds,
+            &["x", "y", "z", "width", "height", "depth"],
+        )?;
+        finite(&values)?;
+        let min = glam::vec3(values[0], values[1], values[2]);
+        let max = min + glam::vec3(values[3], values[4], values[5]);
         if (max - min).min_element() < 0.0 {
             return Err(mlua::Error::runtime(
                 "Bounds dimensions cannot be negative.",
@@ -753,4 +760,28 @@ pub(super) fn draw_3d(
                 |runtime| runtime.diagnostic("Draw", entity, &error),
             )
     })
+}
+
+fn bound_fields(lua: &Lua, bounds: Table, names: &[&str]) -> Result<Vec<f32>> {
+    for field in bounds.clone().pairs::<String, Value>() {
+        let (name, _) = field?;
+        if !names.contains(&name.as_str()) {
+            return Err(mlua::Error::runtime("Unknown bounds field."));
+        }
+    }
+    names
+        .iter()
+        .map(|name| {
+            let TrackValue::F32(value) = super::value::from_lua(
+                lua,
+                bounds.get(*name)?,
+                &TrackValue::F32(0.0),
+                crate::core::TrackChoices::None,
+            )?
+            else {
+                unreachable!()
+            };
+            Ok(value)
+        })
+        .collect()
 }

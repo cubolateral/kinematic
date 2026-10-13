@@ -50,7 +50,8 @@ pub(super) struct Callbacks {
     pub draw: Option<Function>,
     pub bounds: Option<Function>,
     pub update: Option<Function>,
-    pub inputs: Vec<(String, hecs::Entity, TrackTarget)>,
+    pub inputs: Vec<(String, hecs::Entity, TrackTarget, Option<u8>)>,
+    pub methods: Option<Table>,
     pub states: Vec<(String, hecs::Entity)>,
     pub simulation_key: String,
     pub visual_key: String,
@@ -86,11 +87,15 @@ impl SimulationState for ScriptState {
             frame.set("dt", context.dt)?;
             let inputs =
                 lua.create_table_with_capacity(0, callbacks.inputs.len() + callbacks.states.len())?;
-            for (name, entity, target) in &callbacks.inputs {
-                inputs.set(
-                    name.as_str(),
-                    value::to_lua(lua, context.sample(*entity, target))?,
-                )?;
+            for (name, entity, target, channel) in &callbacks.inputs {
+                inputs.set(name.as_str(), {
+                    let sampled = context.sample(*entity, target);
+                    if let Some(channel) = channel {
+                        Value::Number(sampled.channel(*channel) as f64)
+                    } else {
+                        value::to_lua(lua, sampled)?
+                    }
+                })?;
             }
             for (name, entity) in &callbacks.states {
                 let state = context
@@ -145,6 +150,7 @@ pub(super) struct Script3D {
 #[derive(Clone, Debug)]
 pub(super) struct ScriptObject {
     pub runtime: u64,
+    pub name: String,
 }
 
 pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
@@ -198,6 +204,12 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
     api.set(
         "object",
         lua.create_function(|_, definition: Table| {
+            if definition
+                .get::<Option<String>>("name")?
+                .is_some_and(|name| name.is_empty())
+            {
+                return Err(mlua::Error::runtime("Object type name cannot be empty."));
+            }
             let dimension = definition.get::<Option<u8>>("dimension")?.unwrap_or(2);
             if dimension != 2 && dimension != 3 {
                 return Err(mlua::Error::runtime("Object dimension must be 2 or 3."));
@@ -219,6 +231,20 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                                 schema.name
                             )));
                         }
+                    }
+                }
+            }
+            if let Some(methods) = definition.get::<Option<Table>>("methods")? {
+                for entry in methods.pairs::<String, Function>() {
+                    let (name, _) = entry?;
+                    if super::runtime::OBJECT_METHODS.contains(&name.as_str())
+                        || super::adapters::ANCHORS.iter().any(|(anchor, _, _, _)| {
+                            name == *anchor || name == format!("{anchor}_to")
+                        })
+                    {
+                        return Err(mlua::Error::runtime(format!(
+                            "Cannot replace fundamental object method '{name}'."
+                        )));
                     }
                 }
             }
@@ -280,6 +306,7 @@ pub(super) fn configure(
         bounds,
         update,
         inputs: Vec::new(),
+        methods: definition.table.get("methods")?,
         states: Vec::new(),
         simulation_key,
         visual_key,
@@ -293,6 +320,16 @@ pub(super) fn configure(
             entity,
             ScriptObject {
                 runtime: runtime.id,
+                name: definition
+                    .table
+                    .get::<Option<String>>("name")?
+                    .unwrap_or_else(|| {
+                        if definition.dimension == 2 {
+                            "Lua2D".into()
+                        } else {
+                            "Lua3D".into()
+                        }
+                    }),
             },
         )
         .map_err(mlua::Error::external)?;
@@ -333,9 +370,19 @@ pub(super) fn configure(
     }
     drop(world);
     drop(world_handle);
-    if let Some(inputs) = definition.table.get::<Option<Table>>("inputs")? {
-        configure_inputs(handle, inputs)?;
-    }
+    let inputs = if let Some(inputs) = definition.table.get::<Option<Table>>("inputs")? {
+        inputs
+    } else {
+        let inputs = runtime.lua.create_table()?;
+        for target in super::native::properties(&runtime.world.borrow().borrow(), entity) {
+            if target.uniform_name().is_some() {
+                continue;
+            }
+            inputs.set(target.name(), handle.property(target.name())?)?;
+        }
+        inputs
+    };
+    configure_inputs(handle, inputs)?;
     Ok(())
 }
 
@@ -374,7 +421,12 @@ pub(super) fn configure_inputs(handle: &ObjectHandle, inputs: Table) -> Result<(
                 "Inputs must belong to the same scene.",
             ));
         }
-        properties.push((name, property.object.entity, property.target));
+        properties.push((
+            name,
+            property.object.entity,
+            property.target,
+            property.channel,
+        ));
     }
     properties.sort_by(|a, b| a.0.cmp(&b.0));
     states.sort_by(|a, b| a.0.cmp(&b.0));
@@ -437,7 +489,8 @@ pub(super) fn validate_update(lua: &Lua, update: &Function) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn prepare_environment(lua: &Lua) -> Result<()> {
+pub(super) fn prepare_environment(runtime: &Rc<Runtime>) -> Result<()> {
+    let lua = &runtime.lua;
     let globals = lua.globals();
     let env = lua.create_table()?;
     for name in [
@@ -454,16 +507,60 @@ pub(super) fn prepare_environment(lua: &Lua) -> Result<()> {
         lua.create_function(|_, seed: u64| Ok(RandomHandle(crate::core::Random::new(seed))))?,
     )?;
     let module = readonly(lua, values)?;
+    env.set("k", module.clone())?;
+    let weak = Rc::downgrade(runtime);
+    let loaded = lua.create_table()?;
+    let loading = Rc::new(std::cell::RefCell::new(std::collections::BTreeSet::new()));
     env.set(
         "require",
-        lua.create_function(move |_, name: String| {
+        lua.create_function(move |lua, name: String| {
             if name == "kinematic" {
-                Ok(module.clone())
-            } else {
-                Err(mlua::Error::runtime(
-                    "Update can import only immutable Kinematic value constructors.",
-                ))
+                return Ok(Value::Table(module.clone()));
             }
+            if !loaded.get::<Value>(name.as_str())?.is_nil() {
+                return loaded.get::<Value>(name.as_str());
+            }
+            if name.split('.').any(|part| {
+                part.is_empty() || !part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            }) {
+                return Err(mlua::Error::runtime("Invalid simulation module name."));
+            }
+            if !loading.borrow_mut().insert(name.clone()) {
+                return Err(mlua::Error::runtime("Cyclic simulation module dependency."));
+            }
+            let result: Result<Value> = (|| {
+                let runtime = weak
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("Scene has been released."))?;
+                let module = name.replace('.', "/");
+                let file = std::path::PathBuf::from(format!("{module}.lua"));
+                let path = if runtime.sources.contains_key(&file)
+                    || runtime.context.resolve(&file).is_ok_and(|p| p.is_file())
+                {
+                    file
+                } else {
+                    std::path::PathBuf::from(format!("{module}/init.lua"))
+                };
+                let source = runtime.source(&path)?;
+                let value = lua
+                    .load(&source)
+                    .set_name(format!("@{}", path.display()))
+                    .set_environment(
+                        lua.named_registry_value::<Table>("kinematic.update_environment")?,
+                    )
+                    .eval::<Value>()?;
+                let value =
+                    immutable_module(lua, value, &mut std::collections::BTreeSet::new(), 0)?;
+                runtime
+                    .simulation_modules
+                    .borrow_mut()
+                    .insert(name.clone(), source);
+                Ok(value)
+            })();
+            loading.borrow_mut().remove(&name);
+            let value = result?;
+            loaded.set(name, value.clone())?;
+            Ok(value)
         })?,
     )?;
     for name in ["math", "string", "table", "utf8"] {
@@ -487,21 +584,96 @@ pub(super) fn prepare_environment(lua: &Lua) -> Result<()> {
             )))
         })?,
     )?;
+    meta.set("kinematic.readonly", true)?;
+    meta.set("__metatable", false)?;
     proxy.set_metatable(Some(meta))?;
     lua.set_named_registry_value("kinematic.update_environment", proxy)?;
     Ok(())
 }
 
-fn readonly(lua: &Lua, table: Table) -> Result<Table> {
+pub(super) fn readonly(lua: &Lua, table: Table) -> Result<Table> {
     let proxy = lua.create_table()?;
     let meta = lua.create_table()?;
+    let next = lua.globals().get::<Function>("next")?;
+    let contents = table.clone();
+    meta.set(
+        "__pairs",
+        lua.create_function(move |lua, _: Value| {
+            let next = next.clone();
+            let contents = contents.clone();
+            let iterator = lua.create_function(move |_, (_, key): (Value, Value)| {
+                next.call::<(Value, Value)>((contents.clone(), key))
+            })?;
+            Ok((iterator, Value::Nil, Value::Nil))
+        })?,
+    )?;
+    let length = table.raw_len();
+    meta.set("__len", lua.create_function(move |_, _: Value| Ok(length))?)?;
     meta.set("__index", table)?;
     meta.set(
         "__newindex",
         lua.create_function(|_, _: mlua::MultiValue| {
-            Err::<(), _>(mlua::Error::runtime("Update libraries are read-only."))
+            Err::<(), _>(mlua::Error::runtime(
+                "Engine and simulation libraries are read-only.",
+            ))
         })?,
     )?;
+    meta.set("kinematic.readonly", true)?;
+    meta.set("__metatable", false)?;
     proxy.set_metatable(Some(meta))?;
     Ok(proxy)
+}
+
+pub(super) fn method(object: &ObjectHandle, name: &str) -> Result<Option<Function>> {
+    let runtime = object.runtime()?;
+    let callbacks = runtime.callbacks.borrow();
+    callbacks
+        .get(&object.entity)
+        .and_then(|c| c.methods.as_ref())
+        .map(|methods| methods.get(name))
+        .transpose()
+        .map(|v| v.flatten())
+}
+
+fn immutable_module(
+    lua: &Lua,
+    value: Value,
+    seen: &mut std::collections::BTreeSet<usize>,
+    depth: usize,
+) -> Result<Value> {
+    match value {
+        Value::Function(function) => {
+            validate_update(lua, &function)?;
+            Ok(Value::Function(function))
+        }
+        Value::Table(table) => {
+            if depth > 64
+                || !seen.insert(table.to_pointer() as usize)
+                || table.metatable().is_some()
+            {
+                return Err(mlua::Error::runtime(
+                    "Simulation modules require acyclic plain tables.",
+                ));
+            }
+            let contents = lua.create_table()?;
+            for entry in table.pairs::<Value, Value>() {
+                let (key, value) = entry?;
+                if !matches!(key, Value::String(_) | Value::Integer(_)) {
+                    return Err(mlua::Error::runtime("Invalid simulation module key."));
+                }
+                contents.set(key, immutable_module(lua, value, seen, depth + 1)?)?;
+            }
+            Ok(Value::Table(readonly(lua, contents)?))
+        }
+        Value::Nil | Value::Boolean(_) | Value::Integer(_) | Value::String(_) => Ok(value),
+        Value::Number(number) if number.is_finite() => Ok(value),
+        Value::UserData(ref data)
+            if data.is::<ValueHandle>() || data.is::<super::drawing::Matrix>() =>
+        {
+            Ok(value)
+        }
+        _ => Err(mlua::Error::runtime(
+            "Simulation modules cannot export hidden mutable state.",
+        )),
+    }
 }

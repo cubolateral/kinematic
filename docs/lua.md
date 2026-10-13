@@ -37,7 +37,11 @@ Paths are relative to this directory, including module imports, fonts, images,
 shader files, caches and output. Absolute paths, parent traversal and symlinks
 that leave the project are rejected. `require("folder.module")` resolves
 `folder/module.lua` or `folder/module/init.lua`. Imports are cached per revision;
-cyclic imports are rejected.
+cyclic imports are rejected. The global `k` is available in scenes and modules
+and its engine API is read-only. Every scene listed in the manifest returns
+exactly one `function(s)`; its displayed name is the file stem and its persistent
+identity is the relative path. Modules may return functions or tables without
+becoming scenes. The manifest alone selects scenes and their order.
 
 The Project panel creates, opens and closes projects without restarting the
 application. Files supports opening, creating and renaming files and folders.
@@ -69,8 +73,7 @@ and does not disable basic editing or execution.
 ## Scene API
 
 ```lua
-local k = require("kinematic")
-return k.scene("Intro", function(s)
+return function(s)
     local ball = s:circle {
         id = "ball", radius = 24,
         position = k.vec2(-100, 0), fill = k.color("#60A5FA"),
@@ -78,11 +81,11 @@ return k.scene("Intro", function(s)
     s:world_2d():add(ball)
     ball.opacity:set(0)
     s:all(function()
-        s:play(ball.position:to(k.vec2(100, 0), 2, k.ease.linear))
-        s:play(ball.opacity:to(1, 0.5))
+        ball:to {position = k.vec2(100, 0)}:play(2, k.ease.linear)
+        ball:to {opacity = 1}:play(0.5)
     end)
     s:wait(1)
-end)
+end
 ```
 
 Native constructor names and directly exposed properties come from the Rust
@@ -99,31 +102,47 @@ Polygon presets include `triangle`, `square`, `triangle_3d`, `square_3d`,
 
 Objects start inactive. Attach them using `s:world_2d():add(obj)`,
 `s:world_3d():add(obj)` or a group's `add`. Extra canvases attach to `s:root()`.
-`root.view_2d:set(false)` selects the 3D view. Native dimensions, transforms,
-opacity, material, camera, filter, light and layout properties use the same
-handles as other tracks. Enum values use the Rust variant names.
+`s:view("2d")` and `s:view("3d")` schedule an instantaneous view switch.
+Native dimensions, transforms, opacity, materials, cameras, filters, lights and
+layout use the same property metadata. Enum values use Rust variant names.
 
-| Operation | Meaning |
-| --- | --- |
-| `property:get()` | Read the current value. |
-| `property:set(value)` | Set without scheduling an animation. |
-| `property:to(value, seconds, easing)` | Prepare an absolute tween. |
-| `property:by(delta, seconds, easing)` | Prepare a relative number/vector tween. |
-| `property:rotate(axis, radians, seconds, easing)` | Quaternion rotation preserving full turns. |
-| `property:from(start, finish, seconds, easing)` | Prepare a tween with an explicit start. |
-| `property.x`, `.y`, `.z`, `.w` | Access a subchannel; colors also accept `.r`, `.g`, `.b`, `.a`. |
-| `task:delay(seconds)` | Prepare a delayed task. |
-| `s:play(task)` | Compile the task into the current scheduling scope. |
-| `s:wait(seconds)` | Advance that scope. |
-| `s:event(name)` | Named wait editable in Timeline. |
-| `s:chain(fn)` | Run tasks sequentially. |
-| `s:all(fn)` | Start tasks together and advance by the longest duration. |
-| `s:parallel(fn)` | Start a parallel branch without advancing the parent scope. |
-| `s:loop(fn)` | Repeat a positive finite cycle without advancing the parent scope. |
-| `s:track(initial, id)` | Independent animated value, usable as a simulation input. |
+Builders accept complete values or partial channels: `position={x=-200}`,
+`scale={y=2}` and `fill={a=0.5}` preserve omitted defaults. Vectors use `x/y/z`,
+colors use `r/g/b/a`, and quads use `a/b/c/d`.
 
-Tweens default to one second and the native easing default. During construction,
-preparing a tween advances its property's builder value to the target, so later tasks and `get()` can use it; only `play` schedules evaluation.
+```lua
+local movement = ball:by {position={x=100}}
+movement:play(1)
+movement:play(1)
+ball:from {opacity={0,1},position={x={-200,200}}}
+    :to {position={y=50}}:by {radius=10}:play(2,k.ease.cubic_out)
+```
+
+`to` declares absolute destinations; `by` declares numeric increments; `from`
+uses exactly two endpoints for each property or channel. Complete pairs such as
+`position={k.vec2(0,0),k.vec2(100,50)}` are supported. Omitted channels are not
+animated. Overlapping declarations within a table or between chained calls are
+errors. Property names, types and limits are validated.
+
+Preparing a definition leaves the object and timeline unchanged. Each `play`
+schedules an independent execution; implicit starts are resolved at its timeline
+position. Reusing `to` repeats its absolute destination, while reusing `by`
+applies the increment again. `play()` and `play(0)` are instantaneous;
+`play(seconds,easing)` uses the given duration and optional native easing.
+All chained destinations share that execution's duration and easing.
+
+Use `object:get("position")` for reading and `object:prop("position.x")` for a
+property handle, including names that collide with methods. Handles expose
+`get`, `set` and `signal`; standalone `s:track(initial,id)` also supports
+`to(value):play(...)`, `by(delta):play(...)` and `from({start,finish}):play(...)`.
+Quaternion handles support `rotate(axis,radians):play(...)` to preserve full turns.
+
+`s:wait(seconds)` advances the scope; `s:event(name)` adds a named editable wait.
+`chain`, `all`, `parallel` and `loop` accept callbacks. `all` starts its children
+together and advances by the longest duration; `chain` schedules sequentially;
+`parallel` leaves the parent time unchanged; `loop` repeats a positive finite
+cycle. Reusable Lua functions can schedule sequences.
+
 `k.ease` uses lowercase snake case names such as `linear`, `cubic_out` and
 `sine_in_out`. Nested repeats and ambiguous concurrent writes within repeats are
 rejected by the native scheduler. Keyframes remain in timeline order.
@@ -134,23 +153,34 @@ Hierarchy queries include `children`, `get_child(index)`, `parent`,
 `move_to_bottom` preserve native ordering. `remove` and `remove_children` end
 lifetimes; seeking backwards can restore the objects.
 
-`bounds` returns the local box size; `middle`, `left`, `right`, `top`, `bottom`
+`bounds()` returns named local coordinates and dimensions; `box_size()` returns only size; `middle`, `left`, `right`, `top`, `bottom`
 and corners return points in parent coordinates, including displaced bounds.
 3D adds `front`, `back` and their edge/corner combinations, for example
 `top_left_front`. Each anchor has `*_to(point)` returning the required local
 position. Global queries are `global_position`, `global_rotation`,
 `global_scale`, `global_matrix`, and 2D `global_opacity`. Image objects support
 `get_pixel_color(vec2)`. A 3D canvas supports
-`focus_camera(position,target,seconds,easing)`, returning a task.
+`focus_camera{position=k.vec3(0,2,7),target=k.vec3(0,0,0)}:play(2)`.
 
 `snapshot()` captures tracked fields, dynamic properties and uniforms.
-`restore(snapshot,seconds,easing)` creates a tween to that snapshot.
-`save()` pushes a snapshot, `restore(nil,seconds,easing)` pops it, and
-`reset(seconds,easing)` returns to builder values. These return tasks for `play`.
+`restore(snapshot):play(2)` uses an explicit snapshot; `save()` pushes a snapshot
+and `restore():play(2)` pops it. `reset():play()` returns to initial builder values.
+All three produce reusable animation definitions.
 
-Built-in effects have been removed, including fade, grow,
-creation, write, morph and text/LaTeX transitions. Animate opacity, scale,
-position, text and other properties manually.
+Objects can define methods using `k.object {name="Counter",components={...},
+methods={increment=function(self,amount) return self:by{value=amount} end}}`.
+Call `counter:increment(10):play(2)`. Fundamental object operations cannot be
+replaced, and object methods are not copied to animation definitions.
+
+Native methods are explicitly registered per type. An internal Rust handler
+impl annotated with `#[lua_methods]` exports only `#[lua]` methods, generating
+argument conversion and LuaLS signatures. Initially supported arguments are
+`String`, `bool`, `f32`, `f64`, `i32`, `u32`, `i64` and `u64`; methods return
+runtime tween `Task` definitions. Unsupported signatures fail at compilation.
+Connect the generated method list in the native type registry once.
+`text:fade("New text"):play(1)` switches the text at the execution start and
+fades its opacity in. Advanced text, creation and morph transitions need their
+own implementation.
 
 ## Signals and simulations
 
@@ -171,7 +201,7 @@ local moving = k.object {
     update = function(state, frame, inputs)
         state.distance = state.distance + inputs.speed * frame.dt
     end,
-    bounds = function() return {0, -10, 200, 20} end,
+    bounds = function() return {x = 0, y = -10, width = 200, height = 20} end,
     draw = function(ctx, properties, state)
         ctx:circle(state.distance, 0, 10, properties.fill)
     end,
@@ -194,9 +224,15 @@ and `mutate(function(state) ... end)` schedule explicit operations.
 `state()` returns an independent copy for inspection.
 
 Update and mutation callbacks cannot capture upvalues other than the restricted
-read-only environment, isolated from construction-time library mutations. Inside a callback, `local k = require("kinematic")`
-provides value, Random, path, matrix and mesh constructors without capturing the
-outer module; other module imports are restricted to construction. Put changing data in `state` and declare external inputs.
+read-only environment, isolated from construction-time library mutations.
+The global `k` provides allowed value, Random, path, matrix and mesh constructors.
+Inside callbacks, `require("utils.math")` loads helpers in this restricted
+environment. Modules may return pure functions, scalars or immutable tables;
+exported functions obey the same closure validation. Mutable captured state,
+mutable exports, cycles and global writes are rejected. Put changing data in
+`state` and declare external inputs. Module dependencies invalidate checkpoints
+on reload. `inputs={}` supplies no inputs; omitted `inputs` uses own properties.
+Subchannel inputs supply their scalar values.
 State supports finite scalars, plain tables with string/integer keys, engine
 vectors/colors/quaternions/quads, engine Random, and immutable image/font/mesh/
 matrix handles. Snapshots deeply copy mutable values and random state. Cycles,
@@ -228,17 +264,17 @@ after a successful callback; save/layer operations must balance with restore.
 `image(image,x,y,w,h)` and `text(text,x,y,size,paint,font?)`. Paint is a color or
 `{from={x,y},to={x,y},colors={color1,color2,...}}` for a linear gradient.
 `k.font(path)` supplies a project TTF/OTF; omitted fonts use the system default.
-Bounds are `{x,y,width,height}`. The [custom path scene](../examples/lua/2d/scenes/custom.lua)
+Bounds are `{x=0,y=0,width=200,height=20}`. The [custom path scene](../examples/lua/2d/scenes/custom.lua)
 uses a displaced box and manual opacity/position animation.
 
-3D supports `k.mesh {vertices={{x,y,z},...},indices={0,1,2,...}}` with optional
-normals, UVs and colors. Triangle indices are zero-based; normals are generated
+3D supports `k.mesh {vertices={{x,y,z},...},indices={1,2,3,...}}` with optional
+normals, UVs and colors. Triangle indices are one-based; normals are generated
 when omitted. `ctx:mesh(mesh,matrix?)` and `ctx:instances(mesh,matrices)` use the
 native geometry cache. Content-identical meshes reuse their identity; transform,
 material and uniform edits do not rebuild geometry. `k.mat4()` is identity;
 `k.mat4(values)` accepts 16 column-major numbers. Matrix `translate(vec3)`,
 `scale(vec3)`, `rotate(quaternion)` and multiplication return new matrices.
-Bounds are `{width,height,depth}` or displaced `{x,y,z,width,height,depth}`.
+Bounds use named fields `{x=-1,y=-1,z=-1,width=2,height=2,depth=2}`.
 The [3D example](../examples/lua/3d/scenes/intro.lua) defines its own indexed mesh,
 material and animated shader uniform.
 
@@ -250,7 +286,9 @@ canvas dependencies are checked for cycles and cross-scene references.
 `k.image_shader {source=glsl}` or `{path="shader.glsl"}` supplies a GLSL 3.30 image
 shader. `k.mesh_shader {fragment=glsl,vertex=optional_glsl}` accepts inline code,
 or `fragment_path`/`vertex_path`. Object options include `shader`, `uniforms`,
-`textures` and `shader_padding`. Animate uniforms through `obj:uniform("name")`.
+`textures` and `shader_padding`. Animate uniforms with `obj:to{uniforms={pulse=6}}:play(3)` or
+`obj:from{uniforms={pulse={0,6}}}:play(3)`. Uniform names stay separate from
+ordinary properties. `obj:uniform("name")` returns an explicit property handle.
 The GLSL contract is described below.
 Compilation failure preserves the active preview. Mesh/image/font/shader content
 is immutable within an applied revision, including during export.

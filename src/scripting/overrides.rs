@@ -97,3 +97,69 @@ impl Overrides {
         }
     }
 }
+
+pub(super) fn key(target: &TrackTarget) -> String {
+    target.uniform_name().map_or_else(
+        || target.name().to_owned(),
+        |name| format!("uniforms.{name}"),
+    )
+}
+
+pub(super) fn matches(name: &str, target: &TrackTarget, targets: &[TrackTarget]) -> bool {
+    name == key(target) || legacy_key(target, targets).is_some_and(|legacy| name == legacy)
+}
+
+pub(super) fn legacy_key<'a>(target: &'a TrackTarget, targets: &[TrackTarget]) -> Option<&'a str> {
+    // Migrate old uniform overrides only when their unqualified name is unambiguous.
+    target.uniform_name().filter(|name| {
+        !targets
+            .iter()
+            .any(|other| other.uniform_name().is_none() && other.name() == *name)
+    })
+}
+
+pub(super) fn lookup<'a>(
+    saved: &'a BTreeMap<String, SavedValue>,
+    target: &TrackTarget,
+    targets: &[TrackTarget],
+) -> Option<&'a SavedValue> {
+    saved
+        .get(&key(target))
+        .or_else(|| legacy_key(target, targets).and_then(|name| saved.get(name)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uniform_keys_preserve_unambiguous_legacy_overrides_and_avoid_collisions() {
+        let uniform = TrackTarget::uniform("pulse");
+        let property = TrackTarget::Dynamic(std::sync::Arc::new(crate::core::PropertySchema {
+            name: "pulse".into(),
+            default: TrackValue::F32(0.0),
+            limits: crate::core::TrackLimits::None,
+            choices: Vec::new(),
+        }));
+        let saved = [
+            ("pulse".into(), SavedValue::F32(2.0)),
+            ("uniforms.pulse".into(), SavedValue::F32(6.0)),
+        ]
+        .into();
+        let targets = [property.clone(), uniform.clone()];
+        assert!(matches!(
+            lookup(&saved, &property, &targets),
+            Some(SavedValue::F32(2.0))
+        ));
+        assert!(matches!(
+            lookup(&saved, &uniform, &targets),
+            Some(SavedValue::F32(6.0))
+        ));
+        let legacy = [("pulse".into(), SavedValue::F32(4.0))].into();
+        assert!(lookup(&legacy, &uniform, &targets).is_none());
+        assert!(matches!(
+            lookup(&legacy, &uniform, &[uniform.clone()]),
+            Some(SavedValue::F32(4.0))
+        ));
+    }
+}

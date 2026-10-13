@@ -48,6 +48,7 @@ local function api_call(call, name)
     if callee.type == "getlocal" then callee = resolve(callee) end
     if not callee or callee.type ~= "getfield" or callee.field[1] ~= name then return false end
     local api = resolve(callee.node)
+    if api and api.type == "getglobal" and api[1] == "k" then return true end
     return api and api.type == "call" and api.node.type == "getglobal" and api.node[1] == "require"
         and api.args and api.args[1] and api.args[1][1] == "kinematic"
 end
@@ -98,12 +99,24 @@ end
 -- Describes component fields without executing project code.
 function OnSetText(uri, text)
     if not uri:match("%.lua$") or uri:find("/kinematic/cache/luals/", 1, true)
-        or not (text:find("object", 1, true) or text:find("component", 1, true)) then return nil end
+        or not (is_scene(uri) or text:find("object", 1, true) or text:find("component", 1, true)) then return nil end
     local state = parser.compile(text, "Lua", "Lua 5.4")
     if not state or not state.ast then return nil end
     state.uri = uri
     state.ast.uri = uri
     local diffs, classes = {}, {}
+    if is_scene(uri) then
+        for _, action in ipairs(state.ast) do
+            if action.type == "return" and action[1] and action[1].type == "function" then
+                local callback = action[1]
+                local parameter = callback.args and callback.args[1]
+                if parameter then
+                    local start = guide.positionToOffset(state, action.start) + 1
+                    diffs[#diffs + 1] = { start = start, finish = start - 1, text = ("---@param %s Kinematic.Scene\n"):format(parameter[1]) }
+                end
+            end
+        end
+    end
     guide.eachSourceType(state.ast, "call", function(call)
         local component = api_call(call, "component")
         if not component and not api_call(call, "object") then return end
@@ -126,6 +139,13 @@ function OnSetText(uri, text)
             local dimension = resolve(field(options, "dimension"))
             parents[1] = dimension and dimension[1] == 3 and "Kinematic.Script3D" or "Kinematic.Script2D"
             definition[#definition + 1] = ("---@field signal fun(self:%s, callback:fun(object:%s, frame:Kinematic.Frame)):Kinematic.Signal"):format(class, class)
+            local methods = resolve(field(options, "methods"))
+            if methods and methods.type == "table" then
+                for _, entry in ipairs(methods) do
+                    local name = entry.type == "tablefield" and entry.field[1]
+                    if name then definition[#definition + 1] = ("---@field %s fun(self:%s, ...):Kinematic.Animation"):format(name, class) end
+                end
+            end
             local components = resolve(field(options, "components"))
             if components and components.type == "table" then
                 for _, item in ipairs(components) do

@@ -1,8 +1,6 @@
-local k = require("kinematic")
-
 local geometry = k.mesh {
     vertices = {{-1,-1,0}, {1,-1,0}, {0,1,0}, {0,0,1.6}},
-    indices = {0,2,1, 0,1,3, 1,2,3, 2,0,3},
+    indices = {1,3,2, 1,2,4, 2,3,4, 3,1,4},
 }
 local shader = k.mesh_shader {
     fragment = [[
@@ -18,12 +16,12 @@ local shader = k.mesh_shader {
 }
 local sculpture = k.object {
     dimension = 3,
-    bounds = function() return {2, 2, 3.2} end,
+    bounds = function() return {x = -1, y = -1, z = -1.6, width = 2, height = 2, depth = 3.2} end,
     draw = function(ctx) ctx:mesh(geometry) end,
 }
 
-return k.scene("Space", function(s)
-    s:root().view_2d:set(false)
+return function(s)
+    s:view("3d")
     s:world_3d().camera_position:set(k.vec3(0, 0, 7))
     local mesh = s:object(sculpture, {
         id = "sculpture", albedo = k.color("#60A5FA"),
@@ -40,9 +38,9 @@ return k.scene("Space", function(s)
     }
     s:world_3d():add(screen)
     s:all(function()
-        s:play(mesh.position:to(k.vec3(1.5, 0, 0), 3, k.ease.sine_in_out))
-        s:play(mesh.rotation:to(k.axis_angle(k.vec3(0, 1, 0), math.pi), 3))
-        s:play(mesh:uniform("pulse"):to(6, 3))
+        mesh:to {position = k.vec3(1.5, 0, 0)}:play(3, k.ease.sine_in_out)
+        mesh:to {rotation = k.axis_angle(k.vec3(0, 1, 0), math.pi)}:play(3)
+        mesh:to {uniforms = {pulse = 6}}:play(3)
     end)
     s:wait(0.5)
-end)
+end

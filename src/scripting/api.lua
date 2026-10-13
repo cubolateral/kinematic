@@ -7,21 +7,45 @@
 ---@operator add(Kinematic.Value): Kinematic.Value
 ---@operator sub(Kinematic.Value): Kinematic.Value
 ---@operator mul(number): Kinematic.Value
----@class Kinematic.Task
-local Task = {}
----@param seconds number
----@return Kinematic.Task
-function Task:delay(seconds) end
+---@class Kinematic.Animation
+local Animation = {}
+---@param fields table
+---@return Kinematic.Animation
+function Animation:to(fields) end
+---@param fields table
+---@return Kinematic.Animation
+function Animation:by(fields) end
+---@param fields table
+---@return Kinematic.Animation
+function Animation:from(fields) end
+---@param duration? number
+---@param easing? string
+function Animation:play(duration, easing) end
 ---@class Kinematic.Property<T>
 ---@field get fun(self:Kinematic.Property<T>):T
 ---@field set fun(self:Kinematic.Property<T>, value:T)
----@field to fun(self:Kinematic.Property<T>, value:T, duration?:number, easing?:string):Kinematic.Task
----@field by fun(self:Kinematic.Property<T>, delta:T, duration?:number, easing?:string):Kinematic.Task
----@field from fun(self:Kinematic.Property<T>, start:T, finish:T, duration?:number, easing?:string):Kinematic.Task
+---@field to fun(self:Kinematic.Property<T>, value:T):Kinematic.Animation
+---@field by fun(self:Kinematic.Property<T>, delta:T):Kinematic.Animation
+---@field from fun(self:Kinematic.Property<T>, pair:T[]):Kinematic.Animation
 ---@field signal fun(self:Kinematic.Property<T>, callback:fun(property:Kinematic.Property<T>, frame:Kinematic.Frame)):Kinematic.Signal
----@field rotate fun(self:Kinematic.Property<T>, axis:Kinematic.Value, radians:number, duration?:number, easing?:string):Kinematic.Task
+---@field rotate fun(self:Kinematic.Property<T>, axis:Kinematic.Value, radians:number):Kinematic.Animation
 ---@class Kinematic.Object
 local Object = {}
+---@param name string
+---@return any
+function Object:get(name) end
+---@param name string
+---@return Kinematic.Property
+function Object:prop(name) end
+---@param fields table
+---@return Kinematic.Animation
+function Object:to(fields) end
+---@param fields table
+---@return Kinematic.Animation
+function Object:by(fields) end
+---@param fields table
+---@return Kinematic.Animation
+function Object:from(fields) end
 ---@param child Kinematic.Object
 function Object:add(child) end
 function Object:remove() end
@@ -30,8 +54,8 @@ function Object:remove() end
 function Object:signal(callback) end
 ---@class Kinematic.Scene
 local Scene = {}
----@param task Kinematic.Task
-function Scene:play(task) end
+---@param dimension "2d"|"3d"
+function Scene:view(dimension) end
 ---@param seconds number
 function Scene:wait(seconds) end
 ---@param name string
@@ -50,11 +74,7 @@ function Scene:world_2d() end
 function Scene:world_3d() end
 ---@return Kinematic.Object
 function Scene:root() end
-local k = {}
----@param name string
----@param build fun(scene: Kinematic.Scene)
----@return table
-function k.scene(name, build) end
+k = {}
 ---@param x number
 ---@param y number
 ---@return Kinematic.Value
@@ -90,14 +110,10 @@ function Signal:stop() end
 function Object:snapshot() end
 function Object:save() end
 ---@param snapshot? Kinematic.Snapshot
----@param duration? number
----@param easing? string
----@return Kinematic.Task
-function Object:restore(snapshot, duration, easing) end
----@param duration? number
----@param easing? string
----@return Kinematic.Task
-function Object:reset(duration, easing) end
+---@return Kinematic.Animation
+function Object:restore(snapshot) end
+---@return Kinematic.Animation
+function Object:reset() end
 ---@return Kinematic.Object[]
 function Object:children() end
 ---@return Kinematic.Object?
@@ -120,8 +136,10 @@ function Object:move_up() end
 function Object:move_down() end
 function Object:move_to_top() end
 function Object:move_to_bottom() end
----@return Kinematic.Value
+---@return {x:number,y:number,z?:number,width:number,height:number,depth?:number}
 function Object:bounds() end
+---@return Kinematic.Value
+function Object:box_size() end
 ---@return Kinematic.Matrix
 function Object:global_matrix() end
 ---@return Kinematic.Value
@@ -135,12 +153,9 @@ function Object:global_opacity() end
 ---@param position Kinematic.Value
 ---@return Kinematic.Value
 function Object:get_pixel_color(position) end
----@param position Kinematic.Value
----@param target Kinematic.Value
----@param duration? number
----@param easing? string
----@return Kinematic.Task
-function Object:focus_camera(position, target, duration, easing) end
+---@param options {position:Kinematic.Value,target:Kinematic.Value}
+---@return Kinematic.Animation
+function Object:focus_camera(options) end
 ---@param inputs table<string,Kinematic.Property|Kinematic.Object|string>
 function Object:inputs(inputs) end
 ---@return table
@@ -185,7 +200,9 @@ function k.component(fields) end
 ---@field inputs? table<string,Kinematic.Property|Kinematic.Object|string>
 ---@field update? fun(state:table, frame:Kinematic.Frame, inputs:table)
 ---@field draw? fun(context:Kinematic.Draw2D|Kinematic.Draw3D, properties:table, state:table)
----@field bounds? fun(properties:table, state:table):number[]
+---@field bounds? fun(properties:table, state:table):{x:number,y:number,z?:number,width:number,height:number,depth?:number}
+---@field name? string
+---@field methods? table<string,function>
 ---@param definition Kinematic.ObjectOptions
 ---@return Kinematic.Script2D|Kinematic.Script3D
 function k.object(definition) end

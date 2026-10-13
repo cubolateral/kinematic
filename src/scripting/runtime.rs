@@ -44,6 +44,7 @@ pub(crate) struct Runtime {
     pub(super) id: u64,
     pub(super) callbacks: RefCell<BTreeMap<hecs::Entity, extension::Callbacks>>,
     pub(super) simulation_steps: Cell<u64>,
+    pub(super) simulation_modules: RefCell<BTreeMap<String, String>>,
     pub(super) mutations: RefCell<Vec<Function>>,
     overrides: super::overrides::Overrides,
     path: PathBuf,
@@ -77,6 +78,10 @@ pub(super) fn engine<T>(f: impl FnOnce() -> T) -> Result<T> {
 }
 
 impl LuaScene {
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+
     pub(crate) fn simulation_steps(&self) -> u64 {
         self.runtime.simulation_steps.get()
     }
@@ -176,6 +181,7 @@ impl LuaScene {
             id: extension::next_runtime(),
             callbacks: RefCell::new(BTreeMap::new()),
             simulation_steps: Cell::new(0),
+            simulation_modules: RefCell::new(BTreeMap::new()),
             mutations: RefCell::new(Vec::new()),
             operation_keys: RefCell::new(BTreeMap::new()),
             world: RefCell::new(scene.world_handle()),
@@ -223,13 +229,20 @@ impl LuaScene {
             .unwrap()
             .set_event_definitions(file);
         let text = runtime.source(&path)?;
-        let definition: Table = runtime
+        let returned: mlua::MultiValue = runtime
             .lua
             .load(&text)
             .set_name(format!("@{}", path.display()))
             .eval()?;
-        let build: Function = definition.get("build")?;
-        let name: String = definition.get("name")?;
+        if returned.len() != 1 || !matches!(returned.front(), Some(Value::Function(_))) {
+            return Err(mlua::Error::runtime(
+                "A scene file must return exactly one function.",
+            ));
+        }
+        let Value::Function(build) = returned.into_iter().next().unwrap() else {
+            unreachable!()
+        };
+        let name = path.file_stem().unwrap().to_string_lossy().into_owned();
         runtime.scene.borrow_mut().as_mut().unwrap().set_name(name);
         build.call::<()>(SceneHandle(Rc::downgrade(&runtime)))?;
         if let Some(error) = runtime.errors.borrow().first() {
@@ -418,17 +431,19 @@ impl LuaScene {
         let scripts = self.runtime.script_values.borrow();
         let scripts = scripts.get(&entity)?;
         let world = self.scene.world();
-        let fields = native::properties(&world, entity)
-            .into_iter()
+        let targets = native::properties(&world, entity);
+        let fields = targets
+            .iter()
+            .cloned()
             .filter_map(|target| {
-                let script = scripts.get(target.name())?.clone();
+                let script = scripts.get(&super::overrides::key(&target))?.clone();
                 let saved = self
                     .runtime
                     .overrides
                     .values
                     .get(&self.path)
                     .and_then(|s| s.get(&id))
-                    .and_then(|s| s.get(target.name()))
+                    .and_then(|s| super::overrides::lookup(s, &target, &targets))
                     .and_then(|v| v.restore(&target, &script).ok());
                 let evaluated = target.get(&world, entity);
                 Some((target, script, saved, evaluated))
@@ -465,13 +480,17 @@ impl LuaScene {
             .or_default()
             .entry(id)
             .or_default();
+        let targets = native::properties(&self.scene.world(), entity);
+        if let Some(legacy) = super::overrides::legacy_key(target, &targets) {
+            properties.remove(legacy);
+        }
         if let Some(value) = value {
             properties.insert(
-                target.name().to_owned(),
+                super::overrides::key(target),
                 super::overrides::SavedValue::capture(&value),
             );
         } else {
-            properties.remove(target.name());
+            properties.remove(&super::overrides::key(target));
         }
         let mut candidate = self.prepare_configured(
             self.runtime.sources.clone(),
@@ -609,10 +628,21 @@ impl LuaScene {
                 }
             }
         }
+        let environment = candidate
+            .runtime
+            .lua
+            .named_registry_value::<Table>("kinematic.update_environment")?;
+        let require = environment.get::<Function>("require")?;
+        for name in self.runtime.simulation_modules.borrow().keys() {
+            // Failed helper validation invalidates history; evaluation reports errors only if still used.
+            let _ = require.call::<Value>(name.clone());
+        }
+        let modules_changed = *self.runtime.simulation_modules.borrow()
+            != *candidate.runtime.simulation_modules.borrow();
         for entity in candidate.runtime.callbacks.borrow().keys() {
             let old_key = self.runtime.simulation_key(*entity);
             let new_key = candidate.runtime.simulation_key(*entity);
-            if old_key.is_some() && old_key == new_key {
+            if !modules_changed && old_key.is_some() && old_key == new_key {
                 if let Ok(simulation) = self
                     .scene
                     .world()
@@ -698,22 +728,15 @@ impl Runtime {
             entity,
         };
         super::resources::configure(lua, self, &handle, &options)?;
-        for pair in options.pairs::<String, Value>() {
-            let (name, value) = pair?;
-            if name == "id" || super::resources::reserved(&name) {
-                continue;
-            }
-            if name == "name" {
-                self.world
-                    .borrow()
-                    .borrow()
-                    .get::<&mut Name>(entity)
-                    .unwrap()
-                    .set(&String::from_lua(value, lua)?);
-            } else {
-                handle.property(&name)?.set(lua, value)?;
-            }
+        if let Some(name) = options.get::<Option<String>>("name")? {
+            self.world
+                .borrow()
+                .borrow()
+                .get::<&mut Name>(entity)
+                .unwrap()
+                .set(&name);
         }
+        super::animation::configure(lua, &handle, &options)?;
         self.apply_base(&key, entity)?;
         crate::core::objects::initialize_object_snapshots(&self.world.borrow(), entity);
         self.definitions.borrow_mut().insert(
@@ -748,25 +771,33 @@ impl Runtime {
     }
     fn register(self: &Rc<Self>) -> Result<()> {
         let lua = &self.lua;
+        let rawset: Function = lua.globals().get("rawset")?;
+        lua.globals().set(
+            "rawset",
+            lua.create_function(move |_, (table, key, value): (Table, Value, Value)| {
+                if table
+                    .metatable()
+                    .is_some_and(|meta| meta.raw_get::<bool>("kinematic.readonly").unwrap_or(false))
+                {
+                    return Err(mlua::Error::runtime(
+                        "Engine and simulation libraries are read-only.",
+                    ));
+                }
+                rawset.call::<Table>((table, key, value))
+            })?,
+        )?;
         let api = lua.create_table()?;
         value::register(lua, &api)?;
         extension::register(lua, &api)?;
         super::drawing::register(lua, &api)?;
         super::resources::register(self, &api)?;
-        api.set(
-            "scene",
-            lua.create_function(|lua, (name, build): (String, Function)| {
-                let result = lua.create_table()?;
-                result.set("name", name)?;
-                result.set("build", build)?;
-                Ok(result)
-            })?,
-        )?;
         let easing = lua.create_table()?;
         for ease in Easing::ALL {
             easing.set(easing_name(ease), format!("{ease:?}"))?;
         }
-        api.set("ease", easing)?;
+        api.set("ease", extension::readonly(lua, easing)?)?;
+        let api = extension::readonly(lua, api)?;
+        lua.globals().set("k", api.clone())?;
         let loaded = lua.create_table()?;
         loaded.set("kinematic", api)?;
         let weak = Rc::downgrade(self);
@@ -847,7 +878,7 @@ impl Runtime {
                 Ok(())
             })?,
         )?;
-        extension::prepare_environment(lua)
+        extension::prepare_environment(self)
     }
 }
 
@@ -953,16 +984,16 @@ impl UserData for SceneHandle {
             world.borrow_mut().insert_one(entity, definition.properties.clone()).map_err(mlua::Error::external)?;
             let handle = ObjectHandle { runtime: this.0.clone(), entity };
             super::resources::configure(lua, &runtime, &handle, &options)?;
-            for pair in options.pairs::<String, Value>() {
-                let (name, value) = pair?;
-                if name == "id" || super::resources::reserved(&name) { continue; }
-                if name == "name" {
-                    world.borrow().get::<&mut Name>(entity).unwrap().set(&String::from_lua(value, lua)?);
-                } else {
-                    handle.property(&name)?.set(lua, value)?;
+            if let Some(name) = options.get::<Option<String>>("name")? {
+                world.borrow().get::<&mut Name>(entity).unwrap().set(&name);
+            }
+            super::animation::configure(lua, &handle, &options)?;
+            extension::configure(&runtime, &handle, &definition)?;
+            if options.get::<Option<String>>("name")?.is_none() {
+                if let Some(name) = definition.table.get::<Option<String>>("name")? {
+                    world.borrow().get::<&mut Name>(entity).unwrap().set(&name);
                 }
             }
-            extension::configure(&runtime, &handle, &definition)?;
             runtime.apply_base(&key, entity)?;
             crate::core::objects::initialize_object_snapshots(&world, entity);
             runtime.definitions.borrow_mut().insert(key, Definition { kind: kind.into(), entity, fingerprint: String::new() });
@@ -990,6 +1021,22 @@ impl UserData for SceneHandle {
                 })
             });
         }
+        methods.add_method("view", |lua, this, view: String| {
+            if view != "2d" && view != "3d" {
+                return Err(mlua::Error::runtime("View must be '2d' or '3d'."));
+            }
+            let runtime = this.runtime()?;
+            let entity = runtime.scene.borrow().as_ref().unwrap().root().entity();
+            let root = ObjectHandle {
+                runtime: this.0.clone(),
+                entity,
+            };
+            let table = lua.create_table()?;
+            table.set("view_2d", view == "2d")?;
+            super::animation::AnimationDefinition::new(root)
+                .append(lua, table, super::animation::Operation::To)?
+                .play(None, None)
+        });
         methods.add_method("wait", |_, this, seconds: f32| {
             let runtime = this.runtime()?;
             runtime.construction()?;
@@ -1000,18 +1047,6 @@ impl UserData for SceneHandle {
             let runtime = this.runtime()?;
             runtime.construction()?;
             engine(|| runtime.scene.borrow_mut().as_mut().unwrap().event(&name))
-        });
-        methods.add_method("play", |_, this, task: mlua::UserDataRef<TaskHandle>| {
-            let runtime = this.runtime()?;
-            runtime.construction()?;
-            engine(|| {
-                runtime
-                    .scene
-                    .borrow_mut()
-                    .as_mut()
-                    .unwrap()
-                    .play(task.0.clone())
-            })
         });
         for name in ["chain", "all", "parallel", "loop"] {
             methods.add_method(name, move |_, this, callback: Function| {
@@ -1066,7 +1101,7 @@ impl UserData for SceneHandle {
 }
 
 #[derive(Clone)]
-pub(super) struct ObjectHandle {
+pub(crate) struct ObjectHandle {
     pub runtime: Weak<Runtime>,
     pub entity: hecs::Entity,
 }
@@ -1091,21 +1126,92 @@ impl ObjectHandle {
     }
     pub(super) fn property(&self, name: &str) -> Result<PropertyHandle> {
         let runtime = self.runtime()?;
+        let (name, component) = name
+            .split_once('.')
+            .map_or((name, None), |(name, component)| (name, Some(component)));
         let target = native::property(&runtime.world.borrow().borrow(), self.entity, name)
             .ok_or_else(|| mlua::Error::runtime(format!("Unknown object property '{name}'.")))?;
+        let channel = component
+            .map(|name| {
+                super::animation::channel(
+                    &target.get(&runtime.world.borrow().borrow(), self.entity),
+                    name,
+                )
+            })
+            .transpose()?;
         Ok(PropertyHandle {
             object: self.clone(),
             target,
-            channel: None,
+            channel,
         })
     }
 }
 impl UserData for ObjectHandle {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         super::adapters::object_methods(methods);
-        methods.add_meta_method(MetaMethod::Index, |_, this, name: String| {
-            this.property(&name)
+        methods.add_meta_method(MetaMethod::Index, |lua, this, name: String| {
+            use mlua::IntoLua;
+            if let Some(method) = extension::method(this, &name)? {
+                return method.into_lua(lua);
+            }
+            let runtime = this.runtime()?;
+            let class = runtime
+                .world
+                .borrow()
+                .borrow()
+                .get::<&crate::core::components::Inspection>(this.entity)
+                .unwrap()
+                .object_name;
+            if let Some(method) = native::objects()
+                .iter()
+                .filter(|native| native.object_name == class)
+                .flat_map(|native| native.methods)
+                .find(|method| method.name == name)
+            {
+                let object = this.clone();
+                return lua
+                    .create_function(move |lua, mut args: mlua::MultiValue| {
+                        let receiver = args
+                            .pop_front()
+                            .ok_or_else(|| mlua::Error::runtime("Native methods require self."))?;
+                        let Value::UserData(receiver) = receiver else {
+                            return Err(mlua::Error::runtime(
+                                "Native methods require an object receiver.",
+                            ));
+                        };
+                        let receiver = receiver.borrow::<ObjectHandle>()?;
+                        if receiver.entity != object.entity
+                            || !Weak::ptr_eq(&receiver.runtime, &object.runtime)
+                        {
+                            return Err(mlua::Error::runtime(
+                                "Native method receiver belongs to another object.",
+                            ));
+                        }
+                        (method.invoke)(lua, &object, args)
+                    })?
+                    .into_lua(lua);
+            }
+            this.property(&name)?.into_lua(lua)
         });
+        methods.add_method("prop", |_, this, name: String| this.property(&name));
+        methods.add_method("get", |lua, this, name: String| {
+            let property = this.property(&name)?;
+            let value = property.value()?;
+            if let Some(channel) = property.channel {
+                Ok(Value::Number(value.channel(channel) as f64))
+            } else {
+                value::to_lua(lua, value)
+            }
+        });
+        for (name, op) in [
+            ("to", super::animation::Operation::To),
+            ("by", super::animation::Operation::By),
+            ("from", super::animation::Operation::From),
+        ] {
+            methods.add_method(name, move |lua, this, table: Table| {
+                super::animation::AnimationDefinition::new(this.clone()).append(lua, table, op)
+            });
+        }
         methods.add_method("add", |_, this, child: mlua::UserDataRef<Self>| {
             let runtime = this.runtime()?;
             runtime.construction()?;
@@ -1149,11 +1255,18 @@ impl UserData for ObjectHandle {
             })
         });
         methods.add_method("uniform", |_, this, name: String| {
-            let property = this.property(&name)?;
-            if !matches!(property.target, TrackTarget::Uniform(_)) {
-                return Err(mlua::Error::runtime("Property is not a shader uniform."));
-            }
-            Ok(property)
+            let runtime = this.runtime()?;
+            crate::core::objects::shader_uniform(
+                &runtime.world.borrow().borrow(),
+                this.entity,
+                &name,
+            )
+            .map_err(mlua::Error::runtime)?;
+            Ok(PropertyHandle {
+                object: this.clone(),
+                target: TrackTarget::uniform(name),
+                channel: None,
+            })
         });
         methods.add_method("inputs", |_, this, inputs: Table| {
             extension::configure_inputs(this, inputs)
@@ -1295,7 +1408,7 @@ pub(super) struct PropertyHandle {
     pub channel: Option<u8>,
 }
 impl PropertyHandle {
-    fn value(&self) -> Result<TrackValue> {
+    pub(super) fn value(&self) -> Result<TrackValue> {
         let runtime = self.object.runtime()?;
         if let Some(writes) = runtime.writes.borrow().as_ref() {
             if let Some((_, _, value)) = writes.iter().rev().find(|(entity, target, _)| {
@@ -1303,6 +1416,15 @@ impl PropertyHandle {
             }) {
                 return Ok(value.clone());
             }
+        }
+        if runtime.building.get() {
+            return engine(|| {
+                runtime.animator.borrow().sample_scheduled(
+                    &runtime.world.borrow().borrow(),
+                    self.object.entity,
+                    &self.target,
+                )
+            });
         }
         let value = self
             .target
@@ -1312,10 +1434,19 @@ impl PropertyHandle {
     fn convert(&self, lua: &Lua, value: Value) -> Result<TrackValue> {
         self.parse_value(lua, value, true)
     }
-    fn parse_value(&self, lua: &Lua, value: Value, validate: bool) -> Result<TrackValue> {
+    pub(super) fn parse_value(
+        &self,
+        lua: &Lua,
+        value: Value,
+        validate: bool,
+    ) -> Result<TrackValue> {
         let expected = self.value()?;
         if let Some(channel) = self.channel {
-            let number = f32::from_lua(value, lua)?;
+            let TrackValue::F32(number) =
+                value::from_lua(lua, value, &TrackValue::F32(0.0), TrackChoices::None)?
+            else {
+                unreachable!()
+            };
             if !number.is_finite() {
                 return Err(mlua::Error::runtime("Property values must be finite."));
             }
@@ -1335,6 +1466,9 @@ impl PropertyHandle {
                 }
                 _ => return Err(mlua::Error::runtime("Unsupported subchannel.")),
             };
+            if validate {
+                self.validate(&result)?;
+            }
             return Ok(result);
         }
         let choices = match &self.target {
@@ -1345,16 +1479,21 @@ impl PropertyHandle {
         if !validate {
             return Ok(value);
         }
+        self.validate(&value)?;
+        Ok(value)
+    }
+    pub(super) fn validate(&self, value: &TrackValue) -> Result<()> {
+        value.validate().map_err(mlua::Error::runtime)?;
         if let TrackTarget::Dynamic(schema) = &self.target {
-            schema.validate(&value).map_err(mlua::Error::runtime)?;
-        } else if self.target.clamp(value.clone()) != value {
+            schema.validate(value).map_err(mlua::Error::runtime)?;
+        } else if self.target.clamp(value.clone()) != *value {
             return Err(mlua::Error::runtime(
                 "Property is outside its allowed range.",
             ));
         }
-        Ok(value)
+        Ok(())
     }
-    fn set(&self, lua: &Lua, value: Value) -> Result<()> {
+    pub(super) fn set(&self, lua: &Lua, value: Value) -> Result<()> {
         let runtime = self.object.runtime()?;
         let value = self.convert(lua, value)?;
         if let Some(writes) = runtime.writes.borrow_mut().as_mut() {
@@ -1367,7 +1506,6 @@ impl PropertyHandle {
         Ok(())
     }
 }
-use mlua::FromLua;
 impl UserData for PropertyHandle {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("signal", |lua, this, callback: Function| {
@@ -1388,16 +1526,7 @@ impl UserData for PropertyHandle {
         });
         methods.add_method("set", |lua, this, value: Value| this.set(lua, value));
         methods.add_meta_method(MetaMethod::Index, |_, this, name: String| {
-            let channel = match name.as_str() {
-                "x" | "r" => 0,
-                "y" | "g" => 1,
-                "z" | "b" => 2,
-                "w" | "a" => 3,
-                _ => return Err(mlua::Error::runtime("Unknown property subchannel.")),
-            };
-            if this.value()?.channels() == 1 || this.value()?.channels() <= channel {
-                return Err(mlua::Error::runtime("Property has no such subchannel."));
-            }
+            let channel = super::animation::channel(&this.value()?, &name)?;
             Ok(Self {
                 channel: Some(channel),
                 ..this.clone()
@@ -1405,14 +1534,7 @@ impl UserData for PropertyHandle {
         });
         methods.add_method(
             "rotate",
-            |_,
-             this,
-             (axis, angle, seconds, ease): (
-                mlua::UserDataRef<value::ValueHandle>,
-                f32,
-                Option<f32>,
-                Option<String>,
-            )| {
+            |_, this, (axis, angle): (mlua::UserDataRef<value::ValueHandle>, f32)| {
                 let runtime = this.object.runtime()?;
                 runtime.construction()?;
                 let (TrackValue::Quaternion(from), TrackValue::Vector3(axis)) =
@@ -1433,110 +1555,32 @@ impl UserData for PropertyHandle {
                 let to = TrackValue::Quaternion(crate::core::normalized_quaternion(
                     from * glam::Quat::from_axis_angle(axis, angle),
                 ));
-                let task = Task::RuntimeTween {
-                    entity: this.object.entity,
-                    target: this.target.clone(),
-                    from: TrackValue::Quaternion(from),
-                    to: to.clone(),
-                    rotation: Some((axis, angle)),
-                    duration: duration(seconds.unwrap_or(1.0))?,
-                    easing: parse_easing(ease)?,
-                    mask: 1,
-                    relative: 0,
-                    implicit: true,
-                };
-                this.target
-                    .set(&runtime.world.borrow().borrow(), this.object.entity, to);
-                Ok(TaskHandle(task))
-            },
-        );
-        methods.add_method("from", |lua, this, (start, finish, seconds, ease): (Value, Value, Option<f32>, Option<String>)| {
-            let runtime = this.object.runtime()?;
-            runtime.construction()?;
-            let from = this.convert(lua, start)?;
-            let to = this.convert(lua, finish)?;
-            let mask = this.channel.map_or((1 << from.channels()) - 1, |channel| 1 << channel);
-            let task = Task::RuntimeTween {
-                    rotation: None,
-                entity: this.object.entity, target: this.target.clone(), from, to: to.clone(),
-                duration: duration(seconds.unwrap_or(1.0))?, easing: parse_easing(ease)?,
-                mask, relative: 0, implicit: false,
-            };
-            this.target.set(&runtime.world.borrow().borrow(), this.object.entity, to);
-            Ok(TaskHandle(task))
-        });
-        for relative in [false, true] {
-            methods.add_method(
-                if relative { "by" } else { "to" },
-                move |lua, this, (value, seconds, ease): (Value, Option<f32>, Option<String>)| {
-                    let runtime = this.object.runtime()?;
-                    runtime.construction()?;
-                    let from = this.value()?;
-                    let channel_delta = if relative && this.channel.is_some() {
-                        Some(f32::from_lua(value.clone(), lua)?)
-                    } else {
-                        None
-                    };
-                    let mut to = if let (Some(channel), Some(delta)) = (this.channel, channel_delta)
-                    {
-                        this.convert(lua, Value::Number((from.channel(channel) + delta) as f64))?
-                    } else {
-                        this.parse_value(lua, value, !relative)?
-                    };
-                    if relative && this.channel.is_none() {
-                        to = match (&from, &to) {
-                            (TrackValue::F32(a), TrackValue::F32(b)) => TrackValue::F32(a + b),
-                            (TrackValue::Vector2(a), TrackValue::Vector2(b)) => {
-                                TrackValue::Vector2(*a + *b)
-                            }
-                            (TrackValue::Vector3(a), TrackValue::Vector3(b)) => {
-                                TrackValue::Vector3(*a + *b)
-                            }
-                            _ => {
-                                return Err(mlua::Error::runtime(
-                                    "Relative tween requires a number or vector.",
-                                ));
-                            }
-                        };
-                    }
-                    to.validate().map_err(mlua::Error::runtime)?;
-                    if let TrackTarget::Dynamic(schema) = &this.target {
-                        schema.validate(&to).map_err(mlua::Error::runtime)?;
-                    } else if this.target.clamp(to.clone()) != to {
-                        return Err(mlua::Error::runtime(
-                            "Tween endpoint is outside property limits.",
-                        ));
-                    }
-                    let mask = this
-                        .channel
-                        .map_or(from.changed_channels(&to), |channel| 1 << channel);
-                    let task = Task::RuntimeTween {
-                        rotation: None,
+                super::animation::AnimationDefinition::from_task(
+                    this.object.clone(),
+                    Task::RuntimeTween {
                         entity: this.object.entity,
                         target: this.target.clone(),
-                        from,
-                        to: to.clone(),
-                        duration: duration(seconds.unwrap_or(1.0))?,
-                        easing: parse_easing(ease)?,
-                        mask,
-                        relative: if relative { mask } else { 0 },
+                        from: TrackValue::Quaternion(from),
+                        to,
+                        rotation: Some((axis, angle)),
+                        duration: 1.0,
+                        easing: Easing::default(),
+                        mask: 1,
+                        relative: 0,
                         implicit: true,
-                    };
-                    this.target
-                        .set(&runtime.world.borrow().borrow(), this.object.entity, to);
-                    Ok(TaskHandle(task))
-                },
-            );
+                    },
+                )
+            },
+        );
+        for (name, op) in [
+            ("to", super::animation::Operation::To),
+            ("by", super::animation::Operation::By),
+            ("from", super::animation::Operation::From),
+        ] {
+            methods.add_method(name, move |lua, this, value: Value| {
+                super::animation::AnimationDefinition::property(lua, this.clone(), value, op)
+            });
         }
-    }
-}
-#[derive(Clone)]
-pub(super) struct TaskHandle(pub Task);
-impl UserData for TaskHandle {
-    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("delay", |_, this, seconds: f32| {
-            Ok(Self(this.0.clone().delay(duration(seconds)?)))
-        });
     }
 }
 
@@ -1575,7 +1619,7 @@ impl Runtime {
             entity,
             targets
                 .iter()
-                .map(|target| (target.name().to_owned(), target.get(&world, entity)))
+                .map(|target| (super::overrides::key(target), target.get(&world, entity)))
                 .collect(),
         );
         if let Some(overrides) = self
@@ -1585,7 +1629,10 @@ impl Runtime {
             .and_then(|s| s.get(id))
         {
             for (name, saved) in overrides {
-                if let Some(target) = targets.iter().find(|t| t.name() == name) {
+                if let Some(target) = targets
+                    .iter()
+                    .find(|target| super::overrides::matches(name, target, &targets))
+                {
                     match saved.restore(target, &target.get(&world, entity)) {
                         Ok(value) => target.set(&world, entity, value),
                         Err(error) => self
@@ -1669,12 +1716,12 @@ impl Runtime {
             type_id: std::any::TypeId::of::<crate::core::components::Simulation>(),
             info: <crate::core::components::Simulation as crate::core::Trackable>::track(0),
         };
-        let own_input = [("auto_update".to_owned(), entity, auto_update)];
+        let own_input = [("auto_update".to_owned(), entity, auto_update, None)];
         let inputs = callback
             .inputs
             .iter()
             .chain(own_input.iter())
-            .map(|(name, entity, target)| {
+            .map(|(name, entity, target, channel)| {
                 let animation = world
                     .get::<&crate::core::components::Animation>(*entity)
                     .ok();
@@ -1686,7 +1733,7 @@ impl Runtime {
                         .collect::<Vec<_>>()
                 });
                 format!(
-                    "{name}:{entity:?}:{:?}:{tracks:?}",
+                    "{name}:{entity:?}:{channel:?}:{:?}:{tracks:?}",
                     target.get(&world, *entity)
                 )
             })
@@ -1710,24 +1757,23 @@ impl Runtime {
 mod extension_tests {
     use super::*;
     const SOURCE: &str = r##"
-local k=require('kinematic')
 local settings=k.component {speed={default=2,min=0,max=20}}
 local counter=k.object {
     components={settings}, state={total=0}, inputs={speed='speed'},
     update=function(state,frame,inputs)
         state.total=state.total+inputs.speed*frame.dt
     end,
-    bounds=function(props,state) return {10,20,30,40} end,
+    bounds=function(props,state) return {x = 10, y = 20, width = 30, height = 40} end,
     draw=function(ctx,props,state)
         ctx:rect(10,20,30,40,props.fill)
     end,
 }
-return k.scene('Counter',function(s)
+return function(s)
     local counter=s:object(counter,{id='counter',fill=k.color('#ff0000')})
     s:world_2d():add(counter)
-    s:play(counter.speed:to(8,3,k.ease.linear))
+    counter:to {speed = 8}:play(3, k.ease.linear)
     s:wait(1)
-end)
+end
 "##;
     fn sources(text: &str) -> Sources {
         [(PathBuf::from("counter.lua"), text.to_owned())].into()
@@ -1799,8 +1845,7 @@ end)
     #[test]
     fn dependent_simulations_sample_each_step_and_replay_only_changed_dependencies() {
         let source = r#"
-local k = require('kinematic')
-return k.scene('Dependencies', function(s)
+return function(s)
     local a = s:object(k.object{
         state={total=0},
         update=function(state, frame) state.total=state.total+1 end,
@@ -1812,7 +1857,7 @@ return k.scene('Dependencies', function(s)
     s:world_2d():add(a)
     s:world_2d():add(b)
     s:wait(4)
-end)
+end
 "#;
         let mut scene = load(source);
         scene.update(3.0).unwrap();
@@ -1840,18 +1885,17 @@ end)
     #[test]
     fn simulation_libraries_ignore_hidden_mutations_and_support_owned_values() {
         let source = r#"
-local k=require('kinematic')
 local hidden=0
 math.sin=function() hidden=hidden+1; return hidden end
 local counter=k.object{state={total=0},inputs={}, update=function(state)
     local values=require('kinematic')
     state.total=state.total+values.vec2(3,4):length()+math.sin(0)
 end}
-return k.scene('Pure',function(s)
+return function(s)
     local a=s:object(counter,{id='counter'})
     s:world_2d():add(a)
     s:wait(1)
-end)
+end
 "#;
         let scene = load(source);
         scene.update(1.0).unwrap();
@@ -1892,9 +1936,8 @@ end)
         assert_eq!(state(&scene, "life"), state(&clean, "life"));
         let manual = load(
             r#"
-local k=require('kinematic')
 local definition=k.object{state={total=0},inputs={},update=function(state) state.total=state.total+1 end}
-return k.scene('Manual',function(s)
+return function(s)
     local obj=s:object(definition,{id='counter',auto_update=false})
     s:world_2d():add(obj)
     s:wait(0.5)
@@ -1902,7 +1945,7 @@ return k.scene('Manual',function(s)
     obj:update()
     obj:checkpoint()
     s:wait(0.5)
-end)
+end
 "#,
         );
         manual.update(1.0).unwrap();
@@ -1918,10 +1961,10 @@ end)
         let root = std::env::temp_dir().join(format!("kinematic-override-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let context = ProjectContext::new(&root).unwrap();
-        let source = r#"local k=require('kinematic'); return k.scene('Base',function(s)
+        let source = r#"return function(s)
             local a=s:circle{id='ball',radius=4}; s:world_2d():add(a)
-            s:play(a.radius:to(a.radius:get()*2, 1, k.ease.linear))
-        end)"#;
+            a:to {radius = a.radius:get()*2}:play(1, k.ease.linear)
+        end"#;
         let mut scene = LuaScene::load(
             context.clone(),
             "counter.lua",
@@ -2004,3 +2047,47 @@ fn event_path(path: &Path) -> PathBuf {
         .join(path)
         .with_extension("ron")
 }
+
+pub(super) const OBJECT_METHODS: &[&str] = &[
+    "to",
+    "by",
+    "from",
+    "play",
+    "get",
+    "prop",
+    "add",
+    "remove",
+    "texture",
+    "uniform",
+    "inputs",
+    "state",
+    "update",
+    "checkpoint",
+    "mutate",
+    "signal",
+    "snapshot",
+    "save",
+    "restore",
+    "reset",
+    "children",
+    "parent",
+    "move_to",
+    "move_up",
+    "move_down",
+    "move_to_top",
+    "move_to_bottom",
+    "bounds",
+    "box_size",
+    "global_matrix",
+    "global_position",
+    "global_scale",
+    "global_rotation",
+    "global_opacity",
+    "type_name",
+    "get_child",
+    "ancestor",
+    "insert",
+    "remove_children",
+    "get_pixel_color",
+    "focus_camera",
+];

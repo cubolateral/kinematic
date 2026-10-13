@@ -27,6 +27,7 @@ pub use node::*;
 pub use object::*;
 pub(crate) use regular_polygon::regular_polygon_vertices;
 pub use render::object_box;
+pub(crate) use render::{logical_bounds, logical_bounds_at};
 #[cfg(test)]
 pub use simulation::*;
 pub use three_d::*;

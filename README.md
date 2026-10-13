@@ -46,9 +46,7 @@ adding a numeric suffix when an export already exists.
 ## Write a scene
 
 ```lua
-local k = require("kinematic")
-
-return k.scene("Intro", function(s)
+return function(s)
     local ball = s:circle {
         id = "ball",
         radius = 24,
@@ -56,10 +54,10 @@ return k.scene("Intro", function(s)
         fill = k.color("#60A5FA"),
     }
     s:world_2d():add(ball)
-    s:play(ball.position:to(k.vec2(100, 0), 2, k.ease.linear))
+    ball:to {position = k.vec2(100, 0)}:play(2, k.ease.linear)
     s:event("Pause")
     s:wait(1)
-end)
+end
 ```
 
 The manifest lists scenes in playback order and stores resolution, FPS and

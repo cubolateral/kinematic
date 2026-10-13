@@ -26,3 +26,11 @@ pub fn derive_trackable(input: TokenStream) -> TokenStream {
 pub fn derive_track_enum(input: TokenStream) -> TokenStream {
     track_enum::derive_track_enum(input)
 }
+
+mod lua_methods;
+
+/// Binds explicitly annotated methods from one connected handler impl.
+#[proc_macro_attribute]
+pub fn lua_methods(_args: TokenStream, input: TokenStream) -> TokenStream {
+    lua_methods::expand(input)
+}

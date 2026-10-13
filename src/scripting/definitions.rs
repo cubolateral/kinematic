@@ -32,6 +32,12 @@ pub fn definitions() -> String {
                     field_type(field, &world, entity)
                 ));
             }
+            for method in object.methods {
+                output.push_str(&format!(
+                    "local Native = {{}} --[[@as Kinematic.{class}]]\n{}",
+                    method.annotation
+                ));
+            }
             output.push_str(&format!(
                 "---@class Kinematic.{class}Options: Kinematic.ResourceOptions\n---@field id? string\n---@field name? string\n"
             ));
@@ -39,7 +45,7 @@ pub fn definitions() -> String {
                 output.push_str(&format!(
                     "---@field {}? {}\n",
                     field.name(),
-                    field_type(field, &world, entity)
+                    builder_type(field, &world, entity)
                 ));
             }
         }
@@ -78,4 +84,22 @@ fn field_type(
         }
     }
     value_type(&field.get(world, entity)).into()
+}
+
+fn builder_type(
+    field: &crate::core::TrackTarget,
+    world: &hecs::World,
+    entity: hecs::Entity,
+) -> String {
+    let channels = match field.get(world, entity) {
+        TrackValue::Vector2(_) => Some("{x?:number,y?:number}"),
+        TrackValue::Vector3(_) => Some("{x?:number,y?:number,z?:number}"),
+        TrackValue::Color(_) => Some("{r?:number,g?:number,b?:number,a?:number}"),
+        TrackValue::Quad(_) => Some("{a?:number,b?:number,c?:number,d?:number}"),
+        _ => None,
+    };
+    channels.map_or_else(
+        || field_type(field, world, entity),
+        |channels| format!("Kinematic.Value|{channels}"),
+    )
 }
