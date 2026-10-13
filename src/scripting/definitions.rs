@@ -5,7 +5,14 @@ use crate::core::{Scene, TrackValue};
 pub fn definitions() -> String {
     let mut output = include_str!("api.lua").to_owned();
     let mut classes = std::collections::BTreeSet::new();
-    for object in native::objects() {
+    let objects = native::objects()
+        .into_iter()
+        .map(|object| (object, false))
+        .chain([
+            (native::native::<super::extension::Script2D>(), true),
+            (native::native::<super::extension::Script3D>(), true),
+        ]);
+    for (object, custom) in objects {
         let mut scene = Scene::new();
         let entity = scene.world_mut().spawn(());
         (object.spawn)(&mut scene, entity);
@@ -17,6 +24,7 @@ pub fn definitions() -> String {
         let fields = native::properties(&world, entity);
         if classes.insert(class) {
             output.push_str(&format!("---@class Kinematic.{class}: Kinematic.Object\n"));
+            output.push_str(&format!("---@field signal fun(self:Kinematic.{class}, callback:fun(object:Kinematic.{class}, frame:Kinematic.Frame)):Kinematic.Signal\n"));
             for field in &fields {
                 output.push_str(&format!(
                     "---@field {} Kinematic.Property<{}>\n",
@@ -35,7 +43,9 @@ pub fn definitions() -> String {
                 ));
             }
         }
-        output.push_str(&format!("---@param options Kinematic.{class}Options\n---@return Kinematic.{class}\nfunction Scene:{}(options) end\n",object.name));
+        if !custom {
+            output.push_str(&format!("---@param options Kinematic.{class}Options\n---@return Kinematic.{class}\nfunction Scene:{}(options) end\n",object.name));
+        }
     }
     for &(name, _, _, _) in super::adapters::ANCHORS {
         output.push_str(&format!("---@return Kinematic.Value\nfunction Object:{name}() end\n---@param position Kinematic.Value\n---@return Kinematic.Value\nfunction Object:{name}_to(position) end\n"));

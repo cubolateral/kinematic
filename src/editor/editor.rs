@@ -745,7 +745,12 @@ impl Editor {
             } else if let SceneInstance::Lua(scene) = &mut self.scenes[index].scene {
                 scene.apply_reload(candidate);
                 documents.console.extend(scene.console());
-                documents.diagnostics.extend(scene.warnings());
+                documents.diagnostics.extend(
+                    scene
+                        .warnings()
+                        .into_iter()
+                        .map(|warning| format!("Warning: {warning}")),
+                );
             } else {
                 self.scenes[index].scene = SceneInstance::Lua(candidate);
             }

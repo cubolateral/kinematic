@@ -9,11 +9,7 @@ pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
             DockSplit::Left,
             0.25,
             tabs([scene_tree::WINDOW_NAME, code::FILES_WINDOW]),
-            tabs([
-                timeline::WINDOW_NAME,
-                code::DIAGNOSTICS_WINDOW,
-                code::CONSOLE_WINDOW,
-            ]),
+            tabs([timeline::WINDOW_NAME, code::CONSOLE_WINDOW]),
         ),
         DockLayout::split(
             DockSplit::Right,

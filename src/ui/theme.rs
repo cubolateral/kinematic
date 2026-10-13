@@ -8,6 +8,7 @@ pub(super) struct Appearance {
     pub accent: [f32; 4],
     pub contrast: f32,
     pub scale: f32,
+    pub editor: super::code::Settings,
 }
 
 impl Default for Appearance {
@@ -17,6 +18,7 @@ impl Default for Appearance {
             accent: [0.0, 0.549, 1.0, 1.0],
             contrast: 1.0,
             scale: 1.0,
+            editor: super::code::Settings::default(),
         }
     }
 }

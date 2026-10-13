@@ -13,8 +13,10 @@ pub(crate) struct Reply {
     pub path: PathBuf,
     pub version: u64,
     pub value: Value,
+    pub position: Option<(usize, usize)>,
 }
 struct Request {
+    position: (usize, usize),
     utf8_column: usize,
     method: String,
     path: PathBuf,
@@ -54,7 +56,18 @@ impl Client {
             .resolve("kinematic/cache/luals")
             .map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
+        std::fs::write(
+            cache.join("components.lua"),
+            include_str!("../scripting/luals.lua"),
+        )
+        .map_err(|e| e.to_string())?;
+        std::fs::write(cache.join("config.json"), lua_settings(&root).to_string())
+            .map_err(|e| e.to_string())?;
         let mut child = Command::new(executable())
+            .arg(format!(
+                "--configpath={}",
+                cache.join("config.json").display()
+            ))
             .arg(format!("--logpath={}", cache.join("logs").display()))
             .arg(format!("--metapath={}", cache.join("meta").display()))
             .current_dir(root.root())
@@ -116,8 +129,9 @@ impl Client {
             .map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&library).map_err(|e| e.to_string())?;
         std::fs::write(library.join("kinematic.lua"), definitions).map_err(|e| e.to_string())?;
+        let settings = lua_settings(&root);
         let uri = file_uri(root.root());
-        tx.send(json!({"jsonrpc":"2.0","id":0,"method":"initialize","params":{"processId":std::process::id(),"rootUri":uri,"workspaceFolders":[{"uri":uri,"name":"Kinematic"}],"capabilities":{"general":{"positionEncodings":["utf-8","utf-16"]},"textDocument":{"completion":{"completionItem":{"snippetSupport":false}},"publishDiagnostics":{"versionSupport":true}}},"initializationOptions":{"Lua":{"runtime":{"version":"Lua 5.4"},"workspace":{"library":[library],"checkThirdParty":false}}}}})).map_err(|e|e.to_string())?;
+        tx.send(json!({"jsonrpc":"2.0","id":0,"method":"initialize","params":{"processId":std::process::id(),"rootUri":uri,"workspaceFolders":[{"uri":uri,"name":"Kinematic"}],"capabilities":{"general":{"positionEncodings":["utf-8","utf-16"]},"textDocument":{"completion":{"completionItem":{"snippetSupport":false}},"publishDiagnostics":{"versionSupport":true}}},"initializationOptions":{"Lua":settings,"trustByClient":true}}})).map_err(|e|e.to_string())?;
         Ok(Self {
             child,
             send: tx,
@@ -147,7 +161,7 @@ impl Client {
         }
     }
     pub fn sync(&mut self, path: &Path, text: &str, version: u64) {
-        if self.versions.get(path) == Some(&version) {
+        if !analyzed_path(&self.root, path) || self.versions.get(path) == Some(&version) {
             return;
         }
         let uri = file_uri(&self.root.root().join(path));
@@ -171,12 +185,16 @@ impl Client {
         line: usize,
         column: usize,
     ) {
+        if !analyzed_path(&self.root, path) {
+            return;
+        }
         self.sync(path, text, version);
         let id = self.next;
         self.next += 1;
         self.requests.insert(
             id,
             Request {
+                position: (line, column),
                 utf8_column: position_units(text, line, column, true),
                 method: method.into(),
                 path: path.to_owned(),
@@ -185,6 +203,59 @@ impl Client {
         );
         let character = position_units(text, line, column, self.utf8);
         self.send(json!({"jsonrpc":"2.0","id":id,"method":method,"params":{"textDocument":{"uri":file_uri(&self.root.root().join(path))},"position":{"line":line,"character":character}}}));
+    }
+    pub fn format(
+        &mut self,
+        path: &Path,
+        text: &str,
+        version: u64,
+        options: &Value,
+        replies: &mut Vec<Reply>,
+    ) -> Result<String, String> {
+        if !analyzed_path(&self.root, path) {
+            return Err("Formatting requires a project Lua file.".into());
+        }
+        if !self.ready || self.failed {
+            return Err("LuaLS is not ready.".into());
+        }
+        self.sync(path, text, version);
+        let id = self.next;
+        self.next += 1;
+        self.requests.insert(
+            id,
+            Request {
+                position: (0, 0),
+                utf8_column: 0,
+                method: "textDocument/formatting".into(),
+                path: path.to_owned(),
+                version,
+            },
+        );
+        self.send(json!({"jsonrpc":"2.0", "id":id, "method":"textDocument/formatting",
+            "params":{"textDocument":{"uri":file_uri(&self.root.root().join(path))}, "options":options}}));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while std::time::Instant::now() < deadline {
+            let mut result = None;
+            for reply in self.poll() {
+                if reply.method == "textDocument/formatting"
+                    && reply.path == path
+                    && reply.version == version
+                {
+                    result = Some(apply_text_edits(text, &reply.value, self.utf8));
+                } else {
+                    replies.push(reply);
+                }
+            }
+            if let Some(result) = result {
+                return result;
+            }
+            if self.failed {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        self.requests.remove(&id);
+        Err("LuaLS formatting timed out.".into())
     }
     pub fn poll(&mut self) -> Vec<Reply> {
         let mut replies = Vec::new();
@@ -215,8 +286,7 @@ impl Client {
                 let _ = self
                     .send
                     .send(json!({"jsonrpc":"2.0","method":"initialized","params":{}}));
-                let library = self.root.root().join("kinematic/cache/luals");
-                let _=self.send.send(json!({"jsonrpc":"2.0","method":"workspace/didChangeConfiguration","params":{"settings":{"Lua":{"runtime":{"version":"Lua 5.4"},"workspace":{"library":[library],"checkThirdParty":false}}}}}));
+                let _ = self.send.send(json!({"jsonrpc":"2.0","method":"workspace/didChangeConfiguration","params":{"settings":{"Lua":lua_settings(&self.root)}}}));
                 for mut message in self.queued.drain(..) {
                     if self.utf8 {
                         if let Some(request) =
@@ -232,10 +302,29 @@ impl Client {
             if let Some(method) = value.get("method").and_then(Value::as_str) {
                 if let Some(id) = value.get("id") {
                     let result = if method == "workspace/configuration" {
-                        Value::Array(value.pointer("/params/items").and_then(Value::as_array).map_or(Vec::new(),|items|items.iter().map(|item| {
-                        let settings=json!({"runtime":{"version":"Lua 5.4"},"workspace":{"library":[self.root.root().join("kinematic/cache/luals")],"checkThirdParty":false}});
-                        match item["section"].as_str().unwrap_or("") { "Lua"=>settings, "Lua.workspace"=>settings["workspace"].clone(), "Lua.runtime"=>settings["runtime"].clone(), _=>Value::Null }
-                    }).collect()))
+                        Value::Array(
+                            value
+                                .pointer("/params/items")
+                                .and_then(Value::as_array)
+                                .map_or(Vec::new(), |items| {
+                                    items
+                                        .iter()
+                                        .map(|item| {
+                                            let settings = lua_settings(&self.root);
+                                            match item["section"].as_str().unwrap_or("") {
+                                                "Lua" => settings,
+                                                "Lua.workspace" => settings["workspace"].clone(),
+                                                "Lua.runtime" => settings["runtime"].clone(),
+                                                "Lua.diagnostics" => {
+                                                    settings["diagnostics"].clone()
+                                                }
+                                                "Lua.files" => settings["files"].clone(),
+                                                _ => Value::Null,
+                                            }
+                                        })
+                                        .collect()
+                                }),
+                        )
                     } else {
                         Value::Null
                     };
@@ -252,12 +341,15 @@ impl Client {
                     }) else {
                         continue;
                     };
-                    let Some(version) = value.pointer("/params/version").and_then(Value::as_u64)
-                    else {
+                    if !analyzed_path(&self.root, &path) {
                         continue;
-                    };
-                    if self.versions.get(&path) == Some(&version) {
+                    }
+                    if let Some(version) = diagnostic_version(
+                        value.pointer("/params/version").and_then(Value::as_u64),
+                        self.versions.get(&path).copied(),
+                    ) {
                         replies.push(Reply {
+                            position: None,
                             method: method.into(),
                             path,
                             version,
@@ -271,6 +363,7 @@ impl Client {
                 if let Some(request) = self.requests.remove(&id) {
                     if self.versions.get(&request.path) == Some(&request.version) {
                         replies.push(Reply {
+                            position: Some(request.position),
                             method: request.method,
                             path: request.path,
                             version: request.version,
@@ -281,6 +374,32 @@ impl Client {
             }
         }
         replies
+    }
+}
+pub(crate) fn analyzed_path(root: &ProjectContext, path: &Path) -> bool {
+    path.extension().is_some_and(|extension| extension == "lua")
+        && !path.components().any(|part| {
+            matches!(
+                part.as_os_str().to_str(),
+                Some(".git" | "target" | "output" | "kinematic" | ".kinematic")
+            )
+        })
+        && root.resolve(path).is_ok()
+}
+fn lua_settings(root: &ProjectContext) -> Value {
+    json!({
+        "runtime": {"version": "Lua 5.4", "plugin": root.root().join("kinematic/cache/luals/components.lua")},
+        "workspace": {"library": [root.root().join("kinematic/cache/luals")], "checkThirdParty": false,
+            "ignoreDir": ["kinematic", ".kinematic", "output", "target", ".git"]},
+        "diagnostics": {"libraryFiles": "Disable", "ignoredFiles": "Disable"},
+        "files": {"associations": {"*.lua": "lua"}},
+    })
+}
+fn diagnostic_version(reported: Option<u64>, current: Option<u64>) -> Option<u64> {
+    match (reported, current) {
+        (Some(reported), Some(current)) if reported != current => None,
+        (Some(reported), _) => Some(reported),
+        (None, current) => Some(current.unwrap_or(0)),
     }
 }
 impl Drop for Client {
@@ -350,6 +469,70 @@ pub(crate) fn uri_path(uri: &str) -> Option<PathBuf> {
     }
     String::from_utf8(result).ok().map(PathBuf::from)
 }
+fn edit_offset(text: &str, position: &Value, utf8: bool) -> Result<usize, String> {
+    let line = position["line"]
+        .as_u64()
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or("Invalid formatting line.")?;
+    let units = position["character"]
+        .as_u64()
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or("Invalid formatting column.")?;
+    let mut offset = 0;
+    for (index, source) in text.split('\n').enumerate() {
+        if index == line {
+            let source = source.strip_suffix('\r').unwrap_or(source);
+            let mut used = 0;
+            for (byte, character) in source.char_indices() {
+                if used == units {
+                    return Ok(offset + byte);
+                }
+                used += if utf8 {
+                    character.len_utf8()
+                } else {
+                    character.len_utf16()
+                };
+            }
+            if used == units {
+                return Ok(offset + source.len());
+            }
+            return Err("Formatting column is outside the text or splits a character.".into());
+        }
+        offset += source.len() + 1;
+    }
+    Err("Formatting line is outside the document.".into())
+}
+fn apply_text_edits(text: &str, value: &Value, utf8: bool) -> Result<String, String> {
+    if value.is_null() {
+        return Ok(text.to_owned());
+    }
+    let mut edits = value
+        .as_array()
+        .ok_or("Invalid formatting edits.")?
+        .iter()
+        .map(|edit| {
+            let start = edit_offset(text, &edit["range"]["start"], utf8)?;
+            let end = edit_offset(text, &edit["range"]["end"], utf8)?;
+            let replacement = edit["newText"].as_str().ok_or("Invalid formatting text.")?;
+            if replacement.contains('\0') || start > end {
+                return Err("Invalid formatting range or text.".into());
+            }
+            Ok((start, end, replacement))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    edits.sort_by_key(|(start, _, _)| std::cmp::Reverse(*start));
+    let mut result = text.to_owned();
+    let mut previous_start = text.len();
+    for (start, end, replacement) in edits {
+        if end > previous_start {
+            return Err("Formatting edits overlap.".into());
+        }
+        result.replace_range(start..end, replacement);
+        previous_start = start;
+    }
+    Ok(result)
+}
+
 pub(crate) fn position_units(text: &str, line: usize, column: usize, utf8: bool) -> usize {
     let prefix = text
         .lines()
@@ -381,6 +564,56 @@ pub(crate) fn glyph_column(text: &str, line: usize, units: usize, utf8: bool) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn diagnostics_accept_optional_versions_and_reject_old_results() {
+        assert_eq!(diagnostic_version(None, Some(3)), Some(3));
+        assert_eq!(diagnostic_version(Some(3), Some(3)), Some(3));
+        assert_eq!(diagnostic_version(Some(2), Some(3)), None);
+        assert_eq!(diagnostic_version(None, None), Some(0));
+        assert_eq!(diagnostic_version(Some(3), None), Some(3));
+    }
+    #[test]
+    fn analysis_is_limited_to_project_lua_sources() {
+        let root = std::env::temp_dir().join(format!("kinematic-lsp-scope-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let context = ProjectContext::new(&root).unwrap();
+        assert!(analyzed_path(&context, Path::new("scenes/main.lua")));
+        for path in [
+            "notes.txt",
+            "project.ron",
+            "scene.LUA",
+            "../outside.lua",
+            "/tmp/outside.lua",
+            "kinematic/cache/luals/kinematic.lua",
+            "kinematic/cache/luals/meta/LuaJIT.lua",
+            "output/file.lua",
+        ] {
+            assert!(!analyzed_path(&context, Path::new(path)), "{path}");
+        }
+        let settings = lua_settings(&context);
+        assert_eq!(settings["runtime"]["version"], "Lua 5.4");
+        assert_eq!(settings["diagnostics"]["libraryFiles"], "Disable");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn formatting_edits_validate_unicode_and_overlapping_ranges() {
+        let edit = |start, end, replacement| json!({"range": {"start": {"line": 0, "character": start}, "end": {"line": 0, "character": end}}, "newText": replacement});
+        assert_eq!(
+            apply_text_edits("a😀ç", &json!([edit(1, 3, "b")]), false).unwrap(),
+            "abç"
+        );
+        assert!(apply_text_edits("a😀ç", &json!([edit(2, 3, "b")]), false).is_err());
+        assert!(
+            apply_text_edits("abcd", &json!([edit(0, 2, "x"), edit(1, 3, "y")]), true).is_err()
+        );
+        assert!(apply_text_edits("abc", &json!([edit(0, 99, "x")]), true).is_err());
+        assert_eq!(
+            edit_offset("a\r\n", &json!({"line": 1, "character": 0}), true).unwrap(),
+            3
+        );
+        assert_eq!(apply_text_edits("abc", &Value::Null, true).unwrap(), "abc");
+    }
+
     #[test]
     fn unicode_positions_and_uri_roundtrip() {
         let text = "a😀ç.x";
@@ -497,7 +730,193 @@ mod integration_tests {
             hover && signature,
             "LuaLS must provide hover and function signatures."
         );
+        let unformatted = "local value={1,2}  \nif value then\nreturn value\nend";
+        let formatted = client.format(path, unformatted, 4, &json!({
+            "tabSize": 2, "insertSpaces": true, "trimTrailingWhitespace": true, "insertFinalNewline": true,
+        }), &mut Vec::new()).unwrap();
+        assert_ne!(formatted, unformatted);
+        assert!(formatted.contains("\n  return value\n"), "{formatted:?}");
+        assert!(!formatted.contains("  \n"), "{formatted:?}");
+        assert!(formatted.ends_with('\n'), "{formatted:?}");
+        client.sync(Path::new("notes.txt"), "This is not Lua.", 1);
+        client.request(
+            "textDocument/completion",
+            Path::new("settings.ron"),
+            "()",
+            1,
+            0,
+            0,
+        );
+        assert!(!client.versions.contains_key(Path::new("notes.txt")));
+        assert!(!client.versions.contains_key(Path::new("settings.ron")));
+        let text = "local k = require('kinematic')\nlocal ribbon = k.object { bounds = function() return {0, 0, 10, 10} end }\nreturn k.scene('Typed', function(s)\n  local shape = s:object(ribbon, {id = 'shape'})\n  shape.opacity:set(0)\n  s:play(shape.opacity:to(1, 0.5))\n  local ball = s:circle { radius = 10 }\n  ball.radius:set(5)\n  ball.opacity:set(0)\n  ball.opacity:set('Invalid')\n  missing_name()\nend)\n";
+        client.sync(path, text, 5);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut diagnostics = None;
+        while std::time::Instant::now() < deadline {
+            for reply in client.poll() {
+                assert!(analyzed_path(&client.root, &reply.path));
+                if reply.method == "textDocument/publishDiagnostics"
+                    && reply.path == path
+                    && reply.version == 5
+                {
+                    diagnostics = Some(reply.value);
+                }
+            }
+            if diagnostics.as_ref().is_some_and(|items| {
+                items.as_array().is_some_and(|items| {
+                    items.iter().any(|item| item["code"] == "undefined-global")
+                })
+            }) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let diagnostics = diagnostics.expect("LuaLS must publish project diagnostics.");
+        let items = diagnostics.as_array().unwrap();
+        assert!(
+            items.iter().any(|item| item["code"] == "undefined-global"),
+            "{diagnostics}"
+        );
+        assert!(
+            items
+                .iter()
+                .any(|item| item["code"] == "param-type-mismatch"
+                    && item["range"]["start"]["line"] == 9),
+            "{diagnostics}"
+        );
+        assert!(
+            !items.iter().any(|item| item["code"] == "undefined-field"
+                || (item["code"] == "param-type-mismatch" && item["range"]["start"]["line"] != 9)),
+            "{diagnostics}"
+        );
+        let component_path = Path::new("components.lua");
+        let component_text = "local k = require('kinematic')\nlocal motion = k.component { speed = {default = 40}, mode = {default = 'Idle', choices = {'Idle', 'Moving'}} }\nreturn { motion = motion }\n";
+        std::fs::write(root.join(component_path), component_text).unwrap();
+        client.sync(component_path, component_text, 1);
+        let text = r#"local k = require('kinematic')
+local components = require('components')
+local extra = k.component { caption = {default = 'Hello'} }
+local definition = k.object { components = {components.motion, extra} }
+local volume = k.object { dimension = 3 }
+return k.scene('Fields', function(s)
+  local ball = s:circle { radius = 10 }
+  local center = ball.position:get()
+  ball:signal(function(obj, frame)
+    obj.position:set(center + k.vec2(0, math.sin(frame.time * 3) * 40))
+    obj.size:set(k.vec2(10, 10))
+  end)
+  local prism = s:prism {}
+  prism.size:set(k.vec3(10, 20, 30))
+  prism:signal(function(obj) obj.size:set(k.vec3(1, 2, 3)) end)
+  local custom = s:object(definition, {})
+  custom.speed:set(20)
+  custom.caption:set('World')
+  custom.mode:set('Moving')
+  custom:signal(function(obj) obj.speed:set(30); obj.position:set(k.vec2(0, 0)) end)
+  custom.sped:set(20)
+  custom.speed:set('Invalid')
+  custom.mode:set('Invalid')
+  local three = s:object(volume, {})
+  three.position:set(k.vec3(1, 2, 3))
+  three.missing:set(1)
+  missing_name()
+end)
+"#;
+        client.sync(path, text, 6);
+        let diagnostics = wait_diagnostics(&mut client, path, 6);
+        let items = diagnostics.as_array().unwrap();
+        let line = |fragment: &str| {
+            text.lines()
+                .position(|line| line.contains(fragment))
+                .unwrap() as u64
+        };
+        for fragment in ["obj.size:set(k.vec2", "custom.sped", "three.missing"] {
+            assert!(
+                items.iter().any(|item| item["code"] == "undefined-field"
+                    && item["range"]["start"]["line"] == line(fragment)),
+                "{diagnostics}"
+            );
+        }
+        for fragment in ["custom.speed:set('Invalid')", "custom.mode:set('Invalid')"] {
+            assert!(
+                items
+                    .iter()
+                    .any(|item| item["code"] == "param-type-mismatch"
+                        && item["range"]["start"]["line"] == line(fragment)),
+                "{diagnostics}"
+            );
+        }
+        let invalid_lines = [
+            "obj.size:set(k.vec2",
+            "custom.sped",
+            "custom.speed:set('Invalid')",
+            "custom.mode:set('Invalid')",
+            "three.missing",
+            "missing_name()",
+        ]
+        .map(line);
+        assert!(
+            items
+                .iter()
+                .all(|item| invalid_lines
+                    .contains(&item["range"]["start"]["line"].as_u64().unwrap())),
+            "{diagnostics}"
+        );
+        let component_text = component_text.replace("speed =", "velocity =");
+        client.sync(component_path, &component_text, 2);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut updated = false;
+        while std::time::Instant::now() < deadline && !updated {
+            for reply in client.poll() {
+                if reply.method == "textDocument/publishDiagnostics" && reply.path == path {
+                    updated = reply.value.as_array().is_some_and(|items| {
+                        items.iter().any(|item| {
+                            item["code"] == "undefined-field"
+                                && item["range"]["start"]["line"] == line("custom.speed:set(20)")
+                        })
+                    });
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(
+            updated,
+            "Component edits must update fields in importing scenes."
+        );
+        let formatted = client
+            .format(
+                path,
+                text,
+                6,
+                &json!({"tabSize": 2, "insertSpaces": true}),
+                &mut Vec::new(),
+            )
+            .unwrap();
+        assert!(
+            !formatted.contains("---@class") && !formatted.contains("@as Kinematic.Custom_"),
+            "Formatting must preserve original project sources."
+        );
         drop(client);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    fn wait_diagnostics(client: &mut Client, path: &Path, version: u64) -> Value {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            for reply in client.poll() {
+                if reply.method == "textDocument/publishDiagnostics"
+                    && reply.path == path
+                    && reply.version == version
+                    && reply.value.as_array().is_some_and(|items| {
+                        items.iter().any(|item| item["code"] == "undefined-global")
+                    })
+                {
+                    return reply.value;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        panic!("LuaLS must publish updated field diagnostics.");
     }
 }

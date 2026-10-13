@@ -13,21 +13,13 @@ local Task = {}
 ---@return Kinematic.Task
 function Task:delay(seconds) end
 ---@class Kinematic.Property<T>
-local Property = {}
----@return T
-function Property:get() end
----@param value T
-function Property:set(value) end
----@param value T
----@param duration? number
----@param easing? string
----@return Kinematic.Task
-function Property:to(value, duration, easing) end
----@param delta T
----@param duration? number
----@param easing? string
----@return Kinematic.Task
-function Property:by(delta, duration, easing) end
+---@field get fun(self:Kinematic.Property<T>):T
+---@field set fun(self:Kinematic.Property<T>, value:T)
+---@field to fun(self:Kinematic.Property<T>, value:T, duration?:number, easing?:string):Kinematic.Task
+---@field by fun(self:Kinematic.Property<T>, delta:T, duration?:number, easing?:string):Kinematic.Task
+---@field from fun(self:Kinematic.Property<T>, start:T, finish:T, duration?:number, easing?:string):Kinematic.Task
+---@field signal fun(self:Kinematic.Property<T>, callback:fun(property:Kinematic.Property<T>, frame:Kinematic.Frame)):Kinematic.Signal
+---@field rotate fun(self:Kinematic.Property<T>, axis:Kinematic.Value, radians:number, duration?:number, easing?:string):Kinematic.Task
 ---@class Kinematic.Object
 local Object = {}
 ---@param child Kinematic.Object
@@ -86,15 +78,6 @@ function k.color(color, g, b, a) end
 function k.quat(x, y, z, w) end
 ---@type table<string,string>
 k.ease = {}
----@param start T
----@param finish T
----@param duration? number
----@param easing? string
----@return Kinematic.Task
-function Property:from(start, finish, duration, easing) end
----@param callback fun(property:Kinematic.Property<T>, frame:Kinematic.Frame)
----@return Kinematic.Signal
-function Property:signal(callback) end
 ---@class Kinematic.Frame
 ---@field time number
 ---@field index integer
@@ -180,9 +163,10 @@ function Scene:track(initial, id) end
 ---@param options table
 ---@return Kinematic.Object
 function Scene:native(name, options) end
----@param definition Kinematic.ObjectDefinition
+---@generic T
+---@param definition T
 ---@param options table
----@return Kinematic.Object
+---@return T
 function Scene:object(definition, options) end
 ---@class Kinematic.Component
 ---@class Kinematic.PropertyDefinition
@@ -203,7 +187,7 @@ function k.component(fields) end
 ---@field draw? fun(context:Kinematic.Draw2D|Kinematic.Draw3D, properties:table, state:table)
 ---@field bounds? fun(properties:table, state:table):number[]
 ---@param definition Kinematic.ObjectOptions
----@return Kinematic.ObjectDefinition
+---@return Kinematic.Script2D|Kinematic.Script3D
 function k.object(definition) end
 ---@param axis Kinematic.Value
 ---@param radians number
@@ -380,12 +364,6 @@ function Draw3D:mesh(mesh, matrix) end
 ---@param mesh Kinematic.Mesh
 ---@param matrices Kinematic.Matrix[]
 function Draw3D:instances(mesh, matrices) end
----@param axis Kinematic.Value
----@param radians number
----@param duration? number
----@param easing? string
----@return Kinematic.Task
-function Property:rotate(axis, radians, duration, easing) end
 ---@param min number
 ---@param max number
 ---@return number

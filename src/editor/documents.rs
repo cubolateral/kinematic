@@ -25,6 +25,7 @@ pub(crate) struct Documents {
     pub open: BTreeMap<PathBuf, Document>,
     pub active: Option<PathBuf>,
     pub diagnostics: Vec<String>,
+    pub lsp_diagnostics: BTreeMap<PathBuf, serde_json::Value>,
     pub console: Vec<String>,
     pub revision: u64,
     pub applied: u64,
@@ -33,6 +34,7 @@ pub(crate) struct Documents {
     pub replaying: bool,
     pub lsp: Option<super::lsp::Client>,
     pub replies: Vec<super::lsp::Reply>,
+    pub formatting: Option<serde_json::Value>,
     last_edit: Instant,
     file_paths: Option<Vec<PathBuf>>,
     _watcher: notify::RecommendedWatcher,
@@ -56,10 +58,12 @@ impl Documents {
         Ok(Self {
             lsp,
             replies: Vec::new(),
+            formatting: None,
             context,
             open: BTreeMap::new(),
             active: None,
             diagnostics,
+            lsp_diagnostics: BTreeMap::new(),
             console: Vec::new(),
             revision: 0,
             applied: 0,
@@ -116,17 +120,39 @@ impl Documents {
         self.status = "Replay cancelled. Edit or save to retry.".into();
     }
     pub fn save(&mut self, path: &Path) -> Result<(), String> {
-        let document = self.open.get_mut(path).ok_or("Document is not open.")?;
+        let document = self.open.get(path).ok_or("Document is not open.")?;
         if document.conflict {
             return Err("Resolve the external file conflict before saving.".into());
         }
+        let mut text = document.text.clone();
+        if path.extension().is_some_and(|extension| extension == "lua") {
+            if let (Some(options), Some(lsp)) = (&self.formatting, &mut self.lsp) {
+                match lsp.format(
+                    path,
+                    &document.text,
+                    document.version,
+                    options,
+                    &mut self.replies,
+                ) {
+                    Ok(formatted) => text = formatted,
+                    Err(error) => self
+                        .diagnostics
+                        .push(format!("Formatting skipped: {error}")),
+                }
+            }
+        }
+        let document = self.open.get_mut(path).unwrap();
         if let Err(error) = atomic_write(
             &self.context.resolve(path).map_err(|e| e.to_string())?,
-            document.text.as_bytes(),
+            text.as_bytes(),
             document.disk.as_deref(),
         ) {
             document.conflict = true;
             return Err(error.to_string());
+        }
+        if document.text != text {
+            document.text = text;
+            document.version += 1;
         }
         document.disk = Some(document.text.as_bytes().to_vec());
         self.request(path.to_owned());
@@ -230,6 +256,28 @@ impl Documents {
         doc.conflict = false;
         self.request(path.to_owned());
         Ok(())
+    }
+    pub fn diagnostic_messages(&self) -> Vec<String> {
+        let mut messages = self.diagnostics.clone();
+        for (path, diagnostics) in &self.lsp_diagnostics {
+            if let Some(items) = diagnostics.as_array() {
+                for item in items {
+                    let severity = item["severity"].as_u64().unwrap_or(1);
+                    if severity > 2 {
+                        continue;
+                    }
+                    messages.push(format!(
+                        "{}LuaLS {}:{}:{}: {}",
+                        if severity == 2 { "Warning: " } else { "" },
+                        path.display(),
+                        item["range"]["start"]["line"].as_u64().unwrap_or(0) + 1,
+                        item["range"]["start"]["character"].as_u64().unwrap_or(0) + 1,
+                        item["message"].as_str().unwrap_or("Diagnostic."),
+                    ));
+                }
+            }
+        }
+        messages
     }
     pub fn poll(&mut self) -> bool {
         if let Some(lsp) = &mut self.lsp {

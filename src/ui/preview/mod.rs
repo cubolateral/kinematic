@@ -11,13 +11,19 @@ pub(super) const WINDOW_NAME: &str = "Preview";
 
 pub(super) use state::State;
 
-pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
+pub(super) fn draw(
+    editor: &mut Editor,
+    ui: &dear_imgui_rs::Ui,
+    state: &mut State,
+    keyboard_enabled: bool,
+) {
     let is_exporting = editor.is_exporting();
     hide_single_window_tab(ui);
 
     ui.window(WINDOW_NAME).build(|| {
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
-        let plain_keyboard_input = !is_exporting
+        let plain_keyboard_input = keyboard_enabled
+            && !is_exporting
             && !ui.io().want_text_input()
             && !ui.is_any_item_active()
             && !ui.io().key_ctrl()

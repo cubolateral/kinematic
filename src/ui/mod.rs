@@ -66,6 +66,12 @@ fn draw_project_menu(
             code.request_exit();
         }
     }
+    if let Some(_menu) = ui.begin_menu("Editor") {
+        if ui.menu_item("Settings") {
+            settings.open = true;
+            settings.editor_requested = true;
+        }
+    }
 }
 
 impl Ui {
@@ -128,7 +134,7 @@ impl Ui {
         }
 
         if let Some(documents) = &mut editor.documents {
-            self.code.draw(documents, ui);
+            self.code.draw(documents, &self.appearance.editor, ui);
         }
         let is_exporting = editor.is_exporting();
         let fullscreen_button = {
@@ -139,12 +145,12 @@ impl Ui {
             if settings::draw(&mut self.appearance, &mut self.settings, Some(editor), ui) {
                 settings::save(&self.appearance);
             }
-            preview::draw(editor, ui, &mut self.preview);
+            preview::draw(editor, ui, &mut self.preview, !self.code.focused);
             inspector::draw(editor, ui, &mut self.inspector);
             timeline::draw(editor, ui, &mut self.timeline, !self.code.focused)
         };
 
-        if initial_layout {
+        if initial_layout && !self.code.focused {
             ui.set_window_focus(Some(inspector::WINDOW_NAME));
         }
 
@@ -158,8 +164,11 @@ impl Ui {
         context: &dear_imgui_rs::Context,
         editor: Option<&Editor>,
     ) {
-        self.code
-            .prepare(context, editor.and_then(|e| e.documents.as_ref()));
+        self.code.prepare(
+            context,
+            editor.and_then(|e| e.documents.as_ref()),
+            &self.appearance.editor,
+        );
     }
     pub(crate) fn draw_projects(&mut self, editor: Option<&mut Editor>, ui: &dear_imgui_rs::Ui) {
         let _theme = self.appearance.push(ui);

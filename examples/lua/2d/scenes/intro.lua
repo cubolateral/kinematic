@@ -13,7 +13,7 @@ return k.scene("Intro", function(s)
         s:play(ball.position:to(k.vec2(300, 0), 2, k.ease.cubic_out))
         s:play(ball.radius:to(96, 1))
     end)
-    
+
     s:event("Presentation")
 
     local center = ball.position:get()
@@ -25,4 +25,3 @@ return k.scene("Intro", function(s)
     s:play(ball.opacity:to(0, 0.5))
     ball:remove()
 end)
- 
