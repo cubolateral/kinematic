@@ -13,6 +13,7 @@ interaction details belong in the panel modules, not in `ui/mod.rs`.
 - `settings.rs`: Persistent Project, Editor, and Appearance settings opened from the menus.
 - `code.rs`: Lua buffers, file tabs, focus, and inline LuaLS assistance.
 - `code/diagnostics.rs`: Compact diagnostic footer with severity filters and counts.
+- `code/files.rs`: Project file tree, context menu, and file operation dialogs.
 - `widgets.rs`: Small drawing and measurement helpers shared by panels.
 - `scene_tree.rs`: Active scene hierarchy and entity selection.
 - `inspector.rs`: Read-only inspection of the selected entity.

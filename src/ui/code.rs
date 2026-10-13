@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::BTreeMap, path::PathBuf, rc::Rc};
 
 mod diagnostics;
+mod files;
 
 pub(super) const WINDOW_NAME: &str = "Code";
 pub(super) const FILES_WINDOW: &str = "Files";
@@ -382,9 +383,7 @@ pub(super) struct State {
     browser: Option<browser::State>,
     name: String,
     three_d: bool,
-    file_path: String,
-    selected: Option<PathBuf>,
-    directory: bool,
+    files: files::State,
     pending: Option<Pending>,
     ready: Option<ProjectAction>,
     focus_requested: bool,
@@ -488,7 +487,7 @@ impl State {
     }
     pub fn reset(&mut self) {
         self.tabs.clear();
-        self.selected = None;
+        self.files = files::State::default();
         self.focus_requested = false;
         self.displayed_active = None;
         self.jump = None;
@@ -765,33 +764,7 @@ impl State {
             }
         }
         ui.window(FILES_WINDOW).build(|| {
-            if let Some(_actions) = ui.tree_node("File actions") {
-                ui.input_text("Path", &mut self.file_path).build();
-                ui.checkbox("Folder", &mut self.directory);
-                if ui.button("Create") {
-                    if let Err(error) =
-                        documents.create(&PathBuf::from(&self.file_path), self.directory)
-                    {
-                        self.error = Some(error);
-                    }
-                }
-                ui.same_line();
-                if ui.button("Rename selected") {
-                    if let Some(from) = &self.selected {
-                        if let Err(error) = documents.rename(from, &PathBuf::from(&self.file_path))
-                        {
-                            self.error = Some(error);
-                        }
-                    }
-                }
-                ui.text_wrapped("Renaming does not rewrite imports.");
-            }
-            match documents.files() {
-                Ok(files) => {
-                    self.file_tree(documents, ui, &files, std::path::Path::new(""));
-                }
-                Err(error) => self.error = Some(error),
-            }
+            self.focus_requested |= self.files.draw(documents, ui, &mut self.error);
         });
         if self.focus_requested {
             ui.set_window_focus(Some(WINDOW_NAME));
@@ -953,40 +926,6 @@ impl State {
                     self.focus_requested = true;
                 }
                 Err(error) => self.error = Some(error),
-            }
-        }
-    }
-    fn file_tree(
-        &mut self,
-        documents: &mut Documents,
-        ui: &dear_imgui_rs::Ui,
-        files: &[PathBuf],
-        parent: &std::path::Path,
-    ) {
-        for path in files.iter().filter(|path| path.parent() == Some(parent)) {
-            let label = path.file_name().unwrap().to_string_lossy();
-            let _id = ui.push_id(path.to_string_lossy().as_ref());
-            if documents.context.root().join(path).is_dir() {
-                let node = ui
-                    .tree_node_config(label.as_ref())
-                    .selected(self.selected.as_ref() == Some(path))
-                    .push();
-                if ui.is_item_clicked() {
-                    self.selected = Some(path.clone());
-                }
-                if let Some(_node) = node {
-                    self.file_tree(documents, ui, files, path);
-                }
-            } else if ui
-                .selectable_config(label.as_ref())
-                .selected(self.selected.as_ref() == Some(path))
-                .build()
-            {
-                self.selected = Some(path.clone());
-                match documents.open(path) {
-                    Ok(()) => self.focus_requested = true,
-                    Err(error) => self.error = Some(error),
-                }
             }
         }
     }

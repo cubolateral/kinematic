@@ -113,7 +113,6 @@ impl Appearance {
             (StyleColor::NavCursor, accent),
             (StyleColor::NavWindowingHighlight, accent),
             (StyleColor::NavWindowingDimBg, disabled),
-            (StyleColor::ModalWindowDimBg, disabled),
             (StyleColor::UnsavedMarker, accent),
             (StyleColor::PlotLines, foreground),
             (StyleColor::PlotLinesHovered, accent),
@@ -133,6 +132,9 @@ impl Appearance {
 
 pub(super) fn initialize(context: &mut Context) -> FontId {
     apply_geometry(context);
+    context
+        .style_mut()
+        .set_color(StyleColor::ModalWindowDimBg, [0.0; 4]);
     load_font(context)
 }
 

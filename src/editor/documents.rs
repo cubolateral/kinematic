@@ -8,6 +8,15 @@ use std::{
     time::{Duration, Instant},
 };
 
+mod files;
+pub(crate) use files::SceneTemplate;
+
+#[derive(Clone)]
+pub(crate) struct FileEntry {
+    pub path: PathBuf,
+    pub directory: bool,
+}
+
 pub(crate) struct Document {
     pub text: String,
     pub version: u64,
@@ -36,7 +45,7 @@ pub(crate) struct Documents {
     pub replies: Vec<super::lsp::Reply>,
     pub formatting: Option<serde_json::Value>,
     last_edit: Instant,
-    file_paths: Option<Vec<PathBuf>>,
+    file_paths: Option<Vec<FileEntry>>,
     _watcher: notify::RecommendedWatcher,
     events: mpsc::Receiver<notify::Result<notify::Event>>,
     external: BTreeSet<PathBuf>,
@@ -180,11 +189,11 @@ impl Documents {
             .map(|(path, document)| (path.clone(), document.text.clone()))
             .collect()
     }
-    pub fn files(&mut self) -> Result<Vec<PathBuf>, String> {
+    pub fn files(&mut self) -> Result<Vec<FileEntry>, String> {
         if let Some(files) = &self.file_paths {
             return Ok(files.clone());
         }
-        fn walk(root: &Path, base: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
+        fn walk(root: &Path, base: &Path, out: &mut Vec<FileEntry>) -> Result<(), String> {
             for entry in std::fs::read_dir(base).map_err(|e| e.to_string())? {
                 let entry = entry.map_err(|e| e.to_string())?;
                 let path = entry.path();
@@ -193,8 +202,12 @@ impl Documents {
                 {
                     continue;
                 }
-                out.push(relative.to_owned());
-                if path.is_dir() {
+                let directory = entry.file_type().map_err(|e| e.to_string())?.is_dir();
+                out.push(FileEntry {
+                    path: relative.to_owned(),
+                    directory,
+                });
+                if directory {
                     walk(root, &path, out)?;
                 }
             }
@@ -202,11 +215,17 @@ impl Documents {
         }
         let mut files = Vec::new();
         walk(self.context.root(), self.context.root(), &mut files)?;
-        files.sort();
+        files.sort_by_cached_key(|entry| {
+            (
+                !entry.directory,
+                entry.path.to_string_lossy().to_lowercase(),
+            )
+        });
         self.file_paths = Some(files.clone());
         Ok(files)
     }
     pub fn create(&mut self, path: &Path, directory: bool) -> Result<(), String> {
+        self.check_file_path(path)?;
         self.file_paths = None;
         let full = self.context.resolve(path).map_err(|e| e.to_string())?;
         if directory {
@@ -219,13 +238,30 @@ impl Documents {
         Ok(())
     }
     pub fn rename(&mut self, from: &Path, to: &Path) -> Result<(), String> {
+        self.check_file_path(from)?;
+        self.check_file_path(to)?;
+        let manifest = self.scene_manifest(|scenes| {
+            for path in scenes {
+                if let Some(next) = files::renamed_path(path, from, to) {
+                    *path = next;
+                }
+            }
+        })?;
         self.file_paths = None;
         let old = self.context.resolve(from).map_err(|e| e.to_string())?;
         let new = self.context.resolve(to).map_err(|e| e.to_string())?;
         if new.exists() {
             return Err("Destination already exists.".into());
         }
-        std::fs::rename(old, new).map_err(|e| e.to_string())?;
+        std::fs::rename(&old, &new).map_err(|e| e.to_string())?;
+        if let Err(error) = self.write_scene_manifest(manifest) {
+            return match std::fs::rename(&new, &old) {
+                Ok(()) => Err(error),
+                Err(rollback) => Err(format!(
+                    "{error} Could not restore the old path: {rollback}."
+                )),
+            };
+        }
         let moved = self
             .open
             .keys()
@@ -233,9 +269,13 @@ impl Documents {
             .cloned()
             .collect::<Vec<_>>();
         for path in moved {
-            let next = to.join(path.strip_prefix(from).unwrap());
+            let next = files::renamed_path(&path, from, to).unwrap();
             let doc = self.open.remove(&path).unwrap();
             self.open.insert(next.clone(), doc);
+            self.lsp_diagnostics.remove(&path);
+            if let Some(lsp) = &mut self.lsp {
+                lsp.close(&path);
+            }
             if self.active.as_ref() == Some(&path) {
                 self.active = Some(next);
             }
@@ -354,6 +394,7 @@ fn watched(path: &Path) -> bool {
         part.as_os_str().to_str().is_some_and(|s| {
             matches!(s, ".git" | "target" | "output" | ".kinematic" | "kinematic")
                 || s.starts_with(".kinematic-save-")
+                || s.starts_with(".kinematic-delete-")
                 || s.ends_with('~')
                 || s.ends_with(".swp")
                 || s.ends_with(".tmp")
