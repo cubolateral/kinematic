@@ -4,6 +4,9 @@ use crate::core::{Easing, Scene, TrackLimits, TrackTarget, TrackValue};
 /// Generates LuaLS definitions from the same object metadata used by the runtime.
 pub fn definitions() -> String {
     let mut output = include_str!("api.lua").to_owned();
+    output.push('\n');
+    output.push_str(include_str!("property.lua"));
+    value_definitions(&mut output);
     output.push_str("--- Named easing curves accepted by Animation:play. The default is cubic_in_out.\n---@class Kinematic.Easing\n");
     for easing in Easing::ALL {
         let name = super::runtime::easing_name(easing);
@@ -50,9 +53,9 @@ pub fn definitions() -> String {
             output.push_str(&format!("---@field signal fun(self:Kinematic.{class}, callback:fun(object:Kinematic.{class}, frame:Kinematic.Frame)):Kinematic.Signal Runs a callback after scene evaluation at each frame; returns a signal that can be stopped.\n"));
             for field in &fields {
                 output.push_str(&format!(
-                    "---@field {} Kinematic.Property<{}> {}\n",
+                    "---@field {} {} {}\n",
                     field.name(),
-                    field_type(field, &world, entity),
+                    property_type(field, &world, entity),
                     property_documentation(field, &world, entity),
                 ));
             }
@@ -92,6 +95,79 @@ pub fn definitions() -> String {
     output.push_str("return k\n");
     output
 }
+fn value_definitions(output: &mut String) {
+    for (class, channels) in [
+        ("Vec2", "xy"),
+        ("Vec3", "xyz"),
+        ("Color", "rgba"),
+        ("Quaternion", "xyzw"),
+        ("Quad", "abcd"),
+    ] {
+        output.push_str(&format!(
+            "--- Immutable {class} value.\n---@class Kinematic.{class}\n"
+        ));
+        for channel in channels.chars() {
+            output.push_str(&format!(
+                "---@field {channel} number The {channel} component.\n"
+            ));
+        }
+        if matches!(class, "Vec2" | "Vec3" | "Color") {
+            output.push_str(&format!("---@operator add(Kinematic.{class}): Kinematic.{class}\n---@operator sub(Kinematic.{class}): Kinematic.{class}\n"));
+        }
+        if class == "Quaternion" {
+            output.push_str("---@operator mul(Kinematic.Quaternion): Kinematic.Quaternion\n---@operator mul(Kinematic.Vec3): Kinematic.Vec3\n");
+        } else {
+            output.push_str(&format!("---@operator mul(number): Kinematic.{class}\n---@operator div(number): Kinematic.{class}\n---@operator unm: Kinematic.{class}\n"));
+        }
+        output.push_str(&format!("local {class} = {{}}\n\n"));
+        output.push_str(&format!("--- Interpolates between compatible values.\n---@param other Kinematic.{class}\n---@param t number Interpolation factor.\n---@return Kinematic.{class}\nfunction {class}:lerp(other, t) end\n\n"));
+        if matches!(class, "Vec2" | "Vec3") {
+            output.push_str(&format!("--- Returns the dot product.\n---@param other Kinematic.{class}\n---@return number\nfunction {class}:dot(other) end\n\n--- Returns the vector magnitude.\n---@return number\nfunction {class}:length() end\n\n"));
+        }
+        if matches!(class, "Vec2" | "Vec3" | "Quaternion") {
+            output.push_str(&format!("--- Returns a normalized value. Zero vectors remain zero.\n---@return Kinematic.{class}\nfunction {class}:normalized() end\n\n"));
+        }
+        if class == "Vec3" {
+            output.push_str("--- Returns the cross product.\n---@param other Kinematic.Vec3\n---@return Kinematic.Vec3\nfunction Vec3:cross(other) end\n\n");
+        }
+        output.push_str(&format!("--- Animatable {class} property.\n---@class Kinematic.{class}Property: Kinematic.Property<Kinematic.{class}>\n"));
+        if class != "Quaternion" {
+            for channel in channels.chars() {
+                output.push_str(&format!(
+                    "---@field {channel} Kinematic.Property<number> Animatable {channel} component.\n"
+                ));
+            }
+        }
+        let methods = include_str!("property.lua");
+        output.push_str(&format!("local {class}Property = {{}}\n\n"));
+        output.push_str(
+            &methods
+                .replace("---@generic T\n", "")
+                .replace(
+                    "Kinematic.Property<T>",
+                    &format!("Kinematic.{class}Property"),
+                )
+                .replace(" T\n", &format!(" Kinematic.{class}\n"))
+                .replace(" T[]\n", &format!(" Kinematic.{class}[]\n"))
+                .replace("function Property:", &format!("function {class}Property:")),
+        );
+        if class == "Quaternion" {
+            output.push_str("--- Creates a quaternion rotation preserving full turns. Call :play to schedule it.\n---@param axis Kinematic.Vec3\n---@param radians number\n---@return Kinematic.Animation\nfunction QuaternionProperty:rotate(axis, radians) end\n");
+        }
+        output.push('\n');
+    }
+}
+
+fn property_type(field: &TrackTarget, world: &hecs::World, entity: hecs::Entity) -> String {
+    let value = field.get(world, entity);
+    let ty = field_type(field, world, entity);
+    if value.channels() > 1 || matches!(value, TrackValue::Quaternion(_)) {
+        format!("{ty}Property")
+    } else {
+        format!("Kinematic.Property<{ty}>")
+    }
+}
+
 fn documentation(output: &mut String, text: &str) {
     for line in text.trim().lines() {
         output.push_str("--- ");
@@ -157,7 +233,11 @@ fn value_type(value: &TrackValue) -> &'static str {
         TrackValue::U32(_) | TrackValue::I32(_) => "integer",
         TrackValue::F32(_) => "number",
         TrackValue::String(_) | TrackValue::Enum(_) => "string",
-        _ => "Kinematic.Value",
+        TrackValue::Vector2(_) => "Kinematic.Vec2",
+        TrackValue::Vector3(_) => "Kinematic.Vec3",
+        TrackValue::Color(_) => "Kinematic.Color",
+        TrackValue::Quaternion(_) => "Kinematic.Quaternion",
+        TrackValue::Quad(_) => "Kinematic.Quad",
     }
 }
 
@@ -192,7 +272,7 @@ fn builder_type(
     };
     channels.map_or_else(
         || field_type(field, world, entity),
-        |channels| format!("Kinematic.Value|{channels}"),
+        |channels| format!("{}|{channels}", field_type(field, world, entity)),
     )
 }
 

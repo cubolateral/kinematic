@@ -1,20 +1,7 @@
 ---@meta
 
---- Vector, color, quaternion, or quad value. Channels depend on the constructed value type.
----@class Kinematic.Value
----@field x number X component or left coordinate.
----@field y number Y component or bottom coordinate.
----@field z number Z component, available on vec3 and quaternion values.
----@field w number Quaternion scalar component.
----@field r number Red color channel.
----@field g number Green color channel.
----@field b number Blue color channel or second quad channel.
----@field a number Alpha color channel or first quad channel.
----@field c number Third quad channel.
----@field d number Fourth quad channel.
----@operator add(Kinematic.Value): Kinematic.Value
----@operator sub(Kinematic.Value): Kinematic.Value
----@operator mul(number): Kinematic.Value
+--- Vector, color, quaternion, or quad value.
+---@alias Kinematic.Value Kinematic.Vec2|Kinematic.Vec3|Kinematic.Color|Kinematic.Quaternion|Kinematic.Quad
 
 --- Reusable property destinations. Preparing a definition does not execute it; use :play.
 ---@class Kinematic.Animation
@@ -46,68 +33,7 @@ function Animation:play(duration, easing) end
 
 --- Typed handle to an animatable property or one of its scalar channels.
 ---@class Kinematic.Property<T>
----@field x Kinematic.Property<number> Handle to the x channel, when supported by the property value.
----@field y Kinematic.Property<number> Handle to the y channel, when supported by the property value.
----@field z Kinematic.Property<number> Handle to the z channel, when supported by the property value.
----@field r Kinematic.Property<number> Handle to the r channel, when supported by the property value.
----@field g Kinematic.Property<number> Handle to the g channel, when supported by the property value.
----@field b Kinematic.Property<number> Handle to the b channel, when supported by the property value.
----@field a Kinematic.Property<number> Handle to the a channel, when supported by the property value.
----@field c Kinematic.Property<number> Handle to the c channel, when supported by the property value.
----@field d Kinematic.Property<number> Handle to the d channel, when supported by the property value.
 local Property = {}
-
---- Reads the current value of this property or scalar channel.
----@generic T
----@param self Kinematic.Property<T>
----@return T
-function Property:get() end
-
---- Sets the property or scalar channel immediately during construction.
---- Inside a signal, writes apply only to the evaluated frame. Values must match the property type and are constrained by its limits.
----@generic T
----@param self Kinematic.Property<T>
----@param value T
-function Property:set(value) end
-
---- Creates an animation toward an absolute value.
---- Preparing the animation does not schedule it; call :play(duration, easing).
----@generic T
----@param self Kinematic.Property<T>
----@param value T
----@return Kinematic.Animation
-function Property:to(value) end
-
---- Creates an animation adding a relative increment.
---- Repeated :play calls apply the increment at each scheduled start.
----@generic T
----@param self Kinematic.Property<T>
----@param delta T
----@return Kinematic.Animation
-function Property:by(delta) end
-
---- Creates an animation with explicit {start, finish} endpoints.
---- Both endpoints must match the property type. Call :play to schedule it.
----@generic T
----@param self Kinematic.Property<T>
----@param pair T[]
----@return Kinematic.Animation
-function Property:from(pair) end
-
---- Schedules a callback receiving this property and the frame after scene evaluation.
---- Writes are temporary for that frame. Signals cannot construct objects or schedule animations; call :stop on the returned handle to end it.
----@generic T
----@param self Kinematic.Property<T>
----@param callback fun(property:Kinematic.Property<T>, frame:Kinematic.Frame)
----@return Kinematic.Signal
-function Property:signal(callback) end
-
---- Creates a quaternion rotation preserving full turns around a nonzero vec3 axis.
---- The angle is in radians. This requires a quaternion property; call :play to schedule it.
----@param axis Kinematic.Value
----@param radians number
----@return Kinematic.Animation
-function Property:rotate(axis, radians) end
 
 --- Scene object exposing properties, hierarchy operations, animations, and signals.
 ---@class Kinematic.Object
@@ -216,14 +142,14 @@ k = {}
 --- Use it for positions, dimensions, and other vector properties.
 ---@param x number
 ---@param y number
----@return Kinematic.Value
+---@return Kinematic.Vec2
 function k.vec2(x, y) end
 
 --- Creates a three-dimensional value with x, y, and z components.
 ---@param x number
 ---@param y number
 ---@param z number
----@return Kinematic.Value
+---@return Kinematic.Vec3
 function k.vec3(x, y, z) end
 
 --- Creates a color from RGB or RGBA numbers, or a six/eight-digit hexadecimal string.
@@ -232,7 +158,7 @@ function k.vec3(x, y, z) end
 ---@param g? number
 ---@param b? number
 ---@param a? number
----@return Kinematic.Value
+---@return Kinematic.Color
 function k.color(color, g, b, a) end
 
 --- Creates a quaternion from x, y, z, and w components.
@@ -241,7 +167,7 @@ function k.color(color, g, b, a) end
 ---@param y number
 ---@param z number
 ---@param w number
----@return Kinematic.Value
+---@return Kinematic.Quaternion
 function k.quat(x, y, z, w) end
 
 --- Frame information supplied to signals and simulation update callbacks.
@@ -405,6 +331,11 @@ function Object:uniform(name) end
 
 --- Creates a standalone animatable property from an initial value.
 --- An optional stable id preserves editor overrides across reloads. Supports get, set, to, by, from, and signal.
+---@overload fun(self:Kinematic.Scene, initial:Kinematic.Vec2, id?:string):Kinematic.Vec2Property
+---@overload fun(self:Kinematic.Scene, initial:Kinematic.Vec3, id?:string):Kinematic.Vec3Property
+---@overload fun(self:Kinematic.Scene, initial:Kinematic.Color, id?:string):Kinematic.ColorProperty
+---@overload fun(self:Kinematic.Scene, initial:Kinematic.Quaternion, id?:string):Kinematic.QuaternionProperty
+---@overload fun(self:Kinematic.Scene, initial:Kinematic.Quad, id?:string):Kinematic.QuadProperty
 ---@generic T
 ---@param initial T
 ---@param id? string
@@ -456,9 +387,9 @@ function k.object(definition) end
 
 --- Creates a quaternion from a nonzero vec3 axis and a finite angle in radians.
 --- The axis is normalized automatically.
----@param axis Kinematic.Value
+---@param axis Kinematic.Vec3
 ---@param radians number
----@return Kinematic.Value
+---@return Kinematic.Quaternion
 function k.axis_angle(axis, radians) end
 
 --- Creates a four-component value with a, b, c, and d channels.
@@ -467,7 +398,7 @@ function k.axis_angle(axis, radians) end
 ---@param b number
 ---@param c number
 ---@param d number
----@return Kinematic.Value
+---@return Kinematic.Quad
 function k.quad(a, b, c, d) end
 
 --- Creates an immutable rectangle value from local coordinates and nonnegative dimensions.
@@ -486,36 +417,6 @@ function k.rect(x, y, width, height) end
 ---@field width number Rectangle width in local coordinates.
 ---@field height number Rectangle height in local coordinates.
 local RectValue = {}
-
---- Vector, color, quaternion, or quad value. Channels depend on the constructed value type.
----@class Kinematic.Value
-local Value = {}
-
---- Returns the dot product of matching vec2 or vec3 values.
----@param other Kinematic.Value
----@return number
-function Value:dot(other) end
-
---- Returns the cross product of two vec3 values.
----@param other Kinematic.Value
----@return Kinematic.Value
-function Value:cross(other) end
-
---- Returns the magnitude of a vec2 or vec3 value.
----@return number
-function Value:length() end
-
---- Returns a normalized vector or quaternion.
---- A zero-length vector returns the zero vector.
----@return Kinematic.Value
-function Value:normalized() end
-
---- Interpolates between compatible values using a finite factor t.
---- Use t=0 for the first endpoint and t=1 for the second.
----@param other Kinematic.Value
----@param t number
----@return Kinematic.Value
-function Value:lerp(other, t) end
 
 --- Deterministic mutable random generator that can be preserved in simulation state.
 ---@class Kinematic.Random
@@ -805,37 +706,37 @@ function Random:choose_multiple(values, amount) end
 function Random:shuffle(values) end
 
 --- Returns the middle point of this rectangle as a vec2.
----@return Kinematic.Value
+---@return Kinematic.Vec2
 function RectValue:middle() end
 
 --- Returns the top point of this rectangle as a vec2.
----@return Kinematic.Value
+---@return Kinematic.Vec2
 function RectValue:top() end
 
 --- Returns the bottom point of this rectangle as a vec2.
----@return Kinematic.Value
+---@return Kinematic.Vec2
 function RectValue:bottom() end
 
 --- Returns the left point of this rectangle as a vec2.
----@return Kinematic.Value
+---@return Kinematic.Vec2
 function RectValue:left() end
 
 --- Returns the right point of this rectangle as a vec2.
----@return Kinematic.Value
+---@return Kinematic.Vec2
 function RectValue:right() end
 
 --- Returns the top_left point of this rectangle as a vec2.
----@return Kinematic.Value
+---@return Kinematic.Vec2
 function RectValue:top_left() end
 
 --- Returns the bottom_right point of this rectangle as a vec2.
----@return Kinematic.Value
+---@return Kinematic.Vec2
 function RectValue:bottom_right() end
 
 --- Returns the top_right point of this rectangle as a vec2.
----@return Kinematic.Value
+---@return Kinematic.Vec2
 function RectValue:top_right() end
 
 --- Returns the bottom_left point of this rectangle as a vec2.
----@return Kinematic.Value
+---@return Kinematic.Vec2
 function RectValue:bottom_left() end

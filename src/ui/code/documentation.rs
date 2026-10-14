@@ -1,5 +1,5 @@
 use dear_imgui_cte::{PaletteColor, Position, Selection, TextEditor};
-use dear_imgui_rs::{FocusedFlags, Key, MouseButton, StyleColor, Ui};
+use dear_imgui_rs::{FocusedFlags, Key, MouseButton, Ui};
 use std::{collections::HashMap, ops::Range};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -184,7 +184,6 @@ impl Documentation {
             let origin = ui.cursor_screen_pos();
             let width = ui.content_region_avail()[0].max(1.0);
             let mut glyphs = Vec::new();
-            let mut backgrounds = Vec::new();
             let mut y = origin[1];
             for (block_index, block) in self.blocks.iter().enumerate() {
                 let size = if block.kind == Kind::Heading {
@@ -194,19 +193,17 @@ impl Documentation {
                 };
                 let font = ui.push_font_with_size(None, size);
                 let line_height = ui.text_line_height() * 1.35;
-                let inset = if block.kind == Kind::Code { 12.0 } else { 0.0 };
-                let top = y;
                 if block.kind == Kind::Code {
-                    y += 12.0;
+                    y += 3.0;
                 }
-                let mut x = origin[0] + inset;
-                let limit = origin[0] + width - inset;
+                let mut x = origin[0];
+                let limit = origin[0] + width;
                 let mut color_index = 0;
                 let mut widths = HashMap::new();
                 for (offset, character) in self.text[block.range.clone()].char_indices() {
                     let index = block.range.start + offset;
                     if character == '\n' {
-                        x = origin[0] + inset;
+                        x = origin[0];
                         y += line_height;
                         continue;
                     }
@@ -214,7 +211,7 @@ impl Documentation {
                         .entry(character)
                         .or_insert_with(|| ui.calc_text_size(character.to_string())[0]);
                     // Wrap at word boundaries; very long identifiers still wrap by character.
-                    if x > origin[0] + inset
+                    if x > origin[0]
                         && !character.is_whitespace()
                         && (offset == 0
                             || self.text[..index]
@@ -227,12 +224,12 @@ impl Documentation {
                             .next()
                             .unwrap_or("");
                         if x + ui.calc_text_size(word)[0] > limit {
-                            x = origin[0] + inset;
+                            x = origin[0];
                             y += line_height;
                         }
                     }
-                    if x + glyph_width > limit && x > origin[0] + inset {
-                        x = origin[0] + inset;
+                    if x + glyph_width > limit && x > origin[0] {
+                        x = origin[0];
                         y += line_height;
                     }
                     while block
@@ -263,12 +260,13 @@ impl Documentation {
                 }
                 y += ui.text_line_height();
                 if block.kind == Kind::Code {
-                    y += 12.0;
-                    backgrounds.push(([origin[0], top], [origin[0] + width, y]));
+                    y += 3.0;
                 }
                 if block_index + 1 < self.blocks.len() {
                     y += if block.kind == Kind::Heading {
                         5.0
+                    } else if block.kind == Kind::Code {
+                        4.0
                     } else {
                         12.0
                     };
@@ -311,13 +309,6 @@ impl Documentation {
                 }
             }
             let draw = ui.get_window_draw_list();
-            let surface = ui.clone_style().color(StyleColor::Header);
-            for (min, max) in backgrounds {
-                draw.add_rect(min, max, surface)
-                    .filled(true)
-                    .rounding(5.0)
-                    .build();
-            }
             let selected = self.selection.map(|(a, b)| a.min(b)..a.max(b));
             for block in &self.blocks {
                 let font = ui.push_font_with_size(

@@ -59,10 +59,9 @@ local function value_type(node)
     if node.type == "integer" or node.type == "number" then return "number" end
     if node.type == "boolean" then return "boolean" end
     if node.type == "string" then return "string" end
-    for _, name in ipairs { "vec2", "vec3", "color", "quat", "axis_angle", "quad" } do
-        if api_call(node, name) then return "Kinematic.Value" end
+    for name, class in pairs { vec2 = "Vec2", vec3 = "Vec3", color = "Color", quat = "Quaternion", axis_angle = "Quaternion", quad = "Quad" } do
+        if api_call(node, name) then return "Kinematic." .. class end
     end
-    -- shortcut: Computed defaults use any; add LuaLS inference if stricter value checks are needed.
     return "any"
 end
 
@@ -81,6 +80,13 @@ local function class_name(call)
         name = parent[1] .. "_" .. ordinal
     end
     return ("Kinematic.Custom_%d_%s"):format(hash, name)
+end
+
+local function member(name)
+    local keyword = (" and break do else elseif end false for function goto if in local nil not or repeat return then true until while "):find(" " .. name .. " ", 1, true)
+    if name:match("^[%a_][%w_]*$") and not keyword then return name, "." .. name end
+    local indexed = ("[%q]"):format(name)
+    return indexed, indexed
 end
 
 local function property_type(schema)
@@ -105,6 +111,16 @@ function OnSetText(uri, text)
     state.uri = uri
     state.ast.uri = uri
     local diffs, classes = {}, {}
+    local function source_text(node)
+        local source_uri = guide.getUri(node)
+        local source = source_uri == uri and text or files.getOriginText(source_uri)
+        if not source then return nil end
+        local parsed = source_uri == uri and state or parser.compile(source, "Lua", "Lua 5.4")
+        if not parsed then return nil end
+        local start = node.type == "function" and node.args and node.args.start or node.start
+        local expression = source:sub(guide.positionToOffset(parsed, start) + 1, guide.positionToOffset(parsed, node.finish))
+        return node.type == "function" and "function" .. expression or expression
+    end
     if is_scene(uri) then
         for _, action in ipairs(state.ast) do
             if action.type == "return" and action[1] and action[1].type == "function" then
@@ -124,7 +140,8 @@ function OnSetText(uri, text)
         if not options or options.type ~= "table" then return end
         local class = class_name(call)
         local parents = {}
-        local definition = {}
+        local definition, method_definitions = {}, {}
+        local class_local = "_kinematic_" .. class:gsub("%W", "_")
         if component then
             parents[1] = "Kinematic.Component"
             for _, entry in ipairs(options) do
@@ -132,7 +149,18 @@ function OnSetText(uri, text)
                     or entry.type == "tableindex" and entry.index.type == "string" and entry.index[1]
                 local schema = resolve(entry.value)
                 if name and field(schema, "default") then
-                    definition[#definition + 1] = ("---@field [%q] Kinematic.Property<%s>"):format(name, property_type(schema))
+                    local key, access = member(name)
+                    local ty = property_type(schema)
+                    local default = resolve(field(schema, "default"))
+                    if ty == "any" then
+                        local source = default and source_text(default)
+                        if source then
+                            method_definitions[#method_definitions + 1] = ("%s%s = _kinematic_property(%s)"):format(class_local, access, source)
+                        end
+                    else
+                        local property = ty:match("^Kinematic%.") and ty .. "Property" or "Kinematic.Property<" .. ty .. ">"
+                        definition[#definition + 1] = ("---@field %s %s"):format(key, property)
+                    end
                 end
             end
         else
@@ -143,7 +171,16 @@ function OnSetText(uri, text)
             if methods and methods.type == "table" then
                 for _, entry in ipairs(methods) do
                     local name = entry.type == "tablefield" and entry.field[1]
-                    if name then definition[#definition + 1] = ("---@field %s fun(self:%s, ...):Kinematic.Animation"):format(name, class) end
+                        or entry.type == "tableindex" and entry.index.type == "string" and entry.index[1]
+                    local method = resolve(entry.value)
+                    local source = method and method.type == "function" and source_text(method)
+                    if name and source then
+                        local _, access = member(name)
+                        local receiver = method.args and method.args[1]
+                        local annotation = receiver and type(receiver[1]) == "string"
+                            and ("---@param %s %s\n"):format(receiver[1], class) or ""
+                        method_definitions[#method_definitions + 1] = ("%s%s%s = %s"):format(annotation, class_local, access, source)
+                    end
                 end
             end
             local components = resolve(field(options, "components"))
@@ -155,6 +192,8 @@ function OnSetText(uri, text)
             end
         end
         table.insert(definition, 1, ("\n---@class %s: %s"):format(class, table.concat(parents, ",")))
+        definition[#definition + 1] = ("local %s = {}"):format(class_local)
+        for _, method in ipairs(method_definitions) do definition[#definition + 1] = method end
         classes[#classes + 1] = table.concat(definition, "\n")
         local finish = guide.positionToOffset(state, call.finish) + 1
         local start = guide.positionToOffset(state, call.start) + 1
@@ -162,7 +201,32 @@ function OnSetText(uri, text)
         diffs[#diffs + 1] = { start = finish, finish = finish - 1, text = (") --[[@as %s]]"):format(class) }
     end)
     if #classes > 0 then
-        diffs[#diffs + 1] = { start = #text + 1, finish = #text, text = table.concat(classes, "\n") .. "\n" }
+        local start = #text + 1
+        for _, action in ipairs(state.ast) do
+            if action.type == "return" then
+                start = guide.positionToOffset(state, action.start) + 1
+                break
+            end
+        end
+        local generated = [[
+---@generic T
+---@param value T
+---@return Kinematic.Property<T>
+---@overload fun(value:Kinematic.Vec2):Kinematic.Vec2Property
+---@overload fun(value:Kinematic.Vec3):Kinematic.Vec3Property
+---@overload fun(value:Kinematic.Color):Kinematic.ColorProperty
+---@overload fun(value:Kinematic.Quaternion):Kinematic.QuaternionProperty
+---@overload fun(value:Kinematic.Quad):Kinematic.QuadProperty
+---@diagnostic disable-next-line: unused-local, unused-function, missing-return
+local function _kinematic_property(value) end
+]] .. table.concat(classes, "\n") .. "\n"
+        for _, diff in ipairs(diffs) do
+            if diff.start == start and diff.finish == start - 1 then
+                diff.text = generated .. diff.text
+                return diffs
+            end
+        end
+        diffs[#diffs + 1] = { start = start, finish = start - 1, text = generated }
     end
     return diffs
 end

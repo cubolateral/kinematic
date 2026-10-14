@@ -6,9 +6,11 @@ use dear_imgui_cte::{
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::BTreeMap, path::PathBuf, rc::Rc};
 
+mod completion;
 mod diagnostics;
 mod documentation;
 mod files;
+mod popup;
 
 pub(super) const WINDOW_NAME: &str = "Code";
 pub(super) const FILES_WINDOW: &str = "Files";
@@ -86,6 +88,7 @@ impl DocumentationPopup {
 struct Tab {
     editor: TextEditor,
     version: u64,
+    completions: completion::Completion,
     settings: Option<Settings>,
     assistance: Rc<RefCell<Assistance>>,
     signature: String,
@@ -95,12 +98,15 @@ struct Tab {
     documentation_has_content: bool,
     hover_candidate: Option<(Position, f64)>,
     documentation_popup: Option<DocumentationPopup>,
+    popup_content: popup::Content,
 }
 impl Tab {
     fn configure(&mut self, settings: &Settings) -> dear_imgui_cte::CteResult<()> {
         if self.settings.as_ref() == Some(settings) {
             return Ok(());
         }
+        self.completions.clear();
+        self.assistance.borrow_mut().completion_position = None;
         self.editor.set_tab_size(settings.tab_size.clamp(1, 8))?;
         self.editor
             .set_insert_spaces_on_tabs(settings.insert_spaces);
@@ -113,13 +119,15 @@ impl Tab {
         let assistance = self.assistance.clone();
         self.editor.set_autocomplete(
             &AutocompleteConfig::new()
-                .trigger_on_typing(settings.autocomplete && self.assistance.borrow().available),
+                .trigger_on_typing(settings.autocomplete && self.assistance.borrow().available)
+                .trigger_delay(std::time::Duration::from_millis(100))
+                .no_suggestions_label(""),
             move |request| {
                 if let Ok(range) = request.range() {
                     let mut assistance = assistance.borrow_mut();
                     if let Err(error) = request
                         .clear_suggestions()
-                        .and_then(|_| request.set_promised(assistance.available))
+                        .and_then(|_| request.set_promised(false))
                     {
                         assistance.error = Some(error.to_string());
                     }
@@ -131,6 +139,29 @@ impl Tab {
         self.settings = Some(settings.clone());
         Ok(())
     }
+    fn cursor_popup_position(&self, origin: [f32; 2], cursor: Position) -> [f32; 2] {
+        let visual = self.editor.document_to_visual(cursor).unwrap_or_default();
+        let gutter = if self.editor.shows_line_numbers() {
+            self.editor.line_number_left_margin()
+                + (self.editor.line_count() + 1).ilog10() as usize
+                + 1
+        } else {
+            0
+        } + usize::from(self.editor.is_line_folding_enabled())
+            + self.editor.text_left_margin();
+        [
+            origin[0]
+                + (visual
+                    .column
+                    .saturating_sub(self.editor.first_visible_column())
+                    + gutter) as f32
+                    * self.editor.glyph_width().unwrap_or(8.0),
+            origin[1]
+                + (visual.row.saturating_sub(self.editor.first_visible_row()) + 1) as f32
+                    * self.editor.line_height().unwrap_or(16.0),
+        ]
+    }
+
     fn save(&mut self, documents: &mut Documents, path: &std::path::Path) -> Result<(), String> {
         documents.save(path)?;
         let document = &documents.open[path];
@@ -209,11 +240,59 @@ impl Tab {
                 }
             }
         }
-        match ui
+        let completion_popup_position = self
+            .completions
+            .position
+            .filter(|_| !self.completions.items.is_empty())
+            .map(|position| self.cursor_popup_position(origin, position));
+        let mouse_on_completion = completion_popup_position
+            .is_some_and(|position| self.completions.contains_mouse(ui, position));
+        let completion_focused = focused || self.completions.focused || mouse_on_completion;
+        if !completion_focused
+            || self.completions.position != Some(before)
+            || self.editor.cursor_count() != 1
+            || selection.start != selection.end
+        {
+            self.completions.clear();
+        }
+        let completion_key = if completion_focused {
+            self.completions.keyboard(ui)
+        } else {
+            None
+        };
+        if let Some(accept) = completion_key {
+            if accept {
+                let utf8 = documents.lsp.as_ref().is_some_and(|lsp| lsp.utf8);
+                if let Err(error) =
+                    self.completions
+                        .accept(&mut self.editor, &documents.open[path].text, utf8)
+                {
+                    *output_error = Some(error);
+                }
+                self.assistance.borrow_mut().completion_position = None;
+            }
+        }
+        // Completion keys belong to the suggestion list for this frame.
+        let completion_cursor = self.editor.main_cursor_position();
+        self.editor.set_read_only(completion_key.is_some());
+        let rendered = ui
             .text_editor(&mut self.editor, "Source")
             .size([available[0], height])
-            .build()
+            .build();
+        self.editor.set_read_only(false);
+        let popup_cursor = if completion_popup_position.is_some() || completion_key.is_some() {
+            completion_cursor
+        } else {
+            self.editor.main_cursor_position()
+        };
+        let popup_position = completion_popup_position
+            .unwrap_or_else(|| self.cursor_popup_position(origin, popup_cursor));
+        if (completion_key.is_some() || mouse_on_completion)
+            && self.editor.main_cursor_position() != completion_cursor
         {
+            let _ = self.editor.set_cursor(completion_cursor);
+        }
+        match rendered {
             Ok(changed) => {
                 let callback_changed = std::mem::take(&mut self.assistance.borrow_mut().changed);
                 let changed = changed || callback_changed;
@@ -232,6 +311,19 @@ impl Tab {
                     }
                 }
                 let cursor = self.editor.main_cursor_position();
+                if changed || cursor != before {
+                    self.completions.clear();
+                    let mut assistance = self.assistance.borrow_mut();
+                    if assistance.completion_position != Some(cursor)
+                        || assistance.completion.is_none()
+                    {
+                        assistance.completion_position = None;
+                    }
+                }
+                if focused && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Escape, false) {
+                    self.completions.clear();
+                    self.assistance.borrow_mut().completion_position = None;
+                }
                 if cursor != before && !changed {
                     self.signature.clear();
                     self.signature_position = None;
@@ -305,9 +397,29 @@ impl Tab {
                 if let Some(error) = assistance.error.take() {
                     *output_error = Some(error);
                 }
+                if changed
+                    && settings.autocomplete
+                    && assistance.available
+                    && prefix.ends_with(['.', ':', '{', ','])
+                {
+                    assistance.completion = Some(cursor);
+                    assistance.completion_position = Some(cursor);
+                }
                 let completion = assistance.completion.take();
                 let hover = assistance.hover.take();
                 if let Some(lsp) = &mut documents.lsp {
+                    if std::mem::take(&mut self.completions.resolve) {
+                        if let Some(item) = self.completions.items.get(self.completions.selected) {
+                            lsp.resolve_completion(
+                                path,
+                                &documents.open[path].text,
+                                documents.open[path].version,
+                                cursor.line,
+                                cursor.column,
+                                item.clone(),
+                            );
+                        }
+                    }
                     let doc = &documents.open[path];
                     for (method, position) in [
                         ("textDocument/completion", completion),
@@ -334,7 +446,7 @@ impl Tab {
                         }
                     }
                 }
-                if self.documentation_has_content {
+                if self.documentation_has_content && self.completions.items.is_empty() {
                     let popup = self.documentation_popup.get_or_insert_with(|| {
                         let viewport = ui.window_viewport();
                         let work_position = viewport.work_pos();
@@ -363,26 +475,13 @@ impl Tab {
                             bounds: [position, [position[0] + size[0], position[1] + size[1]]],
                         }
                     });
-                    let _rounding = ui.push_style_var(dear_imgui_rs::StyleVar::WindowRounding(7.0));
-                    let _padding =
-                        ui.push_style_var(dear_imgui_rs::StyleVar::WindowPadding([12.0, 12.0]));
-                    let _border = ui.push_style_var(dear_imgui_rs::StyleVar::WindowBorderSize(1.0));
-                    let background = ui.clone_style().color(dear_imgui_rs::StyleColor::WindowBg);
-                    let _background =
-                        ui.push_style_color(dear_imgui_rs::StyleColor::WindowBg, background);
-                    let _child =
-                        ui.push_style_color(dear_imgui_rs::StyleColor::ChildBg, background);
-                    ui.window("Documentation##Code")
-                        .position(popup.position, dear_imgui_rs::Condition::Always)
-                        .size(popup.size, dear_imgui_rs::Condition::Always)
-                        .flags(
-                            dear_imgui_rs::WindowFlags::NO_DECORATION
-                                | dear_imgui_rs::WindowFlags::NO_MOVE
-                                | dear_imgui_rs::WindowFlags::NO_FOCUS_ON_APPEARING
-                                | dear_imgui_rs::WindowFlags::NO_DOCKING
-                                | dear_imgui_rs::WindowFlags::NO_SAVED_SETTINGS,
-                        )
-                        .build(|| {
+                    popup::window(
+                        ui,
+                        "Documentation##Code",
+                        popup.position,
+                        Some(popup.size),
+                        dear_imgui_rs::WindowFlags::empty(),
+                        || {
                             let position = ui.window_pos();
                             let size = ui.window_size();
                             popup.bounds =
@@ -400,48 +499,75 @@ impl Tab {
                                 .min(420.0)
                                 .min(ui.window_viewport().work_size()[1])
                                 .max(1.0);
-                        });
+                        },
+                    );
                 }
                 drop(assistance);
                 if focused && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Escape, false) {
                     self.signature.clear();
                     self.signature_position = None;
                 }
-                if focused && !self.signature.is_empty() {
-                    let visual = self.editor.document_to_visual(cursor).unwrap_or_default();
-                    let row = visual.row;
-                    let column = visual.column;
-                    let gutter = if self.editor.shows_line_numbers() {
-                        self.editor.line_number_left_margin()
-                            + (self.editor.line_count() + 1).ilog10() as usize
-                            + 1
-                    } else {
-                        0
-                    } + usize::from(self.editor.is_line_folding_enabled())
-                        + self.editor.text_left_margin();
-                    let position = [
-                        origin[0]
-                            + (column.saturating_sub(self.editor.first_visible_column()) + gutter)
-                                as f32
-                                * self.editor.glyph_width().unwrap_or(8.0),
-                        origin[1]
-                            + (row.saturating_sub(self.editor.first_visible_row()) + 1) as f32
-                                * self.editor.line_height().unwrap_or(16.0),
+                if completion_focused && !self.completions.items.is_empty() {
+                    let accepted = match self.completions.draw(
+                        ui,
+                        popup_position,
+                        &mut self.popup_content,
+                        font_size,
+                    ) {
+                        Ok(accepted) => accepted,
+                        Err(error) => {
+                            *output_error = Some(error);
+                            false
+                        }
+                    };
+                    if accepted {
+                        let utf8 = documents.lsp.as_ref().is_some_and(|lsp| lsp.utf8);
+                        if let Err(error) = self.completions.accept(
+                            &mut self.editor,
+                            &documents.open[path].text,
+                            utf8,
+                        ) {
+                            *output_error = Some(error);
+                        }
+                        if let Ok(text) = self.editor.text() {
+                            documents.edit(path, text);
+                            self.version = documents.open[path].version;
+                        }
+                        self.assistance.borrow_mut().completion_position = None;
+                        ui.set_window_focus(Some(WINDOW_NAME));
+                        self.editor.focus();
+                    }
+                }
+                if focused && !self.signature.is_empty() && self.completions.items.is_empty() {
+                    let (label, description) = self
+                        .signature
+                        .split_once('\n')
+                        .unwrap_or((&self.signature, ""));
+                    let markdown = format!("```lua\n{label}\n```\n\n{description}");
+                    if let Err(error) = self.popup_content.set(&markdown) {
+                        *output_error = Some(error);
+                    }
+                    let viewport = ui.window_viewport();
+                    let size = [
+                        500.0_f32.min(viewport.work_size()[0]).max(1.0),
+                        (self.popup_content.height() + 24.0)
+                            .max(font_size * 3.0)
+                            .min(340.0)
+                            .min(viewport.work_size()[1])
+                            .max(1.0),
                     ];
-                    ui.window("Signature##Code")
-                        .position(position, dear_imgui_rs::Condition::Always)
-                        .flags(
-                            dear_imgui_rs::WindowFlags::NO_DECORATION
-                                | dear_imgui_rs::WindowFlags::ALWAYS_AUTO_RESIZE
-                                | dear_imgui_rs::WindowFlags::NO_FOCUS_ON_APPEARING
-                                | dear_imgui_rs::WindowFlags::NO_INPUTS
-                                | dear_imgui_rs::WindowFlags::NO_DOCKING
-                                | dear_imgui_rs::WindowFlags::NO_SAVED_SETTINGS,
-                        )
-                        .build(|| {
-                            let _wrap = ui.push_text_wrap_pos(ui.cursor_pos()[0] + 480.0);
-                            ui.text(&self.signature);
-                        });
+                    popup::window(
+                        ui,
+                        "Signature##Code",
+                        popup_position,
+                        Some(size),
+                        dear_imgui_rs::WindowFlags::NO_INPUTS,
+                        || {
+                            if let Err(error) = self.popup_content.draw(ui, font_size) {
+                                *output_error = Some(error);
+                            }
+                        },
+                    );
                 }
             }
             Err(error) => *output_error = Some(error.to_string()),
@@ -516,21 +642,14 @@ impl State {
                     editor.set_transaction_callback(move |_| {
                         changes.borrow_mut().changed = true;
                     })?;
-                    let mut documentation = TextEditor::try_create(context)?;
-                    documentation.set_language(None);
-                    documentation.set_palette(&editor.palette())?;
-                    documentation.set_read_only(true);
-                    documentation.set_show_line_numbers(false);
-                    documentation.set_show_minimap(false);
-                    documentation.set_show_whitespaces(false);
-                    documentation.set_show_spaces(false);
-                    documentation.set_show_tabs(false);
-                    documentation.set_word_wrap_enabled(true);
+                    let documentation = popup::editor(context, &editor.palette())?;
+                    let popup_content = popup::Content::new(context, &editor.palette())?;
                     self.tabs.insert(
                         path.clone(),
                         Tab {
                             editor,
                             version: doc.version,
+                            completions: completion::Completion::default(),
                             settings: None,
                             assistance,
                             signature: String::new(),
@@ -540,12 +659,15 @@ impl State {
                             documentation_has_content: false,
                             hover_candidate: None,
                             documentation_popup: None,
+                            popup_content,
                         },
                     );
                 }
                 let tab = self.tabs.get_mut(path).unwrap();
                 tab.configure(settings)?;
                 if tab.version != doc.version {
+                    tab.completions.clear();
+                    tab.assistance.borrow_mut().completion_position = None;
                     let cursor = tab.editor.main_cursor_position();
                     tab.editor.set_text(&doc.text)?;
                     if let Some(value) = documents.lsp_diagnostics.get(path) {
@@ -747,12 +869,15 @@ impl State {
                                     tab.editor.main_cursor_position().column,
                                 ))
                         {
-                            let suggestions = completion_texts(&reply.value);
-                            if let Err(error) =
-                                tab.editor.set_autocomplete_suggestions(&suggestions)
-                            {
-                                self.error = Some(error.to_string());
-                            }
+                            tab.completions
+                                .receive(&reply.value, tab.editor.main_cursor_position());
+                        }
+                    }
+                }
+                "completionItem/resolve" => {
+                    if let Some(tab) = self.tabs.get_mut(&reply.path) {
+                        if reply.position == tab.completions.position.map(|p| (p.line, p.column)) {
+                            tab.completions.resolve(reply.value);
                         }
                     }
                 }
@@ -1077,25 +1202,6 @@ fn line_prefix(text: &str, position: Position) -> String {
         .take(position.column)
         .collect()
 }
-fn completion_texts(value: &serde_json::Value) -> Vec<String> {
-    value
-        .as_array()
-        .or_else(|| value.get("items").and_then(serde_json::Value::as_array))
-        .map(|items| {
-            items
-                .iter()
-                .take(100)
-                .filter_map(|item| {
-                    item.pointer("/textEdit/newText")
-                        .or_else(|| item.get("insertText"))
-                        .or_else(|| item.get("label"))
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_owned)
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
 
 fn diagnostic_location(error: &str) -> Option<(&str, usize, usize)> {
     for line in error.lines() {
@@ -1121,7 +1227,7 @@ fn diagnostic_location(error: &str) -> Option<(&str, usize, usize)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Settings, State, completion_texts, diagnostic_location};
+    use super::{Position, Settings, State, diagnostic_location};
 
     #[test]
     fn typing_and_switching_files_keep_the_requested_editor_focused() {
@@ -1532,6 +1638,106 @@ mod tests {
         state.draw(&mut documents, &settings, context.frame());
         context.end_frame();
         assert!(!state.tabs[b].documentation_has_content);
+        let settings = Settings {
+            autocomplete: true,
+            ..settings
+        };
+        documents.edit(b, "ball".into());
+        state.prepare(&context, Some(&documents), &settings);
+        {
+            let tab = state.tabs.get_mut(b).unwrap();
+            tab.assistance.borrow_mut().available = true;
+            tab.settings = None;
+            tab.editor.set_cursor(Position::new(0, 4)).unwrap();
+        }
+        state.focus_requested = true;
+        for _ in 0..3 {
+            state.prepare(&context, Some(&documents), &settings);
+            state.draw(&mut documents, &settings, context.frame());
+            context.end_frame();
+        }
+        context.io_mut().add_input_character('.');
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        std::thread::sleep(std::time::Duration::from_millis(120));
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        assert_eq!(
+            state.tabs[b].assistance.borrow().completion_position,
+            Some(Position::new(0, 5))
+        );
+        documents.replies.push(crate::editor::lsp::Reply {
+            method: "textDocument/completion".into(), path: b.to_owned(),
+            version: documents.open[b].version, position: Some((0, 5)),
+            value: serde_json::json!([{ "label": "radius", "kind": 5 }, { "label": "position", "kind": 5 }]),
+        });
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        context
+            .io_mut()
+            .add_key_event(dear_imgui_rs::Key::DownArrow, true);
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        assert_eq!(state.tabs[b].completions.selected, 1);
+        assert_eq!(
+            state.tabs[b].editor.main_cursor_position(),
+            Position::new(0, 5)
+        );
+        context
+            .io_mut()
+            .add_key_event(dear_imgui_rs::Key::DownArrow, false);
+        context
+            .io_mut()
+            .add_key_event(dear_imgui_rs::Key::Tab, true);
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        assert_eq!(documents.open[b].text, "ball.position");
+        context
+            .io_mut()
+            .add_key_event(dear_imgui_rs::Key::Tab, false);
+        documents.edit(b, "ball.".into());
+        state.prepare(&context, Some(&documents), &settings);
+        state
+            .tabs
+            .get_mut(b)
+            .unwrap()
+            .editor
+            .set_cursor(Position::new(0, 5))
+            .unwrap();
+        state.focus_requested = true;
+        for _ in 0..3 {
+            state.draw(&mut documents, &settings, context.frame());
+            context.end_frame();
+        }
+        state.tabs.get_mut(b).unwrap().completions.receive(
+            &serde_json::json!([{"label":"radius", "kind":5}, {"label":"position", "kind":5}]),
+            Position::new(0, 5),
+        );
+        let mut suggestion_position = [0.0, 0.0];
+        for _ in 0..3 {
+            let ui = context.frame();
+            state.draw(&mut documents, &settings, ui);
+            ui.window("Suggestions##Code")
+                .build(|| suggestion_position = ui.window_pos());
+            context.end_frame();
+        }
+        context
+            .io_mut()
+            .add_mouse_pos_event([suggestion_position[0] + 30.0, suggestion_position[1] + 38.0]);
+        for _ in 0..3 {
+            state.draw(&mut documents, &settings, context.frame());
+            context.end_frame();
+        }
+        for expected in ["ball.", "ball.position"] {
+            for pressed in [true, false] {
+                context
+                    .io_mut()
+                    .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, pressed);
+                state.draw(&mut documents, &settings, context.frame());
+                context.end_frame();
+            }
+            assert_eq!(documents.open[b].text, expected);
+        }
         drop(state);
         drop(documents);
         std::fs::remove_dir_all(root).unwrap();
@@ -1569,23 +1775,6 @@ mod tests {
         assert_eq!(super::indentation_backspace("  ", 4), Some(0));
         assert_eq!(super::indentation_backspace("a   ", 4), None);
         assert_eq!(super::indentation_backspace("", 4), None);
-    }
-
-    #[test]
-    fn suggestions_use_lsp_insert_text_for_both_response_shapes() {
-        assert_eq!(
-            completion_texts(&serde_json::json!([
-                {"label": "Display", "textEdit": {"newText": "actual"}},
-                {"label": "Fallback", "insertText": "insert"},
-                {"label": "plain"}
-            ])),
-            vec!["actual", "insert", "plain"]
-        );
-        assert_eq!(
-            completion_texts(&serde_json::json!({"items": [{"label": "circle"}]})),
-            vec!["circle"]
-        );
-        assert!(completion_texts(&serde_json::Value::Null).is_empty());
     }
 
     #[test]

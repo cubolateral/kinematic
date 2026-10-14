@@ -64,8 +64,15 @@ its executable, use an existing Neovim Mason installation, or put
 `lua-language-server` on `PATH` (in that search order). Nothing is downloaded.
 Each project owns an asynchronous server, with generated API definitions and
 logs in `kinematic/cache/luals`. User LuaLS settings are not overwritten.
-Completion is available with Ctrl+Space, documentation by hovering a symbol,
-and definition navigation with Ctrl+click or F12. Signatures appear while typing
+Completion opens automatically while typing, including after `.` and `:`;
+Ctrl+Space requests it explicitly. Suggestions show member categories, signatures
+and documentation. Use arrows to select, Tab/Enter to insert, and Esc to dismiss.
+Vector, color, quaternion and property types retain their supported members through
+chained calls. Custom `k.object` methods and `k.component` properties are inferred
+from Lua source, including imported modules, without registering completion lists.
+Members built dynamically from runtime strings may require type annotations.
+Documentation is also available by hovering a symbol, and definition navigation
+with Ctrl+click or F12. Signatures appear while typing
 function arguments. The documentation popup stays in place while the pointer
 moves into it, supports scrolling and text selection/copying, and closes after
 the pointer leaves the symbol and popup. Buffers and version numbers
@@ -97,7 +104,7 @@ and exported `#[lua]` methods are included automatically in LuaLS definitions.
 Property defaults and numeric limits come from the runtime metadata, including
 constructor presets. Write documentation next to the Rust declaration; do not
 edit the generated cache. Shared Lua operations are documented in
-`src/scripting/api.lua`. The generated file
+`src/scripting/api.lua` and the property template `src/scripting/property.lua`. The generated file
 `kinematic/cache/luals/kinematic.lua` lists their types, and
 [the inventory](lua-parity.md) lists the API families. Constructors include
 `circle`, `ellipse`, `rect`, `regular_polygon_2d`, `line_2d`, `image_2d`,

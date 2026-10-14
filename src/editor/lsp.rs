@@ -132,7 +132,7 @@ impl Client {
         std::fs::write(library.join("kinematic.lua"), definitions).map_err(|e| e.to_string())?;
         let settings = lua_settings(&root);
         let uri = file_uri(root.root());
-        tx.send(json!({"jsonrpc":"2.0","id":0,"method":"initialize","params":{"processId":std::process::id(),"rootUri":uri,"workspaceFolders":[{"uri":uri,"name":"Kinematic"}],"capabilities":{"general":{"positionEncodings":["utf-8","utf-16"]},"textDocument":{"completion":{"completionItem":{"snippetSupport":false}},"publishDiagnostics":{"versionSupport":true}}},"initializationOptions":{"Lua":settings,"trustByClient":true}}})).map_err(|e|e.to_string())?;
+        tx.send(json!({"jsonrpc":"2.0","id":0,"method":"initialize","params":{"processId":std::process::id(),"rootUri":uri,"workspaceFolders":[{"uri":uri,"name":"Kinematic"}],"capabilities":{"general":{"positionEncodings":["utf-8","utf-16"]},"textDocument":{"completion":{"completionItem":{"snippetSupport":false,"documentationFormat":["markdown","plaintext"],"resolveSupport":{"properties":["documentation","detail"]}}},"publishDiagnostics":{"versionSupport":true}}},"initializationOptions":{"Lua":settings,"trustByClient":true}}})).map_err(|e|e.to_string())?;
         Ok(Self {
             child,
             send: tx,
@@ -212,6 +212,31 @@ impl Client {
         );
         let character = position_units(text, line, column, self.utf8);
         self.send(json!({"jsonrpc":"2.0","id":id,"method":method,"params":{"textDocument":{"uri":file_uri(&self.root.root().join(path))},"position":{"line":line,"character":character}}}));
+    }
+    pub fn resolve_completion(
+        &mut self,
+        path: &Path,
+        text: &str,
+        version: u64,
+        line: usize,
+        column: usize,
+        item: Value,
+    ) {
+        let id = self.next;
+        self.next += 1;
+        self.requests.insert(
+            id,
+            Request {
+                position: (line, column),
+                utf8_column: position_units(text, line, column, true),
+                method: "completionItem/resolve".into(),
+                path: path.to_owned(),
+                version,
+            },
+        );
+        self.send(
+            json!({"jsonrpc":"2.0", "id":id, "method":"completionItem/resolve", "params":item}),
+        );
     }
     pub fn format(
         &mut self,
@@ -297,7 +322,7 @@ impl Client {
                     .send(json!({"jsonrpc":"2.0","method":"initialized","params":{}}));
                 let _ = self.send.send(json!({"jsonrpc":"2.0","method":"workspace/didChangeConfiguration","params":{"settings":{"Lua":lua_settings(&self.root)}}}));
                 for mut message in self.queued.drain(..) {
-                    if self.utf8 {
+                    if self.utf8 && message["params"].get("position").is_some() {
                         if let Some(request) =
                             message["id"].as_u64().and_then(|id| self.requests.get(&id))
                         {
@@ -328,6 +353,7 @@ impl Client {
                                                     settings["diagnostics"].clone()
                                                 }
                                                 "Lua.files" => settings["files"].clone(),
+                                                "Lua.completion" => settings["completion"].clone(),
                                                 _ => Value::Null,
                                             }
                                         })
@@ -428,6 +454,7 @@ fn lua_settings(root: &ProjectContext) -> Value {
         "runtime": {"version": "Lua 5.4", "plugin": root.root().join("kinematic/cache/luals/components.lua")},
         "workspace": {"library": [root.root().join("kinematic/cache/luals")], "checkThirdParty": false,
             "ignoreDir": ["kinematic", ".kinematic", "output", "target", ".git"]},
+        "completion": {"showWord": "Disable", "workspaceWord": false, "maxSuggestCount": 500, "callSnippet": "Disable"},
         "diagnostics": {"libraryFiles": "Disable", "ignoredFiles": "Disable"},
         "files": {"associations": {"*.lua": "lua"}},
     })
@@ -991,6 +1018,148 @@ end
                 .take(8)
                 .any(|line| line.contains("Replaces the text and fades"))
         );
+        drop(client);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn real_server_completes_specific_values_and_custom_methods() {
+        if Command::new(executable())
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            eprintln!("LuaLS integration unavailable: executable not installed.");
+            return;
+        }
+        let root =
+            std::env::temp_dir().join(format!("kinematic-completion-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("kinematic.ron"), "(version:1,name:\"Test\",scenes:[\"intro.lua\"],resolution:(640,480),fps:60,margin:(0,0))").unwrap();
+        std::fs::write(
+            root.join("custom.lua"),
+            r#"
+local function origin() return k.vec2(1, 2) end
+local function heading(object) return object.velocity:get():normalized() end
+local motion = k.component { velocity = {default = k.vec2(10, 20)}, speed = {default = 40}, offset = {default = origin()}, multiplier = {default = 2 * 3} }
+return k.object {
+    components = {motion},
+    methods = {
+        heading = heading,
+        increment = function(self, amount) return self:by {speed = amount} end,
+    },
+}
+"#,
+        )
+        .unwrap();
+        let mut client = Client::start(
+            ProjectContext::new(&root).unwrap(),
+            &crate::scripting::definitions(),
+        )
+        .unwrap();
+        let path = Path::new("intro.lua");
+        for (index, (expression, expected, excluded)) in [
+            ("k.vec2(1, 2).", "x", "r"),
+            ("k.vec2(1, 2):", "length", "cross"),
+            ("k.vec3(1, 2, 3):", "cross", "r"),
+            ("k.color(1, 0, 0).", "r", "x"),
+            ("ball.position:", "get", "cross"),
+            ("ball.position:get():", "normalized", "cross"),
+            ("ball.radius.", "get", "x"),
+            ("custom.", "velocity", "radius"),
+            ("custom:", "heading", "fade"),
+            ("custom:heading():", "length", "cross"),
+            ("custom.offset:get():", "length", "cross"),
+            ("custom.multiplier.", "get", "x"),
+            ("custom:increment(1):", "play", "length"),
+            ("s:circle { ra", "radius", "velocity"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let text = format!(
+                "local definition = require('custom')\nreturn function(s)\nlocal ball = s:circle {{}}\nlocal custom = s:object(definition, {{}})\n{expression}\nend\n"
+            );
+            let version = index as u64 + 1;
+            let column = expression.chars().count();
+            client.sync(path, &text, version);
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+            let mut labels = Vec::new();
+            let mut completion = Value::Null;
+            while std::time::Instant::now() < deadline {
+                client.request("textDocument/completion", path, &text, version, 4, column);
+                let until = std::time::Instant::now() + std::time::Duration::from_millis(200);
+                while std::time::Instant::now() < until {
+                    for reply in client.poll() {
+                        if reply.method == "textDocument/completion" && reply.version == version {
+                            completion = reply.value.clone();
+                            labels = reply
+                                .value
+                                .as_array()
+                                .or_else(|| reply.value["items"].as_array())
+                                .into_iter()
+                                .flatten()
+                                .filter_map(|item| item["label"].as_str().map(str::to_owned))
+                                .collect();
+                        }
+                    }
+                    if labels.iter().any(|label| label.starts_with(expected)) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                if labels.iter().any(|label| label.starts_with(expected)) {
+                    break;
+                }
+            }
+            assert!(
+                labels.iter().any(|label| label.starts_with(expected)),
+                "{expression} must suggest {expected}: {labels:?}; {:?}",
+                client.messages
+            );
+            assert!(
+                !labels
+                    .iter()
+                    .any(|label| label == excluded || label.starts_with(&format!("{excluded}("))),
+                "{expression} must not suggest {excluded}: {labels:?}"
+            );
+            if expression == "custom:" {
+                assert!(
+                    labels.iter().any(|label| label.starts_with("increment(")
+                        && label.contains("amount")
+                        && !label.contains("...")),
+                    "Custom signatures must preserve parameters: {labels:?}"
+                );
+            }
+            if expression == "k.vec2(1, 2)." {
+                let item = completion
+                    .as_array()
+                    .or_else(|| completion["items"].as_array())
+                    .unwrap()
+                    .iter()
+                    .find(|item| item["label"] == "x")
+                    .unwrap()
+                    .clone();
+                client.resolve_completion(path, &text, version, 4, column, item);
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+                let mut resolved = None;
+                while std::time::Instant::now() < deadline && resolved.is_none() {
+                    for reply in client.poll() {
+                        if reply.method == "completionItem/resolve"
+                            && reply.position == Some((4, column))
+                        {
+                            resolved = Some(reply.value);
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                let item = resolved.expect("LuaLS must resolve completion documentation.");
+                assert!(
+                    item["documentation"].to_string().contains("component"),
+                    "{item}"
+                );
+            }
+        }
         drop(client);
         std::fs::remove_dir_all(root).unwrap();
     }
