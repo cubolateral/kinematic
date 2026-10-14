@@ -10,11 +10,12 @@ interaction details belong in the panel modules, not in `ui/mod.rs`.
 - `theme.rs`: Appearance state, font loading, colors, scale, and style geometry.
 - `workspace.rs`: Default docking layout. It refers to panels through their
   `WINDOW_NAME` constants.
-- `settings.rs`: Persistent Project, Editor, and Appearance settings opened from the menus.
+- `settings.rs`: Separate Project settings and Editor settings windows opened from the menus.
 - `code.rs`: Lua buffers, file tabs, focus, and inline LuaLS assistance.
 - `code/diagnostics.rs`: Compact diagnostic footer with severity filters and counts.
 - `code/files.rs`: Project file tree, context menu, and file operation dialogs.
 - `widgets.rs`: Small drawing and measurement helpers shared by panels.
+- `windows.rs`: Shared templates for centered floating windows, modals, and popups.
 - `scene_tree.rs`: Active scene hierarchy and entity selection.
 - `inspector.rs`: Read-only inspection of the selected entity.
 - `export.rs`: Export popup and its local UI state.
@@ -50,6 +51,12 @@ To add a panel:
 2. Store panel state beside the other fields in `ui::Ui`, if needed.
 3. Call it from `Ui::draw`.
 4. Add it to `workspace::apply_default_layout`.
+
+Use `windows::window` for floating windows, `windows::modal` for dialogs, and
+`windows::sized_modal` when a dialog needs a specific size. These templates own
+initial positioning and sizing; callers supply content and actions. Keep this
+module independent of editor and project types so it can move to `kinematic-ui`.
+Context menus and inline code assistance keep their contextual anchors.
 
 To change Timeline behavior, update the module that owns that responsibility.
 Pure calculations should remain independent of Dear ImGui and have unit tests.

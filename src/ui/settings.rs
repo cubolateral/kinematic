@@ -7,13 +7,14 @@ use super::{
     widgets::{numeric_input_arrows, text_size},
 };
 
-pub(super) const WINDOW_NAME: &str = "Settings";
+const PROJECT_WINDOW: &str = "Project settings";
+const EDITOR_WINDOW: &str = "Editor settings";
 const SETTINGS_PATH: &str = "settings.ron";
 
 #[derive(Default)]
 pub(super) struct State {
-    pub(super) open: bool,
-    pub(super) editor_requested: bool,
+    pub(super) project_open: bool,
+    pub(super) editor_open: bool,
     initialized: bool,
     resolution: [i32; 2],
     fps: i32,
@@ -70,88 +71,82 @@ pub(super) fn draw(
 ) -> bool {
     let mut changed = false;
 
-    if !state.open {
-        return false;
-    }
-    let mut open = state.open;
-    ui.window(WINDOW_NAME)
-        .opened(&mut open)
-        .flags(dear_imgui_rs::WindowFlags::NO_DOCKING)
-        .size([520.0, 420.0], dear_imgui_rs::Condition::FirstUseEver)
-        .build(|| {
-            if let Some(_tabs) = ui.tab_bar("Settings sections") {
-                if let Some(_project) = ui.tab_item("Project") {
-                    if let Some(editor) = editor {
-                        if !state.initialized {
-                            let (_, settings) = editor.project_info();
-                            state.resolution =
-                                [settings.resolution.0 as i32, settings.resolution.1 as i32];
-                            state.fps = settings.fps as i32;
-                            state.margin = [settings.margin.0 as i32, settings.margin.1 as i32];
-                            state.initialized = true;
-                        }
+    if state.project_open {
+        let mut open = true;
+        super::windows::window(ui, PROJECT_WINDOW, [520.0, 220.0])
+            .opened(&mut open)
+            .build(|| {
+                if let Some(editor) = editor {
+                    if !state.initialized {
+                        let (_, settings) = editor.project_info();
+                        state.resolution =
+                            [settings.resolution.0 as i32, settings.resolution.1 as i32];
+                        state.fps = settings.fps as i32;
+                        state.margin = [settings.margin.0 as i32, settings.margin.1 as i32];
+                        state.initialized = true;
+                    }
 
-                        ui.separator_with_text("Project");
-                        let project_changed = {
-                            let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
-                            let resolution_changed = input_int_components(
-                                ui,
-                                "Resolution",
-                                &mut state.resolution,
-                                ["Width", "Height"],
-                            );
-                            let fps_changed = input_int(ui, "FPS", &mut state.fps);
-                            let margin_changed = input_int_components(
-                                ui,
-                                "Margin (px)",
-                                &mut state.margin,
-                                ["Width", "Height"],
-                            );
-                            resolution_changed || fps_changed || margin_changed
+                    let project_changed = {
+                        let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
+                        let resolution_changed = input_int_components(
+                            ui,
+                            "Resolution",
+                            &mut state.resolution,
+                            ["Width", "Height"],
+                        );
+                        let fps_changed = input_int(ui, "FPS", &mut state.fps);
+                        let margin_changed = input_int_components(
+                            ui,
+                            "Margin (px)",
+                            &mut state.margin,
+                            ["Width", "Height"],
+                        );
+                        resolution_changed || fps_changed || margin_changed
+                    };
+                    let valid_resolution = state
+                        .resolution
+                        .iter()
+                        .all(|value| *value > 0 && *value <= 8192 && value % 2 == 0);
+                    let valid_fps = state.fps > 0 && state.fps <= 1000;
+                    let valid_margin = state.margin[0] >= 0
+                        && state.margin[1] >= 0
+                        && state.margin[0] < state.resolution[0] / 2
+                        && state.margin[1] < state.resolution[1] / 2;
+
+                    if !valid_resolution {
+                        ui.text_wrapped(
+                            "Resolution dimensions must be even numbers from 2 to 8192.",
+                        );
+                    }
+                    if !valid_fps {
+                        ui.text_wrapped("FPS must be between 1 and 1000.");
+                    }
+                    if !valid_margin {
+                        ui.text_wrapped("Margin must fit inside the resolution.");
+                    }
+                    if project_changed && valid_resolution && valid_fps && valid_margin {
+                        let settings = ProjectSettings {
+                            resolution: (state.resolution[0] as u32, state.resolution[1] as u32),
+                            fps: state.fps as u32,
+                            margin: (state.margin[0] as u32, state.margin[1] as u32),
                         };
-                        let valid_resolution = state
-                            .resolution
-                            .iter()
-                            .all(|value| *value > 0 && *value <= 8192 && value % 2 == 0);
-                        let valid_fps = state.fps > 0 && state.fps <= 1000;
-                        let valid_margin = state.margin[0] >= 0
-                            && state.margin[1] >= 0
-                            && state.margin[0] < state.resolution[0] / 2
-                            && state.margin[1] < state.resolution[1] / 2;
-
-                        if !valid_resolution {
-                            ui.text_wrapped(
-                                "Resolution dimensions must be even numbers from 2 to 8192.",
-                            );
-                        }
-                        if !valid_fps {
-                            ui.text_wrapped("FPS must be between 1 and 1000.");
-                        }
-                        if !valid_margin {
-                            ui.text_wrapped("Margin must fit inside the resolution.");
-                        }
-                        if project_changed && valid_resolution && valid_fps && valid_margin {
-                            let settings = ProjectSettings {
-                                resolution: (
-                                    state.resolution[0] as u32,
-                                    state.resolution[1] as u32,
-                                ),
-                                fps: state.fps as u32,
-                                margin: (state.margin[0] as u32, state.margin[1] as u32),
-                            };
-                            if editor.project_info().1 != settings {
-                                editor.request_project_settings(settings);
-                            }
+                        if editor.project_info().1 != settings {
+                            editor.request_project_settings(settings);
                         }
                     }
                 }
-                let editor_flags = if state.editor_requested {
-                    dear_imgui_rs::TabItemFlags::SET_SELECTED
-                } else {
-                    dear_imgui_rs::TabItemFlags::NONE
-                };
-                if let Some(_editor) = ui.tab_item_with_flags("Editor", None, editor_flags) {
-                    state.editor_requested = false;
+            });
+        state.project_open = open;
+    }
+    if !state.editor_open {
+        return false;
+    }
+    let mut open = true;
+    super::windows::window(ui, EDITOR_WINDOW, [520.0, 420.0])
+        .opened(&mut open)
+        .build(|| {
+            if let Some(_tabs) = ui.tab_bar("Editor settings sections") {
+                if let Some(_editor) = ui.tab_item("Code Editor") {
                     let settings = &mut appearance.editor;
                     changed |= ui.slider_f32("Font size", &mut settings.font_size, 10.0, 28.0);
                     changed |= ui.slider("Tab size", 1usize, 8usize, &mut settings.tab_size);
@@ -206,7 +201,7 @@ pub(super) fn draw(
             }
         });
 
-    state.open = open;
+    state.editor_open = open;
     changed
 }
 
@@ -248,7 +243,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn settings_open_only_on_request_and_work_without_a_project() {
+    fn settings_open_independently_and_start_centered() {
         let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
         context.set_ini_filename(None::<&str>).unwrap();
@@ -265,13 +260,38 @@ mod tests {
         context.end_frame();
         let mut layout = String::new();
         context.save_ini_settings(&mut layout);
-        assert!(!layout.contains("[Window][Settings]"));
-        state.open = true;
+        assert!(!layout.contains("[Window][Editor settings]"));
+        state.editor_open = true;
         assert!(!draw(&mut appearance, &mut state, None, context.frame()));
         context.end_frame();
         context.save_ini_settings(&mut layout);
-        assert!(layout.contains("[Window][Settings]"));
+        assert!(layout.contains("[Window][Editor settings]"));
+        assert!(!layout.contains("[Window][Project settings]"));
         assert!(!state.initialized);
+
+        for _ in 0..2 {
+            assert!(!draw(&mut appearance, &mut state, None, context.frame()));
+            context.end_frame();
+        }
+        layout.clear();
+        context.save_ini_settings(&mut layout);
+        assert!(layout.contains("[Window][Editor settings]\nPos=380,150\nSize=520,420"));
+
+        state.editor_open = false;
+        state.project_open = true;
+        for _ in 0..2 {
+            assert!(!draw(&mut appearance, &mut state, None, context.frame()));
+            context.end_frame();
+        }
+        layout.clear();
+        context.save_ini_settings(&mut layout);
+        assert!(layout.contains("[Window][Project settings]\nPos=380,250\nSize=520,220"));
+        assert!(!state.editor_open);
+
+        state.editor_open = true;
+        assert!(!draw(&mut appearance, &mut state, None, context.frame()));
+        context.end_frame();
+        assert!(state.project_open && state.editor_open);
     }
 
     #[test]

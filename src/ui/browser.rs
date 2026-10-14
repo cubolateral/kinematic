@@ -9,7 +9,7 @@ use std::{
     thread,
 };
 
-use dear_imgui_rs::{Condition, ListClipper, MouseButton, StyleVar, TableFlags, Ui};
+use dear_imgui_rs::{ListClipper, MouseButton, StyleVar, TableFlags, Ui};
 
 use super::icons;
 
@@ -133,9 +133,8 @@ impl State {
         let _popup_border = ui.push_style_var(StyleVar::PopupBorderSize(0.0));
         let mut open = true;
         {
-            let popup = ui.begin_modal_popup_config(TITLE).opened(&mut open).begin();
+            let popup = super::windows::sized_modal(ui, TITLE, &mut open, [760.0, 520.0]);
             if let Some(_popup) = popup {
-                ui.set_window_size_with_cond([760.0, 520.0], Condition::FirstUseEver);
                 for (label, step, enabled) in [
                     ("Back", -1, self.history_index > 0),
                     ("Forward", 1, self.history_index + 1 < self.history.len()),

@@ -1,6 +1,6 @@
 use crate::editor::documents::{Documents, FileEntry, SceneTemplate};
 use crate::ui::icons;
-use dear_imgui_rs::{Condition, Key, MouseButton, StyleColor, Ui, WindowFlags};
+use dear_imgui_rs::{Condition, Key, MouseButton, StyleColor, Ui};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -242,13 +242,8 @@ impl State {
         let mut open = true;
         let mut finished = false;
         let mut focus = false;
-        if let Some(_modal) = ui
-            .begin_modal_popup_config(title)
-            .opened(&mut open)
-            .flags(WindowFlags::ALWAYS_AUTO_RESIZE | WindowFlags::NO_SAVED_SETTINGS)
-            .begin()
-        {
-            let width = (ui.io().display_size()[0] - 48.0).clamp(180.0, 440.0);
+        if let Some(_modal) = crate::ui::windows::modal(ui, title, &mut open) {
+            let width = ui.content_region_avail_width().max(1.0);
             let _wrap = ui.push_text_wrap_pos(ui.cursor_pos()[0] + width);
             ui.text_wrapped(if dialog.target.as_os_str().is_empty() {
                 "Project root".into()
@@ -405,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    fn context_menu_stays_open_and_scene_dialog_creates_with_enter() {
+    fn context_menu_stays_open_and_file_dialogs_start_centered() {
         let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
         context.set_ini_filename(None::<&str>).unwrap();
@@ -467,34 +462,77 @@ mod tests {
             drop(_font);
             context.end_frame();
         }
-        state.dialog = Some(Dialog {
-            action: Action::Scene,
-            target: "scenes".into(),
-            name: "New scene##1".into(),
-            template: SceneTemplate::ThreeD,
-            error: None,
-            opening: true,
-        });
-        for enter in [false, false, true] {
-            context.io_mut().add_key_event(Key::Enter, enter);
-            let ui = context.frame();
-            let _font = ui.push_font(font);
-            ui.window("Files").build(|| {
-                state.draw(&mut documents, ui, &mut error);
+        for (action, target, name, title, expected_path) in [
+            (
+                Action::Scene,
+                "scenes",
+                "New scene##1",
+                c"Add Scene",
+                "scenes/New scene##1.lua",
+            ),
+            (
+                Action::Rename,
+                "scenes/New scene##1.lua",
+                "Renamed scene.lua",
+                c"Rename",
+                "scenes/Renamed scene.lua",
+            ),
+        ] {
+            state.dialog = Some(Dialog {
+                action,
+                target: target.into(),
+                name: name.into(),
+                template: SceneTemplate::ThreeD,
+                error: None,
+                opening: true,
             });
-            drop(_font);
-            context.end_frame();
+            let mut visible_frames = 0;
+            for enter in [false, false, false, true] {
+                context.io_mut().add_key_event(Key::Enter, enter);
+                let ui = context.frame();
+                let _font = ui.push_font(font);
+                ui.window("Files").build(|| {
+                    state.draw(&mut documents, ui, &mut error);
+                    if !enter {
+                        // Inspect the actual modal without beginning it a second time.
+                        unsafe {
+                            let window = dear_imgui_rs::sys::igFindWindowByName(title.as_ptr());
+                            assert!(!window.is_null());
+                            if !(*window).Hidden {
+                                visible_frames += 1;
+                                let pos = (*window).Pos;
+                                let size = (*window).Size;
+                                assert!(
+                                    (pos.x + size.x / 2.0 - 450.0).abs() <= 1.0,
+                                    "{title:?}: X: {}, {}",
+                                    pos.x,
+                                    size.x
+                                );
+                                assert!(
+                                    (pos.y + size.y / 2.0 - 350.0).abs() <= 1.0,
+                                    "{title:?}: Y: {}, {}",
+                                    pos.y,
+                                    size.y
+                                );
+                            }
+                        }
+                    }
+                });
+                drop(_font);
+                context.end_frame();
+            }
+            assert!(visible_frames > 0);
+            assert!(state.dialog.is_none());
+            assert!(error.is_none());
+            assert!(root.join(expected_path).exists());
+            assert!(
+                crate::scripting::LuaProject::open(&root)
+                    .unwrap()
+                    .manifest
+                    .scenes
+                    .contains(&PathBuf::from(expected_path))
+            );
         }
-        assert!(state.dialog.is_none());
-        assert!(error.is_none());
-        assert!(root.join("scenes/New scene##1.lua").exists());
-        assert!(
-            crate::scripting::LuaProject::open(&root)
-                .unwrap()
-                .manifest
-                .scenes
-                .contains(&PathBuf::from("scenes/New scene##1.lua"))
-        );
         drop(documents);
         std::fs::remove_dir_all(root).unwrap();
     }

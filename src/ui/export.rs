@@ -10,26 +10,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
         ui.tooltip_text("Export");
     }
 
-    let (_, anchor) = ui.item_rect();
-    unsafe {
-        dear_imgui_rs::sys::igSetNextWindowPos(
-            dear_imgui_rs::sys::ImVec2 {
-                x: anchor[0],
-                y: anchor[1],
-            },
-            dear_imgui_rs::Condition::Always as i32,
-            dear_imgui_rs::sys::ImVec2 { x: 1.0, y: 0.0 },
-        );
-        dear_imgui_rs::sys::igSetNextWindowSize(
-            dear_imgui_rs::sys::ImVec2 {
-                x: ui.frame_height() * 10.0,
-                y: 0.0,
-            },
-            dear_imgui_rs::Condition::Always as i32,
-        );
-    }
-
-    let Some(_popup) = ui.begin_popup("Export") else {
+    let Some(_popup) = super::windows::popup(ui, "Export", ui.frame_height() * 10.0) else {
         return false;
     };
 

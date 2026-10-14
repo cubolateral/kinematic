@@ -704,10 +704,8 @@ impl State {
     pub fn projects(&mut self, mut editor: Option<&mut Editor>, ui: &dear_imgui_rs::Ui) {
         if self.projects_open {
             let mut open = true;
-            ui.window("Projects")
+            super::windows::window(ui, "Projects", [440.0, 250.0])
                 .opened(&mut open)
-                .flags(dear_imgui_rs::WindowFlags::NO_DOCKING)
-                .size([440.0, 250.0], dear_imgui_rs::Condition::FirstUseEver)
                 .build(|| {
                     ui.text("Directory");
                     let style = ui.clone_style();
@@ -772,7 +770,8 @@ impl State {
                 return;
             }
             ui.open_popup("Unsaved changes");
-            if let Some(_modal) = ui.begin_modal_popup("Unsaved changes") {
+            let mut open = true;
+            if let Some(_modal) = super::windows::modal(ui, "Unsaved changes", &mut open) {
                 ui.text("Save changes before continuing?");
                 if ui.button("Save") {
                     let result = editor
@@ -803,6 +802,9 @@ impl State {
                 if let Some(error) = &self.error {
                     ui.text_wrapped(error);
                 }
+            }
+            if !open {
+                self.pending = None;
             }
         }
     }

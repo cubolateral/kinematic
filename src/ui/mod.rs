@@ -13,6 +13,7 @@ mod settings;
 mod theme;
 mod timeline;
 mod widgets;
+mod windows;
 mod workspace;
 
 use crate::editor::Editor;
@@ -58,8 +59,8 @@ fn draw_project_menu(
         if ui.menu_item("Open / Create Project") {
             code.projects_open = true;
         }
-        if ui.menu_item("Settings") {
-            settings.open = true;
+        if ui.menu_item("Project settings") {
+            settings.project_open = true;
         }
         ui.separator();
         if ui.menu_item("Quit") {
@@ -67,9 +68,8 @@ fn draw_project_menu(
         }
     }
     if let Some(_menu) = ui.begin_menu("Editor") {
-        if ui.menu_item("Settings") {
-            settings.open = true;
-            settings.editor_requested = true;
+        if ui.menu_item("Editor settings") {
+            settings.editor_open = true;
         }
     }
 }
