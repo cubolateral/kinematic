@@ -12,6 +12,7 @@ mod diagnostics;
 mod documentation;
 mod files;
 mod popup;
+mod shortcuts;
 
 pub(super) const WINDOW_NAME: &str = "Code";
 pub(super) const FILES_WINDOW: &str = "Files";
@@ -88,6 +89,7 @@ impl DocumentationPopup {
 
 struct Tab {
     editor: TextEditor,
+    chord_started: Option<f64>,
     version: u64,
     completions: completion::Completion,
     settings: Option<Settings>,
@@ -213,6 +215,16 @@ impl Tab {
         if focused && inputs::active(ui, InputAction::Find) {
             self.editor.open_find_replace();
         }
+        if focused
+            && !self
+                .documentation_popup
+                .as_ref()
+                .is_some_and(|popup| popup.focused)
+        {
+            if let Err(error) = self.shortcuts(ui) {
+                *output_error = Some(error.to_string());
+            }
+        }
         let _font = ui.push_font_with_size(None, font_size);
         let available = ui.content_region_avail();
         let height = (available[1] - footer_height).max(1.0);
@@ -326,7 +338,10 @@ impl Tab {
                 }
                 let text = &documents.open[path].text;
                 let prefix = line_prefix(text, cursor);
-                let signature = changed && (prefix.ends_with(['(', ',']) || signature_active);
+                let signature = (changed && (prefix.ends_with(['(', ',']) || signature_active))
+                    || (focused
+                        && !ui.is_any_item_active()
+                        && inputs::active(ui, InputAction::SignatureHelp));
                 if prefix.ends_with(')') {
                     self.signature.clear();
                 }
@@ -583,6 +598,9 @@ pub(super) struct State {
     focus_requested: bool,
     displayed_active: Option<PathBuf>,
     jump: Option<(PathBuf, usize, usize, bool)>,
+    navigation: Option<(bool, String)>,
+    navigation_opening: bool,
+    navigation_selected: usize,
     diagnostics: diagnostics::Footer,
     pub focused: bool,
     pub error: Option<String>,
@@ -642,6 +660,7 @@ impl State {
                         path.clone(),
                         Tab {
                             editor,
+                            chord_started: None,
                             version: doc.version,
                             completions: completion::Completion::default(),
                             settings: None,
@@ -683,6 +702,7 @@ impl State {
         self.focus_requested = false;
         self.displayed_active = None;
         self.jump = None;
+        self.navigation = None;
         self.diagnostics = diagnostics::Footer::default();
         self.error = None;
         self.focused = false;
@@ -975,12 +995,13 @@ impl State {
         if self.focus_requested {
             ui.set_window_focus(Some(WINDOW_NAME));
         }
-        let requested_active = documents.active.clone();
-        let select_active = self.displayed_active != requested_active || self.focus_requested;
         ui.window(WINDOW_NAME).build(|| {
             let _tabs_style = ui.push_style_var(dear_imgui_rs::StyleVar::TabRounding(0.0));
             self.focused = ui
                 .is_window_focused_with_flags(dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS);
+            self.document_shortcuts(documents, settings, ui);
+            let requested_active = documents.active.clone();
+            let select_active = self.displayed_active != requested_active || self.focus_requested;
             let base_size = if settings.font_size.is_finite() {
                 settings.font_size.clamp(10.0, 28.0)
             } else {
@@ -1096,6 +1117,7 @@ impl State {
                     }
                 }
             }
+            self.navigation_popup(documents, ui);
             if documents.open.is_empty() {
                 let mut messages = documents.diagnostic_messages();
                 messages.extend(self.error.iter().cloned());

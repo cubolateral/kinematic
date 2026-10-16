@@ -230,7 +230,8 @@ impl App {
         let mut events = self.sdl.event_pump().unwrap();
 
         'running: loop {
-            for event in events.poll_iter() {
+            for mut event in events.poll_iter() {
+                normalize_key_event(&mut event);
                 self.imgui_sdl
                     .process_event(&mut self.imgui, &event)
                     .unwrap();
@@ -390,3 +391,97 @@ impl App {
 #[cfg(test)]
 #[path = "lua_graphics_tests.rs"]
 mod lua_graphics_tests;
+
+fn normalize_key_event(event: &mut sdl3::event::Event) {
+    use sdl3::{
+        event::Event,
+        keyboard::{Keycode, Scancode},
+    };
+    let (Event::KeyDown {
+        keycode: Some(key),
+        scancode,
+        ..
+    }
+    | Event::KeyUp {
+        keycode: Some(key),
+        scancode,
+        ..
+    }) = event
+    else {
+        return;
+    };
+    // ImGui uses US scancodes for punctuation, including the unrecognized ABNT2 slash key.
+    let mapped = match key {
+        Keycode::Slash => Scancode::Slash,
+        Keycode::LeftBracket => Scancode::LeftBracket,
+        Keycode::RightBracket => Scancode::RightBracket,
+        Keycode::Backslash => Scancode::Backslash,
+        Keycode::Minus => Scancode::Minus,
+        Keycode::Equals => Scancode::Equals,
+        Keycode::Apostrophe => Scancode::Apostrophe,
+        Keycode::Grave => Scancode::Grave,
+        _ => return,
+    };
+    *scancode = Some(mapped);
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use crate::app::normalize_key_event;
+    use sdl3::{
+        event::Event,
+        keyboard::{Keycode, Mod, Scancode},
+    };
+
+    #[test]
+    fn punctuation_uses_the_layout_symbol_for_press_and_release() {
+        for (keycode, physical, expected) in [
+            (Keycode::Slash, Scancode::International1, Scancode::Slash),
+            (
+                Keycode::LeftBracket,
+                Scancode::RightBracket,
+                Scancode::LeftBracket,
+            ),
+            (
+                Keycode::RightBracket,
+                Scancode::Backslash,
+                Scancode::RightBracket,
+            ),
+            (
+                Keycode::Backslash,
+                Scancode::NonUsBackslash,
+                Scancode::Backslash,
+            ),
+            (Keycode::A, Scancode::A, Scancode::A),
+        ] {
+            let mut down = Event::KeyDown {
+                timestamp: 0,
+                window_id: 1,
+                keycode: Some(keycode),
+                scancode: Some(physical),
+                keymod: Mod::LCTRLMOD,
+                repeat: false,
+                which: 0,
+                raw: 0,
+            };
+            let mut up = Event::KeyUp {
+                timestamp: 0,
+                window_id: 1,
+                keycode: Some(keycode),
+                scancode: Some(physical),
+                keymod: Mod::NOMOD,
+                repeat: false,
+                which: 0,
+                raw: 0,
+            };
+            normalize_key_event(&mut down);
+            normalize_key_event(&mut up);
+            assert!(
+                matches!(down, Event::KeyDown { scancode: Some(code), keymod: Mod::LCTRLMOD, .. } if code == expected)
+            );
+            assert!(
+                matches!(up, Event::KeyUp { scancode: Some(code), keymod: Mod::NOMOD, .. } if code == expected)
+            );
+        }
+    }
+}

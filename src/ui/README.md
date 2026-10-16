@@ -14,6 +14,7 @@ interaction details belong in the panel modules, not in `ui/mod.rs`.
 - `settings.rs`: Separate Project settings and Editor settings windows opened from the menus.
 - `code.rs`: Lua buffers, file tabs, focus, and inline LuaLS assistance.
 - `code/diagnostics.rs`: Compact diagnostic footer with severity filters and counts.
+- `code/shortcuts.rs`: VS Code Linux editing overrides, command chords, and keyboard navigation.
 - `code/files.rs`: Project file tree, context menu, and file operation dialogs.
 - `widgets.rs`: Small drawing and measurement helpers shared by panels.
 - `windows.rs`: Shared templates for centered floating windows, modals, and popups.
@@ -64,3 +65,26 @@ Pure calculations should remain independent of Dear ImGui and have unit tests.
 
 Run `cargo fmt --check`, `cargo check --workspace`, and
 `cargo test --workspace` after UI changes.
+
+## Code editor shortcuts
+
+The keymap follows VS Code on Linux for the editor features available here.
+Editor Settings → Shortcuts lists both application commands and the CTE editing
+bindings. `Ctrl+P` searches project files; arrows choose a result and Enter opens
+it. `Ctrl+G` accepts a one-based `line:column`. Closing an editor uses the existing
+unsaved-changes dialog. Formatting uses LuaLS without saving the file.
+
+SDL key events normalize punctuation by its layout symbol before reaching
+ImGui, so ABNT2 slash and bracket keys share the same shortcuts as US keyboards.
+Register every alternative key in routed bindings, including keypad Enter.
+
+CTE owns basic editing, undo, comments, indentation, moving lines, and growing
+selections. Register overrides before rendering CTE, through ImGui routing, so
+its conflicting defaults do not execute as well. Keep text-field and
+documentation focus separate from source editing.
+
+The current CTE API cannot create arbitrary additional carets. Multi-cursor
+selection uses `Ctrl+D` and `Ctrl+Shift+L`; custom range edits (word deletion,
+line duplication/insertion, cutting whole lines, and explicit comment chords) collapse to one caret.
+Vertical caret insertion, column selection, workspace search, rename/refactoring,
+and a command palette are not implemented.

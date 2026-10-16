@@ -48,7 +48,41 @@ pub(super) enum Action {
     CancelSuggestion,
     SelectAll,
     Copy,
+    Cut,
     RequestSuggestions,
+    SignatureHelp,
+    Replace,
+    SelectLine,
+    NextOccurrence,
+    AllOccurrences,
+    DuplicateUp,
+    DuplicateDown,
+    DeleteWordLeft,
+    DeleteWordRight,
+    InsertAbove,
+    SoftNewline,
+    InsertBelow,
+    ScrollUp,
+    ScrollDown,
+    FindNext,
+    FindPrevious,
+    GoToLine,
+    QuickOpen,
+    CloseTab,
+    NextTab,
+    PreviousTab,
+    SaveAll,
+    FormatDocument,
+    ToggleWordWrap,
+    JumpBracket,
+    Fold,
+    Unfold,
+    NativeEditing,
+    ChordPrefix,
+    CommentLines,
+    UncommentLines,
+    FoldAll,
+    UnfoldAll,
 }
 
 #[derive(Clone, Copy)]
@@ -116,12 +150,8 @@ impl Default for InputMap {
     fn default() -> Self {
         use crate::ui::inputs::{Action::*, Category::*, Trigger::*};
 
-        let (suggestion_modifier, suggestion_display) = if cfg!(target_vendor = "apple") {
-            (KeyMods::SUPER, "Super + Space")
-        } else {
-            (KeyMods::CTRL, "Ctrl + Space")
-        };
-        Self {
+        let (suggestion_modifier, suggestion_display) = (KeyMods::CTRL, "Ctrl + Space");
+        let mut map = Self {
             bindings: vec![
                 Binding::new(
                     RequestSuggestions,
@@ -131,6 +161,17 @@ impl Default for InputMap {
                     &[Key::Space],
                 )
                 .modifiers(suggestion_modifier, suggestion_modifier),
+                Binding::new(
+                    SignatureHelp,
+                    CodeEditor,
+                    "Show parameter hints",
+                    "Ctrl + Shift + Space",
+                    &[Key::Space],
+                )
+                .modifiers(
+                    KeyMods::CTRL | KeyMods::SHIFT,
+                    KeyMods::CTRL | KeyMods::SHIFT,
+                ),
                 Binding::new(
                     ToggleFullscreen,
                     Editor,
@@ -271,10 +312,10 @@ impl Default for InputMap {
                 Binding::new(Cancel, Editor, "Cancel dialog", "Escape", &[Key::Escape])
                     .modifiers(KeyMods::empty(), KeyMods::all())
                     .trigger(Repeat),
-                Binding::new(Find, CodeEditor, "Find / replace", "Ctrl + F", &[Key::F])
-                    .modifiers(KeyMods::CTRL, KeyMods::all()),
+                Binding::new(Find, CodeEditor, "Find", "Ctrl + F", &[Key::F])
+                    .modifiers(KeyMods::CTRL, KeyMods::CTRL),
                 Binding::new(Save, CodeEditor, "Save file", "Ctrl + S", &[Key::S])
-                    .modifiers(KeyMods::CTRL, KeyMods::all()),
+                    .modifiers(KeyMods::CTRL, KeyMods::CTRL),
                 Binding::new(
                     ZoomIn,
                     CodeEditor,
@@ -382,7 +423,351 @@ impl Default for InputMap {
                 .modifiers(KeyMods::CTRL, KeyMods::all())
                 .trigger(Repeat),
             ],
+        };
+        for (action, name, display, key, modifiers) in [
+            (
+                Cut,
+                "Cut selection / line",
+                "Ctrl + X",
+                Key::X,
+                KeyMods::CTRL,
+            ),
+            (Replace, "Replace", "Ctrl + H", Key::H, KeyMods::CTRL),
+            (SelectLine, "Select line", "Ctrl + L", Key::L, KeyMods::CTRL),
+            (
+                NextOccurrence,
+                "Add next occurrence",
+                "Ctrl + D",
+                Key::D,
+                KeyMods::CTRL,
+            ),
+            (
+                AllOccurrences,
+                "Select all occurrences",
+                "Ctrl + Shift + L",
+                Key::L,
+                KeyMods::CTRL | KeyMods::SHIFT,
+            ),
+            (
+                DuplicateUp,
+                "Copy lines up",
+                "Ctrl + Shift + Alt + Up",
+                Key::UpArrow,
+                KeyMods::CTRL | KeyMods::SHIFT | KeyMods::ALT,
+            ),
+            (
+                DuplicateDown,
+                "Copy lines down",
+                "Ctrl + Shift + Alt + Down",
+                Key::DownArrow,
+                KeyMods::CTRL | KeyMods::SHIFT | KeyMods::ALT,
+            ),
+            (
+                DeleteWordLeft,
+                "Delete word left",
+                "Ctrl + Backspace",
+                Key::Backspace,
+                KeyMods::CTRL,
+            ),
+            (
+                DeleteWordRight,
+                "Delete word right",
+                "Ctrl + Delete",
+                Key::Delete,
+                KeyMods::CTRL,
+            ),
+            (
+                SoftNewline,
+                "Insert newline",
+                "Shift + Enter",
+                Key::Enter,
+                KeyMods::SHIFT,
+            ),
+            (
+                InsertAbove,
+                "Insert line above",
+                "Ctrl + Shift + Enter",
+                Key::Enter,
+                KeyMods::CTRL | KeyMods::SHIFT,
+            ),
+            (
+                InsertBelow,
+                "Insert line below",
+                "Ctrl + Enter",
+                Key::Enter,
+                KeyMods::CTRL,
+            ),
+            (
+                ScrollUp,
+                "Scroll up",
+                "Ctrl + Up",
+                Key::UpArrow,
+                KeyMods::CTRL,
+            ),
+            (
+                ScrollDown,
+                "Scroll down",
+                "Ctrl + Down",
+                Key::DownArrow,
+                KeyMods::CTRL,
+            ),
+            (FindNext, "Find next", "F3", Key::F3, KeyMods::empty()),
+            (
+                FindPrevious,
+                "Find previous",
+                "Shift + F3",
+                Key::F3,
+                KeyMods::SHIFT,
+            ),
+            (
+                GoToLine,
+                "Go to line / column",
+                "Ctrl + G",
+                Key::G,
+                KeyMods::CTRL,
+            ),
+            (QuickOpen, "Go to file", "Ctrl + P", Key::P, KeyMods::CTRL),
+            (CloseTab, "Close editor", "Ctrl + W", Key::W, KeyMods::CTRL),
+            (
+                NextTab,
+                "Next editor",
+                "Ctrl + Page Down",
+                Key::PageDown,
+                KeyMods::CTRL,
+            ),
+            (
+                PreviousTab,
+                "Previous editor",
+                "Ctrl + Page Up",
+                Key::PageUp,
+                KeyMods::CTRL,
+            ),
+            (
+                SaveAll,
+                "Save all",
+                "Ctrl + Alt + S",
+                Key::S,
+                KeyMods::CTRL | KeyMods::ALT,
+            ),
+            (
+                FormatDocument,
+                "Format document",
+                "Ctrl + Shift + I",
+                Key::I,
+                KeyMods::CTRL | KeyMods::SHIFT,
+            ),
+            (
+                ToggleWordWrap,
+                "Toggle word wrap",
+                "Alt + Z",
+                Key::Z,
+                KeyMods::ALT,
+            ),
+            (
+                JumpBracket,
+                "Go to bracket",
+                "Ctrl + Shift + Backslash",
+                Key::Backslash,
+                KeyMods::CTRL | KeyMods::SHIFT,
+            ),
+            (
+                Fold,
+                "Fold",
+                "Ctrl + Shift + [",
+                Key::LeftBracket,
+                KeyMods::CTRL | KeyMods::SHIFT,
+            ),
+            (
+                Unfold,
+                "Unfold",
+                "Ctrl + Shift + ]",
+                Key::RightBracket,
+                KeyMods::CTRL | KeyMods::SHIFT,
+            ),
+        ] {
+            let trigger = if matches!(
+                action,
+                Replace
+                    | GoToLine
+                    | QuickOpen
+                    | CloseTab
+                    | SaveAll
+                    | FormatDocument
+                    | ToggleWordWrap
+                    | JumpBracket
+                    | Fold
+                    | Unfold
+            ) {
+                Once
+            } else {
+                Repeat
+            };
+            map.bindings.push(
+                Binding::new(action, CodeEditor, name, display, &[key])
+                    .modifiers(modifiers, modifiers)
+                    .trigger(trigger),
+            );
         }
+        for binding in &mut map.bindings {
+            if matches!(binding.action, InsertAbove | InsertBelow | SoftNewline) {
+                binding.keys.push(Key::KeypadEnter);
+            }
+        }
+        for (action, name, display, key, modifiers) in [
+            (
+                ChordPrefix,
+                "Start command chord",
+                "Ctrl + K",
+                Key::K,
+                KeyMods::CTRL,
+            ),
+            (
+                CommentLines,
+                "Add line comments",
+                "Ctrl + K, Ctrl + C",
+                Key::C,
+                KeyMods::CTRL,
+            ),
+            (
+                UncommentLines,
+                "Remove line comments",
+                "Ctrl + K, Ctrl + U",
+                Key::U,
+                KeyMods::CTRL,
+            ),
+            (
+                FoldAll,
+                "Fold all",
+                "Ctrl + K, Ctrl + 0",
+                Key::Key0,
+                KeyMods::CTRL,
+            ),
+            (
+                UnfoldAll,
+                "Unfold all",
+                "Ctrl + K, Ctrl + J",
+                Key::J,
+                KeyMods::CTRL,
+            ),
+        ] {
+            map.bindings.push(
+                Binding::new(action, CodeEditor, name, display, &[key])
+                    .modifiers(modifiers, modifiers),
+            );
+        }
+        // CTE handles these bindings directly; list them alongside application commands.
+        for (name, display, key, modifiers) in [
+            ("Undo", "Ctrl + Z", Key::Z, KeyMods::CTRL),
+            ("Redo", "Ctrl + Shift + Z / Ctrl + Y", Key::Y, KeyMods::CTRL),
+            ("Copy selection / line", "Ctrl + C", Key::C, KeyMods::CTRL),
+            ("Paste", "Ctrl + V", Key::V, KeyMods::CTRL),
+            ("Select all code", "Ctrl + A", Key::A, KeyMods::CTRL),
+            ("Move lines up", "Alt + Up", Key::UpArrow, KeyMods::ALT),
+            (
+                "Move lines down",
+                "Alt + Down",
+                Key::DownArrow,
+                KeyMods::ALT,
+            ),
+            (
+                "Delete lines",
+                "Ctrl + Shift + K",
+                Key::K,
+                KeyMods::CTRL | KeyMods::SHIFT,
+            ),
+            ("Toggle line comment", "Ctrl + /", Key::Slash, KeyMods::CTRL),
+            (
+                "Indent lines",
+                "Ctrl + ] / Tab",
+                Key::RightBracket,
+                KeyMods::CTRL,
+            ),
+            (
+                "Outdent lines",
+                "Ctrl + [ / Shift + Tab",
+                Key::LeftBracket,
+                KeyMods::CTRL,
+            ),
+            (
+                "Expand selection",
+                "Shift + Alt + Right",
+                Key::RightArrow,
+                KeyMods::SHIFT | KeyMods::ALT,
+            ),
+            (
+                "Shrink selection",
+                "Shift + Alt + Left",
+                Key::LeftArrow,
+                KeyMods::SHIFT | KeyMods::ALT,
+            ),
+            (
+                "Move by word",
+                "Ctrl + Left / Right",
+                Key::LeftArrow,
+                KeyMods::CTRL,
+            ),
+            (
+                "Select by word",
+                "Ctrl + Shift + Left / Right",
+                Key::LeftArrow,
+                KeyMods::CTRL | KeyMods::SHIFT,
+            ),
+            (
+                "Go to start / end of file",
+                "Ctrl + Home / End",
+                Key::Home,
+                KeyMods::CTRL,
+            ),
+            (
+                "Select to start / end of file",
+                "Ctrl + Shift + Home / End",
+                Key::Home,
+                KeyMods::CTRL | KeyMods::SHIFT,
+            ),
+            (
+                "Go to start / end of line",
+                "Home / End",
+                Key::Home,
+                KeyMods::empty(),
+            ),
+            (
+                "Select to start / end of line",
+                "Shift + Home / End",
+                Key::Home,
+                KeyMods::SHIFT,
+            ),
+            (
+                "Page up / down",
+                "Page Up / Page Down",
+                Key::PageUp,
+                KeyMods::empty(),
+            ),
+            (
+                "Select page up / down",
+                "Shift + Page Up / Page Down",
+                Key::PageUp,
+                KeyMods::SHIFT,
+            ),
+            (
+                "Select with arrows",
+                "Shift + Arrow keys",
+                Key::LeftArrow,
+                KeyMods::SHIFT,
+            ),
+            (
+                "Indent / accept completion",
+                "Tab",
+                Key::Tab,
+                KeyMods::empty(),
+            ),
+            ("Outdent", "Shift + Tab", Key::Tab, KeyMods::SHIFT),
+        ] {
+            map.bindings.push(
+                Binding::new(NativeEditing, CodeEditor, name, display, &[key])
+                    .modifiers(modifiers, modifiers),
+            );
+        }
+        map
     }
 }
 
@@ -392,6 +777,25 @@ impl InputMap {
             .iter()
             .find(|binding| binding.action == action)
             .expect("Action must have a binding.")
+    }
+
+    pub fn routed(&self, ui: &Ui, action: Action) -> bool {
+        let binding = self.binding(action);
+        let options = dear_imgui_rs::ShortcutOptions::new()
+            .route(dear_imgui_rs::ShortcutRoute::Global(
+                dear_imgui_rs::ShortcutGlobalRouteFlags::OVER_FOCUSED,
+            ))
+            .flags(if matches!(binding.trigger, Trigger::Repeat) {
+                dear_imgui_rs::ShortcutFlags::REPEAT
+            } else {
+                dear_imgui_rs::ShortcutFlags::NONE
+            });
+        binding.keys.iter().fold(false, |pressed, &key| {
+            ui.shortcut_with_flags(
+                KeyChord::new(key).with_mods(binding.required_modifiers),
+                options,
+            ) || pressed
+        })
     }
 
     pub fn chord(&self, action: Action) -> KeyChord {
