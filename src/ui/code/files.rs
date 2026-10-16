@@ -1,6 +1,7 @@
 use crate::editor::documents::{Documents, FileEntry, SceneTemplate};
 use crate::ui::icons;
-use dear_imgui_rs::{Condition, Key, MouseButton, StyleColor, Ui};
+use crate::ui::inputs::{self, Action as InputAction};
+use dear_imgui_rs::{Condition, MouseButton, StyleColor, Ui};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -173,8 +174,8 @@ impl State {
             .open_on_double_click(true)
             .opened(path.as_os_str().is_empty(), Condition::Once)
             .push();
-        let clicked =
-            ui.is_item_clicked() || (ui.is_item_focused() && ui.is_key_pressed(Key::Enter));
+        let clicked = ui.is_item_clicked()
+            || (ui.is_item_focused() && inputs::active(ui, InputAction::Confirm));
         if ui.is_item_hovered() && ui.is_mouse_released(MouseButton::Right) {
             self.selected = Some(path.clone());
             self.context = Some((path.clone(), entry.directory));
@@ -266,7 +267,7 @@ impl State {
                     .input_text("##Name", &mut dialog.name)
                     .enter_returns_true(true)
                     .build();
-                submit |= ui.is_key_pressed(Key::Enter) || ui.is_key_pressed(Key::KeypadEnter);
+                submit |= inputs::active(ui, InputAction::Confirm);
                 if matches!(dialog.action, Action::Scene) {
                     ui.text("Template");
                     for (label, template) in [
@@ -306,7 +307,7 @@ impl State {
                 submit |= ui.button(label);
             }
             ui.same_line();
-            if ui.button("Cancel") || ui.is_key_pressed(Key::Escape) {
+            if ui.button("Cancel") || inputs::active(ui, InputAction::Cancel) {
                 finished = true;
                 ui.close_current_popup();
             } else if submit && validation.is_none() {
@@ -376,6 +377,7 @@ fn filename(name: &str, scene: bool) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dear_imgui_rs::Key;
 
     #[test]
     fn filenames_keep_literal_labels_and_reject_paths_and_wrong_scene_extensions() {

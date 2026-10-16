@@ -1,3 +1,4 @@
+use crate::ui::inputs::{self, Action as InputAction};
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -239,7 +240,7 @@ impl State {
                             if entry.directory
                                 && ((clicked && ui.is_mouse_double_clicked(MouseButton::Left))
                                     || (ui.is_item_focused()
-                                        && ui.is_key_pressed(dear_imgui_rs::Key::Enter)))
+                                        && inputs::active(ui, InputAction::Confirm)))
                             {
                                 navigate = Some(entry.path.clone());
                             }
@@ -271,7 +272,7 @@ impl State {
                     }
                 }
                 ui.same_line();
-                if button(ui, "Cancel") || ui.is_key_pressed(dear_imgui_rs::Key::Escape) {
+                if button(ui, "Cancel") || inputs::active(ui, InputAction::Cancel) {
                     ui.close_current_popup();
                     return Some(None);
                 }

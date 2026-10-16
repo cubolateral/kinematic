@@ -1,3 +1,4 @@
+use crate::ui::inputs::{self, Action as InputAction};
 use crate::{editor::Editor, ui::timeline};
 
 use super::image;
@@ -9,14 +10,9 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     let viewport_pos = viewport.pos();
     let viewport_size = viewport.size();
     let is_exporting = editor.is_exporting();
-    let plain_keyboard_input = !is_exporting
-        && !ui.io().want_text_input()
-        && !ui.is_any_item_active()
-        && !ui.io().key_ctrl()
-        && !ui.io().key_shift()
-        && !ui.io().key_alt()
-        && !ui.io().key_super();
-    if plain_keyboard_input && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::M, false) {
+    let plain_keyboard_input =
+        !is_exporting && !ui.io().want_text_input() && !ui.is_any_item_active();
+    if plain_keyboard_input && inputs::active(ui, InputAction::ToggleMargin) {
         editor.toggle_margin();
     }
     let margin = editor.margin_visible().then(|| editor.margin_size());

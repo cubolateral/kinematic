@@ -1,4 +1,5 @@
 use crate::editor::Timeline;
+use crate::ui::inputs::{self, Action as InputAction};
 use crate::ui::widgets::text_size;
 use crate::ui::{controls, icons};
 
@@ -42,40 +43,25 @@ pub(super) fn draw(
 
 pub(in crate::ui) fn shortcuts(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interactive: bool) {
     let io = ui.io();
-    if !interactive
-        || io.want_text_input()
-        || ui.is_any_item_active()
-        || io.key_ctrl()
-        || io.key_alt()
-        || io.key_super()
-    {
+    if !interactive || io.want_text_input() || ui.is_any_item_active() {
         return;
     }
 
-    let shift = io.key_shift();
-
-    if ui.is_key_pressed(dear_imgui_rs::Key::LeftArrow) {
-        if shift {
-            timeline.go_to_start();
-        } else {
-            timeline.previous_frame();
-        }
+    if inputs::active(ui, InputAction::GoToStart) {
+        timeline.go_to_start();
+    } else if inputs::active(ui, InputAction::PreviousFrame) {
+        timeline.previous_frame();
     }
-
-    if !shift && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::L, false) {
+    if inputs::active(ui, InputAction::ToggleLoop) {
         timeline.toggle_loop();
     }
-
-    if ui.is_key_pressed(dear_imgui_rs::Key::Space) {
+    if inputs::active(ui, InputAction::PlayPause) {
         timeline.toggle();
     }
-
-    if ui.is_key_pressed(dear_imgui_rs::Key::RightArrow) {
-        if shift {
-            timeline.go_to_end();
-        } else {
-            timeline.next_frame();
-        }
+    if inputs::active(ui, InputAction::GoToEnd) {
+        timeline.go_to_end();
+    } else if inputs::active(ui, InputAction::NextFrame) {
+        timeline.next_frame();
     }
 }
 
@@ -136,14 +122,25 @@ pub(in crate::ui) fn fullscreen_controls(
 fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interactive: bool) {
     let is_playing = timeline.is_playing();
 
-    if transport_button(ui, icons::BACKWARD_FAST, "Go to start [Shift + LeftArrow]") && interactive
+    if transport_button(
+        ui,
+        icons::BACKWARD_FAST,
+        "Go to start",
+        InputAction::GoToStart,
+    ) && interactive
     {
         timeline.go_to_start();
     }
 
     ui.same_line();
 
-    if transport_button(ui, icons::BACKWARD, "Previous frame [LeftArrow]") && interactive {
+    if transport_button(
+        ui,
+        icons::BACKWARD,
+        "Previous frame",
+        InputAction::PreviousFrame,
+    ) && interactive
+    {
         timeline.previous_frame();
     }
 
@@ -156,11 +153,8 @@ fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interacti
         } else {
             icons::PLAY
         },
-        if is_playing {
-            "Pause [Space]"
-        } else {
-            "Play [Space]"
-        },
+        if is_playing { "Pause" } else { "Play" },
+        InputAction::PlayPause,
     ) && interactive
     {
         timeline.toggle();
@@ -168,13 +162,13 @@ fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interacti
 
     ui.same_line();
 
-    if transport_button(ui, icons::FORWARD, "Next frame [RightArrow]") && interactive {
+    if transport_button(ui, icons::FORWARD, "Next frame", InputAction::NextFrame) && interactive {
         timeline.next_frame();
     }
 
     ui.same_line();
 
-    if transport_button(ui, icons::FORWARD_FAST, "Go to end [Shift + RightArrow]") && interactive {
+    if transport_button(ui, icons::FORWARD_FAST, "Go to end", InputAction::GoToEnd) && interactive {
         timeline.go_to_end();
     }
 
@@ -190,7 +184,7 @@ fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interacti
         },
     );
     if ui.is_item_hovered() {
-        ui.tooltip_text("Toggle loop [L]");
+        inputs::tooltip(ui, InputAction::ToggleLoop, "Toggle loop");
     }
     if clicked && interactive {
         timeline.toggle_loop();
@@ -212,10 +206,11 @@ fn fullscreen_button(ui: &dear_imgui_rs::Ui, is_fullscreen: bool) -> bool {
             icons::EXPAND
         },
         if is_fullscreen {
-            "Exit fullscreen [F]"
+            "Exit fullscreen"
         } else {
-            "Enter fullscreen [F]"
+            "Enter fullscreen"
         },
+        InputAction::ToggleFullscreen,
     )
 }
 
@@ -285,11 +280,16 @@ fn time_at_position(position: f32, start: f32, width: f32, duration: f32) -> f32
     ((position - start) / width).clamp(0.0, 1.0) * duration
 }
 
-fn transport_button(ui: &dear_imgui_rs::Ui, label: &str, tooltip: &str) -> bool {
+fn transport_button(
+    ui: &dear_imgui_rs::Ui,
+    label: &str,
+    tooltip: &str,
+    action: InputAction,
+) -> bool {
     let clicked = controls::text_button(ui, label, [BUTTON_SIZE; 2]);
 
     if ui.is_item_hovered() {
-        ui.tooltip_text(tooltip);
+        inputs::tooltip(ui, action, tooltip);
     }
 
     clicked

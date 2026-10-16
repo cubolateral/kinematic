@@ -10,6 +10,7 @@ interaction details belong in the panel modules, not in `ui/mod.rs`.
 - `theme.rs`: Appearance state, font loading, colors, scale, and style geometry.
 - `workspace.rs`: Default docking layout. It refers to panels through their
   `WINDOW_NAME` constants.
+- `inputs.rs`: Action bindings, modifier matching, and shortcut display names.
 - `settings.rs`: Separate Project settings and Editor settings windows opened from the menus.
 - `code.rs`: Lua buffers, file tabs, focus, and inline LuaLS assistance.
 - `code/diagnostics.rs`: Compact diagnostic footer with severity filters and counts.

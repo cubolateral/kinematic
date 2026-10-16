@@ -1,3 +1,4 @@
+use crate::ui::inputs::{self, Action as InputAction};
 pub(super) fn draw_panel_rect(
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     min: [f32; 2],
@@ -92,9 +93,9 @@ pub(super) fn numeric_input_arrows<T: NumericValue>(ui: &dear_imgui_rs::Ui, valu
         return false;
     }
 
-    let changed = if ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::UpArrow, true) {
+    let changed = if inputs::active(ui, InputAction::IncreaseValue) {
         value.offset(1.0)
-    } else if ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::DownArrow, true) {
+    } else if inputs::active(ui, InputAction::DecreaseValue) {
         value.offset(-1.0)
     } else {
         false

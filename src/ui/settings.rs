@@ -1,5 +1,6 @@
 use std::{fs, path::Path};
 
+use crate::ui::inputs::{self, Category};
 use crate::{core::ProjectSettings, editor::Editor};
 
 use super::{
@@ -175,6 +176,9 @@ pub(super) fn draw(
                         changed = true;
                     }
                 }
+                if let Some(_shortcuts) = ui.tab_item("Shortcuts") {
+                    draw_shortcuts(ui);
+                }
                 if let Some(_appearance) = ui.tab_item("Appearance") {
                     changed |= ui.color_edit4("Background", &mut appearance.background);
                     changed |= ui.color_edit4("Accent", &mut appearance.accent);
@@ -203,6 +207,53 @@ pub(super) fn draw(
 
     state.editor_open = open;
     changed
+}
+
+fn draw_shortcuts(ui: &dear_imgui_rs::Ui) {
+    let flags = dear_imgui_rs::TableFlags::SCROLL_Y;
+    let Some(_table) = ui.begin_table_with_sizing(
+        "Shortcut list",
+        2,
+        dear_imgui_rs::TableOptions::from(flags),
+        [0.0, ui.content_region_avail()[1]],
+        0.0,
+    ) else {
+        return;
+    };
+    ui.table_setup_scroll_freeze(0, 1);
+    ui.table_setup_column("Action", dear_imgui_rs::TableColumnFlags::empty(), None);
+    ui.table_setup_column("Binding", dear_imgui_rs::TableColumnFlags::empty(), None);
+    ui.table_headers_row();
+
+    for (category, title) in [
+        (Category::Editor, "Editor"),
+        (Category::CodeEditor, "Code Editor"),
+    ] {
+        ui.table_next_row();
+        ui.table_next_column();
+        let group = ui
+            .tree_node_config(title)
+            .default_open(true)
+            .open_on_arrow(true)
+            .open_on_double_click(true)
+            .no_tree_push_on_open(true)
+            .push();
+        ui.table_next_column();
+        if group.is_some() {
+            for binding in inputs::map()
+                .bindings
+                .iter()
+                .filter(|binding| binding.category == category)
+            {
+                ui.table_next_row();
+                ui.table_next_column();
+                ui.set_cursor_pos_x(ui.cursor_pos_x() + ui.tree_node_to_label_spacing());
+                ui.text(binding.name);
+                ui.table_next_column();
+                ui.text(&binding.display);
+            }
+        }
+    }
 }
 
 fn input_int(ui: &dear_imgui_rs::Ui, label: &str, value: &mut i32) -> bool {

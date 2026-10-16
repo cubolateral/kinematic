@@ -1,5 +1,6 @@
+use crate::ui::inputs::{self, Action as InputAction};
 use dear_imgui_cte::{PaletteColor, Position, Selection, TextEditor};
-use dear_imgui_rs::{FocusedFlags, Key, MouseButton, Ui};
+use dear_imgui_rs::{FocusedFlags, MouseButton, Ui};
 use std::{collections::HashMap, ops::Range};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -294,7 +295,7 @@ impl Documentation {
                 }
             }
             let focused = ui.is_window_focused_with_flags(FocusedFlags::ROOT_AND_CHILD_WINDOWS);
-            if focused && ui.io().key_ctrl() && ui.is_key_pressed(Key::A) {
+            if focused && inputs::active(ui, InputAction::SelectAll) {
                 self.selection = Some((0, self.text.len()));
             }
             if let Some((a, b)) = self.selection {
@@ -304,7 +305,7 @@ impl Documentation {
                 )) {
                     error = Some(failure.to_string());
                 }
-                if focused && ui.io().key_ctrl() && ui.is_key_pressed(Key::C) {
+                if focused && inputs::active(ui, InputAction::Copy) {
                     buffer.copy();
                 }
             }

@@ -1,3 +1,4 @@
+use crate::ui::inputs::{self, Action as InputAction};
 mod fullscreen;
 mod image;
 mod state;
@@ -25,22 +26,16 @@ pub(super) fn draw(
         let plain_keyboard_input = keyboard_enabled
             && !is_exporting
             && !ui.io().want_text_input()
-            && !ui.is_any_item_active()
-            && !ui.io().key_ctrl()
-            && !ui.io().key_shift()
-            && !ui.io().key_alt()
-            && !ui.io().key_super();
+            && !ui.is_any_item_active();
         let requested =
             shortcut_mode(ui, plain_keyboard_input).or_else(|| state.take_requested_mode());
         if let Some(mode) = requested {
             state.set_mode(mode);
         }
-        if plain_keyboard_input && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::M, false) {
+        if plain_keyboard_input && inputs::active(ui, InputAction::ToggleMargin) {
             editor.toggle_margin();
         }
-        let reset = plain_keyboard_input
-            && (ui.is_key_pressed(dear_imgui_rs::Key::Key0)
-                || ui.is_key_pressed(dear_imgui_rs::Key::Keypad0));
+        let reset = plain_keyboard_input && inputs::active(ui, InputAction::ToggleCamera);
         if reset {
             match state.mode() {
                 Mode::Two => editor.toggle_editor_2d_camera_view(),
@@ -48,7 +43,7 @@ pub(super) fn draw(
                 Mode::Preview => {}
             }
         }
-        let reset_camera = plain_keyboard_input && ui.is_key_pressed(dear_imgui_rs::Key::R);
+        let reset_camera = plain_keyboard_input && inputs::active(ui, InputAction::ResetCamera);
         if reset_camera {
             match state.mode() {
                 Mode::Two => editor.reset_editor_2d_camera_transform(),
@@ -63,7 +58,7 @@ pub(super) fn draw(
         let preview_tab =
             ui.tab_item_with_flags("PREVIEW", None, tab_flags(requested == Some(Mode::Preview)));
         if ui.is_item_hovered() {
-            ui.tooltip_text("Show the final exported view [1]");
+            inputs::tooltip(ui, InputAction::Preview, "Show the final exported view");
         }
         if let Some(_tab) = preview_tab
             && requested.is_none_or(|mode| mode == Mode::Preview)
@@ -90,7 +85,7 @@ pub(super) fn draw(
         let editor_2d_tab =
             ui.tab_item_with_flags("2D", None, tab_flags(requested == Some(Mode::Two)));
         if ui.is_item_hovered() {
-            ui.tooltip_text("Edit the selected Canvas2D [2]");
+            inputs::tooltip(ui, InputAction::Edit2d, "Edit the selected Canvas2D");
         }
         if let Some(_tab) = editor_2d_tab
             && requested.is_none_or(|mode| mode == Mode::Two)
@@ -106,7 +101,7 @@ pub(super) fn draw(
         let editor_3d_tab =
             ui.tab_item_with_flags("3D", None, tab_flags(requested == Some(Mode::Three)));
         if ui.is_item_hovered() {
-            ui.tooltip_text("Edit the selected Canvas3D [3]");
+            inputs::tooltip(ui, InputAction::Edit3d, "Edit the selected Canvas3D");
         }
         if let Some(_tab) = editor_3d_tab
             && requested.is_none_or(|mode| mode == Mode::Three)
@@ -148,19 +143,19 @@ fn draw_editor_3d(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
     let right = dear_imgui_rs::MouseButton::Right;
     let looking = viewport_active && ui.is_mouse_down(right) && !editor.editor_3d_camera_view();
     if looking {
-        let axis = |positive: dear_imgui_rs::Key, negative: dear_imgui_rs::Key| {
-            f32::from(ui.is_key_down(positive)) - f32::from(ui.is_key_down(negative))
+        let axis = |positive: InputAction, negative: InputAction| {
+            f32::from(inputs::active(ui, positive)) - f32::from(inputs::active(ui, negative))
         };
         let mouse_delta = editor.editor_mouse_delta(ui.io().mouse_delta());
         editor.control_editor_3d(
             mouse_delta,
             [
-                axis(dear_imgui_rs::Key::D, dear_imgui_rs::Key::A),
-                axis(dear_imgui_rs::Key::E, dear_imgui_rs::Key::Q),
-                axis(dear_imgui_rs::Key::W, dear_imgui_rs::Key::S),
+                axis(InputAction::MoveRight, InputAction::MoveLeft),
+                axis(InputAction::MoveUp, InputAction::MoveDown),
+                axis(InputAction::MoveForward, InputAction::MoveBackward),
             ],
             ui.io().delta_time(),
-            ui.io().key_shift(),
+            inputs::active(ui, InputAction::CameraFast),
         );
         image::wrap_pointer(
             ui,
@@ -318,11 +313,15 @@ fn camera_button(ui: &dear_imgui_rs::Ui, camera_view: bool) -> bool {
         },
     );
     if ui.is_item_hovered() {
-        ui.tooltip_text(if camera_view {
-            "Use the free editor camera [0]"
-        } else {
-            "Use the canvas camera [0]"
-        });
+        inputs::tooltip(
+            ui,
+            InputAction::ToggleCamera,
+            if camera_view {
+                "Use the free editor camera"
+            } else {
+                "Use the canvas camera"
+            },
+        );
     }
     clicked
 }
@@ -340,7 +339,7 @@ fn margin_button(ui: &dear_imgui_rs::Ui, visible: bool) -> bool {
         },
     );
     if ui.is_item_hovered() {
-        ui.tooltip_text("Toggle margin [M]");
+        inputs::tooltip(ui, InputAction::ToggleMargin, "Toggle margin");
     }
     clicked
 }
@@ -348,7 +347,7 @@ fn margin_button(ui: &dear_imgui_rs::Ui, visible: bool) -> bool {
 fn reset_camera_button(ui: &dear_imgui_rs::Ui) -> bool {
     let clicked = controls::text_button(ui, icons::RESET, [ui.frame_height(); 2]);
     if ui.is_item_hovered() {
-        ui.tooltip_text("Reset camera transform [R]");
+        inputs::tooltip(ui, InputAction::ResetCamera, "Reset camera transform");
     }
     clicked
 }
@@ -357,17 +356,11 @@ fn shortcut_mode(ui: &dear_imgui_rs::Ui, enabled: bool) -> Option<Mode> {
     if !enabled {
         return None;
     }
-    if ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Key1, false)
-        || ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Keypad1, false)
-    {
+    if inputs::active(ui, InputAction::Preview) {
         Some(Mode::Preview)
-    } else if ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Key2, false)
-        || ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Keypad2, false)
-    {
+    } else if inputs::active(ui, InputAction::Edit2d) {
         Some(Mode::Two)
-    } else if ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Key3, false)
-        || ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Keypad3, false)
-    {
+    } else if inputs::active(ui, InputAction::Edit3d) {
         Some(Mode::Three)
     } else {
         None

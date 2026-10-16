@@ -1,3 +1,4 @@
+use crate::ui::inputs::{self, Action as InputAction};
 use dear_imgui_cte::{Position, Selection, TextEditor};
 use serde_json::Value;
 
@@ -43,20 +44,16 @@ impl Completion {
     }
 
     pub fn keyboard(&mut self, ui: &dear_imgui_rs::Ui) -> Option<bool> {
-        use dear_imgui_rs::Key;
-        if self.items.is_empty() || ui.io().key_ctrl() || ui.io().key_alt() || ui.io().key_super() {
+        if self.items.is_empty() {
             return None;
         }
-        if ui.is_key_pressed(Key::UpArrow) {
+        if inputs::active(ui, InputAction::PreviousSuggestion) {
             self.selected = (self.selected + self.items.len() - 1) % self.items.len();
-        } else if ui.is_key_pressed(Key::DownArrow) {
+        } else if inputs::active(ui, InputAction::NextSuggestion) {
             self.selected = (self.selected + 1) % self.items.len();
-        } else if ui.is_key_pressed(Key::Enter)
-            || ui.is_key_pressed(Key::KeypadEnter)
-            || ui.is_key_pressed(Key::Tab)
-        {
+        } else if inputs::active(ui, InputAction::AcceptSuggestion) {
             return Some(true);
-        } else if ui.is_key_pressed(Key::Escape) {
+        } else if inputs::active(ui, InputAction::CancelSuggestion) {
             self.clear();
             return Some(false);
         } else {

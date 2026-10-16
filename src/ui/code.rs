@@ -1,5 +1,6 @@
 use super::browser;
 use crate::editor::{Editor, documents::Documents};
+use crate::ui::inputs::{self, Action as InputAction};
 use dear_imgui_cte::{
     AutocompleteConfig, CteUiExt, Language, Palette, PaletteColor, Position, TextEditor,
 };
@@ -119,6 +120,7 @@ impl Tab {
         let assistance = self.assistance.clone();
         self.editor.set_autocomplete(
             &AutocompleteConfig::new()
+                .shortcut(inputs::map().chord(InputAction::RequestSuggestions))
                 .trigger_on_typing(settings.autocomplete && self.assistance.borrow().available)
                 .trigger_delay(std::time::Duration::from_millis(100))
                 .no_suggestions_label(""),
@@ -208,10 +210,7 @@ impl Tab {
         footer_height: f32,
         output_error: &mut Option<String>,
     ) {
-        if focused
-            && ui.io().key_ctrl()
-            && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::F, false)
-        {
+        if focused && inputs::active(ui, InputAction::Find) {
             self.editor.open_find_replace();
         }
         let _font = ui.push_font_with_size(None, font_size);
@@ -223,12 +222,9 @@ impl Tab {
         let selection = self.editor.main_cursor_selection();
         if focused
             && !ui.is_any_item_active()
-            && !ui.io().key_ctrl()
-            && !ui.io().key_alt()
-            && !ui.io().key_super()
             && self.editor.cursor_count() == 1
             && selection.start == selection.end
-            && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Backspace, true)
+            && inputs::active(ui, InputAction::IndentBackspace)
         {
             let prefix = line_prefix(&documents.open[path].text, before);
             if let Some(column) = indentation_backspace(&prefix, settings.tab_size) {
@@ -320,7 +316,7 @@ impl Tab {
                         assistance.completion_position = None;
                     }
                 }
-                if focused && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Escape, false) {
+                if focused && inputs::active(ui, InputAction::DismissAssistance) {
                     self.completions.clear();
                     self.assistance.borrow_mut().completion_position = None;
                 }
@@ -337,10 +333,8 @@ impl Tab {
                 if signature {
                     self.signature_position = Some(cursor);
                 }
-                let definition =
-                    focused && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::F12, false);
-                let click_definition = ui.io().key_ctrl()
-                    && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)
+                let definition = focused && inputs::active(ui, InputAction::Definition);
+                let click_definition = inputs::active(ui, InputAction::ClickDefinition)
                     && self
                         .editor
                         .is_mouse_over_glyph(ui.io().mouse_pos())
@@ -503,7 +497,7 @@ impl Tab {
                     );
                 }
                 drop(assistance);
-                if focused && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::Escape, false) {
+                if focused && inputs::active(ui, InputAction::DismissAssistance) {
                     self.signature.clear();
                     self.signature_position = None;
                 }
@@ -992,15 +986,11 @@ impl State {
             } else {
                 16.0
             };
-            if self.focused && ui.io().key_ctrl() && !ui.io().key_alt() && !ui.io().key_super() {
-                if ui.is_key_pressed(dear_imgui_rs::Key::Equal)
-                    || ui.is_key_pressed(dear_imgui_rs::Key::KeypadAdd)
-                {
+            if self.focused {
+                if inputs::active(ui, InputAction::ZoomIn) {
                     self.zoom += 1.0;
                 }
-                if ui.is_key_pressed(dear_imgui_rs::Key::Minus)
-                    || ui.is_key_pressed(dear_imgui_rs::Key::KeypadSubtract)
-                {
+                if inputs::active(ui, InputAction::ZoomOut) {
                     self.zoom -= 1.0;
                 }
             }
@@ -1045,9 +1035,7 @@ impl State {
                                 }
                             }
                         }
-                        let save_requested = self.focused
-                            && ui.io().key_ctrl()
-                            && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::S, false);
+                        let save_requested = self.focused && inputs::active(ui, InputAction::Save);
                         if let Some(tab) = self.tabs.get_mut(&path) {
                             let mut messages = documents.diagnostic_messages();
                             messages.extend(self.error.iter().cloned());

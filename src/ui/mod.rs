@@ -1,8 +1,11 @@
 //! Dear ImGui editor shell and panel composition.
 
+use crate::ui::inputs::Action as InputAction;
+
 mod browser;
 mod code;
 mod controls;
+mod inputs;
 pub(crate) use code::ProjectAction;
 mod export;
 mod icons;
@@ -101,16 +104,11 @@ impl Ui {
         let _theme = self.appearance.push(ui);
         let _font = ui.push_font(self.font);
         let io = ui.io();
-        let plain_keyboard_input = !self.code.focused
-            && !io.want_text_input()
-            && !ui.is_any_item_active()
-            && !io.key_ctrl()
-            && !io.key_shift()
-            && !io.key_alt()
-            && !io.key_super();
+        let plain_keyboard_input =
+            !self.code.focused && !io.want_text_input() && !ui.is_any_item_active();
         let fullscreen_shortcut = plain_keyboard_input
             && (self.is_fullscreen || !editor.is_exporting())
-            && ui.is_key_pressed_with_repeat(dear_imgui_rs::Key::F, false);
+            && inputs::active(ui, InputAction::ToggleFullscreen);
         if self.is_fullscreen {
             let fullscreen_button = preview::draw_fullscreen(editor, ui);
 
