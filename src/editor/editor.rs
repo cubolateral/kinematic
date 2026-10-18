@@ -13,9 +13,6 @@ use crate::{
 
 #[derive(Default)]
 pub(crate) struct Performance {
-    pub prepare_ms: f64,
-    pub replay_ms: f64,
-    pub apply_ms: f64,
     pub update_ms: f32,
     pub render_ms: f32,
     pub avoided: u64,
@@ -481,8 +478,6 @@ impl Editor {
             documents.status = "Edits pending until export completes.".into();
             return;
         }
-        let started = std::time::Instant::now();
-        self.performance.replay_ms = 0.0;
         let result = (|| {
             let sources = documents.sources();
             let project = self.lua_project.as_ref().unwrap();
@@ -563,7 +558,6 @@ impl Editor {
                 manifest: manifest_changed.then_some((manifest, order)),
             })
         })();
-        self.performance.prepare_ms = started.elapsed().as_secs_f64() * 1000.0;
         documents.applied = documents.revision;
         match result {
             Ok(pending) => {
@@ -668,9 +662,7 @@ impl Editor {
                     |(_, time)| time,
                 )
                 .min(candidate.duration());
-            let started = std::time::Instant::now();
             let result = candidate.update_slice(time);
-            self.performance.replay_ms += started.elapsed().as_secs_f64() * 1000.0;
             match result {
                 Ok(true) => {}
                 Ok(false) => {
@@ -691,15 +683,10 @@ impl Editor {
                 }
             }
         }
-        let gpu_started = std::time::Instant::now();
-        let uploads = self.canvases.geometry_uploads;
-        let upload_ms = self.canvases.geometry_upload_ms;
         let result = pending
             .candidates
             .iter()
             .try_for_each(|(_, scene)| self.canvases.validate(scene.scene(), skia));
-        let validation_ms = gpu_started.elapsed().as_secs_f64() * 1000.0;
-        let applied_at = std::time::Instant::now();
         if result.is_err() {
             self.restore_seek_time(pending.seek);
         }
@@ -840,19 +827,6 @@ impl Editor {
         }
         self.timeline.go_to(preserved_time);
         self.update_active_scene(self.timeline.time());
-        self.performance.apply_ms = applied_at.elapsed().as_secs_f64() * 1000.0;
-        if pending.seek.is_none() {
-            let stats = &self.performance;
-            let documents = self.documents.as_mut().unwrap();
-            documents.console.push(format!(
-                "Reload: Lua {:.2} ms; replay {:.2} ms; apply {:.2} ms; GPU validation {:.2} ms; mesh uploads {} ({:.2} ms); previous frame render {:.2} ms.",
-                stats.prepare_ms, stats.replay_ms, stats.apply_ms, validation_ms,
-                self.canvases.geometry_uploads - uploads, self.canvases.geometry_upload_ms - upload_ms, stats.render_ms,
-            ));
-            documents
-                .console
-                .drain(..documents.console.len().saturating_sub(500));
-        }
     }
 
     pub fn draw(
@@ -1078,7 +1052,6 @@ impl Editor {
                     "Apply or resolve source edits before changing project settings.".into();
                 return;
             }
-            let started = std::time::Instant::now();
             let prepared = (|| {
                 let mut manifest = project.manifest.clone();
                 manifest.resolution = settings.resolution;
@@ -1109,8 +1082,6 @@ impl Editor {
                 }
                 Ok::<_, String>((manifest, candidates))
             })();
-            self.performance.prepare_ms = started.elapsed().as_secs_f64() * 1000.0;
-            self.performance.replay_ms = 0.0;
             match prepared {
                 Ok((manifest, candidates)) => {
                     documents.revision += 1;
