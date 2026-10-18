@@ -38,6 +38,7 @@ impl Font {
         let face = skia_safe::FontMgr::new()
             .new_from_data(&bytes, None)
             .ok_or("Font data is invalid.")?;
+
         Ok(Self {
             path,
             face: Some(face),
@@ -75,6 +76,7 @@ impl Font {
         if let Some(face) = &self.face {
             return skia_safe::Font::new(face.clone(), size);
         }
+
         let path = self.path.clone();
         let mut cache = FONT_CACHE.lock().unwrap();
 
@@ -187,6 +189,7 @@ impl Text2DBuilder {
     /// Sets a bundled font or the path to a user-provided TTF or OTF file.
     pub fn font(mut self, font: impl Into<Font>) -> Self {
         self.object.shape.font = font.into();
+
         self
     }
 }
@@ -257,21 +260,26 @@ pub fn draw_text_2d(
 pub(crate) fn text_path(shape: &TextShape) -> skia_safe::Path {
     let font = shape.font.skia_font(shape.size);
     let mut builder = skia_safe::PathBuilder::new();
+
     for line in text_lines(shape, &font) {
         let glyphs = font.text_to_glyphs_vec(line.text);
         let mut positions = vec![skia_safe::Point::default(); glyphs.len()];
+
         font.get_pos(
             &glyphs,
             &mut positions,
             Some(skia_safe::Point::new(line.origin.0, line.origin.1)),
         );
+
         for (glyph, position) in glyphs.into_iter().zip(positions) {
             if let Some(path) = font.get_path(glyph) {
                 let path = path.with_offset((position.x, position.y));
+
                 builder.add_path(&path, None);
             }
         }
     }
+
     weighted_path(&builder.detach(), shape.thickness)
 }
 
@@ -279,17 +287,25 @@ pub(crate) fn weighted_path(path: &skia_safe::Path, thickness: f32) -> skia_safe
     if thickness <= 0.0 {
         return path.clone();
     }
+
     let mut paint = skia_safe::Paint::default();
+
     paint
         .set_style(skia_safe::PaintStyle::Stroke)
         .set_stroke_join(skia_safe::PaintJoin::Round)
         .set_stroke_width(thickness);
+
     let mut stroke = skia_safe::PathBuilder::new();
+
     skia_safe::path_utils::fill_path_with_paint(path, &paint, &mut stroke, None, None);
+
     let stroke = stroke.detach();
     let mut combined = skia_safe::PathBuilder::new();
+
     combined.add_path(path, None).add_path(&stroke, None);
+
     let combined = combined.detach();
+
     path.op(&stroke, skia_safe::PathOp::Union)
         .or_else(|| combined.simplify())
         .unwrap_or(combined)
@@ -304,6 +320,7 @@ fn draw_text_object(
     let shape = world.get::<&TextShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
+
     draw_text_2d(&shape, &style, transform.scale, opacity, canvas);
 }
 
@@ -320,6 +337,7 @@ impl Default for Text2D {
                     let shape = world.get::<&TextShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
+
                     crate::core::components::styled_bounds(
                         *text_path(&shape).bounds(),
                         &style,
@@ -353,14 +371,17 @@ mod tests {
             world.get::<&TextShape>(bundled.entity()).unwrap().font,
             Font::new(fonts::HACK_MONO)
         );
+
         assert_eq!(
             world.get::<&TextShape>(custom.entity()).unwrap().font,
             Font::new(custom_path)
         );
+
         assert_eq!(
             world.get::<&TextShape>(bundled.entity()).unwrap().thickness,
             3.0
         );
+
         assert_eq!(TextShape::thickness_property().info().name, "thickness");
     }
 
@@ -390,22 +411,29 @@ mod tests {
         let font = shape.font.skia_font(shape.size);
 
         shape.align = -1.0;
+
         let left = text_lines(&shape, &font);
+
         assert!(approximately_equal(left[0].origin.0, left[1].origin.0));
 
         shape.align = 0.0;
+
         let center = text_lines(&shape, &font);
+
         assert!(approximately_equal(
             center[0].origin.0 + center[0].width * 0.5,
             center[1].origin.0 + center[1].width * 0.5,
         ));
 
         shape.align = 1.0;
+
         let right = text_lines(&shape, &font);
+
         assert!(approximately_equal(
             right[0].origin.0 + right[0].width,
             right[1].origin.0 + right[1].width,
         ));
+
         assert!(approximately_equal(
             right[1].origin.1 - right[0].origin.1,
             font.spacing(),

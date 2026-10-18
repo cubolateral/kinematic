@@ -26,6 +26,7 @@ pub(crate) fn invalidate_lifetimes(world: &hecs::World) {
 
 fn root_trackables(_: &hecs::World, _: hecs::Entity) -> &'static [TrackableInfo] {
     static TRACKABLES: [TrackableInfo; 1] = [View::INFO];
+
     &TRACKABLES
 }
 
@@ -86,7 +87,9 @@ impl Scene {
         let animator_time = std::rc::Rc::new(std::cell::Cell::new(0.0));
         let animator = Animator::with_scene_time(std::rc::Rc::clone(&animator_time));
         let world = std::rc::Rc::new(std::cell::RefCell::new(hecs::World::new()));
+
         static NEXT_SCENE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
         let id = NEXT_SCENE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let root = world.borrow_mut().spawn(
             hecs::EntityBuilder::new()
@@ -107,6 +110,7 @@ impl Scene {
                 .expect("Root must contain a Node component.");
 
             node.is_root = true;
+
             node.activate(0.0);
         }
 
@@ -137,10 +141,13 @@ impl Scene {
         });
         let world_2d = world_2d.build(&mut scene);
         let world_3d = world_3d.build(&mut scene);
+
         scene.root().add(&world_2d);
         scene.root().add(&world_3d);
+
         scene.world_2d = world_2d.entity();
         scene.world_3d = world_3d.entity();
+
         scene
     }
 
@@ -169,8 +176,10 @@ impl Scene {
             .as_ref()
             .map_or(Ok(()), |runtime| runtime.check())
     }
+
     pub(crate) fn revision_after(&self, previous: &Scene) {
         self.revision.set(previous.render_key().1.wrapping_add(1));
+
         self.plan_revision
             .set(previous.plan_revision().wrapping_add(1));
     }
@@ -197,15 +206,19 @@ impl Scene {
             .handle()
             .signals()
             .restore_overrides(&self.world.borrow());
+
         {
             let mut active = self.world.borrow_mut();
             let mut next = candidate.world.borrow_mut();
+
             for entity in removed {
                 let _ = active.despawn(*entity);
             }
+
             let identity = active
                 .remove_one::<SceneIdentity>(self.root)
                 .expect("Active scene must have an identity.");
+
             for entity in changed.iter().copied().chain([
                 candidate.root,
                 candidate.world_2d,
@@ -214,26 +227,35 @@ impl Scene {
                 if !next.contains(entity) {
                     continue;
                 }
+
                 let bundle = next
                     .take(entity)
                     .expect("Validated candidate entity must exist.");
+
                 active.spawn_at(entity, bundle);
             }
+
             active.insert_one(self.root, identity).unwrap();
+
             invalidate_lifetimes(&active);
         }
+
         std::mem::swap(&mut self.animator, &mut candidate.animator);
         std::mem::swap(&mut self.animator_time, &mut candidate.animator_time);
         std::mem::swap(&mut self.scheduled_events, &mut candidate.scheduled_events);
         std::mem::swap(&mut self.scene_file, &mut candidate.scene_file);
+
         self.name = candidate.name.clone();
         self.fps = candidate.fps;
         self.margin = candidate.margin;
         self.runtime_owner = candidate.runtime_owner.take();
+
         self.time.set(candidate.time.get());
         self.revision.set(candidate.revision.get());
         self.plan_revision.set(candidate.plan_revision.get());
+
         *self.runtime.borrow_mut() = None;
+
         self.invalidate();
     }
 
@@ -251,6 +273,7 @@ impl Scene {
             repeating,
         );
         let previous = group.handle().activate();
+
         (std::mem::replace(&mut self.animator, group), previous)
     }
 
@@ -261,9 +284,13 @@ impl Scene {
         parallel: bool,
     ) {
         let group = std::mem::replace(&mut self.animator, scope.0);
+
         group.handle().restore(scope.1);
+
         let mut schedule = group.take_schedule();
+
         schedule.parallel = parallel;
+
         self.animator.handle().schedule(if repeating {
             schedule.repeated()
         } else {
@@ -298,7 +325,9 @@ impl Scene {
         deadline: Option<std::time::Instant>,
     ) -> Result<bool, String> {
         self.time.set(time);
+
         let generation = self.structure_revision();
+
         if self
             .runtime
             .borrow()
@@ -307,14 +336,17 @@ impl Scene {
         {
             self.compile_runtime();
         }
+
         let signals = self.animator.handle().signals();
         let world = self.world.borrow_mut();
 
         signals.restore_overrides(&world);
 
         let mut runtime = self.runtime.borrow_mut();
+
         if let Some(runtime) = runtime.as_mut() {
             let cursor = runtime.boundaries.partition_point(|(at, _)| *at <= time);
+
             if !runtime.initialized {
                 for (_, entity) in &runtime.boundaries {
                     if let Ok(mut node) = world.get::<&mut TreeNode>(*entity) {
@@ -330,12 +362,15 @@ impl Scene {
                     }
                 }
             }
+
             if !runtime.initialized || cursor != runtime.cursor {
                 self.plan_revision
                     .set(self.plan_revision.get().wrapping_add(1));
             }
+
             runtime.cursor = cursor;
             runtime.initialized = true;
+
             for entity in &runtime.animated {
                 if world
                     .get::<&TreeNode>(*entity)
@@ -352,40 +387,50 @@ impl Scene {
                 let Ok(node) = world.get::<&TreeNode>(*entity) else {
                     continue;
                 };
+
                 if !node.is_activated {
                     continue;
                 }
+
                 drop(node);
+
                 if !Simulation::seek_entity(&world, *entity, time, self.fps, deadline)? {
                     return Ok(false);
                 }
             }
         }
+
         drop(runtime);
+
         drop(world);
 
         signals.evaluate(&self.world, time, self.fps);
         self.revision.set(self.revision.get().wrapping_add(1));
+
         Ok(true)
     }
 
     pub(crate) fn event_definitions(&self) -> SceneFile {
         self.scene_file.clone()
     }
+
     pub(crate) fn set_event_definitions(&mut self, file: SceneFile) {
         self.scene_file = file;
     }
 
     pub(crate) fn restore_time(&self, time: f32) {
         self.time.set(time);
+
         for node in self.world.borrow().query::<&mut TreeNode>().iter() {
             node.update(time);
         }
+
         *self.runtime.borrow_mut() = None;
     }
 
     pub(crate) fn invalidate(&self) {
         self.revision.set(self.revision.get().wrapping_add(1));
+
         self.plan_revision
             .set(self.plan_revision.get().wrapping_add(1));
     }
@@ -426,6 +471,7 @@ impl Scene {
                 .load(std::sync::atomic::Ordering::Relaxed),
             ..Runtime::default()
         };
+
         for (entity, node) in world.query::<(hecs::Entity, &TreeNode)>().iter() {
             for at in node.lifetime {
                 if at.is_finite() {
@@ -433,7 +479,9 @@ impl Scene {
                 }
             }
         }
+
         runtime.boundaries.sort_by(|a, b| a.0.total_cmp(&b.0));
+
         runtime.animated.extend(
             world
                 .query::<(hecs::Entity, &Animation)>()
@@ -441,13 +489,16 @@ impl Scene {
                 .filter(|(_, animation)| !animation.tracks.is_empty())
                 .map(|(entity, _)| entity),
         );
+
         runtime.simulations.extend(
             world
                 .query::<(hecs::Entity, &Simulation)>()
                 .iter()
                 .map(|(entity, _)| entity),
         );
+
         *self.runtime.borrow_mut() = Some(runtime);
+
         self.invalidate();
     }
 
@@ -464,6 +515,7 @@ impl Scene {
             .unwrap()
             .resolution();
         let (mx, my) = self.margin;
+
         Rect::new(
             -(width as f32) / 2.0 + mx as f32,
             -(height as f32) / 2.0 + my as f32,
@@ -491,6 +543,7 @@ impl Scene {
         for child in children_by_z_index(&world, self.world_2d) {
             draw_entity(&world, child, canvas, Some(&camera_base));
         }
+
         canvas.restore_to_count(save_count);
     }
 
@@ -499,12 +552,15 @@ impl Scene {
         let view_2d = self.root().is_view_2d();
         let output = self.view_texture();
         let world = self.world.borrow();
+
         if !view_2d {
             return crate::core::objects::outline_segments3d(&world, output.entity, entity);
         }
+
         if !self.output_is_active_2d(&world, output.entity) {
             return None;
         }
+
         let points = crate::core::objects::outline_points(&world, output.entity, entity)?;
         let size = world
             .get::<&crate::core::objects::CanvasSettings>(output.entity)
@@ -516,6 +572,7 @@ impl Scene {
                 p.y / size.1.max(1) as f32 + 0.5,
             ]
         });
+
         Some(
             (0..4)
                 .map(|index| [points[index], points[(index + 1) % 4]])
@@ -528,10 +585,12 @@ impl Scene {
         mut entity: hecs::Entity,
     ) -> Option<(hecs::Entity, crate::core::objects::CanvasDimension)> {
         let world = self.world.borrow();
+
         loop {
             if let Ok(settings) = world.get::<&crate::core::objects::CanvasSettings>(entity) {
                 return Some((entity, settings.dimension));
             }
+
             entity = world.get::<&TreeNode>(entity).ok()?.parent?;
         }
     }
@@ -544,11 +603,13 @@ impl Scene {
     ) -> Option<[skia_safe::Point; 4]> {
         let world = self.world.borrow();
         let mut points = crate::core::objects::outline_points_in_world(&world, canvas, entity)?;
+
         if camera_view && crate::core::objects::object_follows_camera(&world, canvas, entity) {
             crate::core::objects::camera_matrix2d(&world, canvas)?
                 .invert()?
                 .map_points_inplace(&mut points);
         }
+
         Some(points)
     }
 
@@ -567,6 +628,7 @@ impl Scene {
         camera_view: bool,
     ) -> Option<hecs::Entity> {
         let world = self.world.borrow();
+
         crate::core::objects::pick_canvas2d_in_world(&world, canvas, point, camera_view)
     }
 
@@ -599,6 +661,7 @@ impl Scene {
         let view_2d = self.root().is_view_2d();
         let output = self.view_texture();
         let world = self.world.borrow();
+
         if view_2d && self.output_is_active_2d(&world, output.entity) {
             crate::core::objects::pick_canvas2d(&world, output.entity, point)
         } else if !view_2d {
@@ -674,6 +737,7 @@ impl Scene {
     /// ```
     pub fn event(&mut self, name: &str) {
         self.animator.handle().assert_event_scope();
+
         let (file_index, duration) = match self
             .scene_file
             .events
@@ -687,15 +751,18 @@ impl Scene {
                     name: name.to_owned(),
                     duration: 0.0,
                 });
+
                 (self.scene_file.events.len() - 1, 0.0)
             }
         };
+
         self.scheduled_events.push(ScheduledEvent {
             file_index,
             name: name.to_owned(),
             creation_time: self.animator.handle().time(),
             duration,
         });
+
         self.wait(duration.max(0.0));
     }
 
@@ -703,6 +770,7 @@ impl Scene {
     pub fn delay(&mut self, duration: f32, schedule: impl FnOnce(&mut Scene)) {
         self.chain(|scene| {
             scene.wait(duration);
+
             schedule(scene);
         });
     }
@@ -732,6 +800,7 @@ impl Scene {
         let values = {
             let world = self.world.borrow();
             let mut values = Vec::new();
+
             for (entity, inspection) in world.query::<(hecs::Entity, &Inspection)>().iter() {
                 for component in inspection.trackables(&world, entity) {
                     for info in (component.get)() {
@@ -739,6 +808,7 @@ impl Scene {
                     }
                 }
             }
+
             values
         };
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -746,9 +816,11 @@ impl Scene {
         }));
         // A background cycle does not advance the outer construction values.
         let world = self.world.borrow();
+
         for (entity, info, value) in values {
             (info.set)(&world, entity, value);
         }
+
         if let Err(error) = result {
             std::panic::resume_unwind(error);
         }
@@ -766,12 +838,17 @@ impl Scene {
         let parent = std::mem::replace(&mut self.animator, group);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| schedule(self)));
         let group = std::mem::replace(&mut self.animator, parent);
+
         group.handle().restore(previous);
+
         if let Err(error) = result {
             std::panic::resume_unwind(error);
         }
+
         let mut schedule = group.take_schedule();
+
         schedule.parallel = parallel;
+
         self.animator.handle().schedule(if repeating {
             schedule.repeated()
         } else {
@@ -798,6 +875,7 @@ impl Scene {
             object,
             Name::new(name),
         );
+
         if let Some(shader) = image_shader {
             self.world
                 .borrow_mut()
@@ -807,6 +885,7 @@ impl Scene {
                 )
                 .expect("Spawned object must accept its image shader.");
         }
+
         if let Some(shader) = mesh_shader {
             self.world
                 .borrow_mut()
@@ -816,10 +895,12 @@ impl Scene {
                 )
                 .expect("Spawned object must accept its mesh shader.");
         }
+
         crate::core::objects::initialize_object_snapshots(
             &self.world,
             crate::core::objects::ObjectHandler::entity(&handler),
         );
+
         handler
     }
 
@@ -868,7 +949,9 @@ impl Scene {
     /// Mutable access to the underlying ECS world.
     pub fn world_mut(&self) -> std::cell::RefMut<'_, hecs::World> {
         self.invalidate();
+
         *self.runtime.borrow_mut() = None;
+
         self.world.borrow_mut()
     }
 
@@ -887,16 +970,23 @@ mod tests {
     fn revision_changes_for_updates_edits_and_rebuilds_but_not_overlays() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
         scene.update(0.0);
+
         let rendered = scene.render_key();
+
         assert!(scene.selection_outline(object.entity()).is_some());
         assert_eq!(scene.pick(Vector2::ZERO), Some(object.entity()));
+
         let mut surface = skia_safe::surfaces::raster_n32_premul((16, 16)).unwrap();
+
         scene.draw(surface.canvas());
         assert_eq!(scene.render_key(), rendered);
         scene.invalidate();
+
         let edited = scene.render_key();
+
         assert_ne!(edited, rendered);
         scene.update(0.5);
         assert_ne!(scene.render_key(), edited);
@@ -907,13 +997,17 @@ mod tests {
     fn preview_hit_testing_and_debug_follow_the_root_view_dimension() {
         let mut scene = Scene::new_with_resolution((64, 64));
         let rectangle = rect().size(vec2(16.0, 16.0)).build(&mut scene);
+
         scene.world_2d().add(&rectangle);
+
         let near_cube = cube().build(&mut scene);
         let far_cube = cube().position(vec3(0.0, 0.0, -2.0)).build(&mut scene);
+
         scene.world_3d().add(&near_cube);
         scene.world_3d().add(&far_cube);
 
         assert_eq!(scene.pick(Vector2::ZERO), Some(rectangle.entity()));
+
         assert_eq!(
             scene.selection_outline(rectangle.entity()).unwrap().len(),
             4
@@ -923,10 +1017,12 @@ mod tests {
 
         assert_eq!(scene.pick(Vector2::ZERO), Some(near_cube.entity()));
         assert!(scene.pick(vec2(31.0, 31.0)).is_none());
+
         assert_eq!(
             scene.selection_outline(near_cube.entity()).unwrap().len(),
             12
         );
+
         assert!(scene.selection_outline(rectangle.entity()).is_none());
     }
 
@@ -943,6 +1039,7 @@ mod tests {
             .size(vec2(10.0, 10.0))
             .position(vec2(20.0, 0.0))
             .build(&mut scene);
+
         group.add(&rectangle);
         canvas.add(&group);
         scene.add_canvas_2d(&canvas);
@@ -951,6 +1048,7 @@ mod tests {
             scene.nearest_canvas(rectangle.entity()),
             Some((canvas.entity(), CanvasDimension::Two))
         );
+
         assert_eq!(
             scene.pick_editor_2d(canvas.entity(), vec2(20.0, 0.0), false),
             Some(rectangle.entity())
@@ -959,25 +1057,32 @@ mod tests {
         let camera = scene
             .editor_2d_camera_outline(canvas.entity(), false)
             .unwrap();
+
         assert_eq!(camera[0], skia_safe::Point::new(75.0, -20.0));
         assert_eq!(camera[2], skia_safe::Point::new(125.0, 20.0));
+
         assert!(
             scene
                 .editor_2d_selection_outline(canvas.entity(), rectangle.entity(), false)
                 .is_some()
         );
+
         assert_eq!(
             scene.pick_editor_2d(canvas.entity(), vec2(-160.0, 0.0), true),
             Some(rectangle.entity())
         );
+
         let locked_camera = scene
             .editor_2d_camera_outline(canvas.entity(), true)
             .unwrap();
+
         assert_eq!(locked_camera[0], skia_safe::Point::new(-50.0, -40.0));
         assert_eq!(locked_camera[2], skia_safe::Point::new(50.0, 40.0));
+
         let locked_selection = scene
             .editor_2d_selection_outline(canvas.entity(), rectangle.entity(), true)
             .unwrap();
+
         assert_eq!(locked_selection[0], skia_safe::Point::new(-170.0, -10.0));
         assert_eq!(locked_selection[2], skia_safe::Point::new(-150.0, 10.0));
     }
@@ -1003,6 +1108,7 @@ mod tests {
         );
 
         let pixels = surface.peek_pixels().unwrap();
+
         assert_eq!(pixels.get_color((100, 80)).a(), 0);
         assert!((63..=64).contains(&pixels.get_color((10, 10)).a()));
     }
@@ -1016,12 +1122,15 @@ mod tests {
             .thickness(10.0)
             .fill(Color::RED)
             .build(&mut scene);
+
         scene.world_2d().add(&line);
+
         scene
             .world_2d()
             .camera_position(vec2(100_000_000.0, 0.0))
             .camera_zoom(100.0)
             .immediate();
+
         let mut surface = skia_safe::surfaces::raster_n32_premul((100, 80)).unwrap();
 
         surface.canvas().translate((50.0, 40.0));
@@ -1034,26 +1143,36 @@ mod tests {
     fn compiled_runtime_visits_tracks_and_crossed_lifetimes_and_handles_later_removal() {
         let mut scene = Scene::new();
         let static_object = circle().build(&mut scene);
+
         scene.world_2d().add(&static_object);
+
         let animated = circle().build(&mut scene);
+
         scene.world_2d().add(&animated);
+
         animated
             .position_x(10.0)
             .duration(2.0)
             .easing(Easing::Linear)
             .play();
+
         scene.animator.take_schedule().compile(&scene);
+
         assert_eq!(
             scene.runtime.borrow().as_ref().unwrap().animated,
             vec![animated.entity()]
         );
+
         scene.update(0.5);
+
         let plan_revision = scene.plan_revision();
+
         scene.update(1.0);
         assert_eq!(scene.plan_revision(), plan_revision);
         assert_eq!(animated.get_position().x, 5.0);
         static_object.remove();
         scene.update(2.0);
+
         assert!(
             !scene
                 .world()
@@ -1061,7 +1180,9 @@ mod tests {
                 .unwrap()
                 .is_activated
         );
+
         scene.update(0.5);
+
         assert!(
             scene
                 .world()
@@ -1069,15 +1190,18 @@ mod tests {
                 .unwrap()
                 .is_activated
         );
+
         assert_eq!(animated.get_position().x, 2.5);
     }
 
     fn scene_with_event(name: &str, event_name: &str, duration: f32) -> Scene {
         let mut scene = Scene::new_candidate(name, (1920, 1080));
+
         scene.scene_file.events.push(TimeEvent {
             name: event_name.into(),
             duration,
         });
+
         scene
     }
 
@@ -1100,11 +1224,13 @@ mod tests {
         let mut scene = scene_with_event("event_groups", "intro", 5.0);
 
         scene.wait(1.0);
+
         scene.all(|scene| {
             scene.chain(|scene| {
                 scene.wait(2.0);
                 scene.event("intro");
             });
+
             scene.wait(3.0);
         });
 
@@ -1123,13 +1249,16 @@ mod tests {
     fn signal_overrides_a_tween_after_tracks_are_evaluated() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
         object.signal(|handler, _| handler.set_position(vec2(25.0, 0.0)));
+
         object
             .position_x(100.0)
             .duration(2.0)
             .easing(Easing::Linear)
             .play();
+
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(1.0);
@@ -1140,17 +1269,23 @@ mod tests {
     #[test]
     fn signal_receives_project_frame_timing() {
         let mut scene = Scene::new();
+
         scene.set_fps(24);
+
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
+
         let observed = std::rc::Rc::new(std::cell::Cell::new(None));
         let callback_observed = std::rc::Rc::clone(&observed);
+
         object.signal(move |_, frame| callback_observed.set(Some(frame)));
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(0.5);
 
         let frame = observed.get().unwrap();
+
         assert_eq!(frame.time, 0.5);
         assert_eq!(frame.index, 12);
         assert_eq!(frame.dt, 1.0 / 24.0);
@@ -1160,10 +1295,13 @@ mod tests {
     fn signal_interval_supports_forward_and_backward_seeks() {
         let mut scene = Scene::new();
         let object = circle().position(vec2(3.0, 0.0)).build(&mut scene);
+
         scene.world_2d().add(&object);
         scene.wait(1.0);
+
         let signaled = object.clone();
         let signal = object.signal(move |_, _| signaled.set_position(vec2(9.0, 0.0)));
+
         scene.wait(1.0);
         signal.stop();
         scene.animator.take_schedule().compile(&scene);
@@ -1184,9 +1322,12 @@ mod tests {
     fn stopping_a_signal_uses_the_current_animator_time() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
+
         let signaled = object.clone();
         let signal = object.signal(move |_, _| signaled.set_position(vec2(4.0, 0.0)));
+
         scene.wait(1.0);
         signal.stop();
         scene.animator.take_schedule().compile(&scene);
@@ -1202,14 +1343,17 @@ mod tests {
         let mut scene = Scene::new();
         let object = circle().position(vec2(3.0, 0.0)).build(&mut scene);
         let other = circle().position(vec2(4.0, 0.0)).build(&mut scene);
+
         scene.world_2d().add(&object);
         scene.world_2d().add(&other);
+
         let other_target = other.clone();
         let other_signal = other.signal(move |_, _| other_target.set_position(vec2(30.0, 0.0)));
         let first = object.clone();
         let first_signal = object.signal(move |_, _| first.set_position(vec2(10.0, 0.0)));
         let second = object.clone();
         let second_signal = object.signal(move |_, _| second.set_position(vec2(20.0, 0.0)));
+
         scene.wait(1.0);
         first_signal.stop();
         second_signal.stop();
@@ -1230,6 +1374,7 @@ mod tests {
         let object = circle().build(&mut scene);
         let calls = std::rc::Rc::new(std::cell::Cell::new(0));
         let callback_calls = std::rc::Rc::clone(&calls);
+
         object.signal(move |_, _| callback_calls.set(callback_calls.get() + 1));
         scene.animator.take_schedule().compile(&scene);
 
@@ -1242,10 +1387,13 @@ mod tests {
     fn signal_can_read_another_handler_without_borrowing_the_scene_world() {
         let mut scene = Scene::new();
         let tracked = circle().position(vec2(7.0, 8.0)).build(&mut scene);
+
         scene.world_2d().add(&tracked);
+
         let canvas = scene.world_2d();
         let signaled_canvas = canvas.clone();
         let tracked = tracked.clone();
+
         canvas.signal(move |_, _| signaled_canvas.set_camera_position(tracked.global_position()));
         scene.animator.take_schedule().compile(&scene);
 
@@ -1258,6 +1406,7 @@ mod tests {
     fn signal_does_not_advance_scene_duration() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
         object.signal(|_, _| {});
 
@@ -1269,6 +1418,7 @@ mod tests {
     fn signal_is_rejected_inside_repeat() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
 
         scene.repeat(|_| {
@@ -1281,11 +1431,15 @@ mod tests {
     fn signal_cannot_create_a_tween_while_it_is_evaluated() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
+
         let signaled = object.clone();
+
         object.signal(move |_, _| {
             let _ = signaled.position(vec2(1.0, 2.0));
         });
+
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(0.0);
@@ -1296,8 +1450,11 @@ mod tests {
     fn signal_cannot_remove_an_object_while_it_is_evaluated() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
+
         let signaled = object.clone();
+
         object.signal(move |_, _| signaled.remove());
         scene.animator.take_schedule().compile(&scene);
 
@@ -1311,6 +1468,7 @@ mod tests {
         let canvas = scene.world_2d();
         let child = circle().build(&mut scene);
         let parent = canvas.clone();
+
         canvas.signal(move |_, _| parent.add(&child));
         scene.animator.take_schedule().compile(&scene);
 
@@ -1322,10 +1480,15 @@ mod tests {
     fn signal_cannot_play_an_existing_tween_while_it_is_evaluated() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
+
         let queued = object.position(vec2(1.0, 2.0));
+
         object.set_position(Vector2::ZERO);
+
         let mut queued = Some(queued);
+
         object.signal(move |_, _| queued.take().unwrap().play());
         scene.animator.take_schedule().compile(&scene);
 
@@ -1336,7 +1499,9 @@ mod tests {
     fn finite_for_loops_rebuild_relative_targets() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
+
         for _ in 0..3 {
             object
                 .position_x_by(10.0)
@@ -1344,6 +1509,7 @@ mod tests {
                 .easing(Easing::Linear)
                 .play();
         }
+
         assert_eq!(scene.animator.take_schedule().compile(&scene), 3.0);
         scene.update(2.5);
         assert_eq!(object.get(Transform2D::position_property()).x, 25.0);
@@ -1354,6 +1520,7 @@ mod tests {
         let mut scene = Scene::new();
         let group = group_2d().visibility(false).build(&mut scene);
         let object = rect().size(vec2(10.0, 10.0)).build(&mut scene);
+
         group.add(&object);
         scene.world_2d().add(&group);
 
@@ -1368,6 +1535,7 @@ mod tests {
         let tween_object = circle().build(&mut scene);
         let task_object = circle().build(&mut scene);
         let scope_object = circle().build(&mut scene);
+
         scene.world_2d().add(&tween_object);
         scene.world_2d().add(&task_object);
         scene.world_2d().add(&scope_object);
@@ -1379,6 +1547,7 @@ mod tests {
                 .duration(1.0)
                 .easing(Easing::Linear)
                 .play();
+
             scene.play(
                 task_object
                     .position_x(100.0)
@@ -1387,6 +1556,7 @@ mod tests {
                     .task()
                     .delay(1.0),
             );
+
             scene.delay(1.5, |_| {
                 scope_object
                     .position_x(100.0)
@@ -1397,6 +1567,7 @@ mod tests {
         });
 
         assert_eq!(scene.animator.take_schedule().compile(&scene), 2.5);
+
         for (time, tween_x, task_x, scope_x) in [
             (0.25, 0.0, 0.0, 0.0),
             (0.75, 25.0, 0.0, 0.0),
@@ -1404,11 +1575,14 @@ mod tests {
             (1.75, 100.0, 75.0, 25.0),
         ] {
             scene.update(time);
+
             assert_eq!(
                 tween_object.get(Transform2D::position_property()).x,
                 tween_x
             );
+
             assert_eq!(task_object.get(Transform2D::position_property()).x, task_x);
+
             assert_eq!(
                 scope_object.get(Transform2D::position_property()).x,
                 scope_x
@@ -1420,7 +1594,9 @@ mod tests {
     fn task_repeat_and_groups_share_the_same_schedule() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
+
         let cycle = Task::Repeat(vec![Task::All(vec![
             object
                 .opacity_from(0.0, 1.0)
@@ -1429,6 +1605,7 @@ mod tests {
                 .task(),
             Task::Chain(vec![Task::Wait(1.0)]),
         ])]);
+
         scene.play(Task::Chain(vec![Task::Wait(2.0), cycle, Task::Wait(3.0)]));
         assert_eq!(scene.animator.take_schedule().compile(&scene), 5.0);
         scene.update(4.5);
@@ -1439,8 +1616,10 @@ mod tests {
     fn repeat_is_seekable_and_does_not_advance_the_outer_timeline() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
         scene.wait(3.0);
+
         scene.all(|scene| {
             scene.repeat(|scene| {
                 scene.chain(|_| {
@@ -1449,6 +1628,7 @@ mod tests {
                         .duration(1.0)
                         .easing(Easing::Linear)
                         .play();
+
                     object
                         .position_y(0.0)
                         .duration(1.0)
@@ -1456,15 +1636,18 @@ mod tests {
                         .play();
                 });
             });
+
             object
                 .opacity(0.0)
                 .duration(4.0)
                 .easing(Easing::Linear)
                 .play();
         });
+
         scene.wait(3.0);
         assert_eq!(scene.animator.take_schedule().compile(&scene), 10.0);
         assert_eq!(scene.duration(), 10.0);
+
         for (time, y) in [
             (3.5, 5.0),
             (6.5, 5.0),
@@ -1476,8 +1659,10 @@ mod tests {
             scene.update(time);
             assert_eq!(object.get(Transform2D::position_property()).y, y);
         }
+
         scene.update(5.0);
         assert_eq!(object.get(Draw2D::opacity_property()), 0.5);
+
         let world = scene.world();
         let animation = world.get::<&Animation>(object.entity()).unwrap();
         let track = animation
@@ -1485,6 +1670,7 @@ mod tests {
             .iter()
             .find(|track| track.track.repeat.is_some())
             .unwrap();
+
         assert!(track.track.keyframes.len() <= 5);
     }
 
@@ -1492,24 +1678,30 @@ mod tests {
     fn repeat_restores_construction_values_and_holds_at_the_start_of_each_cycle() {
         let mut scene = Scene::new();
         let object = circle().position(vec2(0.0, 2.0)).build(&mut scene);
+
         scene.world_2d().add(&object);
+
         object
             .position_y(4.0)
             .duration(1.0)
             .easing(Easing::Linear)
             .play();
+
         scene.repeat(|scene| {
             scene.wait(1.0);
+
             object
                 .position_y(8.0)
                 .duration(1.0)
                 .easing(Easing::Linear)
                 .play();
         });
+
         assert_eq!(object.get(Transform2D::position_property()).y, 4.0);
         assert_eq!(scene.duration(), 1.0);
         scene.wait(6.0);
         scene.animator.take_schedule().compile(&scene);
+
         for (time, y) in [(0.5, 3.0), (2.5, 6.0), (3.5, 4.0), (1.5, 4.0), (6.5, 6.0)] {
             scene.update(time);
             assert_eq!(object.get(Transform2D::position_property()).y, y);
@@ -1520,16 +1712,21 @@ mod tests {
     fn standalone_track_is_seekable_and_readable_from_a_signal() {
         let mut scene = Scene::new();
         let value = scene.track(0.0_f32);
+
         scene.repeat(|_| {
             value.to(10.0).duration(2.0).easing(Easing::Linear).play();
         });
+
         assert_eq!(value.get(), 0.0);
 
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
+
         let observed = std::rc::Rc::new(std::cell::Cell::new(0.0));
         let signal_value = value.clone();
         let signal_observed = std::rc::Rc::clone(&observed);
+
         object.signal(move |_, _| signal_observed.set(signal_value.get()));
         scene.wait(6.0);
         scene.animator.take_schedule().compile(&scene);
@@ -1547,11 +1744,13 @@ mod tests {
         let value = scene.track(0.0_f32);
         let observed = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
         let callback_observed = std::rc::Rc::clone(&observed);
+
         value.signal(move |value, frame| {
             callback_observed
                 .borrow_mut()
                 .push((value.get(), frame.time));
         });
+
         value.to(10.0).duration(2.0).easing(Easing::Linear).play();
         scene.animator.take_schedule().compile(&scene);
 
@@ -1578,8 +1777,11 @@ mod tests {
         let mut scene = Scene::new();
         let value = scene.track(0.0_f32);
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
+
         let signaled_value = value.clone();
+
         object.signal(move |_, _| signaled_value.set(20.0));
         value.to(10.0).duration(1.0).easing(Easing::Linear).play();
         scene.animator.take_schedule().compile(&scene);
@@ -1594,11 +1796,13 @@ mod tests {
     fn standalone_track_supports_explicit_and_relative_tweens() {
         let mut scene = Scene::new();
         let value = scene.track(0.0_f32);
+
         value
             .from(2.0, 6.0)
             .duration(1.0)
             .easing(Easing::Linear)
             .play();
+
         value.by(4.0).duration(1.0).easing(Easing::Linear).play();
         scene.animator.take_schedule().compile(&scene);
 
@@ -1612,7 +1816,9 @@ mod tests {
     fn repeated_axis_rotation_preserves_signed_multiple_turns() {
         let mut scene = Scene::new();
         let object = cube().build(&mut scene);
+
         scene.world_3d().add(&object);
+
         scene.repeat(|_| {
             object
                 .rotation_y_by(-2.0 * std::f32::consts::TAU)
@@ -1620,15 +1826,22 @@ mod tests {
                 .easing(Easing::Linear)
                 .play();
         });
+
         scene.wait(12.0);
         scene.animator.take_schedule().compile(&scene);
+
         for time in [0.5, 4.5, 100.5, 0.5] {
             scene.update(time);
+
             let direction = object.get(Transform3D::rotation_property()) * Vector3::X;
+
             assert!(direction.abs_diff_eq(Vector3::Z, 1e-5));
         }
+
         scene.update(4.0);
+
         let direction = object.get(Transform3D::rotation_property()) * Vector3::X;
+
         assert!(direction.abs_diff_eq(Vector3::X, 1e-5));
     }
 
@@ -1636,10 +1849,13 @@ mod tests {
     fn nested_parallel_branches_compile_in_property_time_order() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
+
         scene.all(|scene| {
             scene.chain(|scene| {
                 scene.wait(2.0);
+
                 scene.all(|scene| {
                     scene.all(|_| {
                         object
@@ -1650,13 +1866,16 @@ mod tests {
                     });
                 });
             });
+
             object
                 .position_from(Vector2::ZERO, vec2(10.0, 0.0))
                 .duration(1.0)
                 .easing(Easing::Linear)
                 .play();
         });
+
         assert_eq!(scene.animator.take_schedule().compile(&scene), 3.0);
+
         for (time, x) in [(2.5, 15.0), (0.5, 5.0), (1.5, 10.0)] {
             scene.update(time);
             assert_eq!(object.get(Transform2D::position_property()).x, x);
@@ -1667,6 +1886,7 @@ mod tests {
     fn parallel_tween_does_not_extend_the_timeline() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.world_2d().add(&object);
 
         scene.parallel(|_| {
@@ -1676,6 +1896,7 @@ mod tests {
                 .easing(Easing::Linear)
                 .play();
         });
+
         scene.wait(1.0);
 
         assert_eq!(scene.animator.take_schedule().compile(&scene), 1.0);
@@ -1688,9 +1909,11 @@ mod tests {
     fn repeat_rejects_competing_property_animation() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.repeat(|_| {
             object.opacity(0.0).play();
         });
+
         scene.wait(4.0);
         object.opacity(0.5).play();
         scene.animator.take_schedule().compile(&scene);
@@ -1701,12 +1924,15 @@ mod tests {
     fn repeat_rejects_another_cycle_on_the_same_property() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.repeat(|_| {
             object.opacity(0.0).play();
         });
+
         scene.repeat(|_| {
             object.opacity(0.5).play();
         });
+
         scene.animator.take_schedule().compile(&scene);
     }
 
@@ -1714,13 +1940,16 @@ mod tests {
     fn rejected_repeat_restores_the_active_scope_and_values() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.wait(2.0);
+
         let error = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             scene.repeat(|scene| {
                 object.opacity(0.0).play();
                 scene.repeat(|_| {});
             });
         }));
+
         assert!(error.is_err());
         assert_eq!(object.get(Draw2D::opacity_property()), 1.0);
         assert_eq!(scene.duration(), 2.0);
@@ -1733,6 +1962,7 @@ mod tests {
     fn repeat_rejects_zero_duration_cycles() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.repeat(|_| {
             object.opacity(0.0).immediate();
         });
@@ -1743,6 +1973,7 @@ mod tests {
     fn repeat_rejects_lifetime_changes_through_existing_handlers() {
         let mut scene = Scene::new();
         let object = circle().build(&mut scene);
+
         scene.repeat(|_| {
             object.remove();
         });
@@ -1757,6 +1988,7 @@ mod tests {
 
         assert_eq!(world_2d.name(), "World 2D");
         assert_eq!(world_3d.name(), "World 3D");
+
         assert_eq!(
             world
                 .get::<&CanvasSettings>(world_2d.entity())
@@ -1764,6 +1996,7 @@ mod tests {
                 .resolution,
             (1280, 720)
         );
+
         assert_eq!(
             world
                 .get::<&CanvasSettings>(world_3d.entity())
@@ -1771,12 +2004,16 @@ mod tests {
                 .resolution,
             (1280, 720)
         );
+
         assert_eq!(scene.view_texture(), world_2d.texture());
+
         let inspection = world.get::<&Inspection>(scene.root().entity()).unwrap();
+
         assert_eq!(
             (inspection.get)(&world, scene.root().entity())[0].name,
             "View"
         );
+
         assert_eq!(
             children(&world, scene.root().entity()),
             vec![world_2d.entity(), world_3d.entity()]
@@ -1820,6 +2057,7 @@ mod tests {
 
         assert_eq!(transform.position, vec2(default.transform.position.x, 24.0));
         assert_eq!(transform.scale, vec2(2.0, default.transform.scale.y));
+
         assert_eq!(
             style.fill,
             Color::new(
@@ -1845,6 +2083,7 @@ mod tests {
         circle.set_name("Primary Circle");
 
         assert_eq!(circle.name(), "Primary Circle");
+
         assert_eq!(
             scene.world().get::<&Name>(circle.entity()).unwrap().get(),
             "Primary Circle"
@@ -1876,11 +2115,17 @@ mod tests {
         assert_eq!(circle.get_opacity(), 1.0);
         circle.set_opacity(-1.0_f32);
         assert_eq!(circle.get_opacity(), 0.0);
+
         let _ = circle.opacity(2.0);
+
         assert_eq!(circle.get_opacity(), 1.0);
+
         let _ = circle.opacity_from(-1.0, 2.0);
+
         assert_eq!(circle.get_opacity(), 1.0);
+
         let _ = circle.opacity_by(-2.0);
+
         assert_eq!(circle.get_opacity(), 0.0);
     }
 
@@ -1888,6 +2133,7 @@ mod tests {
     fn object_handlers_animate_properties_and_generate_from_shortcuts() {
         let mut scene = Scene::new();
         let circle: CircleHandler = circle().build(&mut scene);
+
         scene.world_2d().add(&circle);
 
         scene.play(
@@ -1896,13 +2142,16 @@ mod tests {
                 .duration(1.0)
                 .task(),
         );
+
         circle
             .position_from(Vector2::ZERO, vec2(20.0, 30.0))
             .immediate();
+
         scene.play(circle.opacity_from(0.0, 1.0).duration(1.0).task());
 
         scene.animator.take_schedule().compile(&scene);
         scene.update(0.5);
+
         let world = scene.world();
         let transform = world.get::<&Transform2D>(circle.entity()).unwrap();
 
@@ -1914,6 +2163,7 @@ mod tests {
         let mut scene = Scene::new();
         let object = rect().z_index(-10).build(&mut scene);
         let polygon = regular_polygon_2d().sides(4).build(&mut scene);
+
         scene.world_2d().add(&object);
         scene.world_2d().add(&polygon);
 
@@ -1923,6 +2173,7 @@ mod tests {
                 .duration(2.0)
                 .easing(Easing::Linear)
                 .play();
+
             polygon.sides(8).duration(2.0).easing(Easing::Linear).play();
         });
 
@@ -1942,6 +2193,7 @@ mod tests {
     fn handler_tweens_add_relative_scalar_and_vector_targets() {
         let mut scene = Scene::new();
         let circle = circle().build(&mut scene);
+
         scene.world_2d().add(&circle);
 
         circle
@@ -1954,6 +2206,7 @@ mod tests {
 
         scene.animator.take_schedule().compile(&scene);
         scene.update(1.0);
+
         let world = scene.world();
         let transform = world.get::<&Transform2D>(circle.entity()).unwrap();
         let draw = world.get::<&Draw2D>(circle.entity()).unwrap();
@@ -1966,6 +2219,7 @@ mod tests {
     fn quaternion_axis_rotation_preserves_a_complete_turn() {
         let mut scene = Scene::new();
         let cube = cube().build(&mut scene);
+
         scene.world_3d().add(&cube);
 
         cube.rotation_y_by(std::f32::consts::TAU)
@@ -1976,21 +2230,25 @@ mod tests {
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(1.0);
+
         let halfway = scene
             .world()
             .get::<&Transform3D>(cube.entity())
             .unwrap()
             .rotation
             * Vector3::X;
+
         assert!(halfway.abs_diff_eq(-Vector3::X, 1e-5));
 
         scene.update(2.0);
+
         let complete = scene
             .world()
             .get::<&Transform3D>(cube.entity())
             .unwrap()
             .rotation
             * Vector3::X;
+
         assert!(complete.abs_diff_eq(Vector3::X, 1e-5));
     }
 
@@ -2000,6 +2258,7 @@ mod tests {
         let initial = Quaternion::from_euler(glam::EulerRot::XYZ, 0.1, 0.2, 0.3);
         let fixed = cube().rotation(initial).build(&mut scene);
         let relative = cube().build(&mut scene);
+
         scene.world_3d().add(&fixed);
         scene.world_3d().add(&relative);
 
@@ -2010,6 +2269,7 @@ mod tests {
                 .duration(2.0)
                 .easing(Easing::Linear)
                 .play();
+
             relative
                 .rotation_x_by(std::f32::consts::FRAC_PI_2)
                 .rotation_y_by(std::f32::consts::FRAC_PI_2)
@@ -2019,27 +2279,33 @@ mod tests {
         });
 
         scene.animator.take_schedule().compile(&scene);
+
         let fixed_target = Quaternion::from_euler(glam::EulerRot::XYZ, 0.4, 0.5, 0.3);
         let relative_target = Quaternion::from_rotation_x(std::f32::consts::FRAC_PI_2)
             * Quaternion::from_rotation_y(std::f32::consts::FRAC_PI_2);
 
         scene.update(0.0);
+
         assert!(
             fixed
                 .get(Transform3D::rotation_property())
                 .abs_diff_eq(initial, 1e-5)
         );
+
         assert!(
             relative
                 .get(Transform3D::rotation_property())
                 .abs_diff_eq(Quaternion::IDENTITY, 1e-5)
         );
+
         scene.update(2.0);
+
         assert!(
             fixed
                 .get(Transform3D::rotation_property())
                 .abs_diff_eq(fixed_target, 1e-5)
         );
+
         assert!(
             relative
                 .get(Transform3D::rotation_property())
@@ -2051,14 +2317,19 @@ mod tests {
     fn absolute_axis_rotation_uses_the_requested_axis_and_angle() {
         let mut scene = Scene::new();
         let cube = cube().build(&mut scene);
+
         scene.world_3d().add(&cube);
+
         let axis = Vector3::new(1.0, 2.0, 3.0).normalize();
+
         cube.rotation_axis(axis, 0.75)
             .duration(1.0)
             .easing(Easing::Linear)
             .play();
+
         scene.animator.take_schedule().compile(&scene);
         scene.update(1.0);
+
         assert!(
             cube.get(Transform3D::rotation_property())
                 .abs_diff_eq(Quaternion::from_axis_angle(axis, 0.75), 1e-5)
@@ -2069,19 +2340,23 @@ mod tests {
     fn relative_rotation_starts_from_the_interrupted_orientation() {
         let mut scene = Scene::new();
         let cube = cube().build(&mut scene);
+
         scene.world_3d().add(&cube);
+
         scene.parallel(|_| {
             cube.rotation_z_by(1.0)
                 .duration(2.0)
                 .easing(Easing::Linear)
                 .play();
         });
+
         scene.wait(1.0);
         cube.rotation_z_by(0.5).easing(Easing::Linear).play();
         scene.animator.take_schedule().compile(&scene);
 
         for (time, angle) in [(0.5, 0.25), (1.0, 0.5), (2.0, 1.0)] {
             scene.update(time);
+
             assert!(
                 cube.get(Transform3D::rotation_property())
                     .abs_diff_eq(Quaternion::from_rotation_z(angle), 1e-5)
@@ -2096,7 +2371,9 @@ mod tests {
         impl HandlerTweenScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().fill(Color::RED).build(scene);
+
                 scene.world_2d().add(&circle);
+
                 circle
                     .position_x(256.0)
                     .fill(Color::BLUE)
@@ -2107,18 +2384,22 @@ mod tests {
         }
 
         let mut scene = Scene::new();
+
         assert_eq!(
             {
                 HandlerTweenScene.build(&mut scene);
+
                 scene.finish_build()
             },
             1.0
         );
 
         scene.update(0.5);
+
         let world = scene.world();
         let mut query = world.query::<(&Transform2D, &Style)>();
         let circle = query.iter().next().unwrap();
+
         assert_eq!(circle.0.position.x, 64.0);
         assert_eq!(circle.1.fill, Color::new(0.75, 0.0, 0.25, 1.0));
     }
@@ -2127,6 +2408,7 @@ mod tests {
     fn unchanged_tweens_do_not_add_tracks_or_keyframes() {
         let mut scene = Scene::new();
         let circle = circle().build(&mut scene);
+
         scene.world_2d().add(&circle);
 
         circle.save();
@@ -2137,10 +2419,13 @@ mod tests {
 
         let world = scene.world();
         let animation = world.get::<&Animation>(circle.entity()).unwrap();
+
         assert_eq!(animation.tracks.len(), 1);
         assert_eq!(animation.tracks[0].track.keyframes.len(), 4);
         assert!(animation.tracks[0].track.keyframes[1].easing.is_none());
+
         drop(animation);
+
         drop(world);
 
         scene.update(1.5);
@@ -2153,6 +2438,7 @@ mod tests {
     fn constant_tween_still_anchors_an_explicit_value_change() {
         let mut scene = Scene::new();
         let circle = circle().build(&mut scene);
+
         scene.world_2d().add(&circle);
 
         circle
@@ -2162,6 +2448,7 @@ mod tests {
                 vec2(5.0, 0.0),
             )
             .play();
+
         circle
             .animate_from(
                 Transform2D::position_property(),
@@ -2169,6 +2456,7 @@ mod tests {
                 vec2(10.0, 0.0),
             )
             .play();
+
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(0.5);
@@ -2181,7 +2469,9 @@ mod tests {
     fn vector_and_color_channels_animate_independently() {
         let mut scene = Scene::new();
         let circle = circle().fill(Color::RED).build(&mut scene);
+
         scene.world_2d().add(&circle);
+
         scene.parallel(|_| {
             circle
                 .position_x(10.0)
@@ -2189,6 +2479,7 @@ mod tests {
                 .easing(Easing::Linear)
                 .play();
         });
+
         scene.parallel(|_| {
             circle
                 .fill_r(0.0)
@@ -2196,12 +2487,15 @@ mod tests {
                 .easing(Easing::Linear)
                 .play();
         });
+
         scene.wait(1.0);
+
         circle
             .position_y(20.0)
             .fill_g(1.0)
             .easing(Easing::Linear)
             .play();
+
         scene.animator.take_schedule().compile(&scene);
 
         scene.update(1.5);
@@ -2213,7 +2507,9 @@ mod tests {
     fn editing_y_does_not_interrupt_a_full_vector_tween_on_x() {
         let mut scene = Scene::new();
         let circle = circle().build(&mut scene);
+
         scene.world_2d().add(&circle);
+
         scene.parallel(|_| {
             circle
                 .position(vec2(10.0, 0.0))
@@ -2221,6 +2517,7 @@ mod tests {
                 .easing(Easing::Linear)
                 .play();
         });
+
         scene.wait(1.0);
         circle.position_y(20.0).easing(Easing::Linear).play();
         scene.animator.take_schedule().compile(&scene);
@@ -2233,7 +2530,9 @@ mod tests {
     fn later_tween_interrupts_at_the_sampled_value() {
         let mut scene = Scene::new();
         let circle = circle().build(&mut scene);
+
         scene.world_2d().add(&circle);
+
         scene.parallel(|_| {
             circle
                 .position_x(10.0)
@@ -2241,6 +2540,7 @@ mod tests {
                 .easing(Easing::Linear)
                 .play();
         });
+
         scene.wait(1.0);
         circle.position_x(20.0).easing(Easing::Linear).play();
         scene.animator.take_schedule().compile(&scene);
@@ -2255,7 +2555,9 @@ mod tests {
     fn interrupted_easing_keeps_the_original_curve_before_the_cut() {
         let mut scene = Scene::new();
         let circle = circle().build(&mut scene);
+
         scene.world_2d().add(&circle);
+
         scene.parallel(|_| {
             circle
                 .position_x(10.0)
@@ -2263,6 +2565,7 @@ mod tests {
                 .easing(Easing::InQuad)
                 .play();
         });
+
         scene.wait(1.0);
         circle.position_x(20.0).easing(Easing::Linear).play();
         scene.animator.take_schedule().compile(&scene);
@@ -2278,7 +2581,9 @@ mod tests {
         for (relative, expected) in [(true, 25.0), (false, 0.0)] {
             let mut scene = Scene::new();
             let circle = circle().build(&mut scene);
+
             scene.world_2d().add(&circle);
+
             scene.parallel(|_| {
                 circle
                     .position_x(10.0)
@@ -2286,7 +2591,9 @@ mod tests {
                     .easing(Easing::Linear)
                     .play();
             });
+
             scene.wait(1.0);
+
             if relative {
                 circle.position_x_by(20.0).easing(Easing::Linear).play();
             } else {
@@ -2295,12 +2602,14 @@ mod tests {
                     .easing(Easing::Linear)
                     .play();
             }
+
             scene.animator.take_schedule().compile(&scene);
             scene.update(0.5);
             assert_eq!(circle.get_position().x, 2.5);
             scene.update(1.0);
             assert_eq!(circle.get_position().x, if relative { 5.0 } else { 0.0 });
             scene.update(2.0);
+
             assert_eq!(
                 circle.get_position().x,
                 if relative { expected } else { 20.0 }
@@ -2315,6 +2624,7 @@ mod tests {
         impl SnapshotScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().fill(Color::RED).build(scene);
+
                 scene.world_2d().add(&circle);
 
                 circle.save();
@@ -2327,15 +2637,18 @@ mod tests {
         }
 
         let mut scene = Scene::new();
+
         assert_eq!(
             {
                 SnapshotScene.build(&mut scene);
+
                 scene.finish_build()
             },
             4.0
         );
 
         scene.update(3.0);
+
         {
             let world = scene.world();
             let mut query = world.query::<(&Transform2D, &Style)>();
@@ -2346,6 +2659,7 @@ mod tests {
         }
 
         scene.update(4.0);
+
         let world = scene.world();
         let mut query = world.query::<(&Transform2D, &Style)>();
         let (transform, style) = query.iter().next().unwrap();
@@ -2358,6 +2672,7 @@ mod tests {
     fn object_handler_resets_to_reusable_builder_state() {
         let mut scene = Scene::new();
         let circle = circle().position_x(10.0).fill(Color::RED).build(&mut scene);
+
         scene.world_2d().add(&circle);
 
         circle.position_x(100.0).fill(Color::BLUE).play();
@@ -2386,10 +2701,12 @@ mod tests {
             .fill(Color::RED)
             .opacity(1.0)
             .build(&mut scene);
+
         scene.world_2d().add(&source);
         scene.world_2d().add(&target);
 
         let snapshot = source.snapshot();
+
         target.restore_snapshot(&snapshot).play();
         scene.animator.take_schedule().compile(&scene);
 
@@ -2430,15 +2747,18 @@ mod tests {
         }
 
         let mut scene = Scene::new();
+
         assert_eq!(
             {
                 ImmediateRestoreScene.build(&mut scene);
+
                 scene.finish_build()
             },
             1.0
         );
 
         scene.update(0.5);
+
         {
             let world = scene.world();
             let mut query = world.query::<&Camera2D>();
@@ -2448,6 +2768,7 @@ mod tests {
         }
 
         scene.update(1.0);
+
         let world = scene.world();
         let mut query = world.query::<&Camera2D>();
         let camera = query.iter().next().unwrap();
@@ -2462,7 +2783,9 @@ mod tests {
         impl ComponentTweenScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().build(scene);
+
                 scene.world_2d().add(&circle);
+
                 circle
                     .position_x(128.0)
                     .position_y(64.0)
@@ -2472,15 +2795,18 @@ mod tests {
         }
 
         let mut scene = Scene::new();
+
         assert_eq!(
             {
                 ComponentTweenScene.build(&mut scene);
+
                 scene.finish_build()
             },
             1.0
         );
 
         scene.update(1.0);
+
         let world = scene.world();
         let mut query = world.query::<(&TreeNode, &Transform2D)>();
         let (_, circle) = query.iter().find(|(node, _)| !node.is_root).unwrap();
@@ -2495,52 +2821,64 @@ mod tests {
         impl NestedGroupsScene {
             fn build(&mut self, scene: &mut Scene) {
                 let root = circle().build(scene);
+
                 scene.world_2d().add(&root);
                 scene.wait(1.0);
 
                 scene.chain(|scene| {
                     let chain_object = circle().build(scene);
+
                     scene.world_2d().add(&chain_object);
                     scene.wait(2.0);
 
                     scene.all(|scene| {
                         let parallel_object = circle().build(scene);
+
                         scene.world_2d().add(&parallel_object);
                         scene.wait(4.0);
 
                         scene.chain(|scene| {
                             let nested_object = circle().build(scene);
+
                             scene.world_2d().add(&nested_object);
                             scene.wait(1.0);
 
                             let nested_end_object = circle().build(scene);
+
                             scene.world_2d().add(&nested_end_object);
                         });
 
                         scene.chain(|scene| {
                             let short_chain_object = circle().build(scene);
+
                             scene.world_2d().add(&short_chain_object);
                             scene.wait(0.5);
 
                             let short_chain_end_object = circle().build(scene);
+
                             scene.world_2d().add(&short_chain_end_object);
                         });
 
                         let parallel_end_object = circle().build(scene);
+
                         scene.world_2d().add(&parallel_end_object);
                     });
 
                     scene.wait(1.0);
+
                     let chain_end_object = circle().build(scene);
+
                     scene.world_2d().add(&chain_end_object);
                 });
             }
         }
 
         let mut scene = Scene::new();
+
         assert_eq!(
             {
                 NestedGroupsScene.build(&mut scene);
+
                 scene.finish_build()
             },
             8.0
@@ -2555,6 +2893,7 @@ mod tests {
             })
             .map(|(_, node)| node.lifetime)
             .collect();
+
         lifetimes.sort_by(|left, right| left[0].total_cmp(&right[0]));
 
         assert_eq!(
@@ -2582,6 +2921,7 @@ mod tests {
             .opacity(0.5)
             .position(vec2(4.0, 0.0))
             .build(&mut scene);
+
         scene.world_2d().add(&rect);
 
         let image_info = skia_safe::ImageInfo::new(
@@ -2592,6 +2932,7 @@ mod tests {
         );
         let mut surface = skia_safe::surfaces::raster(&image_info, None, None).unwrap();
         let canvas = surface.canvas();
+
         canvas.clear(skia_safe::colors::TRANSPARENT);
         canvas.translate((16.0, 16.0));
 
@@ -2614,6 +2955,7 @@ mod tests {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().build(scene);
                 let rect = rect().build(scene);
+
                 scene.world_2d().add(&circle);
 
                 scene.wait(1.0);
@@ -2626,6 +2968,7 @@ mod tests {
         let mut scene = Scene::new();
         let duration = {
             LifetimeScene.build(&mut scene);
+
             scene.finish_build()
         };
 
@@ -2641,7 +2984,9 @@ mod tests {
                 })
                 .map(|(_, node)| node.lifetime)
                 .collect();
+
             lifetimes.sort_by(|left, right| left[0].total_cmp(&right[0]));
+
             lifetimes
         };
 
@@ -2649,6 +2994,7 @@ mod tests {
 
         let active_count = |time| {
             scene.update(time);
+
             scene
                 .world()
                 .query::<(hecs::Entity, &TreeNode)>()
@@ -2680,6 +3026,7 @@ mod tests {
                     scene.world_2d().add(&circle);
                     scene.wait(2.0);
                 });
+
                 scene.wait(1.0);
             }
         }
@@ -2689,6 +3036,7 @@ mod tests {
         assert_eq!(
             {
                 ParallelLifetimeScene.build(&mut scene);
+
                 scene.finish_build()
             },
             6.0

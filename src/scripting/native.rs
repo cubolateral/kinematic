@@ -62,6 +62,7 @@ pub(crate) fn objects() -> Vec<NativeObject> {
         native::<PointLight3D>(),
         native::<SpotLight3D>(),
     ];
+
     macro_rules! preset {
         ($name:literal, $object:ty, $sides:expr) => {
             objects.push(NativeObject {
@@ -83,6 +84,7 @@ pub(crate) fn objects() -> Vec<NativeObject> {
             });
         };
     }
+
     preset!("triangle", RegularPolygon2D, 3);
     preset!("square", RegularPolygon2D, 4);
     preset!("triangle_3d", RegularPolygon3D, 3);
@@ -92,6 +94,7 @@ pub(crate) fn objects() -> Vec<NativeObject> {
     preset!("cube", Prism, 4);
     preset!("cylinder", Prism, 32);
     preset!("cone", Pyramid, 32);
+
     objects
 }
 
@@ -108,16 +111,19 @@ pub(super) fn property(
     name: &str,
 ) -> Option<TrackTarget> {
     let inspection = world.get::<&Inspection>(entity).ok()?;
+
     for component in inspection.trackables(world, entity) {
         if let Some(info) = (component.get)().iter().find(|info| info.name == name) {
             return Some(TrackTarget::property((component.type_id)(), info));
         }
     }
+
     if let Ok(properties) = world.get::<&crate::core::Properties>(entity)
         && let Some((schema, _)) = properties.0.get(name)
     {
         return Some(TrackTarget::Dynamic(schema.clone()));
     }
+
     None
 }
 
@@ -130,6 +136,7 @@ mod tests {
         let mut scene = Scene::new();
         let circle = circle().build(&mut scene);
         let world = scene.world();
+
         for target in properties(&world, circle.entity()) {
             assert!(
                 property(&world, circle.entity(), target.name())
@@ -137,6 +144,7 @@ mod tests {
                     .same(&target)
             );
         }
+
         assert!(property(&world, circle.entity(), "missing").is_none());
     }
 }

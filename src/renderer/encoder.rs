@@ -80,6 +80,7 @@ impl Encoder {
             .take()
             .expect("FFmpeg process must exist while encoding.")
             .wait()?;
+
         if !status.success() {
             return Err(RenderError::FfmpegFailed(status));
         }

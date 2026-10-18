@@ -27,6 +27,7 @@ impl Completion {
             .take(500)
             .cloned()
             .collect();
+
         self.selected = 0;
         self.position = Some(position);
         self.resolve = !self.items.is_empty();
@@ -47,6 +48,7 @@ impl Completion {
         if self.items.is_empty() {
             return None;
         }
+
         if inputs::active(ui, InputAction::PreviousSuggestion) {
             self.selected = (self.selected + self.items.len() - 1) % self.items.len();
         } else if inputs::active(ui, InputAction::NextSuggestion) {
@@ -55,12 +57,15 @@ impl Completion {
             return Some(true);
         } else if inputs::active(ui, InputAction::CancelSuggestion) {
             self.clear();
+
             return Some(false);
         } else {
             return None;
         }
+
         self.resolve = true;
         self.scroll_selected = true;
+
         Some(false)
     }
 
@@ -71,25 +76,34 @@ impl Completion {
         utf8: bool,
     ) -> Result<(), String> {
         let cursor = editor.main_cursor_position();
+
         if self.position != Some(cursor) {
             self.clear();
+
             return Ok(());
         }
+
         let Some(item) = self.items.get(self.selected) else {
             return Ok(());
         };
+
         let (range, replacement) = edit(item, text, cursor, utf8)?;
+
         editor.select_region(range).map_err(|e| e.to_string())?;
+
         editor
             .replace_current_selection(&replacement)
             .map_err(|e| e.to_string())?;
+
         self.clear();
+
         Ok(())
     }
 
     pub fn contains_mouse(&self, ui: &dear_imgui_rs::Ui, position: [f32; 2]) -> bool {
         let (position, size) = bounds(ui, position);
         let mouse = ui.io().mouse_pos();
+
         (0..2)
             .all(|axis| mouse[axis] >= position[axis] && mouse[axis] <= position[axis] + size[axis])
     }
@@ -104,9 +118,11 @@ impl Completion {
         if self.items.is_empty() {
             return Ok(false);
         }
+
         let (position, size) = bounds(ui, position);
         let mut accept = false;
         let mut error = None;
+
         super::popup::window(
             ui,
             "Suggestions##Code",
@@ -126,36 +142,45 @@ impl Completion {
                                 dear_imgui_rs::StyleColor::Text,
                                 [1.0, 1.0, 1.0, 1.0],
                             );
+
                             ui.selectable_config(&row).selected(selected).build();
+
                             // The source editor keeps keyboard focus behind this overlay.
                             let pressed = ui.is_item_hovered_with_flags(
                                 dear_imgui_rs::ItemHoveredFlags::ALLOW_WHEN_OVERLAPPED_BY_WINDOW,
                             ) && ui
                                 .is_mouse_clicked(dear_imgui_rs::MouseButton::Left);
+
                             if pressed {
                                 accept = selected;
                                 self.selected = index;
                                 self.resolve = !selected;
                             }
+
                             if !kind.is_empty() {
                                 let origin = ui.item_rect_min();
+
                                 ui.get_window_draw_list().add_text(
                                     [origin[0] + ui.calc_text_size(label)[0] + 28.0, origin[1]],
                                     content.packed_color(color(item)),
                                     kind,
                                 );
                             }
+
                             if index == self.selected && self.scroll_selected {
                                 ui.set_scroll_here_y(0.5);
                             }
                         }
                     });
+
                 ui.separator();
+
                 if let Some(item) = self.items.get(self.selected) {
                     if let Err(failure) = content.set(&documentation(item)) {
                         error = Some(failure);
                     }
                 }
+
                 ui.child_window("Details").build(ui, || {
                     if error.is_none() {
                         if let Err(failure) = content.draw(ui, font_size) {
@@ -163,12 +188,15 @@ impl Completion {
                         }
                     }
                 });
+
                 self.focused = ui.is_window_focused_with_flags(
                     dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS,
                 );
             },
         );
+
         self.scroll_selected = false;
+
         error.map_or(Ok(accept), Err)
     }
 }
@@ -184,6 +212,7 @@ fn bounds(ui: &dear_imgui_rs::Ui, position: [f32; 2]) -> ([f32; 2], [f32; 2]) {
             work[axis] + (available[axis] - size[axis]).max(0.0),
         )
     });
+
     (position, size)
 }
 
@@ -193,6 +222,7 @@ fn documentation(item: &Value) -> String {
         .and_then(|doc| doc.as_str().or_else(|| doc["value"].as_str()))
         .unwrap_or_default();
     let detail = detail(item);
+
     if detail.eq_ignore_ascii_case(kind(item)) {
         markdown.to_owned()
     } else {
@@ -202,6 +232,7 @@ fn documentation(item: &Value) -> String {
 
 fn color(item: &Value) -> dear_imgui_cte::PaletteColor {
     use dear_imgui_cte::PaletteColor;
+
     match item["kind"].as_u64() {
         Some(2 | 3) => PaletteColor::Declaration,
         Some(5 | 10) => PaletteColor::KnownIdentifier,
@@ -262,13 +293,16 @@ fn edit(
                 .split('\n')
                 .nth(line)
                 .ok_or("Completion line is outside the document.")?;
+
             if crate::editor::lsp::position_units(source, 0, column, utf8) != units {
                 return Err(
                     "Completion column splits a character or is outside the document.".into(),
                 );
             }
+
             Ok(Position::new(line, column))
         };
+
         Selection::new(position("start")?, position("end")?)
     } else {
         let prefix = super::line_prefix(text, cursor);
@@ -277,8 +311,10 @@ fn edit(
             .rev()
             .take_while(|ch| ch.is_alphanumeric() || *ch == '_')
             .count();
+
         Selection::new(Position::new(cursor.line, cursor.column - count), cursor)
     };
+
     if range.start > range.end
         || cursor < range.start
         || cursor > range.end
@@ -286,6 +322,7 @@ fn edit(
     {
         return Err("Completion edit does not contain the cursor or has invalid text.".into());
     }
+
     Ok((range, replacement.to_owned()))
 }
 
@@ -297,6 +334,7 @@ mod tests {
     fn suggestions_keep_metadata_and_accept_both_server_response_shapes() {
         let mut completion = Completion::default();
         let item = serde_json::json!({"label":"length", "kind":2, "insertText":"length", "detail":"length(): number"});
+
         for value in [
             serde_json::json!([item]),
             serde_json::json!({"items":[item]}),
@@ -304,11 +342,14 @@ mod tests {
             completion.receive(&value, Position::new(0, 3));
             assert_eq!(completion.items, vec![item.clone()]);
             assert_eq!(detail(&completion.items[0]), "length(): number");
+
             completion.resolve(
                 serde_json::json!({"label":"length", "documentation":"Returns the magnitude."}),
             );
+
             assert_eq!(completion.items[0]["insertText"], "length");
         }
+
         completion.receive(&Value::Null, Position::new(0, 3));
         assert!(completion.items.is_empty());
     }
@@ -317,16 +358,19 @@ mod tests {
     fn insertion_uses_server_ranges_and_preserves_receivers_and_unicode() {
         let item = serde_json::json!({"label":"normalized()", "textEdit":{"newText":"normalized", "range":{"start":{"line":0,"character":5},"end":{"line":0,"character":8}}}});
         let (range, text) = edit(&item, "ação:nor", Position::new(0, 8), false).unwrap();
+
         assert_eq!(
             range,
             Selection::new(Position::new(0, 5), Position::new(0, 8))
         );
+
         assert_eq!(text, "normalized");
     }
 
     #[test]
     fn generic_detail_is_hidden() {
         let item = serde_json::json!({"label":"OnSetText", "kind":3, "detail":"function", "documentation":"```lua\nfunction OnSetText(uri, text)\n```"});
+
         assert_eq!(
             documentation(&item),
             item["documentation"].as_str().unwrap()

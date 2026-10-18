@@ -26,6 +26,7 @@ pub(super) fn draw(
     ui.dummy([0.0, TRACK_SPACING]);
 
     let top = ui.cursor_screen_pos()[1];
+
     ui.dummy([layout.timeline_right() - layout.content_left, SCENE_HEIGHT]);
 
     let clip = draw_list.push_clip_rect(
@@ -65,6 +66,7 @@ pub(super) fn draw(
     for (index, name, range, _) in &scenes {
         let start = range[0].max(time.start);
         let end = range[1].min(time.end);
+
         if end <= start {
             continue;
         }
@@ -80,9 +82,11 @@ pub(super) fn draw(
             ui.get_color_u32(dear_imgui_rs::StyleColor::WindowBg)
         };
         let is_active = *index == active_scene;
+
         if hovered {
             hovered_scene = Some(*index);
         }
+
         let border = ui.get_color_u32(if is_active {
             dear_imgui_rs::StyleColor::CheckMark
         } else {
@@ -100,13 +104,16 @@ pub(super) fn draw(
 
         let text_height = text_size(ui, name)[1];
         let focused = editor.focused_scene_index() == Some(*index);
+
         if focused {
             back_position = Some([
                 min[0] + PANEL_TEXT_PADDING,
                 top + (EVENT_HEIGHT - text_height) * 0.5,
             ]);
         }
+
         let text_clip = draw_list.push_clip_rect(min, max, true);
+
         draw_list.add_text(
             [
                 min[0] + PANEL_TEXT_PADDING + if focused { arrow_spacing } else { 0.0 },
@@ -115,6 +122,7 @@ pub(super) fn draw(
             ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
             name,
         );
+
         drop(text_clip);
     }
 
@@ -128,6 +136,7 @@ pub(super) fn draw(
             let duration = drag.map_or(*stored_duration, |drag| drag.duration);
             let global_start = range[0] + creation_time;
             let global_end = global_start + duration;
+
             if global_end < time.start || global_start > time.end {
                 continue;
             }
@@ -137,6 +146,7 @@ pub(super) fn draw(
                 top + EVENT_HEIGHT,
             ];
             let duration_max = [time.x(layout, global_end.min(time.end)), top + SCENE_HEIGHT];
+
             if duration_max[0] > duration_min[0] {
                 // Extend under the handle to fill its rounded corners.
                 draw_list
@@ -161,20 +171,25 @@ pub(super) fn draw(
             ];
             let hovered =
                 ui.is_window_hovered() && ui.is_mouse_hovering_rect(handle_min, handle_max);
+
             over_event |= hovered
                 || (duration_max[0] > duration_min[0]
                     && ui.is_window_hovered()
                     && ui.is_mouse_hovering_rect(duration_min, duration_max));
+
             if hovered {
                 hovered_event = Some((*index, event_index, *file_event, *creation_time, duration));
             }
 
             let is_dragging = drag.is_some();
+
             if hovered || is_dragging {
                 ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeEW));
             }
+
             let accent = ui.get_color_u32(dear_imgui_rs::StyleColor::CheckMark);
             let text = ui.get_color_u32(dear_imgui_rs::StyleColor::Text);
+
             draw_panel_rect(
                 draw_list,
                 handle_min,
@@ -183,7 +198,9 @@ pub(super) fn draw(
                 if is_dragging { accent } else { text },
                 1.0,
             );
+
             let event_clip = draw_list.push_clip_rect(handle_min, handle_max, true);
+
             draw_list.add_text(
                 [
                     handle_min[0] + PANEL_TEXT_PADDING,
@@ -192,6 +209,7 @@ pub(super) fn draw(
                 if is_dragging { accent } else { text },
                 event_name,
             );
+
             drop(event_clip);
         }
     }
@@ -201,8 +219,10 @@ pub(super) fn draw(
     let next_row = ui.cursor_screen_pos();
     let back_hovered = if let Some(position) = back_position {
         ui.set_cursor_screen_pos(position);
+
         let clicked = ui.invisible_button("##back_to_all_scenes", arrow_size);
         let hovered = ui.is_item_hovered();
+
         draw_list.add_text(
             position,
             ui.get_color_u32(if hovered {
@@ -212,11 +232,14 @@ pub(super) fn draw(
             }),
             ARROW_LEFT,
         );
+
         if clicked && interactive {
             ui.set_cursor_screen_pos(next_row);
             editor.clear_scene_focus();
+
             return;
         }
+
         hovered
     } else {
         false
@@ -253,6 +276,7 @@ pub(super) fn draw(
             .iter()
             .find(|(index, ..)| *index == scene)
             .map_or(0.0, |(_, _, range, _)| range[0]);
+
         editor.focus_scene(scene, mouse_global_time - start);
     }
 
@@ -263,6 +287,7 @@ pub(super) fn draw(
             .iter()
             .find(|(index, ..)| *index == scene)
             .map_or(0.0, |(_, _, range, _)| range[0]);
+
         state.begin_event_drag(
             scene,
             event,
@@ -279,6 +304,7 @@ pub(super) fn draw(
                 .find(|(index, ..)| *index == drag.scene)
                 .expect("Dragged event scene must exist.");
             let creation_time = events[drag.event].2;
+
             state.drag_event(mouse_global_time - range[0] - creation_time);
         } else if let Some(drag) = state.finish_event_drag() {
             editor.set_event_duration(drag.scene, drag.file_event, drag.duration);

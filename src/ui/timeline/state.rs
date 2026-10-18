@@ -4,6 +4,7 @@ use super::metrics::DRAG_DIRECTION_THRESHOLD;
 pub(super) enum Interaction {
     #[default]
     None,
+
     Scrubber,
     Tracks,
     Zoom,
@@ -39,9 +40,12 @@ impl State {
                 self.saved_views
                     .insert(self.view_focus, (self.view_start, self.view_end));
             }
+
             self.view_focus = focus;
             self.duration = 0.0;
+
             self.sync_duration(duration);
+
             if let Some(&(start, end)) = self.saved_views.get(&focus) {
                 self.set_view(start, end);
             }
@@ -49,6 +53,7 @@ impl State {
             self.sync_duration(duration);
         }
     }
+
     pub fn sync_duration(&mut self, duration: f32) {
         if self.duration == duration {
             return;
@@ -56,17 +61,20 @@ impl State {
 
         let old_duration = self.duration;
         let old_span = self.view_end - self.view_start;
+
         self.duration = duration.max(0.0);
 
         if old_duration <= 0.0 || old_span <= 0.0 {
             self.view_start = 0.0;
             self.view_end = self.duration;
+
             return;
         }
 
         // Keep the absolute timeline range so changing an event does not unexpectedly
         // change the ruler scale or the user's current pan.
         let span = old_span.min(self.duration);
+
         self.view_start = self.view_start.clamp(0.0, self.duration - span);
         self.view_end = self.view_start + span;
     }
@@ -94,6 +102,7 @@ impl State {
 
         let horizontal = delta[0].abs();
         let vertical = delta[1].abs();
+
         if horizontal.max(vertical) >= DRAG_DIRECTION_THRESHOLD {
             self.interaction = if vertical > horizontal {
                 Interaction::Zoom
@@ -125,6 +134,7 @@ impl State {
         }
 
         let span = self.view_end - self.view_start;
+
         self.set_view(
             self.view_start - delta_x / width * span,
             self.view_end - delta_x / width * span,
@@ -142,11 +152,13 @@ impl State {
     ) -> Option<usize> {
         let pressed = self.pressed_scene.take()?;
         let moved = drag_delta[0].abs().max(drag_delta[1].abs()) >= DRAG_DIRECTION_THRESHOLD;
+
         (!moved
             && matches!(self.interaction, Interaction::None | Interaction::Tracks)
             && scene == Some(pressed))
         .then_some(pressed)
     }
+
     pub(super) fn begin_event_drag(
         &mut self,
         scene: usize,
@@ -162,6 +174,7 @@ impl State {
             duration,
             grab_offset: mouse_duration - duration,
         });
+
         self.interaction = Interaction::Event;
     }
 
@@ -177,6 +190,7 @@ impl State {
 
     pub(super) fn finish_event_drag(&mut self) -> Option<EventDrag> {
         self.interaction = Interaction::None;
+
         self.event_drag.take()
     }
 
@@ -188,6 +202,7 @@ impl State {
 
     fn set_view(&mut self, start: f32, end: f32) {
         let span = (end - start).clamp(0.0, self.duration);
+
         self.view_start = start.clamp(0.0, self.duration - span);
         self.view_end = self.view_start + span;
     }
@@ -209,9 +224,11 @@ mod tests {
     #[test]
     fn duration_changes_preserve_the_visible_absolute_range() {
         let mut state = State::default();
+
         state.sync_duration(20.0);
         state.zoom(-100.0, 0.5);
         state.pan(-20.0, 100.0);
+
         let range = state.view_range();
 
         state.sync_duration(30.0);
@@ -222,15 +239,20 @@ mod tests {
     #[test]
     fn zoom_and_pan_keep_the_view_inside_the_duration() {
         let mut state = State::default();
+
         state.sync_duration(10.0);
 
         state.zoom(-100.0, 0.5);
+
         let (zoomed_start, zoomed_end) = state.view_range();
+
         assert!(zoomed_start > 0.0);
         assert!(zoomed_end < 10.0);
 
         state.pan(-1_000.0, 100.0);
+
         let (panned_start, panned_end) = state.view_range();
+
         assert!(panned_start >= 0.0);
         assert!(panned_end <= 10.0);
     }
@@ -238,14 +260,17 @@ mod tests {
     #[test]
     fn switching_focus_restores_each_view_and_clamps_after_event_changes() {
         let mut state = State::default();
+
         state.sync_focus(None, 20.0);
         state.zoom(-100.0, 0.5);
         state.pan(-20.0, 100.0);
+
         let project_view = state.view_range();
 
         state.sync_focus(Some(1), 5.0);
         assert_eq!(state.view_range(), (0.0, 5.0));
         state.zoom(-100.0, 0.5);
+
         let scene_view = state.view_range();
 
         state.sync_focus(Some(2), 3.0);
@@ -262,6 +287,7 @@ mod tests {
     #[test]
     fn event_drag_changes_only_duration_and_clamps_it_to_zero() {
         let mut state = State::default();
+
         state.begin_event_drag(2, 3, 4, 5.0, 7.0);
 
         state.drag_event(8.0);
@@ -270,6 +296,7 @@ mod tests {
         state.drag_event(-2.0);
 
         let drag = state.finish_event_drag().unwrap();
+
         assert_eq!(drag.scene, 2);
         assert_eq!(drag.event, 3);
         assert_eq!(drag.file_event, 4);
@@ -279,6 +306,7 @@ mod tests {
     #[test]
     fn scene_focus_requires_a_stationary_click_on_the_same_scene() {
         let mut state = State::default();
+
         state.press_scene(2);
         assert_eq!(state.release_scene(Some(2), [0.0, 0.0]), Some(2));
 
@@ -286,7 +314,9 @@ mod tests {
         assert_eq!(state.release_scene(Some(2), [10.0, 0.0]), None);
 
         state.press_scene(2);
+
         state.interaction = super::Interaction::Event;
+
         assert_eq!(state.release_scene(Some(2), [0.0, 0.0]), None);
     }
 }

@@ -38,6 +38,7 @@ impl Default for EditorCache {
 pub(crate) enum EditorMode {
     #[default]
     Preview,
+
     Two,
     Three,
 }
@@ -47,21 +48,26 @@ impl EditorCache {
         let Ok(path) = context.resolve(CACHE_PATH) else {
             return Self::default();
         };
+
         match std::fs::read_to_string(&path) {
             Ok(contents) => match ron::from_str(&contents) {
                 Ok(cache) if Self::is_valid(&cache) => cache,
                 Ok(_) => {
                     eprintln!("Could not use {CACHE_PATH}: values must be finite and valid.");
+
                     Self::default()
                 }
+
                 Err(error) => {
                     eprintln!("Could not parse {CACHE_PATH}: {error}.");
+
                     Self::default()
                 }
             },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Self::default(),
             Err(error) => {
                 eprintln!("Could not read {CACHE_PATH}: {error}.");
+
                 Self::default()
             }
         }
@@ -71,6 +77,7 @@ impl EditorCache {
         let Ok(path) = context.resolve(CACHE_PATH) else {
             return;
         };
+
         if path.exists()
             && std::fs::read_to_string(&path)
                 .ok()
@@ -79,6 +86,7 @@ impl EditorCache {
         {
             return;
         }
+
         if let Err(error) = write(self, &path) {
             eprintln!("Could not write {CACHE_PATH}: {error}.");
         }
@@ -166,7 +174,9 @@ fn write(cache: &EditorCache, path: &Path) -> Result<(), Box<dyn std::error::Err
     }
 
     let contents = ron::ser::to_string_pretty(cache, ron::ser::PrettyConfig::default())?;
+
     std::fs::write(path, format!("{contents}\n"))?;
+
     Ok(())
 }
 
@@ -221,6 +231,7 @@ mod tests {
 
         let contents = std::fs::read_to_string(&path).unwrap();
         let loaded: EditorCache = ron::from_str(&contents).unwrap();
+
         assert_eq!(loaded, cache);
         assert!(contents.contains("timeline_time: 1.5"));
         assert!(contents.contains("timeline_tracks_expanded: true"));

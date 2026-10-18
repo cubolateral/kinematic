@@ -126,6 +126,7 @@ fn line_box(shape: &Line2DShape) -> Vector2 {
     let Some(geometry) = line_geometry(shape) else {
         return Vector2::ZERO;
     };
+
     vec2(
         geometry.bounds.left.abs().max(geometry.bounds.right.abs()) * 2.0,
         geometry.bounds.top.abs().max(geometry.bounds.bottom.abs()) * 2.0,
@@ -159,19 +160,24 @@ impl Default for Line2D {
                     let shape = world.get::<&Line2DShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
+
                     let Some(geometry) = line_geometry(&shape) else {
                         return;
                     };
+
                     draw_styled_path(&geometry.path, &style, transform.scale, opacity, canvas);
                 },
                 box_size: |world, entity| line_box(&world.get::<&Line2DShape>(entity).unwrap()),
                 visual_bounds: |world, entity| {
                     let shape = world.get::<&Line2DShape>(entity).unwrap();
+
                     let Some(geometry) = line_geometry(&shape) else {
                         return skia_safe::Rect::default();
                     };
+
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
+
                     styled_bounds(geometry.bounds, &style, transform.scale)
                 },
                 ..Default::default()

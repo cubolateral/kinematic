@@ -38,8 +38,10 @@ pub(crate) fn rect_path(shape: &RectShape) -> skia_safe::Path {
         } else {
             0.0
         };
+
         skia_safe::Vector::new(radius, radius)
     });
+
     skia_safe::Path::rrect(skia_safe::RRect::new_rect_radii(rect, &radii), None)
 }
 
@@ -71,6 +73,7 @@ impl Default for Rect {
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
                     let path = rect_path(&shape);
+
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
                 box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size,
@@ -78,6 +81,7 @@ impl Default for Rect {
                     let shape = world.get::<&RectShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
+
                     styled_bounds(*rect_path(&shape).bounds(), &style, transform.scale)
                 },
                 ..Default::default()
@@ -106,8 +110,10 @@ mod tests {
             Quad::new(10.0, 20.0, 30.0, 20.0),
             Quad::new(10.0, 20.0, 30.0, 40.0),
         ];
+
         {
             let world = scene.world();
+
             for (rect, expected) in values.iter().zip(expected) {
                 assert_eq!(
                     world.get::<&RectShape>(rect.entity()).unwrap().round,
@@ -132,13 +138,16 @@ mod tests {
             .position(vec2(32.0, 32.0))
             .fill(Color::RED)
             .build(&mut scene);
+
         scene.world_2d().add(&rect);
         scene.update(0.0);
+
         let mut surface = skia_safe::surfaces::raster_n32_premul((64, 64)).unwrap();
 
         scene.draw(surface.canvas());
 
         let pixels = surface.peek_pixels().unwrap();
+
         assert_eq!(pixels.get_color((12, 12)).a(), 0);
         assert_eq!(pixels.get_color((32, 32)).r(), 255);
     }

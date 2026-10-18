@@ -41,11 +41,13 @@ pub(super) trait NumericValue {
 impl NumericValue for f32 {
     fn offset(&mut self, amount: f32) -> bool {
         let next = *self + amount;
+
         if next == *self {
             return false;
         }
 
         *self = next;
+
         true
     }
 }
@@ -53,6 +55,7 @@ impl NumericValue for f32 {
 impl NumericValue for i32 {
     fn offset(&mut self, amount: f32) -> bool {
         let amount = amount.round() as i64;
+
         if amount == 0 {
             return false;
         }
@@ -60,11 +63,13 @@ impl NumericValue for i32 {
         let next = i64::from(*self)
             .saturating_add(amount)
             .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32;
+
         if next == *self {
             return false;
         }
 
         *self = next;
+
         true
     }
 }
@@ -72,6 +77,7 @@ impl NumericValue for i32 {
 impl NumericValue for u32 {
     fn offset(&mut self, amount: f32) -> bool {
         let amount = amount.round() as i64;
+
         if amount == 0 {
             return false;
         }
@@ -79,11 +85,13 @@ impl NumericValue for u32 {
         let next = i64::from(*self)
             .saturating_add(amount)
             .clamp(0, i64::from(u32::MAX)) as u32;
+
         if next == *self {
             return false;
         }
 
         *self = next;
+
         true
     }
 }
@@ -107,6 +115,7 @@ pub(super) fn numeric_input_arrows<T: NumericValue>(ui: &dear_imgui_rs::Ui, valu
         unsafe {
             let state =
                 dear_imgui_rs::sys::igGetInputTextState(dear_imgui_rs::sys::igGetActiveID());
+
             if !state.is_null() {
                 dear_imgui_rs::sys::ImGuiInputTextState_ReloadUserBufAndKeepSelection(state);
             }
@@ -123,10 +132,12 @@ mod tests {
     #[test]
     fn numeric_offsets_round_and_saturate_integer_values() {
         let mut signed = 10i32;
+
         assert!(signed.offset(-1.4));
         assert_eq!(signed, 9);
 
         let mut unsigned = 0u32;
+
         assert!(!unsigned.offset(-1.0));
         assert_eq!(unsigned, 0);
     }

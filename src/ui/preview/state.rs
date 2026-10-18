@@ -25,6 +25,7 @@ impl State {
             crate::editor::EditorMode::Two => Mode::Two,
             crate::editor::EditorMode::Three => Mode::Three,
         };
+
         Self {
             mode,
             requested_mode: Some(mode),
@@ -49,7 +50,9 @@ impl State {
         if self.mode == mode {
             return false;
         }
+
         self.mode = mode;
+
         true
     }
 
@@ -74,7 +77,9 @@ impl State {
         let changed = self
             .canvas_2d
             .is_some_and(|current| current != (scene, canvas));
+
         self.canvas_2d = Some((scene, canvas));
+
         changed
     }
 
@@ -82,7 +87,9 @@ impl State {
         let changed = self
             .canvas_3d
             .is_some_and(|current| current != (scene, canvas));
+
         self.canvas_3d = Some((scene, canvas));
+
         changed
     }
 }
@@ -94,6 +101,7 @@ mod tests {
     #[test]
     fn preview_is_the_default_mode() {
         let mut state = State::default();
+
         assert_eq!(state.mode(), Mode::Preview);
         assert!(state.set_mode(Mode::Two));
         assert_eq!(state.mode(), Mode::Two);
@@ -125,6 +133,7 @@ mod tests {
     #[test]
     fn show_preview_selects_the_preview_tab() {
         let mut state = State::new(crate::editor::EditorMode::Three);
+
         state.take_requested_mode();
 
         state.show_preview();

@@ -46,9 +46,11 @@ fn draw_entity_with_parent(
     if world.get::<&CanvasSettings>(entity).is_ok() {
         return;
     }
+
     let node = world
         .get::<&TreeNode>(entity)
         .expect("Drawn object must contain a Node component.");
+
     if !node.is_activated {
         return;
     }
@@ -56,10 +58,13 @@ fn draw_entity_with_parent(
     let Ok(draw) = world.get::<&Draw2D>(entity) else {
         return;
     };
+
     let opacity = draw.opacity.clamp(0.0, 1.0);
+
     if !draw.visibility || opacity <= 0.0 {
         return;
     }
+
     let image_filter = world
         .get::<&Filter>(entity)
         .ok()
@@ -70,8 +75,10 @@ fn draw_entity_with_parent(
     let global = parent.append(local_transform(world, entity));
     let save_count = canvas.save();
     let follows_camera = follows_camera && draw.follows_camera;
+
     if !follows_camera && let Some(camera_base) = camera_base {
         canvas.set_matrix(camera_base);
+
         apply_global_transform(GlobalTransform::default(), global, canvas);
     } else {
         apply_global_transform(parent, global, canvas);
@@ -86,7 +93,9 @@ fn draw_entity_with_parent(
             shader_image.bounds,
             &skia_safe::Paint::default(),
         );
+
         canvas.restore_to_count(save_count);
+
         return;
     }
 
@@ -102,6 +111,7 @@ fn draw_entity_with_parent(
         None
     };
     let composites = children.len() != 0 || world.get::<&Simulation>(entity).is_ok();
+
     if !filtered && (!composites || opacity >= 1.0) {
         draw_object(world, entity, canvas, opacity, images);
 
@@ -120,13 +130,18 @@ fn draw_entity_with_parent(
         }
     } else {
         let mut paint = skia_safe::Paint::default();
+
         paint.set_alpha_f(opacity);
         paint.set_image_filter(image_filter);
+
         let mut layer = skia_safe::canvas::SaveLayerRec::default().paint(&paint);
+
         if let Some(bounds) = bounds.as_ref() {
             layer = layer.bounds(bounds);
         }
+
         let layer_count = canvas.save_layer(&layer);
+
         draw_object(world, entity, canvas, 1.0, images);
 
         for child in children {
@@ -166,30 +181,40 @@ fn draw_object(
     images: Option<&HashMap<CanvasTexture, skia_safe::Image>>,
 ) {
     let draw = world.get::<&Draw2D>(entity).unwrap();
+
     (draw.on_draw)(world, entity, canvas, opacity);
+
     draw_projection_2d_entity(world, entity, canvas, opacity, images);
 }
 
 fn subtree_visual_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::Rect> {
     let draw = world.get::<&Draw2D>(entity).ok()?;
+
     if !draw.visibility || draw.opacity <= 0.0 {
         return None;
     }
+
     let own = (draw.visual_bounds)(world, entity);
     let mut bounds = (!own.is_empty()).then_some(own);
+
     for child in children_by_z_index(world, entity) {
         let node = world.get::<&TreeNode>(child).unwrap();
+
         if !node.is_activated {
             continue;
         }
+
         let Some(child_bounds) = subtree_visual_bounds(world, child) else {
             continue;
         };
+
         let transformed = transform_matrix(local_transform(world, child))
             .map_rect(child_bounds)
             .0;
+
         bounds = Some(bounds.map_or(transformed, |bounds| union_bounds(bounds, transformed)));
     }
+
     bounds.map(|bounds| filtered_bounds(world, entity, bounds))
 }
 
@@ -210,8 +235,10 @@ fn image_filter(filter: &Filter) -> Option<skia_safe::ImageFilter> {
     let mut image_filter = (blur > 0.0)
         .then(|| skia_safe::image_filters::blur((blur, blur), None, None, None))
         .flatten();
+
     if filter.shadow_color.a > 0.0 {
         let color = filter.shadow_color;
+
         image_filter = skia_safe::image_filters::drop_shadow(
             (filter.shadow_offset.x, filter.shadow_offset.y),
             (filter.shadow_blur.max(0.0), filter.shadow_blur.max(0.0)),
@@ -221,6 +248,7 @@ fn image_filter(filter: &Filter) -> Option<skia_safe::ImageFilter> {
             None,
         );
     }
+
     image_filter
 }
 
@@ -242,6 +270,7 @@ fn visual_bounds(
     } else {
         None
     };
+
     for child in crate::core::objects::child_iter(world, entity) {
         if world.get::<&CanvasSettings>(child).is_ok()
             || !world.get::<&TreeNode>(child).is_ok_and(|n| n.is_activated)
@@ -251,14 +280,17 @@ fn visual_bounds(
         {
             continue;
         }
+
         let child_bounds = visual_bounds(
             world,
             child,
             global.append(local_transform(world, child)),
             Some(inverse),
         )?;
+
         bounds = Some(bounds.map_or(child_bounds, |bounds| union_bounds(bounds, child_bounds)));
     }
+
     bounds
 }
 
@@ -272,12 +304,14 @@ fn draw_projection_2d_entity(
     let Ok(source) = world.get::<&ProjectionSource>(entity) else {
         return;
     };
+
     let Some(image) = source
         .0
         .and_then(|source| images.and_then(|images| images.get(&source)))
     else {
         return;
     };
+
     draw_projection_2d(world, entity, image, canvas, opacity);
 }
 
@@ -288,11 +322,13 @@ pub(crate) fn outline_points(
     target: hecs::Entity,
 ) -> Option<[skia_safe::Point; 4]> {
     let mut points = outline_points_in_world(world, scope, target)?;
+
     if object_follows_camera(world, scope, target)
         && let Some(view) = camera_matrix2d(world, scope).and_then(|m| m.invert())
     {
         view.map_points_inplace(&mut points);
     }
+
     Some(points)
 }
 
@@ -308,6 +344,7 @@ pub(crate) fn object_follows_camera(
         {
             return false;
         }
+
         let Some(parent) = world
             .get::<&TreeNode>(entity)
             .ok()
@@ -315,8 +352,10 @@ pub(crate) fn object_follows_camera(
         else {
             return false;
         };
+
         entity = parent;
     }
+
     true
 }
 
@@ -341,7 +380,9 @@ pub(crate) fn outline_points_in_world(
         {
             return None;
         }
+
         let global = parent.append(local_transform(world, entity));
+
         if entity == target {
             let bounds = local_bounds(world, entity)?;
             let mut points = [
@@ -350,9 +391,12 @@ pub(crate) fn outline_points_in_world(
                 skia_safe::Point::new(bounds.right, bounds.bottom),
                 skia_safe::Point::new(bounds.left, bounds.bottom),
             ];
+
             transform_matrix(global).map_points_inplace(&mut points);
+
             return Some(points);
         }
+
         crate::core::objects::child_iter(world, entity)
             .find_map(|child| visit(world, child, target, global))
     }
@@ -366,6 +410,7 @@ pub(crate) fn outline_points_in_world(
     {
         return None;
     }
+
     crate::core::objects::child_iter(world, scope)
         .find_map(|child| visit(world, child, target, GlobalTransform::default()))
 }
@@ -381,6 +426,7 @@ fn pick_entity_with_parent(
     if world.get::<&CanvasSettings>(entity).is_ok() {
         return None;
     }
+
     let node = world
         .get::<&TreeNode>(entity)
         .expect("Picked object must contain a Node component.");
@@ -439,12 +485,15 @@ pub(crate) fn children_by_z_index(
         .any(|pair| z_index(pair[0]) > z_index(pair[1]))
     {
         let mut sorted = children.to_vec();
+
         sorted.sort_by_key(|entity| z_index(*entity));
+
         Some(sorted)
     } else {
         None
     };
     let count = children.len();
+
     (0..count).map(move |index| {
         sorted
             .as_deref()
@@ -479,6 +528,7 @@ fn logical_bounds_inner(
     if world.get::<&CanvasSettings>(entity).is_ok() {
         return None;
     }
+
     let draw = world.get::<&Draw2D>(entity).ok()?;
     let size = (draw.box_size)(world, entity);
     let bounds = draw.logical_bounds.map_or_else(
@@ -496,6 +546,7 @@ fn logical_bounds_inner(
         })
         .filter_map(|child| {
             let bounds = logical_bounds_inner(world, child, time)?;
+
             Some(
                 transform_matrix(local_transform(world, child))
                     .map_rect(bounds)
@@ -503,6 +554,7 @@ fn logical_bounds_inner(
             )
         })
         .reduce(union_bounds);
+
     match (own, children) {
         (Some(own), Some(children)) => Some(union_bounds(own, children)),
         (Some(own), None) => Some(own),
@@ -514,6 +566,7 @@ fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::
     if world.get::<&CanvasSettings>(entity).is_ok() {
         return None;
     }
+
     let draw = world.get::<&Draw2D>(entity).ok()?;
     let bounds = (draw.visual_bounds)(world, entity);
     let own = (!bounds.is_empty()).then_some(bounds);
@@ -532,11 +585,13 @@ fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::
         (Some(own), None) => Some(own),
         (None, children) => children,
     };
+
     bounds.map(|bounds| filtered_bounds(world, entity, bounds))
 }
 
 fn transformed_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::Rect> {
     let bounds = local_bounds(world, entity)?;
+
     Some(
         transform_matrix(local_transform(world, entity))
             .map_rect(bounds)
@@ -568,7 +623,9 @@ fn apply_global_transform(
     let Some(inverse_parent) = transform_matrix(parent).invert() else {
         return;
     };
+
     let relative = skia_safe::Matrix::concat(&inverse_parent, &transform_matrix(global));
+
     canvas.concat(&relative);
 }
 
@@ -631,6 +688,7 @@ pub(crate) fn draw_canvas2d_editor_with_images(
     camera_view: bool,
 ) {
     canvas.clear(skia_safe::colors::TRANSPARENT);
+
     if !world
         .get::<&Draw2D>(entity)
         .is_ok_and(|draw| draw.visibility)
@@ -639,11 +697,16 @@ pub(crate) fn draw_canvas2d_editor_with_images(
     }
 
     let saved = canvas.save();
+
     canvas.translate((target_size.0 as f32 * 0.5, target_size.1 as f32 * 0.5));
+
     let mut camera_base = None;
+
     if camera_view {
         canvas.scale((correction[0], correction[1]));
+
         camera_base = Some(canvas.local_to_device());
+
         if let Some(view) = camera_matrix2d(world, entity).and_then(|camera| camera.invert()) {
             canvas.concat(&view);
         }
@@ -651,6 +714,7 @@ pub(crate) fn draw_canvas2d_editor_with_images(
         canvas.translate((pan[0] * correction[0], pan[1] * correction[1]));
         canvas.scale((zoom * correction[0], zoom * correction[1]));
     }
+
     for child in children_by_z_index(world, entity) {
         draw_entity_with_parent(
             world,
@@ -664,13 +728,16 @@ pub(crate) fn draw_canvas2d_editor_with_images(
             camera_base.is_some(),
         );
     }
+
     if !camera_view && let Some(points) = camera_outline_points2d(world, entity, false) {
         let mask =
             skia_safe::Path::polygon(&points, true, skia_safe::PathFillType::InverseEvenOdd, None);
         let mut paint = skia_safe::Paint::new(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.25), None);
+
         paint.set_anti_alias(true);
         canvas.draw_path(&mask, &paint);
     }
+
     canvas.restore_to_count(saved);
 }
 
@@ -683,24 +750,31 @@ fn draw_canvas2d_inner(
 ) {
     let settings = world.get::<&CanvasSettings>(entity).unwrap();
     let [r, g, b, a] = settings.clear.rgba();
+
     canvas.clear(skia_safe::Color4f::new(r, g, b, a));
+
     if !world
         .get::<&Draw2D>(entity)
         .is_ok_and(|draw| draw.visibility)
     {
         return;
     }
+
     let saved = canvas.save();
+
     canvas.translate((
         settings.resolution.0 as f32 * 0.5,
         settings.resolution.1 as f32 * 0.5,
     ));
+
     let camera_base = canvas.local_to_device();
+
     if let Some(camera) = camera_matrix2d(world, entity) {
         if let Some(view) = camera.invert() {
             canvas.concat(&view);
         }
     }
+
     for child in children_by_z_index(world, entity) {
         draw_entity_with_parent(
             world,
@@ -714,6 +788,7 @@ fn draw_canvas2d_inner(
             true,
         );
     }
+
     canvas.restore_to_count(saved);
 }
 
@@ -723,7 +798,9 @@ pub(crate) fn image_shader_bounds(
     padding: f32,
 ) -> Option<skia_safe::Rect> {
     let mut bounds = subtree_visual_bounds(world, entity)?;
+
     bounds.outset((padding, padding));
+
     Some(bounds)
 }
 
@@ -735,8 +812,10 @@ pub(crate) fn draw_image_shader_source(
     shader_images: &HashMap<hecs::Entity, ImageShaderImage>,
 ) {
     let saved = canvas.save();
+
     if let Some(inverse) = transform_matrix(local_transform(world, entity)).invert() {
         canvas.concat(&inverse);
+
         draw_entity_with_parent(
             world,
             entity,
@@ -749,6 +828,7 @@ pub(crate) fn draw_image_shader_source(
             false,
         );
     }
+
     canvas.restore_to_count(saved);
 }
 
@@ -773,13 +853,16 @@ fn pick_canvas2d_with_view(
     {
         return None;
     }
+
     let camera_point = camera_view
         .then(|| camera_matrix2d(world, scope))
         .flatten()
         .map_or(point, |matrix| {
             let point = matrix.map_point((point.x, point.y));
+
             Vector2::new(point.x, point.y)
         });
+
     children_by_z_index(world, scope)
         .into_iter()
         .rev()
@@ -816,8 +899,10 @@ pub(crate) fn pick_canvas3d(
     {
         return None;
     }
+
     let camera = world.get::<&Camera3D>(scope).ok()?;
     let settings = world.get::<&CanvasSettings>(scope).ok()?;
+
     pick_canvas3d_with_camera(world, scope, &camera, settings.resolution, point)
 }
 
@@ -834,7 +919,9 @@ pub(crate) fn pick_canvas3d_with_camera(
     {
         return None;
     }
+
     camera.validate().ok()?;
+
     let ray = camera_ray(camera, resolution, point)?;
 
     crate::core::objects::child_iter(world, scope)
@@ -851,6 +938,7 @@ pub(crate) fn outline_segments3d(
 ) -> Option<Vec<[[f32; 2]; 2]>> {
     let settings = world.get::<&CanvasSettings>(scope).ok()?;
     let camera = world.get::<&Camera3D>(scope).ok()?;
+
     outline_segments3d_with_camera(world, scope, target, &camera, settings.resolution)
 }
 
@@ -863,7 +951,9 @@ pub(crate) fn outline_segments3d_with_camera(
     resolution: (u32, u32),
 ) -> Option<Vec<[[f32; 2]; 2]>> {
     camera.validate().ok()?;
+
     let view_projection = camera_projection(camera, resolution)? * camera.matrix().inverse();
+
     outline_segments3d_in_world(world, scope, target)?
         .into_iter()
         .map(|[from, to]| {
@@ -891,6 +981,7 @@ pub(crate) fn outline_segments3d_in_world(
         {
             return false;
         }
+
         entity == target
             || crate::core::objects::child_iter(world, entity)
                 .any(|child| contains(world, child, target))
@@ -921,6 +1012,7 @@ pub(crate) fn outline_segments3d_in_world(
         glam::vec3(min.x, max.y, max.z),
     ]
     .map(|corner| transform.transform_point3(corner));
+
     const EDGES: [(usize, usize); 12] = [
         (0, 1),
         (1, 2),
@@ -935,6 +1027,7 @@ pub(crate) fn outline_segments3d_in_world(
         (2, 6),
         (3, 7),
     ];
+
     Some(
         EDGES
             .into_iter()
@@ -963,6 +1056,7 @@ fn camera_ray(camera: &Camera3D, resolution: (u32, u32), point: Vector2) -> Opti
                 -1.0,
             )
             .normalize();
+
             (camera.camera_position, rotation * direction)
         }
         Camera3DMode::Orthogonal => {
@@ -971,12 +1065,14 @@ fn camera_ray(camera: &Camera3D, resolution: (u32, u32), point: Vector2) -> Opti
                 -point.y / height * camera.camera_fov,
                 0.0,
             );
+
             (
                 camera.camera_position + rotation * offset,
                 rotation * -glam::Vec3::Z,
             )
         }
     };
+
     direction.is_finite().then_some(Ray3D {
         origin,
         direction,
@@ -1010,11 +1106,14 @@ fn pick_entity3d(
 
     let (min, max) = bounds3d(world, entity)?;
     let inverse = global_matrix3d(world, entity).inverse();
+
     if !inverse.is_finite() {
         return None;
     }
+
     let origin = inverse.transform_point3(ray.origin);
     let direction = inverse.transform_vector3(ray.direction);
+
     ray_cuboid_intersection(origin, direction, min, max, ray.near, ray.far)
         .map(|distance| (distance, entity))
 }
@@ -1030,20 +1129,26 @@ fn ray_cuboid_intersection(
     for axis in 0..3 {
         let origin = origin[axis];
         let direction = direction[axis];
+
         if direction.abs() <= f32::EPSILON {
             if origin < min[axis] || origin > max[axis] {
                 return None;
             }
+
             continue;
         }
+
         let first = (min[axis] - origin) / direction;
         let second = (max[axis] - origin) / direction;
+
         near = near.max(first.min(second));
         far = far.min(first.max(second));
+
         if near > far {
             return None;
         }
     }
+
     Some(near)
 }
 
@@ -1059,6 +1164,7 @@ fn camera_projection(camera: &Camera3D, resolution: (u32, u32)) -> Option<glam::
         ),
         Camera3DMode::Orthogonal => {
             let half_height = camera.camera_fov * 0.5;
+
             glam::camera::rh::proj::opengl::orthographic(
                 -half_height * aspect,
                 half_height * aspect,
@@ -1069,16 +1175,20 @@ fn camera_projection(camera: &Camera3D, resolution: (u32, u32)) -> Option<glam::
             )
         }
     };
+
     projection.is_finite().then_some(projection)
 }
 
 #[cfg(test)]
 fn project_point(view_projection: glam::Mat4, point: glam::Vec3) -> Option<[f32; 2]> {
     let clip = view_projection * point.extend(1.0);
+
     if !clip.is_finite() || clip.w <= f32::EPSILON {
         return None;
     }
+
     let ndc = clip.truncate() / clip.w;
+
     Some([ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5])
 }
 
@@ -1087,6 +1197,7 @@ pub(crate) fn camera_matrix2d(
     canvas: hecs::Entity,
 ) -> Option<skia_safe::Matrix> {
     let camera = world.get::<&Camera2D>(canvas).ok()?;
+
     Some(transform_matrix(camera.transform()))
 }
 
@@ -1105,10 +1216,13 @@ pub(crate) fn camera_outline_points2d(
         skia_safe::Point::new(half_width, half_height),
         skia_safe::Point::new(-half_width, half_height),
     ];
+
     camera.map_points_inplace(&mut points);
+
     if camera_view {
         camera.invert()?.map_points_inplace(&mut points);
     }
+
     Some(points)
 }
 
@@ -1125,16 +1239,20 @@ mod shader_capture_tests {
             .size(vec2(16.0, 16.0))
             .fill(Color::WHITE)
             .build(&mut scene);
+
         group.add(&child);
         scene.world_2d().add(&group);
         scene.update(0.0);
 
         let mut surface = skia_safe::surfaces::raster_n32_premul((64, 64)).unwrap();
+
         surface.canvas().clear(skia_safe::colors::TRANSPARENT);
         surface.canvas().translate((32.0, 32.0));
+
         draw_entity(&scene.world(), group.entity(), surface.canvas(), None);
 
         let pixels = surface.peek_pixels().unwrap();
+
         assert!(pixels.get_color((44, 32)).a() > 0);
     }
 
@@ -1147,6 +1265,7 @@ mod shader_capture_tests {
         };
 
         assert!(image_filter(&filter).is_none());
+
         assert!(
             image_filter(&Filter {
                 shadow_color: Color::BLACK,

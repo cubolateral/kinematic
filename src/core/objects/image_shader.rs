@@ -25,6 +25,7 @@ impl ImageShader {
     /// Creates a reusable shader definition from a complete GLSL 3.30 fragment shader.
     pub fn new(source: impl Into<String>) -> Self {
         static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
         Self {
             source: Arc::from(source.into()),
             id: NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
@@ -166,11 +167,14 @@ impl ImageShaderData {
     #[doc(hidden)]
     pub fn uniform(&mut self, name: impl Into<String>, value: impl Into<ImageShaderUniform>) {
         let name = name.into();
+
         assert!(
             valid_binding_name(&name),
             "Image shader bindings must be GLSL identifiers and cannot use the `k_` prefix."
         );
+
         let value = value.into().into_track_value();
+
         validate_shader_track_value(&value).unwrap_or_else(|error| panic!("{error}"));
         self.uniforms.insert(name, value);
     }
@@ -178,10 +182,12 @@ impl ImageShaderData {
     #[doc(hidden)]
     pub fn texture(&mut self, name: impl Into<String>, canvas: &impl ProjectionCanvas) {
         let name = name.into();
+
         assert!(
             valid_binding_name(&name),
             "Image shader bindings must be GLSL identifiers and cannot use the `k_` prefix."
         );
+
         self.textures.insert(name, canvas.texture());
     }
 
@@ -191,6 +197,7 @@ impl ImageShaderData {
             padding.is_finite() && padding >= 0.0,
             "Image shader padding must be finite and non-negative."
         );
+
         self.padding = padding;
     }
 }
@@ -203,6 +210,7 @@ pub(crate) fn validate_shader_values(data: &ImageShaderData) -> Result<(), Strin
             ));
         }
     }
+
     if let Some(name) = data
         .uniforms
         .keys()
@@ -212,14 +220,17 @@ pub(crate) fn validate_shader_values(data: &ImageShaderData) -> Result<(), Strin
             "Image shader binding `{name}` cannot be both a uniform and a texture."
         ));
     }
+
     for value in data.uniforms.values() {
         validate_shader_track_value(value)?;
     }
+
     Ok(())
 }
 
 fn valid_binding_name(name: &str) -> bool {
     let mut chars = name.chars();
+
     chars
         .next()
         .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
@@ -240,6 +251,7 @@ pub(crate) fn validate_shader_track_value(value: &TrackValue) -> Result<(), Stri
             return Err("Shader uniforms must use numeric or boolean TrackValues.".into());
         }
     };
+
     finite
         .then_some(())
         .ok_or_else(|| "Shader uniforms must contain finite values.".into())
@@ -255,11 +267,13 @@ pub(crate) fn shader_uniform(
     {
         return Ok(value.clone());
     }
+
     if let Ok(data) = world.get::<&crate::core::objects::MeshShaderData>(entity)
         && let Some(value) = data.uniforms.get(name)
     {
         return Ok(value.clone());
     }
+
     Err(format!(
         "Shader uniform `{name}` must be defined on this object's builder before use."
     ))
@@ -272,16 +286,19 @@ pub(crate) fn set_shader_uniform(
     value: TrackValue,
 ) -> Result<(), String> {
     validate_shader_track_value(&value)?;
+
     if let Ok(mut data) = world.get::<&mut ImageShaderData>(entity)
         && let Some(current) = data.uniforms.get_mut(name)
     {
         return replace_uniform(name, current, value);
     }
+
     if let Ok(mut data) = world.get::<&mut crate::core::objects::MeshShaderData>(entity)
         && let Some(current) = data.uniforms.get_mut(name)
     {
         return replace_uniform(name, current, value);
     }
+
     Err(format!(
         "Shader uniform `{name}` must be defined on this object's builder before use."
     ))
@@ -293,7 +310,9 @@ fn replace_uniform(name: &str, current: &mut TrackValue, value: TrackValue) -> R
             "Shader uniform `{name}` must keep its builder-defined type."
         ));
     }
+
     *current = value;
+
     Ok(())
 }
 
@@ -308,6 +327,7 @@ pub(crate) fn shader_uniforms(
             .map(|(name, value)| (name.clone(), value.clone()))
             .collect();
     }
+
     world
         .get::<&crate::core::objects::MeshShaderData>(entity)
         .map(|data| {
@@ -332,11 +352,14 @@ mod tests {
     fn shader_values_reject_engine_names_and_non_finite_values() {
         let shader = ImageShader::new("#version 330 core\nvoid main() {}");
         let mut data = ImageShaderData::new(shader);
+
         data.uniforms.insert("k_time".into(), TrackValue::F32(1.0));
         assert!(validate_shader_values(&data).is_err());
         data.uniforms.clear();
+
         data.uniforms
             .insert("amount".into(), TrackValue::F32(f32::NAN));
+
         assert!(validate_shader_values(&data).is_err());
     }
 
@@ -360,6 +383,7 @@ mod tests {
             .get::<&ImageShaderData>(scene.world_2d().entity())
             .unwrap();
         let object = world.get::<&ImageShaderData>(object.entity()).unwrap();
+
         assert_eq!(canvas.padding, 8.0);
         assert_eq!(canvas.uniforms["amount"], TrackValue::F32(1.0));
         assert_eq!(object.uniforms["amount"], TrackValue::F32(2.0));
@@ -370,6 +394,7 @@ mod tests {
         struct Build {
             object: Option<RectHandler>,
         }
+
         impl Build {
             fn build(&mut self, scene: &mut Scene) {
                 let object = rect()
@@ -377,7 +402,9 @@ mod tests {
                     .uniform("u_progress", 0.0_f32)
                     .uniform("u_other", 0.0_f32)
                     .build(scene);
+
                 scene.world_2d().add(&object);
+
                 object
                     .uniform("u_progress", 1.0_f32)
                     .uniform("u_other", 2.0_f32)
@@ -385,20 +412,25 @@ mod tests {
                     .duration(2.0)
                     .easing(Easing::Linear)
                     .play();
+
                 self.object = Some(object);
             }
         }
 
         let mut scene = Scene::new();
         let mut build = Build { object: None };
+
         assert_eq!(
             {
                 build.build(&mut scene);
+
                 scene.finish_build()
             },
             2.0
         );
+
         let object = build.object.unwrap();
+
         scene.update(1.0);
         assert_eq!(object.get_uniform::<f32>("u_progress"), 0.5);
         assert_eq!(object.get_uniform::<f32>("u_other"), 1.0);
@@ -413,18 +445,22 @@ mod tests {
         struct Build {
             object: Option<RectHandler>,
         }
+
         impl Build {
             fn build(&mut self, scene: &mut Scene) {
                 let object = rect()
                     .shader(&shader())
                     .uniform("u_progress", 0.0_f32)
                     .build(scene);
+
                 scene.world_2d().add(&object);
+
                 object.signal(|object, frame| {
                     if frame.time < 0.75 {
                         object.set_uniform("u_progress", 0.9_f32);
                     }
                 });
+
                 scene.repeat(|_| {
                     object
                         .uniform_from("u_progress", 0.0_f32, 1.0_f32)
@@ -432,18 +468,24 @@ mod tests {
                         .easing(Easing::Linear)
                         .play();
                 });
+
                 scene.wait(3.0);
+
                 self.object = Some(object);
             }
         }
 
         let mut scene = Scene::new();
         let mut build = Build { object: None };
+
         {
             build.build(&mut scene);
+
             scene.finish_build()
         };
+
         let object = build.object.unwrap();
+
         scene.update(0.5);
         assert_eq!(object.get_uniform::<f32>("u_progress"), 0.9);
         scene.update(1.5);
@@ -465,12 +507,16 @@ mod tests {
             .uniform("color", Color::RED)
             .build(&mut scene);
         let snapshot = object.snapshot();
+
         object.set_uniform("float", 0.75_f32);
+
         let tween = object.restore_snapshot(&snapshot);
+
         assert_eq!(object.get_uniform::<f32>("float"), 0.25);
         assert_eq!(object.get_uniform::<u32>("uint"), 2);
         assert!(object.get_uniform::<bool>("bool"));
         assert_eq!(object.get_uniform::<Color>("color"), Color::RED);
+
         drop(tween);
     }
 
@@ -482,33 +528,41 @@ mod tests {
             .shader(&shader())
             .uniform("value", 1.0_f32)
             .build(&mut scene);
+
         object.set_uniform("value", 1_i32);
     }
 
     #[test]
     fn concurrent_uniform_writes_use_the_latest_tween() {
         struct Build(Option<RectHandler>);
+
         impl Build {
             fn build(&mut self, scene: &mut Scene) {
                 let object = rect()
                     .shader(&shader())
                     .uniform("value", 0.0_f32)
                     .build(scene);
+
                 scene.world_2d().add(&object);
+
                 scene.all(|_| {
                     object.uniform("value", 1.0_f32).play();
                     object.uniform("value", 2.0_f32).play();
                 });
+
                 self.0 = Some(object);
             }
         }
 
         let mut scene = Scene::new();
         let mut build = Build(None);
+
         {
             build.build(&mut scene);
+
             scene.finish_build()
         };
+
         scene.update(0.5);
         assert_eq!(build.0.unwrap().get_uniform::<f32>("value"), 1.0);
     }

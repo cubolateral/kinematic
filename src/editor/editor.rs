@@ -31,6 +31,7 @@ enum SceneInstance {
 }
 impl std::ops::Deref for SceneInstance {
     type Target = Scene;
+
     fn deref(&self) -> &Scene {
         match self {
             Self::Empty(scene) => scene,
@@ -51,6 +52,7 @@ impl SceneInstance {
         match self {
             Self::Empty(scene) => {
                 scene.update(time);
+
                 Ok(())
             }
             Self::Lua(scene) => scene.update(time).map_err(|e| e.to_string()),
@@ -70,6 +72,7 @@ enum InspectorTarget {
         component: std::any::TypeId,
         track_id: crate::core::TrackId,
     },
+
     Uniform(String),
 }
 
@@ -122,6 +125,7 @@ impl InspectorEdits {
     ) {
         if let Some(edit) = self.0.iter_mut().find(|edit| edit.key == key) {
             edit.current = value;
+
             if edit.current == edit.original {
                 self.0.retain(|edit| edit.key != key);
             }
@@ -145,6 +149,7 @@ impl InspectorEdits {
     ) {
         if let Some(edit) = self.0.iter_mut().find(|edit| edit.key == key) {
             edit.current = value;
+
             if edit.current == edit.original {
                 self.0.retain(|edit| edit.key != key);
             }
@@ -163,9 +168,12 @@ impl InspectorEdits {
         let Some(index) = self.0.iter().position(|edit| edit.key == key) else {
             return false;
         };
+
         let edit = self.0.remove(index);
+
         Self::restore(scene, std::slice::from_ref(&edit));
         scene.invalidate();
+
         true
     }
 
@@ -173,7 +181,9 @@ impl InspectorEdits {
         let (animated, remaining) = std::mem::take(&mut self.0)
             .into_iter()
             .partition(|edit| edit.animated);
+
         self.0 = remaining;
+
         Self::restore(scene, &animated);
     }
 
@@ -181,7 +191,9 @@ impl InspectorEdits {
         if saved.is_empty() {
             return;
         }
+
         let world = scene.world();
+
         for saved in saved {
             match (&saved.key.target, saved.track) {
                 (InspectorTarget::Property { .. }, Some(track)) => {
@@ -199,6 +211,7 @@ impl InspectorEdits {
                 _ => unreachable!(),
             }
         }
+
         scene.invalidate();
     }
 }
@@ -309,11 +322,13 @@ impl Editor {
             project.context.clone(),
             &crate::scripting::definitions(),
         )?;
+
         for path in &project.manifest.scenes {
             if let Err(error) = documents.open(path) {
                 documents.diagnostics.push(error);
             }
         }
+
         let sources = documents.sources();
         let scenes = project
             .manifest
@@ -331,14 +346,17 @@ impl Editor {
                     Ok(scene) => SceneInstance::Lua(scene),
                     Err(error) => {
                         documents.diagnostics.push(error.to_string());
+
                         documents.status =
                             "Scene failed. Correct the script to build its preview.".into();
+
                         SceneInstance::Empty(Scene::new_candidate(
                             &path.display().to_string(),
                             project.manifest.resolution,
                         ))
                     }
                 };
+
                 EditorScene {
                     scene,
                     start: 0.0,
@@ -360,9 +378,12 @@ impl Editor {
             gl,
             three_context,
         );
+
         editor.documents = Some(documents);
         editor.lua_project = Some(project);
+
         editor.update_active_scene(editor.timeline.time());
+
         Ok(editor)
     }
 
@@ -375,6 +396,7 @@ impl Editor {
         three_context: three_d::Context,
     ) -> Self {
         recalculate_scene_ranges(&mut scenes);
+
         let cache = EditorCache::load(&project.context);
         let focused_scene = (scenes.len() > 1)
             .then(|| {
@@ -392,6 +414,7 @@ impl Editor {
         );
         let mut timeline = Timeline::new(duration, project.settings.fps);
         let timeline_time = cache.timeline_time(duration);
+
         timeline.set_loop(cache.loop_enabled);
         timeline.go_to(timeline_time);
 
@@ -414,6 +437,7 @@ impl Editor {
             gl,
         );
         let mut renderer = Renderer::new(project.settings.resolution);
+
         renderer.set_project_root(project.context.root());
 
         Self {
@@ -471,13 +495,17 @@ impl Editor {
         let Some(documents) = &mut self.documents else {
             return;
         };
+
         if !documents.poll() {
             return;
         }
+
         if self.is_exporting {
             documents.status = "Edits pending until export completes.".into();
+
             return;
         }
+
         let result = (|| {
             let sources = documents.sources();
             let project = self.lua_project.as_ref().unwrap();
@@ -495,7 +523,9 @@ impl Editor {
                     .map_err(|e| e.to_string())?;
                 let manifest: crate::scripting::Manifest =
                     ron::from_str(&text).map_err(|e| e.to_string())?;
+
                 manifest.validate(&project.context)?;
+
                 manifest
             } else {
                 project.manifest.clone()
@@ -504,6 +534,7 @@ impl Editor {
             let mut candidates = Vec::new();
             let mut order = Vec::new();
             let mut next_index = self.scenes.len();
+
             for path in &manifest.scenes {
                 let index = project
                     .manifest
@@ -512,10 +543,14 @@ impl Editor {
                     .position(|old| old == path)
                     .unwrap_or_else(|| {
                         let index = next_index;
+
                         next_index += 1;
+
                         index
                     });
+
                 order.push(index);
+
                 if let Some(EditorScene {
                     scene: SceneInstance::Lua(scene),
                     ..
@@ -535,6 +570,7 @@ impl Editor {
                                 manifest.margin,
                             )
                             .map_err(|e| e.to_string())?;
+
                         candidates.push((index, candidate));
                     }
                 } else {
@@ -547,9 +583,11 @@ impl Editor {
                         manifest.margin,
                     )
                     .map_err(|e| e.to_string())?;
+
                     candidates.push((index, candidate));
                 }
             }
+
             Ok::<_, String>(PendingLua {
                 save_manifest: false,
                 revision: documents.revision,
@@ -558,13 +596,16 @@ impl Editor {
                 manifest: manifest_changed.then_some((manifest, order)),
             })
         })();
+
         documents.applied = documents.revision;
+
         match result {
             Ok(pending) => {
                 documents.replaying = true;
                 self.pending_lua = Some(pending);
                 documents.status = "Validating drawing and resources.".into();
             }
+
             Err(error) => {
                 documents.status = "Edits failed; showing the last valid revision.".into();
                 documents.diagnostics = vec![error];
@@ -578,12 +619,15 @@ impl Editor {
 
         if self.pending_lua.is_some() && !self.is_exporting {
             self.accumulator = 0.0;
+
             return;
         }
 
         if self.pending_screenshot {
             self.canvas_timer.tick();
+
             self.accumulator = 0.0;
+
             return;
         }
 
@@ -594,7 +638,9 @@ impl Editor {
             }
 
             self.canvas_timer.tick();
+
             self.accumulator = 0.0;
+
             return;
         }
 
@@ -616,6 +662,7 @@ impl Editor {
     fn restore_seek_time(&mut self, seek: Option<(usize, f32)>) {
         if let Some((index, _)) = seek {
             let scene = &self.scenes[index];
+
             self.timeline.go_to(
                 scene.scene.time()
                     + if self.focused_scene.is_some() {
@@ -624,6 +671,7 @@ impl Editor {
                         scene.start
                     },
             );
+
             self.timeline.pause();
         }
     }
@@ -637,18 +685,23 @@ impl Editor {
         if self.is_exporting {
             return;
         }
+
         let Some(mut pending) = self.pending_lua.take() else {
             return;
         };
+
         if self
             .documents
             .as_ref()
             .is_none_or(|docs| docs.revision != pending.revision)
         {
             self.documents.as_mut().unwrap().replaying = false;
+
             self.restore_seek_time(pending.seek);
+
             return;
         }
+
         for (index, candidate) in &pending.candidates {
             let time = pending
                 .seek
@@ -663,66 +716,93 @@ impl Editor {
                 )
                 .min(candidate.duration());
             let result = candidate.update_slice(time);
+
             match result {
                 Ok(true) => {}
+
                 Ok(false) => {
                     self.documents.as_mut().unwrap().status = format!(
                         "Replaying simulations at {time:.2} s: {} steps. Editing or Cancel discards this candidate.",
                         candidate.simulation_steps()
                     );
+
                     self.pending_lua = Some(pending);
+
                     return;
                 }
+
                 Err(error) => {
                     self.restore_seek_time(pending.seek);
+
                     let docs = self.documents.as_mut().unwrap();
+
                     docs.replaying = false;
                     docs.status = "Replay failed. Showing the last valid revision.".into();
+
                     docs.diagnostics.push(error.to_string());
+
                     return;
                 }
             }
         }
+
         let result = pending
             .candidates
             .iter()
             .try_for_each(|(_, scene)| self.canvases.validate(scene.scene(), skia));
+
         if result.is_err() {
             self.restore_seek_time(pending.seek);
         }
+
         let documents = self.documents.as_mut().unwrap();
+
         if let Err(error) = result {
             documents.replaying = false;
             documents.status = "Drawing failed. Showing the last valid revision.".into();
+
             documents.diagnostics.push(error);
+
             return;
         }
+
         if pending.save_manifest {
             let project = self.lua_project.as_mut().unwrap();
             let previous = project.manifest.clone();
+
             project.manifest = pending.manifest.as_ref().unwrap().0.clone();
+
             if let Err(error) = project.save() {
                 project.manifest = previous;
                 documents.replaying = false;
+
                 documents.status =
                     "Manifest save conflicted. Showing the last valid revision.".into();
+
                 documents.diagnostics.push(error);
+
                 return;
             }
         }
+
         for (_, candidate) in &mut pending.candidates {
             if let Err(error) = candidate.persist_prepared() {
                 documents.replaying = false;
                 documents.status = "Save conflicted. Showing the last valid revision.".into();
+
                 documents.diagnostics.push(error.to_string());
+
                 return;
             }
         }
+
         documents.replaying = false;
+
         if pending.seek.is_none() {
             documents.diagnostics.clear();
             documents.changed.clear();
         }
+
         for (index, candidate) in pending.candidates {
             if index >= self.scenes.len() {
                 self.scenes.push(EditorScene {
@@ -734,6 +814,7 @@ impl Editor {
             } else if let SceneInstance::Lua(scene) = &mut self.scenes[index].scene {
                 scene.apply_reload(candidate);
                 documents.console.extend(scene.console());
+
                 documents.diagnostics.extend(
                     scene
                         .warnings()
@@ -744,44 +825,59 @@ impl Editor {
                 self.scenes[index].scene = SceneInstance::Lua(candidate);
             }
         }
+
         documents
             .console
             .drain(..documents.console.len().saturating_sub(500));
+
         documents.status = if documents.changed.is_empty() {
             "Preview is current."
         } else {
             "Showing the active revision; source edits remain pending."
         }
         .into();
+
         let local_time = self.scenes[self.active_scene].scene.time();
         let mut preserved_time = None;
+
         if let Some((manifest, order)) = pending.manifest {
             let local_time = self.scenes[self.active_scene].scene.time();
             let next_active = order.iter().position(|index| *index == self.active_scene);
+
             self.focused_scene = self
                 .focused_scene
                 .and_then(|focus| order.iter().position(|index| *index == focus));
+
             if let Some((selected, entity)) = self.selection.get() {
                 self.selection.clear();
+
                 if let Some(index) = order.iter().position(|old| *old == selected) {
                     self.selection.select(index, entity);
                 }
             }
+
             let mut previous = std::mem::take(&mut self.scenes)
                 .into_iter()
                 .map(Some)
                 .collect::<Vec<_>>();
+
             self.scenes = order
                 .iter()
                 .map(|index| previous[*index].take().unwrap())
                 .collect();
+
             self.project.name = manifest.name.clone();
+
             let settings = manifest.settings();
+
             if settings.resolution != self.project.settings.resolution {
                 self.resize_project_targets(&settings, imgui_renderer, skia, gl);
             }
+
             self.timeline.set_fps(settings.fps);
+
             self.project.settings = settings;
+
             if let Some(client) = self
                 .documents
                 .as_mut()
@@ -789,10 +885,14 @@ impl Editor {
             {
                 client.set_scenes(&manifest.scenes);
             }
+
             self.lua_project.as_mut().unwrap().accept_manifest(manifest);
+
             let duration = recalculate_scene_ranges(&mut self.scenes);
+
             if let Some(active) = next_active {
                 self.active_scene = active;
+
                 preserved_time = Some(if self.focused_scene.is_some() {
                     local_time
                 } else {
@@ -803,6 +903,7 @@ impl Editor {
                 preserved_time = Some(0.0_f32.min(duration));
             }
         }
+
         let duration = recalculate_scene_ranges(&mut self.scenes);
         let preserved_time = preserved_time.unwrap_or_else(|| {
             if self.focused_scene.is_some() {
@@ -811,20 +912,24 @@ impl Editor {
                 self.scenes[self.active_scene].start + local_time
             }
         });
+
         self.timeline
             .set_duration(self.focused_scene.map_or(duration, |index| {
                 self.scenes[index].end - self.scenes[index].start
             }));
+
         self.evaluated = None;
         self.rendered = None;
         self.editor_rendered = None;
         self.editor_3d_rendered = None;
         self.render_error = None;
+
         if let Some((index, entity)) = self.selection.get() {
             if !self.scenes[index].scene.world().contains(entity) {
                 self.selection.clear();
             }
         }
+
         self.timeline.go_to(preserved_time);
         self.update_active_scene(self.timeline.time());
     }
@@ -839,10 +944,13 @@ impl Editor {
         if self.render_error.is_some() {
             return;
         }
+
         let scene = &self.scenes[self.active_scene].scene;
         let key = scene.render_key();
+
         if self.rendered == Some(key) {
             self.performance.avoided += 1;
+
             if self.is_exporting {
                 self.process_export_frame(gl);
             }
@@ -851,21 +959,28 @@ impl Editor {
             let result = self
                 .canvases
                 .render(scene, &mut self.preview.target, skia_context);
+
             if let Err(error) = result {
                 self.rendered = None;
                 self.render_error = Some(error);
                 self.pending_screenshot = false;
+
                 if self.is_exporting {
                     self.renderer.cancel();
+
                     self.is_exporting = false;
                     self.pending_export_time = None;
                 }
+
                 self.timeline.pause();
+
                 return;
             }
+
             self.render_error = None;
             self.rendered = Some(key);
             self.performance.render_ms = started.elapsed().as_secs_f32() * 1000.0;
+
             crate::renderer::target::reset_gl(gl, window_size);
             skia_context.reset(None);
 
@@ -881,6 +996,7 @@ impl Editor {
                 &self.project.name,
                 self.project.settings.resolution,
             );
+
             self.pending_screenshot = false;
         }
 
@@ -897,9 +1013,11 @@ impl Editor {
         if self.is_exporting {
             self.renderer.cancel();
             self.timeline.pause();
+
             self.pending_export_time = None;
             self.is_exporting = false;
             self.accumulator = 0.0;
+
             return;
         }
 
@@ -924,6 +1042,7 @@ impl Editor {
             self.timeline.duration(),
             silent,
         );
+
         if !started {
             return;
         }
@@ -931,14 +1050,20 @@ impl Editor {
         self.timeline.pause();
         self.timeline.go_to_start();
         self.reset_animated_inspector_edits();
+
         self.evaluated = None;
         self.is_exporting = true;
+
         self.update_active_scene(0.0);
+
         if self.render_error.is_some() {
             self.renderer.cancel();
+
             self.is_exporting = false;
+
             return;
         }
+
         self.pending_export_time = None;
         self.pending_project_settings = None;
         self.is_exporting = true;
@@ -1002,6 +1127,7 @@ impl Editor {
                 }),
         }
         .save(&self.project.context);
+
         self.renderer.shutdown(gl);
     }
 
@@ -1020,8 +1146,10 @@ impl Editor {
     pub(crate) fn context(&self) -> &crate::core::ProjectContext {
         &self.project.context
     }
+
     pub(crate) fn cached_view(&self) -> (EditorMode, bool) {
         let cache = EditorCache::load(&self.project.context);
+
         (cache.mode, cache.fullscreen)
     }
 
@@ -1033,6 +1161,7 @@ impl Editor {
         if self.is_exporting {
             return;
         }
+
         self.pending_project_settings = Some(settings);
     }
 
@@ -1047,19 +1176,26 @@ impl Editor {
 
         if let Some(project) = &self.lua_project {
             let documents = self.documents.as_mut().unwrap();
+
             if self.pending_lua.is_some() || !documents.changed.is_empty() {
                 documents.status =
                     "Apply or resolve source edits before changing project settings.".into();
+
                 return;
             }
+
             let prepared = (|| {
                 let mut manifest = project.manifest.clone();
+
                 manifest.resolution = settings.resolution;
                 manifest.fps = settings.fps;
                 manifest.margin = settings.margin;
+
                 manifest.validate(&project.context)?;
+
                 let sources = documents.sources();
                 let mut candidates = Vec::new();
+
                 for (index, entry) in self.scenes.iter().enumerate() {
                     let scene = match &entry.scene {
                         SceneInstance::Lua(scene) => scene.prepare_settings_pending(
@@ -1078,16 +1214,21 @@ impl Editor {
                         ),
                     }
                     .map_err(|error| error.to_string())?;
+
                     candidates.push((index, scene));
                 }
+
                 Ok::<_, String>((manifest, candidates))
             })();
+
             match prepared {
                 Ok((manifest, candidates)) => {
                     documents.revision += 1;
+
                     documents.applied = documents.revision;
                     documents.replaying = true;
                     documents.status = "Preparing project settings before saving.".into();
+
                     self.pending_lua = Some(PendingLua {
                         save_manifest: true,
                         revision: documents.revision,
@@ -1096,8 +1237,10 @@ impl Editor {
                         manifest: Some((manifest, (0..self.scenes.len()).collect())),
                     });
                 }
+
                 Err(error) => documents.diagnostics.push(error),
             }
+
             return;
         }
     }
@@ -1110,12 +1253,15 @@ impl Editor {
         gl: &std::rc::Rc<glow::Context>,
     ) {
         self.renderer.shutdown(gl);
+
         let preview = Canvas::new(settings.resolution, imgui_renderer, skia_context, gl);
         let editor_2d = Canvas::new(settings.resolution, imgui_renderer, skia_context, gl);
         let editor_3d = Canvas::new_3d(settings.resolution, imgui_renderer, skia_context, gl);
+
         self.preview.unregister(imgui_renderer);
         self.editor_2d.unregister(imgui_renderer);
         self.editor_3d.unregister(imgui_renderer);
+
         self.preview = preview;
         self.editor_2d = editor_2d;
         self.editor_rendered = None;
@@ -1123,6 +1269,7 @@ impl Editor {
         self.editor_3d_rendered = None;
         self.pending_editor_3d_size = None;
         self.renderer = Renderer::new(settings.resolution);
+
         self.renderer.set_project_root(self.project.context.root());
     }
 
@@ -1136,6 +1283,7 @@ impl Editor {
 
     pub(crate) fn scene_range(&self, index: usize) -> [f32; 2] {
         let scene = &self.scenes[index];
+
         if self.focused_scene.is_some() {
             [0.0, scene.end - scene.start]
         } else {
@@ -1163,6 +1311,7 @@ impl Editor {
                 } else {
                     [scene.start, scene.end]
                 };
+
                 (index, scene.scene.name(), range, scene.scene.events())
             })
     }
@@ -1186,8 +1335,10 @@ impl Editor {
             {
                 self.documents.as_mut().unwrap().status =
                     "Apply or resolve source edits before changing event durations.".into();
+
                 return;
             }
+
             match scene.prepare_event_duration(event_index, duration) {
                 Ok(candidate) => self.queue_lua_change(scene_index, candidate),
                 Err(error) => self
@@ -1197,6 +1348,7 @@ impl Editor {
                     .diagnostics
                     .push(error.to_string()),
             }
+
             return;
         }
     }
@@ -1211,12 +1363,18 @@ impl Editor {
         }
 
         self.timeline.pause();
+
         self.focused_scene = Some(index);
+
         self.selection.clear();
+
         let duration = self.scenes[index].end - self.scenes[index].start;
+
         self.timeline.set_duration(duration);
         self.timeline.go_to(time.clamp(0.0, duration));
+
         self.evaluated = None;
+
         self.update_active_scene(self.timeline.time());
     }
 
@@ -1226,12 +1384,17 @@ impl Editor {
         };
 
         let time = self.scenes[index].start + self.timeline.time();
+
         self.timeline
             .set_duration(self.scenes.last().map_or(0.0, |scene| scene.end));
+
         self.timeline.go_to(time);
+
         self.evaluated = None;
+
         self.update_active_scene(time);
     }
+
     pub fn active_scene_index(&self) -> usize {
         self.active_scene
     }
@@ -1273,6 +1436,7 @@ impl Editor {
             _ => None,
         }
     }
+
     pub(crate) fn set_lua_override(
         &mut self,
         index: usize,
@@ -1283,6 +1447,7 @@ impl Editor {
         if self.is_exporting {
             return;
         }
+
         if self.pending_lua.is_some()
             || self
                 .documents
@@ -1291,8 +1456,10 @@ impl Editor {
         {
             self.documents.as_mut().unwrap().status =
                 "Apply or resolve source edits before changing base values.".into();
+
             return;
         }
+
         if let SceneInstance::Lua(scene) = &self.scenes[index].scene {
             match scene.prepare_override(entity, target, value) {
                 Ok(Some(candidate)) => self.queue_lua_change(index, candidate),
@@ -1301,6 +1468,7 @@ impl Editor {
                     self.editor_rendered = None;
                     self.editor_3d_rendered = None;
                 }
+
                 Err(error) => self
                     .documents
                     .as_mut()
@@ -1313,10 +1481,13 @@ impl Editor {
 
     fn queue_lua_change(&mut self, index: usize, candidate: crate::scripting::LuaScene) {
         let documents = self.documents.as_mut().unwrap();
+
         documents.revision += 1;
+
         documents.applied = documents.revision;
         documents.replaying = true;
         documents.status = "Validating the edited base and drawing before saving.".into();
+
         self.pending_lua = Some(PendingLua {
             save_manifest: false,
             revision: documents.revision,
@@ -1331,6 +1502,7 @@ impl Editor {
         index: usize,
     ) -> (&mut Scene, &mut InspectorEdits) {
         let scene = &mut self.scenes[index];
+
         (&mut scene.scene, &mut scene.inspector_edits)
     }
 
@@ -1339,6 +1511,7 @@ impl Editor {
             self.scene_mut().world().contains(entity),
             "Selected object must belong to this scene."
         );
+
         self.selection.select(self.active_scene, entity);
     }
 
@@ -1350,6 +1523,7 @@ impl Editor {
         let Some(entity) = self.selected_entity() else {
             return SelectedCanvas::None;
         };
+
         match self.scenes[self.active_scene].scene.nearest_canvas(entity) {
             Some((entity, crate::core::objects::CanvasDimension::Two)) => {
                 SelectedCanvas::Two(entity)
@@ -1386,6 +1560,7 @@ impl Editor {
 
     pub(crate) fn reset_editor_3d_camera_transform(&mut self) {
         let default = EditorView3D::default();
+
         self.editor_view_3d.position = default.position;
         self.editor_view_3d.yaw = default.yaw;
         self.editor_view_3d.pitch = default.pitch;
@@ -1420,20 +1595,27 @@ impl Editor {
         if self.editor_view_3d.canvas_view {
             return;
         }
+
         let view = &mut self.editor_view_3d;
+
         view.yaw -= look[0] * 0.003;
+
         view.pitch = (view.pitch - look[1] * 0.003).clamp(-1.55, 1.55);
+
         let rotation =
             glam::Quat::from_rotation_y(view.yaw) * glam::Quat::from_rotation_x(view.pitch);
         let speed = if fast { 12.0 } else { 3.0 } * delta.min(0.1);
+
         view.position += rotation
             * glam::vec3(movement[0], movement[1], -movement[2]).normalize_or_zero()
             * speed;
+
         self.editor_3d_rendered = None;
     }
 
     pub(crate) fn editor_3d_camera(&self) -> crate::core::components::Camera3D {
         let canvas = self.editor_3d_canvas();
+
         if self.editor_view_3d.canvas_view {
             let mut camera = self.scenes[self.active_scene]
                 .scene
@@ -1445,6 +1627,7 @@ impl Editor {
             let editor_size = self.editor_3d.size();
             let canvas_aspect = canvas_size.0.max(1) as f32 / canvas_size.1.max(1) as f32;
             let editor_aspect = editor_size.0.max(1) as f32 / editor_size.1.max(1) as f32;
+
             if editor_aspect < canvas_aspect {
                 camera.camera_fov = match camera.camera_mode {
                     crate::core::components::Camera3DMode::Perspective => {
@@ -1456,8 +1639,10 @@ impl Editor {
                     }
                 };
             }
+
             return camera;
         }
+
         crate::core::components::Camera3D {
             camera_position: self.editor_view_3d.position,
             camera_rotation: glam::Quat::from_rotation_y(self.editor_view_3d.yaw)
@@ -1479,6 +1664,7 @@ impl Editor {
             .get::<&crate::core::objects::CanvasSettings>(canvas)
             .map(|settings| settings.resolution())
             .unwrap_or((1, 1));
+
         (camera, size)
     }
 
@@ -1486,6 +1672,7 @@ impl Editor {
         let canvas = self.editor_3d_canvas();
         let camera = self.editor_3d_camera();
         let size = self.editor_3d.size();
+
         match self.scenes[self.active_scene]
             .scene
             .pick_editor_3d(canvas, &camera, size, point)
@@ -1527,6 +1714,7 @@ impl Editor {
 
     pub(crate) fn editor_2d_canvas_size(&self) -> (u32, u32) {
         let canvas = self.editor_2d_canvas();
+
         self.scenes[self.active_scene]
             .scene
             .world()
@@ -1547,6 +1735,7 @@ impl Editor {
         let content_scale = (display_size[0].max(1.0) / content_size.0.max(1) as f32)
             .min(display_size[1].max(1.0) / content_size.1.max(1) as f32);
         let correction = [content_scale / display_x, content_scale / display_y];
+
         if self.editor_view_2d.correction != correction {
             self.editor_view_2d.correction = correction;
             self.editor_rendered = None;
@@ -1557,8 +1746,10 @@ impl Editor {
         if self.editor_view_2d.canvas_view {
             return;
         }
+
         self.editor_view_2d.pan[0] += delta[0];
         self.editor_view_2d.pan[1] += delta[1];
+
         self.editor_rendered = None;
     }
 
@@ -1566,13 +1757,16 @@ impl Editor {
         if wheel == 0.0 || self.editor_view_2d.canvas_view {
             return;
         }
+
         let old_zoom = self.editor_view_2d.zoom;
         let zoom = (old_zoom * (wheel * 0.15).exp()).clamp(0.01, 100.0);
         let ratio = zoom / old_zoom;
+
         for axis in 0..2 {
             self.editor_view_2d.pan[axis] =
                 anchor[axis] + (self.editor_view_2d.pan[axis] - anchor[axis]) * ratio;
         }
+
         self.editor_view_2d.zoom = zoom;
         self.editor_rendered = None;
     }
@@ -1583,6 +1777,7 @@ impl Editor {
 
     pub(crate) fn select_at_editor_2d(&mut self, point: Vector2) {
         let canvas = self.editor_2d_canvas();
+
         match self.scenes[self.active_scene].scene.pick_editor_2d(
             canvas,
             point,
@@ -1595,6 +1790,7 @@ impl Editor {
 
     pub(crate) fn editor_2d_camera_outline(&self) -> Option<[skia_safe::Point; 4]> {
         let canvas = self.editor_2d_canvas();
+
         self.scenes[self.active_scene]
             .scene
             .editor_2d_camera_outline(canvas, self.editor_view_2d.canvas_view)
@@ -1604,6 +1800,7 @@ impl Editor {
         let (width, height) = self.editor_2d_canvas_size();
         let half_width = width as f32 * 0.5;
         let half_height = height as f32 * 0.5;
+
         [
             skia_safe::Point::new(-half_width, -half_height),
             skia_safe::Point::new(half_width, -half_height),
@@ -1614,9 +1811,11 @@ impl Editor {
 
     pub(crate) fn editor_2d_selection_outline(&self) -> Option<[skia_safe::Point; 4]> {
         let entity = self.selected_entity()?;
+
         let SelectedCanvas::Two(canvas) = self.selected_canvas() else {
             return None;
         };
+
         self.scenes[self.active_scene]
             .scene
             .editor_2d_selection_outline(canvas, entity, self.editor_view_2d.canvas_view)
@@ -1626,6 +1825,7 @@ impl Editor {
         use crate::core::types::Color;
 
         let canvas = self.editor_2d_canvas();
+
         self.scenes[self.active_scene]
             .scene
             .world()
@@ -1654,6 +1854,7 @@ impl Editor {
             size[0].max(1.0).round() as u32,
             size[1].max(1.0).round() as u32,
         );
+
         if self.editor_3d.size() != size {
             self.pending_editor_3d_size = Some(size);
         }
@@ -1690,8 +1891,11 @@ impl Editor {
         if self.editor_3d.size() == size {
             return;
         }
+
         let replacement = Canvas::new_3d(size, imgui_renderer, skia_context, gl);
+
         self.editor_3d.unregister(imgui_renderer);
+
         self.editor_3d = replacement;
         self.editor_3d_rendered = None;
     }
@@ -1714,8 +1918,10 @@ impl Editor {
                 self.is_exporting = false;
                 self.accumulator = 0.0;
             }
+
             Err(error) => {
                 self.renderer.fail(&error);
+
                 self.pending_export_time = None;
                 self.is_exporting = false;
                 self.accumulator = 0.0;
@@ -1744,10 +1950,13 @@ impl Editor {
                 u32::from(view.canvas_view),
             ],
         );
+
         if self.editor_rendered == Some(key) {
             return;
         }
+
         let scene = &self.scenes[self.active_scene].scene;
+
         if let Err(error) = self.canvases.render_editor_2d(
             scene,
             canvas,
@@ -1759,9 +1968,12 @@ impl Editor {
             view.canvas_view,
         ) {
             self.render_error = Some(error);
+
             return;
         }
+
         self.editor_rendered = Some(key);
+
         crate::renderer::target::reset_gl(gl, window_size);
         skia_context.reset(None);
     }
@@ -1796,9 +2008,11 @@ impl Editor {
                 u32::from(view.axes[2]),
             ],
         );
+
         if self.editor_3d_rendered == Some(key) {
             return;
         }
+
         let scene = &self.scenes[self.active_scene].scene;
         let selection =
             selection.and_then(|target| scene.editor_3d_selection_segments(canvas, target));
@@ -1808,6 +2022,7 @@ impl Editor {
             canvas_camera: (!view.canvas_view).then_some((canvas_camera, canvas_size)),
             selection,
         };
+
         if let Err(error) = self.canvases.render_editor_3d(
             scene,
             canvas,
@@ -1817,9 +2032,12 @@ impl Editor {
             &guides,
         ) {
             self.render_error = Some(error);
+
             return;
         }
+
         self.editor_3d_rendered = Some(key);
+
         crate::renderer::target::reset_gl(gl, window_size);
         skia_context.reset(None);
     }
@@ -1839,6 +2057,7 @@ impl Editor {
         }
         .clamp(0.0, scene.end - scene.start);
         let identity = scene.scene.render_key().0;
+
         if self.evaluated != Some((identity, local_time)) {
             if !self.is_exporting
                 && self.pending_lua.is_none()
@@ -1849,8 +2068,10 @@ impl Editor {
                         match lua.prepare_seek() {
                             Ok(candidate) => {
                                 let documents = self.documents.as_mut().unwrap();
+
                                 documents.replaying = true;
                                 documents.status = "Replaying the active revision. Cancel keeps the previous preview.".into();
+
                                 self.pending_lua = Some(PendingLua {
                                     save_manifest: false,
                                     revision: documents.revision,
@@ -1859,6 +2080,7 @@ impl Editor {
                                     seek: Some((active_scene, local_time)),
                                 });
                             }
+
                             Err(error) => self
                                 .documents
                                 .as_mut()
@@ -1866,34 +2088,45 @@ impl Editor {
                                 .diagnostics
                                 .push(error.to_string()),
                         }
+
                         return;
                     }
                 }
             }
+
             let started = std::time::Instant::now();
+
             if let Err(error) = scene.scene.evaluate(local_time) {
                 self.timeline.pause();
+
                 self.render_error = Some(error.clone());
+
                 if self.is_exporting {
                     self.renderer.cancel();
+
                     self.is_exporting = false;
                     self.pending_export_time = None;
                 }
+
                 if let Some(documents) = &mut self.documents {
                     if documents.diagnostics.last() != Some(&error) {
                         documents.diagnostics.push(error);
                     }
                 }
+
                 return;
             }
+
             if let SceneInstance::Lua(scene) = &scene.scene {
                 if let Some(documents) = &mut self.documents {
                     documents.console.extend(scene.console());
+
                     documents
                         .console
                         .drain(..documents.console.len().saturating_sub(500));
                 }
             }
+
             self.render_error = None;
             self.performance.update_ms = started.elapsed().as_secs_f32() * 1000.0;
             self.evaluated = Some((identity, local_time));
@@ -1916,11 +2149,13 @@ fn active_scene_at(scenes: &[EditorScene], time: f32) -> usize {
 
 fn recalculate_scene_ranges(scenes: &mut [EditorScene]) -> f32 {
     let mut start = 0.0;
+
     for scene in scenes {
         scene.start = start;
         scene.end = start + scene.scene.duration();
         start = scene.end;
     }
+
     start
 }
 
@@ -1969,6 +2204,7 @@ mod tests {
                 inspector_edits: InspectorEdits::default(),
             },
         ];
+
         scenes[0].scene.wait(4.0);
         scenes[1].scene.wait(2.0);
 
@@ -1993,6 +2229,7 @@ mod tests {
             let TrackValue::F32(value) = value else {
                 panic!("Test track requires an f32 value.");
             };
+
             world.get::<&mut Values>(entity).unwrap().0[INDEX] = value;
         }
 
@@ -2023,6 +2260,7 @@ mod tests {
         let animated = InspectorTrack::new(entity, component, &TRACKS[0]);
         let static_track = InspectorTrack::new(entity, component, &TRACKS[1]);
         let mut edits = InspectorEdits::default();
+
         edits.record(
             animated.clone(),
             &TRACKS[0],
@@ -2030,6 +2268,7 @@ mod tests {
             TrackValue::F32(10.0),
             true,
         );
+
         edits.record(
             static_track.clone(),
             &TRACKS[1],
@@ -2044,10 +2283,12 @@ mod tests {
             (TRACKS[0].get)(&scene.world(), entity),
             TrackValue::F32(1.0)
         );
+
         assert_eq!(
             (TRACKS[1].get)(&scene.world(), entity),
             TrackValue::F32(20.0)
         );
+
         assert!(!edits.contains(&animated));
         assert!(edits.contains(&static_track));
     }
@@ -2060,9 +2301,12 @@ mod tests {
             .shader(&shader)
             .uniform("amount", 0.25_f32)
             .build(&mut scene);
+
         object.set_uniform("amount", 0.75_f32);
+
         let key = InspectorTrack::uniform(object.entity(), "amount");
         let mut edits = InspectorEdits::default();
+
         edits.record_uniform(
             key.clone(),
             TrackValue::F32(0.25),
@@ -2087,8 +2331,10 @@ mod tests {
         let mut edits = InspectorEdits::default();
         let original = TrackValue::Enum("Perspective");
         let current = TrackValue::Enum("Orthogonal");
+
         (track.set)(&scene.world(), entity, current.clone());
         edits.record(key.clone(), track, original.clone(), current, false);
+
         let render_key = scene.render_key();
 
         assert!(edits.reset(&scene, key));

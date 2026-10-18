@@ -63,9 +63,12 @@ fn draw_plane(
 ) -> Result<(), String> {
     let shape = world.get::<&PlaneShape>(entity).unwrap();
     let size = (shape.size * 0.5).extend(1.0);
+
     validate_dimensions(size)?;
+
     let transformation = global_matrix3d(world, entity) * glam::Mat4::from_scale(size);
     let material = world.get::<&Material>(entity).unwrap();
+
     context.render_material(
         GeometryKey::new::<PlaneShape>(0),
         three_d::CpuMesh::square,

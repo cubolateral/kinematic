@@ -80,10 +80,12 @@ mod tests {
     fn shorthand_expands_in_corner_order() {
         assert_eq!(Quad::from(10.0), Quad::new(10.0, 10.0, 10.0, 10.0));
         assert_eq!(Quad::from([10.0, 30.0]), Quad::new(10.0, 30.0, 10.0, 30.0));
+
         assert_eq!(
             Quad::from([10.0, 20.0, 30.0]),
             Quad::new(10.0, 20.0, 30.0, 20.0)
         );
+
         assert_eq!(
             Quad::from([10.0, 20.0, 30.0, 40.0]),
             Quad::new(10.0, 20.0, 30.0, 40.0)

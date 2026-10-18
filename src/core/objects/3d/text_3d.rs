@@ -48,6 +48,7 @@ pub struct Text3DShape {
 impl Default for Text3DShape {
     fn default() -> Self {
         let shape = TextShape::default();
+
         Self {
             text: shape.text,
             size: 1.0,
@@ -72,11 +73,13 @@ impl Text3DShape {
 
     fn geometry_key(&self, text: &str) -> GeometryKey {
         let mut hash = DefaultHasher::new();
+
         text.hash(&mut hash);
         self.font.resource_key().hash(&mut hash);
         self.size.to_bits().hash(&mut hash);
         self.align.to_bits().hash(&mut hash);
         self.thickness.to_bits().hash(&mut hash);
+
         GeometryKey::new::<Text3DShape>(hash.finish())
     }
 }
@@ -114,12 +117,14 @@ impl Text3DBuilder {
     /// Sets a bundled font or the path to a user-provided TTF or OTF file.
     pub fn font(mut self, font: impl Into<Font>) -> Self {
         self.object.shape.font = font.into();
+
         self
     }
 }
 
 fn text_3d_box(world: &hecs::World, entity: hecs::Entity) -> Vector3 {
     let shape = world.get::<&Text3DShape>(entity).unwrap();
+
     (text_box(&shape.text_shape(&shape.text)) / TEXT_GEOMETRY_SCALE).extend(shape.depth.abs())
 }
 
@@ -134,6 +139,7 @@ fn validate_text_shape(shape: &Text3DShape) -> Result<(), String> {
     {
         return Err("Text dimensions must be finite and nonnegative.".into());
     }
+
     Ok(())
 }
 
@@ -143,10 +149,14 @@ fn draw_text_object(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     let shape = world.get::<&Text3DShape>(entity).unwrap();
+
     validate_text_shape(&shape)?;
+
     let material = world.get::<&Material>(entity).unwrap();
     let transform = global_matrix3d(world, entity);
+
     draw_text_3d(&shape, &material, transform, context)?;
+
     Ok(())
 }
 
@@ -167,15 +177,19 @@ pub fn draw_text_3d(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     validate_text_shape(shape)?;
+
     let text = &shape.text;
     let transform = text_transform(shape, transform);
+
     if material.opacity <= 0.0 || text.is_empty() {
         return Ok(());
     }
+
     context.render_material(
         shape.geometry_key(text),
         || {
             let text_shape = shape.text_shape(text);
+
             extruded_path_mesh(
                 &text_path(&text_shape),
                 (text_shape.size * TEXT_TESSELLATION_TOLERANCE).max(0.05),
@@ -190,23 +204,30 @@ fn lyon_path(path: &skia_safe::Path) -> Path {
     let mut builder = Path::builder();
     let mut contour_open = false;
     let mut current = skia_safe::Point::default();
+
     for record in path.iter() {
         let points = record.points();
+
         match record.verb() {
             skia_safe::PathVerb::Move => {
                 if contour_open {
                     builder.end(false);
                 }
+
                 current = points[0];
+
                 builder.begin(point(current.x, -current.y));
+
                 contour_open = true;
             }
             skia_safe::PathVerb::Line => {
                 current = points[0];
+
                 builder.line_to(point(current.x, -current.y));
             }
             skia_safe::PathVerb::Quad => {
                 current = points[1];
+
                 builder.quadratic_bezier_to(
                     point(points[0].x, -points[0].y),
                     point(current.x, -current.y),
@@ -223,15 +244,19 @@ fn lyon_path(path: &skia_safe::Path) -> Path {
                     2,
                 )
                 .expect("Font conic must be finite.");
+
                 for index in 0..count {
                     let control = quads[index * 2 + 1];
                     let end = quads[index * 2 + 2];
+
                     builder.quadratic_bezier_to(point(control.x, -control.y), point(end.x, -end.y));
                 }
+
                 current = points[1];
             }
             skia_safe::PathVerb::Cubic => {
                 current = points[2];
+
                 builder.cubic_bezier_to(
                     point(points[0].x, -points[0].y),
                     point(points[1].x, -points[1].y),
@@ -240,13 +265,16 @@ fn lyon_path(path: &skia_safe::Path) -> Path {
             }
             skia_safe::PathVerb::Close => {
                 builder.end(true);
+
                 contour_open = false;
             }
         }
     }
+
     if contour_open {
         builder.end(false);
     }
+
     builder.build()
 }
 
@@ -254,6 +282,7 @@ pub(crate) fn extruded_path_mesh(path: &skia_safe::Path, tolerance: f32) -> thre
     let path = lyon_path(path);
     let mut tessellator = FillTessellator::new();
     let mut geometry: VertexBuffers<Point, u32> = VertexBuffers::new();
+
     tessellator
         .tessellate_path(
             &path,
@@ -264,19 +293,24 @@ pub(crate) fn extruded_path_mesh(path: &skia_safe::Path, tolerance: f32) -> thre
 
     let mut triangles = Vec::with_capacity(geometry.indices.len() / 3);
     let mut edges = HashMap::<(u32, u32), (u32, u32, u32)>::new();
+
     for triangle in geometry.indices.chunks_exact(3) {
         let mut triangle = [triangle[0], triangle[1], triangle[2]];
         let [a, b, c] = triangle.map(|index| geometry.vertices[index as usize]);
+
         if (b - a).cross(c - a) < 0.0 {
             triangle.swap(1, 2);
         }
+
         triangles.push(triangle);
+
         for [from, to] in [
             [triangle[0], triangle[1]],
             [triangle[1], triangle[2]],
             [triangle[2], triangle[0]],
         ] {
             let key = (from.min(to), from.max(to));
+
             edges
                 .entry(key)
                 .and_modify(|edge| edge.0 += 1)
@@ -286,6 +320,7 @@ pub(crate) fn extruded_path_mesh(path: &skia_safe::Path, tolerance: f32) -> thre
 
     let vertex = |index: u32, z: f32| {
         let point = geometry.vertices[index as usize];
+
         three_d::vec3(point.x, point.y, z)
     };
     let boundary_edges: Vec<_> = edges
@@ -294,52 +329,66 @@ pub(crate) fn extruded_path_mesh(path: &skia_safe::Path, tolerance: f32) -> thre
         .map(|(_, from, to)| (from, to))
         .collect();
     let mut side_normals = HashMap::<u32, glam::Vec2>::new();
+
     for &(from, to) in &boundary_edges {
         let from_point = geometry.vertices[from as usize];
         let to_point = geometry.vertices[to as usize];
         let direction = glam::Vec2::new(to_point.x - from_point.x, to_point.y - from_point.y);
         let outward = glam::Vec2::new(direction.y, -direction.x).normalize_or_zero();
+
         side_normals
             .entry(from)
             .and_modify(|normal| *normal += outward)
             .or_insert(outward);
+
         side_normals
             .entry(to)
             .and_modify(|normal| *normal += outward)
             .or_insert(outward);
     }
+
     for normal in side_normals.values_mut() {
         *normal = normal.normalize_or_zero();
     }
+
     let vertex_count = geometry.vertices.len() as u32;
     let mut positions = Vec::with_capacity(geometry.vertices.len() * 2 + side_normals.len() * 2);
     let mut normals = Vec::with_capacity(positions.capacity());
+
     for index in 0..vertex_count {
         positions.push(vertex(index, 0.5));
         normals.push(three_d::vec3(0.0, 0.0, 1.0));
     }
+
     for index in 0..vertex_count {
         positions.push(vertex(index, -0.5));
         normals.push(three_d::vec3(0.0, 0.0, -1.0));
     }
+
     let mut indices = Vec::with_capacity(triangles.len() * 6 + boundary_edges.len() * 6);
+
     for [a, b, c] in triangles {
         indices.extend_from_slice(&[a, b, c]);
         indices.extend_from_slice(&[vertex_count + a, vertex_count + c, vertex_count + b]);
     }
+
     let mut side_vertices = HashMap::with_capacity(side_normals.len());
+
     for (&index, normal) in &side_normals {
         let front = positions.len() as u32;
         let normal = three_d::vec3(normal.x, normal.y, 0.0);
+
         positions.extend_from_slice(&[vertex(index, 0.5), vertex(index, -0.5)]);
         normals.extend_from_slice(&[normal, normal]);
         side_vertices.insert(index, front);
     }
+
     for (from, to) in boundary_edges {
         let front_from = side_vertices[&from];
         let back_from = front_from + 1;
         let front_to = side_vertices[&to];
         let back_to = front_to + 1;
+
         indices.extend_from_slice(&[front_from, back_from, back_to]);
         indices.extend_from_slice(&[front_from, back_to, front_to]);
     }

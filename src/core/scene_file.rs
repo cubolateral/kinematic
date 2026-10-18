@@ -58,11 +58,14 @@ mod tests {
 
         let contents =
             ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default()).unwrap();
+
         std::fs::create_dir_all(&directory).unwrap();
+
         std::fs::write(&path, contents).unwrap();
 
         let contents = std::fs::read_to_string(&path).unwrap();
         let loaded: SceneFile = ron::from_str(&contents).unwrap();
+
         assert_eq!(loaded.events, file.events);
         assert!(contents.contains("name: \"show_formula\""));
         assert!(contents.contains("duration: 5.0"));

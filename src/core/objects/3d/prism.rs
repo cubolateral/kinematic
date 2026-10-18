@@ -67,6 +67,7 @@ fn validate_sides(sides: u32) -> Result<(), String> {
     if !(3..=256).contains(&sides) {
         return Err("Prism sides must be between 3 and 256.".into());
     }
+
     Ok(())
 }
 
@@ -90,12 +91,15 @@ fn prism_mesh(sides: u32, top_cap: bool, bottom_cap: bool) -> three_d::CpuMesh {
         if bottom_cap {
             positions.extend_from_slice(&[bottom[0], bottom[index], bottom[index + 1]]);
         }
+
         if top_cap {
             positions.extend_from_slice(&[top[0], top[index + 1], top[index]]);
         }
     }
+
     for index in 0..bottom.len() {
         let next = (index + 1) % bottom.len();
+
         positions.extend_from_slice(&[
             bottom[index],
             top[index],
@@ -110,7 +114,9 @@ fn prism_mesh(sides: u32, top_cap: bool, bottom_cap: bool) -> three_d::CpuMesh {
         positions: three_d::Positions::F32(positions),
         ..Default::default()
     };
+
     mesh.compute_normals();
+
     mesh
 }
 
@@ -120,10 +126,13 @@ fn draw_prism(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     let shape = world.get::<&PrismShape>(entity).unwrap();
+
     validate_sides(shape.sides)?;
     validate_dimensions(shape.size)?;
+
     let transformation = global_matrix3d(world, entity) * glam::Mat4::from_scale(shape.size);
     let material = world.get::<&Material>(entity).unwrap();
+
     context.render_material(
         GeometryKey::new::<PrismShape>(geometry_variant(
             shape.sides,

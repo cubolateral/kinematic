@@ -18,28 +18,37 @@ pub struct Sources {
 impl Sources {
     pub(crate) fn read(&self, context: &ProjectContext, path: &Path) -> std::io::Result<Vec<u8>> {
         let full = context.resolve(path)?;
+
         if let Some(text) = self.text.get(path) {
             return Ok(text.as_bytes().to_vec());
         }
+
         if let Some(bytes) = self.files.borrow().get(&full) {
             return Ok(bytes.to_vec());
         }
+
         let metadata = std::fs::metadata(&full)?;
+
         if metadata.len() > 64 * 1024 * 1024 {
             return Err(std::io::Error::other("Resource exceeds 64 MiB."));
         }
+
         let bytes = std::fs::read(&full)?;
+
         if bytes.len() > 64 * 1024 * 1024 {
             return Err(std::io::Error::other("Resource exceeds 64 MiB."));
         }
+
         self.files
             .borrow_mut()
             .insert(full, Arc::from(bytes.as_slice()));
+
         Ok(bytes)
     }
 }
 impl std::ops::Deref for Sources {
     type Target = BTreeMap<PathBuf, String>;
+
     fn deref(&self) -> &Self::Target {
         &self.text
     }

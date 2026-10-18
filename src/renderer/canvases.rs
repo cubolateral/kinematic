@@ -90,8 +90,11 @@ impl Canvases {
         skia: &mut skia_safe::gpu::DirectContext,
     ) -> Result<(), String> {
         self.frame += 1;
+
         let plan = canvas_plan_for(scene, scene.view_texture().entity)?;
+
         self.render_targets(scene, &plan.order, &plan.sources, skia)?;
+
         scene.check_runtime()
     }
 
@@ -102,37 +105,47 @@ impl Canvases {
         skia: &mut skia_safe::gpu::DirectContext,
     ) -> Result<(), String> {
         self.frame += 1;
+
         let (order, sources) = {
             let plan = self.plans.get(scene, self.frame)?;
+
             (plan.order.clone(), plan.sources.clone())
         };
+
         self.render_targets(scene, &order, &sources, skia)?;
 
         scene.check_runtime()?;
         self.images.clear();
+
         for key in &self.used_geometries {
             self.geometry_usage.insert(*key, self.frame);
         }
+
         // Retain recently used resources across scene switches; reclaim at most one of each per render.
         let target_bytes: u64 = self
             .targets
             .values()
             .map(|target| u64::from(target.size.0) * u64::from(target.size.1) * 8)
             .sum();
+
         evict_oldest(
             &mut self.targets,
             &mut self.target_usage,
             self.frame,
             target_bytes > 256 * 1024 * 1024,
         );
+
         let over_budget = self.geometries.len() > 256;
+
         evict_oldest(
             &mut self.geometries,
             &mut self.geometry_usage,
             self.frame,
             over_budget,
         );
+
         let output = scene.view_texture();
+
         if order.contains(&output.entity) {
             self.rendered_target(output)
                 .ok_or("Output canvas is unavailable.")?
@@ -142,6 +155,7 @@ impl Canvases {
                 canvas.clear(skia_safe::colors::BLACK);
             });
         }
+
         Ok(())
     }
 
@@ -163,7 +177,9 @@ impl Canvases {
             .copied()
             .filter(|candidate| *candidate != entity)
             .collect::<Vec<_>>();
+
         self.render_targets(scene, &dependencies, &plan.sources, skia)?;
+
         for key in &self.used_geometries {
             self.geometry_usage.insert(*key, self.frame);
         }
@@ -172,24 +188,31 @@ impl Canvases {
         let settings = world
             .get::<&CanvasSettings>(entity)
             .map_err(|_| "Selected canvas is unavailable.")?;
+
         if settings.dimension != CanvasDimension::Two {
             return Err("Selected canvas is not two-dimensional.".into());
         }
 
         self.images.clear();
+
         for source in &plan.sources[&entity] {
             let image = self
                 .rendered_target(*source)
                 .ok_or("Projection source texture is unavailable.")?
                 .image(skia)?;
+
             self.images.insert(*source, image);
         }
+
         let scene_id = world
             .get::<&SceneIdentity>(scene.root().entity())
             .unwrap()
             .0;
+
         self.prepare_object_shaders(scene_id, scene.time(), &world, entity, skia)?;
+
         let target_size = target.size;
+
         target.draw_skia(skia, |canvas| {
             crate::core::objects::draw_canvas2d_editor_with_images(
                 &world,
@@ -204,6 +227,7 @@ impl Canvases {
                 camera_view,
             )
         });
+
         Ok(())
     }
 
@@ -223,23 +247,30 @@ impl Canvases {
             .copied()
             .filter(|candidate| *candidate != entity)
             .collect::<Vec<_>>();
+
         self.render_targets(scene, &dependencies, &plan.sources, skia)?;
 
         let world = scene.world();
         let settings = world
             .get::<&CanvasSettings>(entity)
             .map_err(|_| "Selected canvas is unavailable.")?;
+
         if settings.dimension != CanvasDimension::Three {
             return Err("Selected canvas is not three-dimensional.".into());
         }
+
         reset_gl(&self.gl, target.size);
+
         let camera = camera_from_component(camera_component, target.size)?;
+
         unsafe {
             self.gl
                 .bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(target.framebuffer()));
         }
+
         let [r, g, b, a] = settings.clear.rgba();
         let pass = FramebufferPass::new(&self.context, target);
+
         pass.target().clear(three_d::ClearState::color_and_depth(
             r * a,
             g * a,
@@ -247,15 +278,21 @@ impl Canvases {
             a,
             1.0,
         ));
+
         let textures = &self.targets;
         let resolve_texture = |texture: CanvasTexture| textures.get(&texture).map(Target::texture);
+
         visible_subtree_3d(&world, entity, &mut self.visible);
+
         let lights = scene_lights(&world, &self.visible, &self.context)?;
         let mut light_refs: Vec<&dyn three_d::Light> = vec![&self.ambient];
+
         if lights.is_empty() {
             light_refs.push(&self.sun);
         }
+
         light_refs.extend(lights.iter().map(|light| light.as_ref()));
+
         pass.target()
             .write(|| {
                 let mut render = RenderContext3D::new(
@@ -270,23 +307,29 @@ impl Canvases {
                     &mut self.mesh_programs,
                     scene.time(),
                 );
+
                 for child in &self.visible {
                     if let Ok(draw) = world.get::<&Draw3D>(*child) {
                         render.set_mesh_shader(
                             effective_mesh_shader(&world, *child).map_err(std::io::Error::other)?,
                         );
+
                         (draw.on_draw)(&world, *child, &mut render)
                             .map_err(std::io::Error::other)?;
+
                         render
                             .finish_mesh_shader((draw.box_size)(&world, *child) != glam::Vec3::ZERO)
                             .map_err(std::io::Error::other)?;
                     }
                 }
+
                 self.geometry_uploads += render.geometry_uploads;
                 self.geometry_upload_ms += render.geometry_upload_ms;
+
                 Ok::<_, std::io::Error>(())
             })
             .map_err(|error| error.to_string())?;
+
         pass.target()
             .write(|| {
                 self.editor_guides
@@ -294,6 +337,7 @@ impl Canvases {
                     .map_err(std::io::Error::other)
             })
             .map_err(|error| error.to_string())?;
+
         Ok(())
     }
 
@@ -309,6 +353,7 @@ impl Canvases {
             .get::<&SceneIdentity>(scene.root().entity())
             .unwrap()
             .0;
+
         self.images.clear();
         self.shader_images.clear();
         self.used_geometries.clear();
@@ -320,6 +365,7 @@ impl Canvases {
                 scene: scene_id,
                 entity: *entity,
             };
+
             if self
                 .targets
                 .get(&key)
@@ -331,21 +377,27 @@ impl Canvases {
                     skia,
                     &self.gl,
                 )?;
+
                 self.targets.insert(key, target);
             }
 
             self.target_usage.insert(key, self.frame);
+
             match settings.dimension {
                 CanvasDimension::Two => {
                     self.images.clear();
+
                     for source in &sources[entity] {
                         let image = self
                             .rendered_target(*source)
                             .ok_or("Projection source texture is unavailable.")?
                             .image(skia)?;
+
                         self.images.insert(*source, image);
                     }
+
                     self.prepare_object_shaders(scene_id, scene.time(), &world, *entity, skia)?;
+
                     self.targets
                         .get_mut(&key)
                         .unwrap()
@@ -361,14 +413,18 @@ impl Canvases {
                 }
                 CanvasDimension::Three => {
                     reset_gl(&self.gl, settings.resolution);
+
                     let camera = camera(&world, *entity, settings.resolution)?;
                     let target = &self.targets[&key];
+
                     unsafe {
                         self.gl
                             .bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(target.framebuffer()));
                     }
+
                     let [r, g, b, a] = settings.clear.rgba();
                     let pass = FramebufferPass::new(&self.context, target);
+
                     pass.target().clear(three_d::ClearState::color_and_depth(
                         r * a,
                         g * a,
@@ -376,6 +432,7 @@ impl Canvases {
                         a,
                         1.0,
                     ));
+
                     let textures = &self.targets;
                     let shader_targets = &self.shader_targets;
                     let shader_outputs = &self.shader_outputs;
@@ -389,13 +446,18 @@ impl Canvases {
                     let context = &self.context;
                     let geometries = &mut self.geometries;
                     let physical = &mut self.physical;
+
                     visible_subtree_3d(&world, *entity, &mut self.visible);
+
                     let lights = scene_lights(&world, &self.visible, context)?;
                     let mut light_refs: Vec<&dyn three_d::Light> = vec![&self.ambient];
+
                     if lights.is_empty() {
                         light_refs.push(&self.sun);
                     }
+
                     light_refs.extend(lights.iter().map(|light| light.as_ref()));
+
                     pass.target()
                         .write(|| {
                             let mut render = RenderContext3D::new(
@@ -410,14 +472,17 @@ impl Canvases {
                                 &mut self.mesh_programs,
                                 scene.time(),
                             );
+
                             for child in &self.visible {
                                 if let Ok(draw) = world.get::<&Draw3D>(*child) {
                                     render.set_mesh_shader(
                                         effective_mesh_shader(&world, *child)
                                             .map_err(std::io::Error::other)?,
                                     );
+
                                     (draw.on_draw)(&world, *child, &mut render)
                                         .map_err(std::io::Error::other)?;
+
                                     render
                                         .finish_mesh_shader(
                                             (draw.box_size)(&world, *child) != glam::Vec3::ZERO,
@@ -425,15 +490,19 @@ impl Canvases {
                                         .map_err(std::io::Error::other)?;
                                 }
                             }
+
                             self.geometry_uploads += render.geometry_uploads;
                             self.geometry_upload_ms += render.geometry_upload_ms;
+
                             Ok::<_, std::io::Error>(())
                         })
                         .map_err(|error| error.to_string())?;
                 }
             }
+
             self.apply_canvas_shader(scene.time(), &world, key, skia)?;
         }
+
         Ok(())
     }
 
@@ -454,20 +523,25 @@ impl Canvases {
         skia: &mut skia_safe::gpu::DirectContext,
     ) -> Result<(), String> {
         self.shader_images.clear();
+
         let camera_zoom = world
             .get::<&Camera2D>(canvas)
             .map_or(1.0, |camera| camera.camera_zoom);
         let entities = active_subtree(world, canvas);
+
         for entity in entities.into_iter().rev() {
             let Ok(data) = world.get::<&ImageShaderData>(entity) else {
                 continue;
             };
+
             let Ok(draw) = world.get::<&Draw2D>(entity) else {
                 continue;
             };
+
             let Some(bounds) = image_shader_bounds(world, entity, data.padding) else {
                 continue;
             };
+
             let scale = global_transform(world, entity).scale.abs();
             let camera = if object_follows_camera(world, canvas, entity) {
                 camera_zoom
@@ -480,6 +554,7 @@ impl Canvases {
             );
             let size = (bucket(requested.0), bucket(requested.1));
             let key = (scene_id, entity);
+
             if self
                 .object_targets
                 .get(&key)
@@ -493,6 +568,7 @@ impl Canvases {
                     ),
                 );
             }
+
             let textures = data
                 .textures
                 .values()
@@ -505,25 +581,34 @@ impl Canvases {
             let data = (*data).clone();
             let alpha = draw.opacity.clamp(0.0, 1.0);
             let targets = self.object_targets.get_mut(&key).unwrap();
+
             targets.0.draw_skia(skia, |surface| {
                 let saved = surface.save();
+
                 surface.clear(skia_safe::colors::TRANSPARENT);
+
                 surface.scale((
                     size.0 as f32 / bounds.width(),
                     size.1 as f32 / bounds.height(),
                 ));
+
                 surface.translate((-bounds.left, -bounds.top));
+
                 draw_image_shader_source(world, entity, surface, &self.images, &self.shader_images);
                 surface.restore_to_count(saved);
             });
+
             self.image_shaders
                 .apply(&targets.0, &targets.1, &data, time, alpha, |texture| {
                     textures.get(&texture).copied()
                 })?;
+
             let image = targets.1.image(skia)?;
+
             self.shader_images
                 .insert(entity, ImageShaderImage { image, bounds });
         }
+
         Ok(())
     }
 
@@ -537,13 +622,16 @@ impl Canvases {
         let Ok(data) = world.get::<&ImageShaderData>(key.entity) else {
             return Ok(());
         };
+
         if data.padding != 0.0 {
             return Err(
                 "Canvas image shaders have fixed output bounds and cannot use padding.".into(),
             );
         }
+
         let data = (*data).clone();
         let size = self.targets[&key].size;
+
         if self
             .shader_targets
             .get(&key)
@@ -552,6 +640,7 @@ impl Canvases {
             self.shader_targets
                 .insert(key, Target::new(size, false, skia, &self.gl)?);
         }
+
         let textures = data
             .textures
             .values()
@@ -561,6 +650,7 @@ impl Canvases {
                     .ok_or("Image shader texture is unavailable.")
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
+
         self.image_shaders.apply(
             &self.targets[&key],
             &self.shader_targets[&key],
@@ -569,7 +659,9 @@ impl Canvases {
             1.0,
             |texture| textures.get(&texture).copied(),
         )?;
+
         self.shader_outputs.insert(key);
+
         Ok(())
     }
 }
@@ -587,6 +679,7 @@ impl Drop for Canvases {
         self.object_targets.clear();
         self.geometries.clear();
         self.mesh_programs.clear();
+
         // Program objects retain Context clones; clear this cache to break that cycle.
         if let Ok(mut programs) = self.context.programs.write() {
             programs.clear();
@@ -600,13 +693,16 @@ fn scene_lights(
     context: &three_d::Context,
 ) -> Result<Vec<Box<dyn three_d::Light>>, String> {
     let mut lights: Vec<Box<dyn three_d::Light>> = Vec::new();
+
     for &entity in visible {
         let Ok(light) = world.get::<&Light3D>(entity) else {
             continue;
         };
+
         if !light.intensity.is_finite() || light.intensity < 0.0 {
             return Err("Light intensity must be finite and nonnegative.".into());
         }
+
         let color = three_d::Srgba::new(
             light_channel(light.color.r),
             light_channel(light.color.g),
@@ -617,6 +713,7 @@ fn scene_lights(
         let direction = global_rotation3d(world, entity) * glam::Vec3::NEG_Z;
         let position = three_d::vec3(position.x, position.y, position.z);
         let direction = three_d::vec3(direction.x, direction.y, direction.z);
+
         if world.get::<&DirectionalLightKind>(entity).is_ok() {
             lights.push(Box::new(three_d::DirectionalLight::new(
                 context,
@@ -631,6 +728,7 @@ fn scene_lights(
                 attenuation.linear,
                 attenuation.quadratic,
             ];
+
             if coefficients
                 .iter()
                 .any(|value| !value.is_finite() || *value < 0.0)
@@ -638,11 +736,13 @@ fn scene_lights(
             {
                 return Err("Light attenuation must have finite, nonnegative coefficients and at least one positive coefficient.".into());
             }
+
             let attenuation = three_d::Attenuation {
                 constant: attenuation.constant,
                 linear: attenuation.linear,
                 quadratic: attenuation.quadratic,
             };
+
             if world.get::<&PointLightKind>(entity).is_ok() {
                 lights.push(Box::new(three_d::PointLight::new(
                     context,
@@ -653,9 +753,11 @@ fn scene_lights(
                 )));
             } else if world.get::<&SpotLightKind>(entity).is_ok() {
                 let cutoff = world.get::<&SpotLightCone>(entity).unwrap().cutoff;
+
                 if !cutoff.is_finite() || !(0.0..std::f32::consts::PI).contains(&cutoff) {
                     return Err("Spot light cutoff must be between zero and pi radians.".into());
                 }
+
                 lights.push(Box::new(three_d::SpotLight::new(
                     context,
                     light.intensity,
@@ -668,6 +770,7 @@ fn scene_lights(
             }
         }
     }
+
     Ok(lights)
 }
 
@@ -683,6 +786,7 @@ fn camera(
     let camera_component = world
         .get::<&Camera3D>(entity)
         .map_err(|_| "Camera3D lens is missing.")?;
+
     camera_from_component(&camera_component, size)
 }
 
@@ -691,6 +795,7 @@ fn camera_from_component(
     size: (u32, u32),
 ) -> Result<three_d::Camera, String> {
     camera_component.validate()?;
+
     let matrix = camera_component.matrix();
     let rotation = crate::core::normalized_quaternion(camera_component.camera_rotation);
     let position = matrix.transform_point3(glam::Vec3::ZERO);
@@ -718,7 +823,9 @@ fn camera_from_component(
             camera_component.camera_far,
         ),
     };
+
     camera.tone_mapping = three_d::ToneMapping::None;
+
     Ok(camera)
 }
 
@@ -761,14 +868,19 @@ mod tests {
     #[test]
     fn eviction_retains_recent_resources_and_reclaims_one_old_resource() {
         use super::evict_oldest;
+
         use std::collections::HashMap;
+
         let mut cache = HashMap::from([(1, "First"), (2, "Second"), (3, "Current")]);
         let mut usage = HashMap::from([(1, 1), (2, 2), (3, 3)]);
+
         evict_oldest(&mut cache, &mut usage, 3, false);
         assert_eq!(cache.len(), 3);
+
         evict_oldest(&mut cache, &mut usage, 3, true);
         assert!(!cache.contains_key(&1));
         assert!(cache.contains_key(&3));
+
         evict_oldest(&mut cache, &mut usage, 604, false);
         assert_eq!(cache.len(), 1);
         assert!(cache.contains_key(&3));
@@ -778,10 +890,12 @@ mod tests {
     fn perspective_aspect_follows_canvas_resolution() {
         let scene = Scene::new();
         let handler = scene.world_3d();
+
         for resolution in [(1920, 1080), (512, 1024)] {
             let view = camera(&scene.world(), handler.entity(), resolution).unwrap();
             let projection = view.projection();
             let aspect = projection.y.y / projection.x.x;
+
             assert!((aspect - resolution.0 as f32 / resolution.1 as f32).abs() < 1e-5);
         }
     }

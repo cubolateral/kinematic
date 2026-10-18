@@ -50,6 +50,7 @@ impl<Object> Tween<Object> {
     ) -> Self {
         let from = track_info.clamp(from);
         let to = track_info.clamp(to);
+
         Self {
             world,
             entity,
@@ -136,18 +137,21 @@ impl<Object> Tween<Object> {
     #[doc(hidden)]
     pub fn component(mut self, channel: u8) -> Self {
         self.targets[0].mask = Some(1 << channel);
+
         self
     }
 
     #[doc(hidden)]
     pub fn implicit(mut self) -> Self {
         self.targets[0].implicit = true;
+
         self
     }
 
     #[doc(hidden)]
     pub fn relative(mut self, mask: u8) -> Self {
         self.targets[0].relative |= mask;
+
         self
     }
 
@@ -167,7 +171,9 @@ impl<Object> Tween<Object> {
                     .same(&TrackTarget::property(type_id, track_info))
             })
             .expect("Relative track must already belong to this tween.");
+
         target.relative |= mask;
+
         self
     }
 
@@ -186,6 +192,7 @@ impl<Object> Tween<Object> {
             let to = track_info.clamp(update(value).into_track_value());
 
             (track_info.set)(&world, self.entity, to.clone());
+
             (from, to)
         };
 
@@ -196,10 +203,12 @@ impl<Object> Tween<Object> {
         }) {
             target.to = to;
             target.rotation = None;
+
             target.mask = match (target.mask, channel) {
                 (Some(mask), Some(channel)) => Some(mask | (1 << channel)),
                 (_, None) | (None, Some(_)) => None,
             };
+
             target.relative &= !channel.map_or(u8::MAX, |channel| 1 << channel);
         } else {
             self.targets.push(TweenTarget {
@@ -230,6 +239,7 @@ impl<Object> Tween<Object> {
 
         {
             let world = self.world.borrow();
+
             (track_info.set)(&world, self.entity, to.clone());
         }
 
@@ -262,26 +272,31 @@ impl<Object> Tween<Object> {
     /// Sets the duration in timeline seconds for every target field.
     pub fn duration(mut self, duration: f32) -> Self {
         self.duration = duration;
+
         self
     }
 
     /// Delays this tween by the specified number of timeline seconds.
     pub fn delay(mut self, duration: f32) -> Self {
         self.delay = duration;
+
         self
     }
 
     /// Sets the easing function used by every target field.
     pub fn easing(mut self, easing: Easing) -> Self {
         self.easing = easing;
+
         self
     }
 
     /// Adds or replaces a shader-uniform target in this simultaneous tween.
     pub fn uniform<T: TrackValueType>(self, name: impl Into<String>, value: T) -> Self {
         let value = value.into_track_value();
+
         crate::core::objects::validate_shader_track_value(&value)
             .unwrap_or_else(|error| panic!("{error}"));
+
         self.uniform_values(name.into(), None, value)
     }
 
@@ -289,10 +304,13 @@ impl<Object> Tween<Object> {
     pub fn uniform_from<T: TrackValueType>(self, name: impl Into<String>, from: T, to: T) -> Self {
         let from = from.into_track_value();
         let to = to.into_track_value();
+
         crate::core::objects::validate_shader_track_value(&from)
             .unwrap_or_else(|error| panic!("{error}"));
+
         crate::core::objects::validate_shader_track_value(&to)
             .unwrap_or_else(|error| panic!("{error}"));
+
         self.uniform_values(name.into(), Some(from), to)
     }
 
@@ -301,15 +319,19 @@ impl<Object> Tween<Object> {
         let target = TrackTarget::uniform(name);
         let current = {
             let world = self.world.borrow();
+
             target.get(&world, self.entity)
         };
+
         assert!(
             same_value_type(&current, &to)
                 && from.as_ref().is_none_or(|from| same_value_type(from, &to)),
             "Shader uniform '{}' must keep its builder-defined type.",
             target.name(),
         );
+
         target.set(&self.world.borrow(), self.entity, to.clone());
+
         if let Some(existing) = self
             .targets
             .iter_mut()
@@ -318,8 +340,10 @@ impl<Object> Tween<Object> {
             if let Some(from) = from {
                 existing.from = from;
             }
+
             existing.to = to;
             existing.rotation = None;
+
             if explicit {
                 existing.implicit = false;
             }
@@ -334,6 +358,7 @@ impl<Object> Tween<Object> {
                 implicit: !explicit,
             });
         }
+
         self
     }
 
@@ -346,6 +371,7 @@ impl<Object> Tween<Object> {
         angle: f32,
     ) -> Self {
         validate_rotation(axis, angle);
+
         let axis = axis.normalize();
         let type_id = property.type_id();
         let track_info = property.info();
@@ -362,6 +388,7 @@ impl<Object> Tween<Object> {
 
         {
             let world = self.world.borrow();
+
             (track_info.set)(&world, self.entity, TrackValue::Quaternion(to));
         }
 
@@ -371,17 +398,21 @@ impl<Object> Tween<Object> {
                 .same(&TrackTarget::property(type_id, track_info))
         }) {
             target.to = TrackValue::Quaternion(to);
+
             target.rotation = match target.rotation.take() {
                 Some(mut rotation) if rotation.axis == axis => {
                     rotation.angle += angle;
+
                     Some(rotation)
                 }
                 Some(mut rotation) if rotation.axis == -axis => {
                     rotation.angle -= angle;
+
                     Some(rotation)
                 }
                 _ => None,
             };
+
             target.mask = None;
             target.relative = 0;
         } else {
@@ -423,7 +454,9 @@ impl<Object> Tween<Object> {
         angle: f32,
     ) -> Self {
         validate_rotation(axis, angle);
+
         let to = normalized_quaternion(Quaternion::from_axis_angle(axis.normalize(), angle));
+
         self.update_track(property.type_id(), property.info(), |_| to)
     }
 
@@ -435,6 +468,7 @@ impl<Object> Tween<Object> {
     /// Registers this tween in the animator associated with its object handler.
     pub fn play(self) {
         let animator = self.animator.active();
+
         animator.play(self.task());
     }
 
@@ -540,6 +574,7 @@ impl Tween<()> {
         animator: AnimatorHandle,
     ) -> Tween<Object> {
         validate_rotation(axis, angle);
+
         let axis = axis.normalize();
         let from = normalized_quaternion(from);
         let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
@@ -570,6 +605,7 @@ fn validate_rotation(axis: Vector3, angle: f32) {
         axis.is_finite() && axis.length_squared() > f32::EPSILON,
         "Rotation axis must be finite and non-zero."
     );
+
     assert!(angle.is_finite(), "Rotation angle must be finite.");
 }
 

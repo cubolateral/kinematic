@@ -31,7 +31,9 @@ end
 fn lua_uses_native_tracks_and_seek() {
     let scene = load(SCENE);
     let entity = scene.entity("ball").unwrap();
+
     scene.update(1.0).unwrap();
+
     assert_eq!(
         scene
             .scene()
@@ -42,7 +44,9 @@ fn lua_uses_native_tracks_and_seek() {
             .x,
         0.0
     );
+
     scene.update(0.0).unwrap();
+
     assert_eq!(
         scene
             .scene()
@@ -53,6 +57,7 @@ fn lua_uses_native_tracks_and_seek() {
             .x,
         -100.0
     );
+
     assert_eq!(scene.duration(), 3.0);
 }
 
@@ -60,11 +65,15 @@ fn lua_uses_native_tracks_and_seek() {
 fn reload_preserves_ids_and_rejects_invalid_candidates() {
     let mut scene = load(SCENE);
     let entity = scene.entity("ball").unwrap();
+
     scene.update(1.0).unwrap();
+
     scene
         .reload(sources(&SCENE.replace("radius=24", "radius=48")))
         .unwrap();
+
     assert_eq!(scene.entity("ball"), Some(entity));
+
     assert_eq!(
         scene
             .scene()
@@ -74,8 +83,10 @@ fn reload_preserves_ids_and_rejects_invalid_candidates() {
             .radius,
         48.0
     );
+
     assert!(scene.reload(sources("Invalid Lua ???")).is_err());
     assert_eq!(scene.entity("ball"), Some(entity));
+
     assert_eq!(
         scene
             .scene()
@@ -85,6 +96,7 @@ fn reload_preserves_ids_and_rejects_invalid_candidates() {
             .radius,
         48.0
     );
+
     assert_eq!(scene.revision(), 2);
 }
 
@@ -92,7 +104,9 @@ fn reload_preserves_ids_and_rejects_invalid_candidates() {
 fn signal_errors_do_not_commit_partial_writes() {
     let source=SCENE.replace("s:wait(1)", "ball:signal(function(obj, frame) obj.radius:set(99); if frame.time > 2 then error('Failed') end end); s:wait(1)");
     let scene = load(&source);
+
     assert!(scene.update(2.5).is_err());
+
     assert_eq!(
         scene
             .scene()
@@ -117,6 +131,7 @@ fn duplicate_ids_and_infinite_loops_are_diagnostics() {
         )
         .is_err()
     );
+
     assert!(
         LuaScene::load(
             ProjectContext::new(".").unwrap(),
@@ -161,10 +176,14 @@ return function(s)
 end
 "#,
     );
+
     scene.update(0.5).unwrap();
+
     let world = scene.scene().world();
     let a = scene.entity("a").unwrap();
+
     assert_eq!(world.get::<&Transform2D>(a).unwrap().scale.x, 0.5);
+
     assert_eq!(
         world
             .get::<&crate::core::components::Draw2D>(a)
@@ -177,6 +196,7 @@ end
 #[test]
 fn removing_a_shader_on_reload_removes_its_components() {
     use crate::core::objects::MeshShaderData;
+
     let source = r#"
 return function(s)
     local shape = s:sphere {id='shape', shader=k.mesh_shader {fragment='out vec4 outColor; void main() { outColor=vec4(1.0); }'}}
@@ -186,11 +206,15 @@ end
 "#;
     let mut scene = load(source);
     let entity = scene.entity("shape").unwrap();
+
     assert!(scene.scene().world().get::<&MeshShaderData>(entity).is_ok());
+
     scene.reload(sources(&source.replace(
         ", shader=k.mesh_shader {fragment='out vec4 outColor; void main() { outColor=vec4(1.0); }'}", ""
     ))).unwrap();
+
     assert_eq!(scene.entity("shape"), Some(entity));
+
     assert!(
         scene
             .scene()
@@ -198,6 +222,7 @@ end
             .get::<&MeshShaderData>(entity)
             .is_err()
     );
+
     scene.update(0.5).unwrap();
 }
 
@@ -221,13 +246,17 @@ end
 "#,
     );
     let a = scene.entity("a").unwrap();
+
     scene.update(0.5).unwrap();
     assert!(scene.update(1.5).is_err());
+
     let b = scene.entity("b").unwrap();
+
     assert_eq!(
         scene.scene().world().get::<&CircleShape>(b).unwrap().radius,
         20.5
     );
+
     assert_eq!(
         scene
             .scene()
@@ -237,10 +266,12 @@ end
             .opacity,
         1.0
     );
+
     assert_eq!(
         scene.scene().world().get::<&CircleShape>(a).unwrap().radius,
         10.5
     );
+
     assert_eq!(
         scene
             .scene()
@@ -251,7 +282,9 @@ end
             .x,
         25.0
     );
+
     scene.update(0.0).unwrap();
+
     assert_eq!(
         scene.scene().world().get::<&CircleShape>(a).unwrap().radius,
         10.0
@@ -269,11 +302,14 @@ return function(s)
 end
 "#,
     );
+
     scene.update(0.25).unwrap();
+
     let world = scene.scene().world();
     let transform = world
         .get::<&crate::core::components::Transform3D>(scene.entity("spin").unwrap())
         .unwrap();
+
     assert!((transform.rotation * glam::Vec3::X - glam::Vec3::Y).length() < 0.001);
 }
 
@@ -307,7 +343,9 @@ end
 "#,
     );
     let entity = scene.entity("ball").unwrap();
+
     scene.update(1.5).unwrap();
+
     assert_eq!(
         scene
             .scene()
@@ -317,7 +355,9 @@ end
             .position,
         glam::vec2(-50.0, 0.0)
     );
+
     scene.update(3.0).unwrap();
+
     assert_eq!(
         scene
             .scene()
@@ -327,6 +367,7 @@ end
             .position,
         glam::vec2(100.0, 25.0)
     );
+
     assert_eq!(
         scene
             .scene()
@@ -336,7 +377,9 @@ end
             .radius,
         27.5
     );
+
     scene.update(0.0).unwrap();
+
     assert_eq!(
         scene
             .scene()
@@ -346,6 +389,7 @@ end
             .position,
         glam::vec2(-200.0, 0.0)
     );
+
     assert_eq!(scene.duration(), 4.0);
 }
 
@@ -367,7 +411,9 @@ end
 "#,
     );
     let entity = scene.entity("ball").unwrap();
+
     scene.update(3.0).unwrap();
+
     assert_eq!(
         scene
             .scene()
@@ -377,6 +423,7 @@ end
             .position,
         glam::vec2(10.0, 12.0)
     );
+
     assert_eq!(
         scene
             .scene()
@@ -386,10 +433,12 @@ end
             .radius,
         30.0
     );
+
     let world = scene.scene().world();
     let animation = world
         .get::<&crate::core::components::Animation>(entity)
         .unwrap();
+
     assert!(
         !animation
             .tracks
@@ -417,11 +466,13 @@ fn malformed_pairs_channels_overlaps_and_limits_are_rejected() {
         "ball:by{rotation=k.quat(0,0,0,1)}",
     ] {
         let source = format!("return function(s) local ball=s:circle{{}}; {declaration} end");
+
         assert!(
             try_load(&source).is_err(),
             "Accepted invalid declaration: {declaration}"
         );
     }
+
     for fields in [
         "position=k.vec2(1,2),['position.x']=3",
         "position={x=1},['position.x']=2",
@@ -430,6 +481,7 @@ fn malformed_pairs_channels_overlaps_and_limits_are_rejected() {
     ] {
         assert!(try_load(&format!("return function(s) s:circle{{{fields}}} end")).is_err());
     }
+
     assert!(try_load("return function(s) end, 'Extra'").is_err());
     assert!(try_load("return {build=function(s) end,name='Old'}").is_err());
 }
@@ -467,9 +519,12 @@ return function(s)
 end
 "#,
     );
+
     scene.update(0.5).unwrap();
+
     let label = scene.entity("label").unwrap();
     let world = scene.scene().world();
+
     assert_eq!(
         world
             .get::<&crate::core::objects::TextShape>(label)
@@ -477,6 +532,7 @@ end
             .text,
         "New"
     );
+
     assert!(
         (world
             .get::<&crate::core::components::Draw2D>(label)
@@ -486,9 +542,11 @@ end
             .abs()
             < 0.001
     );
+
     drop(world);
     assert_eq!(scene.duration(), 4.0);
     scene.update(4.0).unwrap();
+
     assert_eq!(
         scene
             .scene()
@@ -498,6 +556,7 @@ end
             .radius,
         10.0
     );
+
     for source in [
         "local O=k.object{methods={to=function() end}};return function(s) end",
         "return function(s) s:text_2d{}:fade(123) end",
@@ -528,8 +587,10 @@ return function(s)
 end
 "#,
     );
+
     assert!(try_load("return function(s) s:world_3d():to{camera_fov=10}:play(1) end").is_err());
     assert_eq!(scene.scene().name(), "intro");
+
     assert!(
         try_load(
             "return function(s) k.mesh{vertices={{0,0,0},{1,0,0},{0,1,0}},indices={0,1,2}} end"
@@ -558,10 +619,12 @@ return function(s)
 end
 "#;
     let mut sources = sources(script);
+
     sources.insert(
         "utils/math.lua".into(),
         "return {double=function(value) return value*2 end}".into(),
     );
+
     sources.insert(
         "objects/counter.lua".into(),
         r#"
@@ -575,6 +638,7 @@ return k.object{
 "#
         .into(),
     );
+
     let mut scene = LuaScene::load(
         ProjectContext::new(".").unwrap(),
         "intro.lua",
@@ -584,22 +648,29 @@ return k.object{
         (0, 0),
     )
     .unwrap();
+
     scene.update(1.0).unwrap();
     scene.update(0.5).unwrap();
     scene.update(1.0).unwrap();
+
     let entity = scene.entity("counter").unwrap();
     let changed_script = script.replace("self:state().result==6", "self:state().result==9");
+
     sources.insert("intro.lua".into(), changed_script);
+
     sources.insert(
         "utils/math.lua".into(),
         "return {double=function(value) return value*3 end}".into(),
     );
+
     scene.reload(sources.clone()).unwrap();
     scene.update(0.5).unwrap();
+
     sources.insert(
         "utils/math.lua".into(),
         "local hidden=0;return {double=function(value) hidden=hidden+1;return value*2 end}".into(),
     );
+
     assert!(scene.reload(sources).is_err());
     assert_eq!(scene.entity("counter"), Some(entity));
     scene.update(0.5).unwrap();
@@ -621,13 +692,17 @@ return function(s)
 end
 "#,
     );
+
     scene.update(1.5).unwrap();
+
     let world = scene.scene().world();
     let entity = scene.entity("mesh").unwrap();
+
     assert_eq!(
         crate::core::objects::shader_uniform(&world, entity, "pulse").unwrap(),
         crate::core::TrackValue::F32(3.0)
     );
+
     assert_eq!(
         world.get::<&crate::core::Properties>(entity).unwrap().0["pulse"].1,
         crate::core::TrackValue::F32(6.0)
@@ -651,7 +726,9 @@ return function(s)
 end
 "#,
     );
+
     scene.update(2.5).unwrap();
+
     assert_eq!(
         scene
             .scene()
@@ -661,7 +738,9 @@ end
             .radius,
         40.0
     );
+
     scene.update(0.0).unwrap();
+
     assert_eq!(
         scene
             .scene()

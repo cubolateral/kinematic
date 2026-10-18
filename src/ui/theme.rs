@@ -124,17 +124,21 @@ impl Appearance {
             .into_iter()
             .map(|(style_color, color)| ui.push_style_color(style_color, color))
             .collect::<Vec<_>>();
+
         // Stack guards must be released in reverse push order.
         tokens.reverse();
+
         tokens
     }
 }
 
 pub(super) fn initialize(context: &mut Context) -> FontId {
     apply_geometry(context);
+
     context
         .style_mut()
         .set_color(StyleColor::ModalWindowDimBg, [0.0; 4]);
+
     load_font(context)
 }
 

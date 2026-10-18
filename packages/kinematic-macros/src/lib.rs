@@ -10,11 +10,14 @@ fn documentation(attributes: &[syn::Attribute]) -> proc_macro2::TokenStream {
         if !attribute.path().is_ident("doc") {
             return None;
         }
+
         let syn::Meta::NameValue(value) = &attribute.meta else {
             return None;
         };
+
         Some(&value.value)
     });
+
     quote::quote!(concat!(#(#lines, "\n",)*))
 }
 

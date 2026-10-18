@@ -10,6 +10,7 @@ use crate::core::{
 pub enum Camera3DMode {
     #[default]
     Perspective,
+
     Orthogonal,
 }
 
@@ -71,6 +72,7 @@ impl Camera3D {
             }
             _ => {}
         }
+
         if !self.camera_near.is_finite()
             || !self.camera_far.is_finite()
             || self.camera_near <= 0.0
@@ -78,9 +80,11 @@ impl Camera3D {
         {
             return Err("Camera planes must satisfy 0 < near < far.".into());
         }
+
         if !self.matrix().is_finite() {
             return Err("Camera transform must be finite.".into());
         }
+
         Ok(())
     }
 }
@@ -96,7 +100,9 @@ mod tests {
             camera_fov: 10.0,
             ..Default::default()
         };
+
         assert!(orthogonal.validate().is_ok());
+
         assert!(
             Camera3D {
                 camera_mode: Camera3DMode::Perspective,

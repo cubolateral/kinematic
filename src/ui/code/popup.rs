@@ -24,9 +24,11 @@ pub(super) fn window<R>(
             | WindowFlags::NO_SAVED_SETTINGS
             | flags,
     );
+
     if let Some(size) = size {
         window = window.size(size, Condition::Always);
     }
+
     window.build(content)
 }
 
@@ -35,6 +37,7 @@ pub(super) fn editor(
     palette: &Palette,
 ) -> dear_imgui_cte::CteResult<TextEditor> {
     let mut editor = TextEditor::try_create(context)?;
+
     editor.set_language(None);
     editor.set_palette(palette)?;
     editor.set_read_only(true);
@@ -44,6 +47,7 @@ pub(super) fn editor(
     editor.set_show_spaces(false);
     editor.set_show_tabs(false);
     editor.set_word_wrap_enabled(true);
+
     Ok(editor)
 }
 
@@ -68,12 +72,15 @@ impl Content {
     pub fn set(&mut self, markdown: &str) -> Result<(), String> {
         if self.source != markdown {
             self.view = Documentation::parse(markdown);
+
             self.buffer
                 .set_text(&self.view.text)
                 .and_then(|_| self.buffer.set_cursor(Position::new(0, 0)))
                 .map_err(|error| error.to_string())?;
+
             self.source = markdown.to_owned();
         }
+
         Ok(())
     }
 

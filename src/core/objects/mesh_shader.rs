@@ -45,6 +45,7 @@ impl MeshShader {
 
     fn new(vertex: Option<String>, fragment: String) -> Self {
         static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
         Self {
             vertex: vertex.map(Arc::from),
             fragment: Arc::from(fragment),
@@ -77,11 +78,14 @@ impl MeshShaderData {
     #[doc(hidden)]
     pub fn uniform(&mut self, name: impl Into<String>, value: impl Into<MeshShaderUniform>) {
         let name = name.into();
+
         assert!(
             valid_uniform_name(&name),
             "Mesh shader uniforms must use non-reserved GLSL identifiers."
         );
+
         let value = value.into().into_track_value();
+
         validate_shader_track_value(&value).unwrap_or_else(|error| panic!("{error}"));
         self.uniforms.insert(name, value);
     }
@@ -92,6 +96,7 @@ impl MeshShaderData {
             padding.is_finite() && padding >= 0.0,
             "Mesh shader bounds padding must be finite and non-negative."
         );
+
         self.bounds_padding = Some(padding);
     }
 }
@@ -109,15 +114,19 @@ pub(crate) fn effective_mesh_shader(
 ) -> Result<Option<EffectiveMeshShader>, String> {
     let mut lineage = vec![entity];
     let mut current = entity;
+
     while let Some(parent) = world
         .get::<&TreeNode>(current)
         .ok()
         .and_then(|node| node.parent)
     {
         lineage.push(parent);
+
         current = parent;
     }
+
     lineage.reverse();
+
     let Some(start) = lineage.iter().rposition(|entity| {
         world
             .get::<&MeshShaderData>(*entity)
@@ -125,21 +134,25 @@ pub(crate) fn effective_mesh_shader(
     }) else {
         return Ok(None);
     };
+
     let owner = world.get::<&MeshShaderData>(lineage[start]).unwrap();
     let mut result = EffectiveMeshShader {
         shader: owner.shader.clone().unwrap(),
         uniforms: BTreeMap::new(),
         bounds_padding: 0.0,
     };
+
     drop(owner);
 
     for entity in &lineage[start..] {
         let Ok(data) = world.get::<&MeshShaderData>(*entity) else {
             continue;
         };
+
         if let Some(padding) = data.bounds_padding {
             result.bounds_padding = padding;
         }
+
         for (name, value) in &data.uniforms {
             if let Some(previous) = result.uniforms.get(name)
                 && std::mem::discriminant(previous) != std::mem::discriminant(value)
@@ -148,10 +161,13 @@ pub(crate) fn effective_mesh_shader(
                     "Mesh shader uniform override `{name}` must keep its inherited value type."
                 ));
             }
+
             result.uniforms.insert(name.clone(), value.clone());
         }
     }
+
     validate(&result)?;
+
     Ok(Some(result))
 }
 
@@ -162,8 +178,10 @@ fn validate(data: &EffectiveMeshShader) -> Result<(), String> {
                 "Mesh shader uniform `{name}` uses an invalid or reserved name."
             ));
         }
+
         validate_shader_track_value(value)?;
     }
+
     Ok(())
 }
 
@@ -180,7 +198,9 @@ fn valid_uniform_name(name: &str) -> bool {
         "hasNormal",
         "hasUv",
     ];
+
     let mut chars = name.chars();
+
     chars
         .next()
         .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
@@ -210,18 +230,23 @@ mod tests {
         let incompatible = plane()
             .mesh_uniform("amount", vec2(1.0, 2.0))
             .build(&mut scene);
+
         group.add(&child);
         group.add(&own);
         group.add(&incompatible);
         scene.world_3d().add(&group);
+
         let effective = effective_mesh_shader(&scene.world(), child.entity())
             .unwrap()
             .unwrap();
+
         assert_eq!(effective.shader.id, shader.id);
         assert_eq!(effective.uniforms["amount"], TrackValue::F32(2.0));
+
         let effective = effective_mesh_shader(&scene.world(), own.entity())
             .unwrap()
             .unwrap();
+
         assert_eq!(effective.shader.id, own_shader.id);
         assert!(!effective.uniforms.contains_key("amount"));
         assert_eq!(effective.uniforms["local"], TrackValue::F32(3.0));
@@ -237,8 +262,11 @@ mod tests {
             .mesh_shader(&shader)
             .mesh_shader_bounds(2.0)
             .build(&mut scene);
+
         assert_eq!(object.box_size(), vec3(1.0, 1.0, 1.0));
+
         let (min, max) = crate::core::objects::bounds3d(&scene.world(), object.entity()).unwrap();
+
         assert_eq!(min, vec3(-2.5, -2.5, -2.5));
         assert_eq!(max, vec3(2.5, 2.5, 2.5));
     }
@@ -249,6 +277,7 @@ mod tests {
             group: Option<Group3DHandler>,
             child: Option<PrismHandler>,
         }
+
         impl Build {
             fn build(&mut self, scene: &mut Scene) {
                 let shader = MeshShader::fragment("void main() { outColor = vec4(amount); }");
@@ -257,20 +286,24 @@ mod tests {
                     .mesh_uniform("amount", 0.0_f32)
                     .build(scene);
                 let child = cube().mesh_uniform("amount", 0.25_f32).build(scene);
+
                 group.add(&child);
                 scene.world_3d().add(&group);
+
                 scene.all(|_| {
                     group
                         .uniform("amount", 1.0_f32)
                         .duration(2.0)
                         .easing(Easing::Linear)
                         .play();
+
                     child
                         .uniform("amount", 0.75_f32)
                         .duration(2.0)
                         .easing(Easing::Linear)
                         .play();
                 });
+
                 self.group = Some(group);
                 self.child = Some(child);
             }
@@ -281,18 +314,25 @@ mod tests {
             group: None,
             child: None,
         };
+
         {
             build.build(&mut scene);
+
             scene.finish_build()
         };
+
         scene.update(1.0);
+
         let group = build.group.unwrap();
         let child = build.child.unwrap();
+
         assert_eq!(group.get_uniform::<f32>("amount"), 0.5);
         assert_eq!(child.get_uniform::<f32>("amount"), 0.5);
+
         let effective = effective_mesh_shader(&scene.world(), child.entity())
             .unwrap()
             .unwrap();
+
         assert_eq!(effective.uniforms["amount"], TrackValue::F32(0.5));
     }
 }

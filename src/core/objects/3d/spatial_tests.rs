@@ -29,19 +29,24 @@ fn spatial_handlers_compose_transforms_and_bounds() {
         .rotation(Quaternion::from_rotation_y(0.5))
         .size(vec3(2.0, 3.0, 4.0))
         .build(&mut scene);
+
     parent.add(&child);
     canvas.add(&parent);
     scene.add_canvas_3d(&canvas);
+
     assert!(
         child
             .global_position()
             .abs_diff_eq(vec3(1.0, 4.0, 7.0), 1e-5)
     );
+
     assert!(child.global_scale().abs_diff_eq(vec3(2.0, 3.0, 4.0), 1e-5));
+
     assert!(child.global_rotation().abs_diff_eq(
         Quaternion::from_rotation_z(std::f32::consts::FRAC_PI_2) * Quaternion::from_rotation_y(0.5),
         1e-5
     ));
+
     assert_eq!(child.box_size(), vec3(2.0, 3.0, 4.0));
 }
 
@@ -54,7 +59,9 @@ fn group_origin_moves_3d_children_to_the_selected_edge() {
             .size(vec3(2.0, 2.0, 2.0))
             .position(vec3(x, 0.0, 0.0))
             .build(&mut scene);
+
         group.add(&child);
+
         child
     });
 
@@ -63,6 +70,7 @@ fn group_origin_moves_3d_children_to_the_selected_edge() {
             .global_position()
             .abs_diff_eq(vec3(-1.0, 0.0, 0.0), 1e-5)
     );
+
     assert_eq!(
         group.get(Transform3D::origin_property()),
         vec3(1.0, 0.0, 0.0)
@@ -75,12 +83,14 @@ fn container_visibility_hides_its_3d_subtree() {
     let canvas = canvas_3d().build(&mut scene);
     let parent = group_3d().visibility(false).build(&mut scene);
     let child = cube().build(&mut scene);
+
     parent.add(&child);
     canvas.add(&parent);
     scene.add_canvas_3d(&canvas);
 
     let world = scene.world();
     let mut visible = Vec::new();
+
     visible_subtree_3d(&world, canvas.entity(), &mut visible);
     assert!(visible.contains(&canvas.entity()));
     assert!(!visible.contains(&parent.entity()));
@@ -94,6 +104,7 @@ fn dimensional_containers_reject_mixing_and_foreign_scenes() {
     let three = canvas_3d().resolution((64, 32)).build(&mut scene);
     let cube = cube().build(&mut scene);
     let rectangle = rect().build(&mut scene);
+
     for action in [0, 1] {
         assert!(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -106,8 +117,10 @@ fn dimensional_containers_reject_mixing_and_foreign_scenes() {
             .is_err()
         );
     }
+
     let mut other = Scene::new();
     let foreign = rect().build(&mut other);
+
     assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| two.add(&foreign))).is_err());
 }
 
@@ -118,16 +131,20 @@ fn canvases_require_explicit_resolution_and_own_their_cameras() {
     let invalid = canvas_2d().resolution((0, 20)).build(&mut scene);
     let two = canvas_2d().resolution((1024, 512)).build(&mut scene);
     let three = canvas_3d().resolution((1920, 1080)).build(&mut scene);
+
     assert!(missing.validate().is_err());
     assert!(invalid.validate().is_err());
     assert!(two.validate().is_ok());
     assert!(three.validate().is_ok());
     scene.add_canvas_3d(&three);
     assert!(three.validate().is_ok());
+
     let world = scene.world();
     let camera = world.get::<&Camera3D>(three.entity()).unwrap();
+
     assert_eq!(camera.camera_position, vec3(0.0, 0.0, 3.0));
     assert!(world.get::<&Camera2D>(two.entity()).is_ok());
+
     assert_eq!(
         world
             .get::<&CanvasSettings>(two.entity())
@@ -135,7 +152,9 @@ fn canvases_require_explicit_resolution_and_own_their_cameras() {
             .resolution,
         (1024, 512)
     );
+
     let settings = world.get::<&CanvasSettings>(three.entity()).unwrap();
+
     assert_eq!(settings.aspect_ratio().unwrap(), 1920.0 / 1080.0);
 }
 
@@ -161,6 +180,7 @@ fn projection_3d_builder_sizes_the_plane_from_canvas_resolution() {
             .size
             .abs_diff_eq(vec2(7.5, 4.21875), 1e-5)
     );
+
     for projection in [custom_after_source, custom_before_source] {
         assert!(
             world
@@ -188,10 +208,12 @@ fn projection_2d_builder_sizes_the_rect_from_canvas_resolution() {
         world.get::<&RectShape>(projection.entity()).unwrap().size,
         vec2(960.0, 540.0)
     );
+
     assert_eq!(
         world.get::<&Style>(projection.entity()).unwrap().fill,
         Color::TRANSPARENT
     );
+
     assert_eq!(
         world.get::<&RectShape>(projection.entity()).unwrap().round,
         Quad::new(10.0, 20.0, 30.0, 40.0)
@@ -230,46 +252,62 @@ fn camera_lens_rejects_invalid_ranges() {
 #[test]
 fn spatial_tracks_snapshots_and_lifetime_are_seekable() {
     struct Setup(Option<PrismHandler>);
+
     impl Setup {
         fn build(&mut self, scene: &mut Scene) {
             let canvas = canvas_3d().resolution((64, 64)).build(scene);
             let cube = cube().build(scene);
+
             canvas.add(&cube);
             scene.add_canvas_3d(&canvas);
             cube.save();
+
             cube.position(vec3(2.0, 4.0, 6.0))
                 .duration(2.0)
                 .easing(Easing::Linear)
                 .play();
+
             cube.restore().duration(2.0).easing(Easing::Linear).play();
             cube.remove();
+
             self.0 = Some(cube);
         }
     }
+
     let mut scene = Scene::new();
     let mut setup = Setup(None);
+
     {
         setup.build(&mut scene);
+
         scene.finish_build()
     };
+
     let cube = setup.0.unwrap();
+
     scene.update(1.0);
+
     assert_eq!(
         cube.get(Transform3D::position_property()),
         vec3(1.0, 2.0, 3.0)
     );
+
     scene.update(3.0);
+
     assert_eq!(
         cube.get(Transform3D::position_property()),
         vec3(1.0, 2.0, 3.0)
     );
+
     scene.update(4.0);
     assert!(!active_subtree(&scene.world(), scene.root().entity()).contains(&cube.entity()));
     scene.update(0.0);
     assert!(active_subtree(&scene.world(), scene.root().entity()).contains(&cube.entity()));
     assert_eq!(cube.name(), "Prism");
     assert!(scene.pick(Vector2::ZERO).is_none());
+
     let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
+
     scene.draw(surface.canvas());
     assert!(scene.selection_outline(cube.entity()).is_none());
 }
@@ -280,15 +318,20 @@ fn projections_order_dependencies_and_reject_cycles_and_inactive_sources() {
     let world = scene.world_3d();
     let source = canvas_2d().resolution((32, 16)).build(&mut scene);
     let projection = projection_3d().source(&source).build(&mut scene);
+
     world.add(&projection);
     scene.add_canvas_2d(&source);
     scene.root().view_2d(false).immediate();
+
     let order = canvas_order(&scene).unwrap();
+
     assert_eq!(order, vec![source.entity(), world.entity()]);
+
     let cyclic = std::collections::HashMap::from([
         (source.entity(), vec![world.entity()]),
         (world.entity(), vec![source.entity()]),
     ]);
+
     assert!(order_dependencies(&cyclic).unwrap_err().contains("cycle"));
     source.remove();
     scene.update(0.0);
@@ -304,6 +347,7 @@ fn projection_2d_orders_its_canvas_3d_dependency() {
     let world_2d = scene.world_2d();
     let world_3d = scene.world_3d();
     let projection = projection_2d().source(&world_3d).build(&mut scene);
+
     world_2d.add(&projection);
     scene.update(0.0);
 
@@ -318,10 +362,14 @@ fn projections_accept_sources_with_the_same_dimension() {
     let mut scene_2d = Scene::new_with_resolution((64, 64));
     let output_2d = scene_2d.world_2d();
     let source_2d = canvas_2d().resolution((32, 32)).build(&mut scene_2d);
+
     scene_2d.add_canvas_2d(&source_2d);
+
     let projection_2d = projection_2d().source(&source_2d).build(&mut scene_2d);
+
     output_2d.add(&projection_2d);
     scene_2d.update(0.0);
+
     assert_eq!(
         canvas_order(&scene_2d).unwrap(),
         vec![source_2d.entity(), output_2d.entity()]
@@ -330,11 +378,15 @@ fn projections_accept_sources_with_the_same_dimension() {
     let mut scene_3d = Scene::new_with_resolution((64, 64));
     let output_3d = scene_3d.world_3d();
     let source_3d = canvas_3d().resolution((32, 32)).build(&mut scene_3d);
+
     scene_3d.add_canvas_3d(&source_3d);
+
     let projection_3d = projection_3d().source(&source_3d).build(&mut scene_3d);
+
     output_3d.add(&projection_3d);
     scene_3d.root().view_2d(false).immediate();
     scene_3d.update(0.0);
+
     assert_eq!(
         canvas_order(&scene_3d).unwrap(),
         vec![source_3d.entity(), output_3d.entity()]
@@ -350,14 +402,19 @@ fn canvas2d_camera_is_scoped_to_its_canvas() {
         .position(vec2(10.0, 0.0))
         .fill(Color::RED)
         .build(&mut scene);
+
     source.add(&shape);
     source.camera_position(vec2(10.0, 0.0)).immediate();
+
     let other = canvas_2d()
         .resolution((32, 32))
         .camera_position(vec2(200.0, 0.0))
         .build(&mut scene);
+
     scene.add_canvas_2d(&other);
+
     let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
+
     draw_canvas2d(&scene.world(), source.entity(), surface.canvas());
     assert_eq!(surface.peek_pixels().unwrap().get_color((16, 16)).r(), 255);
     assert_eq!(scene.pick(Vector2::ZERO), Some(shape.entity()));
@@ -381,13 +438,16 @@ fn objects_can_ignore_the_2d_camera_with_their_subtree() {
         .position(vec2(1.0, 0.0))
         .fill(Color::RED)
         .build(&mut scene);
+
     fixed.add(&child);
     parent.add(&fixed);
     canvas.add(&parent);
     canvas.camera_position(vec2(10.0, 0.0)).immediate();
 
     let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
+
     draw_canvas2d(&scene.world(), canvas.entity(), surface.canvas());
+
     let pixels = surface.peek_pixels().unwrap();
 
     assert_eq!(pixels.get_color((23, 16)).r(), 255);
@@ -395,6 +455,7 @@ fn objects_can_ignore_the_2d_camera_with_their_subtree() {
     assert_eq!(pixels.get_color((13, 16)).a(), 0);
     assert_eq!(scene.pick(vec2(7.0, 0.0)), Some(child.entity()));
     assert_ne!(scene.pick(vec2(-3.0, 0.0)), Some(child.entity()));
+
     assert_eq!(
         scene.selection_outline(child.entity()).unwrap()[0][0][0],
         0.65625
@@ -421,11 +482,13 @@ fn canvas_camera_tracks_use_the_camera_prefix() {
     let world = scene.world();
 
     let camera_2d = world.get::<&Camera2D>(two.entity()).unwrap();
+
     assert_eq!(camera_2d.camera_position, vec2(1.0, 2.0));
     assert_eq!(camera_2d.camera_zoom, 2.0);
     assert_eq!(camera_2d.camera_rotation, 0.5);
 
     let camera_3d = world.get::<&Camera3D>(three.entity()).unwrap();
+
     assert_eq!(camera_3d.camera_mode, Camera3DMode::Orthogonal);
     assert_eq!(camera_3d.camera_position, vec3(1.0, 2.0, 4.0));
     assert_eq!(camera_3d.camera_fov, 1.0);
@@ -438,6 +501,7 @@ fn canvas_camera_tracks_use_the_camera_prefix() {
             .into_iter()
             .find(|component| component.name == "Camera2D" || component.name == "Camera3D")
             .unwrap();
+
         assert!(
             (camera.get)()
                 .iter()
@@ -449,6 +513,7 @@ fn canvas_camera_tracks_use_the_camera_prefix() {
 #[test]
 fn camera3d_defaults_to_perspective_mode() {
     assert_eq!(Camera3D::default().camera_mode, Camera3DMode::Perspective);
+
     assert_eq!(
         Camera3D::track(0).choices,
         TrackChoices::Enum(&["Perspective", "Orthogonal"])
@@ -463,9 +528,12 @@ fn canvas3d_focus_camera_moves_and_looks_at_the_target() {
     let target = vec3(-1.0, 4.0, -2.0);
 
     canvas.focus_camera(position, target).play();
+
     let world = scene.world();
     let camera = world.get::<&Camera3D>(canvas.entity()).unwrap();
+
     assert_eq!(camera.camera_position, position);
+
     assert!(
         (camera.camera_rotation * Vector3::NEG_Z)
             .abs_diff_eq((target - position).normalize(), 1e-5)
@@ -480,11 +548,14 @@ fn orthogonal_camera_projects_and_picks_with_parallel_rays() {
         .position(vec3(0.5, 0.0, 0.0))
         .size(vec3(0.25, 0.25, 0.25))
         .build(&mut scene);
+
     canvas.add(&cube);
+
     canvas
         .camera_mode(Camera3DMode::Orthogonal)
         .camera_fov(2.0)
         .immediate();
+
     scene.root().view_2d(false).immediate();
 
     assert_eq!(scene.pick(vec2(16.0, 0.0)), Some(cube.entity()));
@@ -494,6 +565,7 @@ fn orthogonal_camera_projects_and_picks_with_parallel_rays() {
 #[test]
 fn root_view_track_switches_between_builtin_worlds() {
     struct SwitchView;
+
     impl SwitchView {
         fn build(&mut self, scene: &mut Scene) {
             scene.root().view_2d(false).immediate();
@@ -505,8 +577,10 @@ fn root_view_track_switches_between_builtin_worlds() {
     let mut scene = Scene::new();
     let world_2d = scene.world_2d().texture();
     let world_3d = scene.world_3d().texture();
+
     {
         SwitchView.build(&mut scene);
+
         scene.finish_build()
     };
 
@@ -527,6 +601,7 @@ fn light_objects_follow_3d_visibility_and_animation() {
         .quadratic(0.5)
         .build(&mut scene);
     let spot = spot_light().cutoff(0.5).build(&mut scene);
+
     group.add(&directional);
     group.add(&point);
     group.add(&spot);
@@ -537,12 +612,15 @@ fn light_objects_follow_3d_visibility_and_animation() {
     assert_eq!(directional.get_intensity(), 2.0);
     assert_eq!(point.get_quadratic(), 0.5);
     assert_eq!(spot.get_cutoff(), 0.5);
+
     let mut visible = Vec::new();
+
     visible_subtree_3d(&scene.world(), canvas.entity(), &mut visible);
     assert!(visible.contains(&directional.entity()));
     assert!(visible.contains(&point.entity()));
     assert!(visible.contains(&spot.entity()));
     group.visibility(false).immediate();
+
     visible_subtree_3d(&scene.world(), canvas.entity(), &mut visible);
     assert!(!visible.contains(&point.entity()));
 }

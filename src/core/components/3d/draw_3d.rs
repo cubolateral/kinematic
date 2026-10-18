@@ -48,6 +48,7 @@ struct MeshOutline {
 impl MeshOutline {
     fn new(context: &three_d::Context, mesh: &three_d::CpuMesh) -> Self {
         let (positions, barycentric) = outline_vertices(mesh);
+
         Self {
             positions: three_d::VertexBuffer::new_with_data(context, &positions),
             barycentric: three_d::VertexBuffer::new_with_data(context, &barycentric),
@@ -73,6 +74,7 @@ impl three_d::Geometry for MeshOutline {
         program.use_uniform("modelMatrix", self.transformation);
         program.use_vertex_attribute("position", &self.positions);
         program.use_vertex_attribute("barycentric", &self.barycentric);
+
         program.draw_arrays(
             render_states,
             viewer.viewport(),
@@ -280,6 +282,7 @@ impl<'a> RenderContext3D<'a> {
                     .into(),
             );
         }
+
         Ok(())
     }
 
@@ -302,7 +305,9 @@ impl<'a> RenderContext3D<'a> {
         create: impl FnOnce() -> three_d::CpuMesh,
     ) -> &mut three_d::Mesh {
         self.direct_geometry_access = true;
+
         self.used_geometries.insert(key);
+
         &mut self
             .geometries
             .entry(key)
@@ -314,8 +319,10 @@ impl<'a> RenderContext3D<'a> {
                     outline: None,
                     attributes: MeshAttributes::new(&cpu),
                 };
+
                 self.geometry_uploads += 1;
                 self.geometry_upload_ms += started.elapsed().as_secs_f64() * 1000.0;
+
                 geometry
             })
             .mesh
@@ -339,11 +346,15 @@ impl<'a> RenderContext3D<'a> {
         data: &Material,
     ) -> Result<(), String> {
         self.mesh_shader_used |= self.mesh_shader.is_some();
+
         let transformation = combine_transforms(self.current_transform, transformation);
+
         validate_transformation(transformation)?;
+
         if transformation.determinant().abs() <= f32::EPSILON {
             return Ok(());
         }
+
         let [r, g, b, a] = data.albedo.rgba();
         let transparent = data.opacity * a < 1.0;
         let color = three_d::Srgba::new(
@@ -354,11 +365,15 @@ impl<'a> RenderContext3D<'a> {
         );
         let states = render_states(transparent, false);
         let camera = self.camera;
+
         self.prepare_geometry(key, create, data.outline_width > 0.0);
+
         if self.render_mesh_shader(key, transformation, data, states)? {
             self.render_outline(key, transformation, data);
+
             return Ok(());
         }
+
         if data.unlit {
             let material = three_d::ColorMaterial {
                 color,
@@ -367,6 +382,7 @@ impl<'a> RenderContext3D<'a> {
                 is_transparent: transparent,
             };
             let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
+
             mesh.set_transformation(transformation.to_cols_array_2d().into());
             mesh.render_with_material(&material, camera, &[]);
         } else {
@@ -375,12 +391,16 @@ impl<'a> RenderContext3D<'a> {
             self.physical.roughness = data.roughness.clamp(0.04, 1.0);
             self.physical.is_transparent = transparent;
             self.physical.render_states = states;
+
             let physical = &*self.physical;
             let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
+
             mesh.set_transformation(transformation.to_cols_array_2d().into());
             mesh.render_with_material(physical, camera, self.lights);
         }
+
         self.render_outline(key, transformation, data);
+
         Ok(())
     }
 
@@ -394,8 +414,11 @@ impl<'a> RenderContext3D<'a> {
         data: &Material,
     ) -> Result<(), String> {
         self.mesh_shader_used |= self.mesh_shader.is_some();
+
         let transformation = combine_transforms(self.current_transform, transformation);
+
         validate_transformation(transformation)?;
+
         if transformation.determinant().abs() <= f32::EPSILON {
             return Ok(());
         }
@@ -409,16 +432,20 @@ impl<'a> RenderContext3D<'a> {
         );
         let states = render_states(true, false);
         let camera = self.camera;
+
         self.prepare_geometry(key, create, data.outline_width > 0.0);
 
         if self.render_mesh_shader(key, transformation, data, states)? {
             self.render_outline(key, transformation, data);
+
             return Ok(());
         }
 
         if data.unlit {
             let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
+
             mesh.set_transformation(transformation.to_cols_array_2d().into());
+
             mesh.render_with_material(
                 &three_d::ColorMaterial {
                     color,
@@ -431,17 +458,22 @@ impl<'a> RenderContext3D<'a> {
             );
         } else {
             let mut material = self.physical.clone();
+
             material.albedo = color;
             material.albedo_texture = Some(texture);
             material.metallic = data.metallic.clamp(0.0, 1.0);
             material.roughness = data.roughness.clamp(0.04, 1.0);
             material.is_transparent = true;
             material.render_states = states;
+
             let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
+
             mesh.set_transformation(transformation.to_cols_array_2d().into());
             mesh.render_with_material(&material, camera, self.lights);
         }
+
         self.render_outline(key, transformation, data);
+
         Ok(())
     }
 
@@ -455,18 +487,25 @@ impl<'a> RenderContext3D<'a> {
         if self.mesh_shader.is_none() {
             return Ok(false);
         }
+
         self.mesh_shader_used = true;
+
         let transformation = combine_transforms(self.current_transform, transformation);
+
         validate_transformation(transformation)?;
+
         if transformation.determinant().abs() <= f32::EPSILON {
             return Ok(true);
         }
+
         let a = data.albedo.a;
         let transparent = data.opacity * a < 1.0;
         let states = render_states(transparent, false);
+
         self.prepare_geometry(key, create, data.outline_width > 0.0);
         self.render_mesh_shader(key, transformation, data, states)?;
         self.render_outline(key, transformation, data);
+
         Ok(true)
     }
 
@@ -480,8 +519,10 @@ impl<'a> RenderContext3D<'a> {
         let Some(shader) = self.mesh_shader.clone() else {
             return Ok(false);
         };
+
         let attributes = self.geometries[&key].attributes;
         let cache_key = (shader.shader.id, attributes);
+
         if !self.mesh_programs.contains_key(&cache_key) {
             let vertex = shader
                 .shader
@@ -492,10 +533,13 @@ impl<'a> RenderContext3D<'a> {
             let program =
                 three_d::Program::from_source(self.three_d, &vertex, &shader.shader.fragment)
                     .map_err(|error| format!("Mesh shader compilation failed: {error}"))?;
+
             validate_mesh_program(&program, attributes)?;
             self.mesh_programs.insert(cache_key, program);
         }
+
         let program = &self.mesh_programs[&cache_key];
+
         use_uniforms(
             program,
             &shader,
@@ -504,10 +548,14 @@ impl<'a> RenderContext3D<'a> {
             self.scene_time,
             data,
         )?;
+
         let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
+
         mesh.set_transformation(transformation.to_cols_array_2d().into());
         mesh.draw(self.camera, program, states);
+
         self.mesh_shader_used = true;
+
         Ok(true)
     }
 
@@ -518,18 +566,21 @@ impl<'a> RenderContext3D<'a> {
         outline: bool,
     ) {
         self.used_geometries.insert(key);
+
         let needs_mesh = !self.geometries.contains_key(&key);
         let needs_outline = outline
             && self
                 .geometries
                 .get(&key)
                 .is_none_or(|geometry| geometry.outline.is_none());
+
         if !needs_mesh && !needs_outline {
             return;
         }
 
         let started = std::time::Instant::now();
         let cpu = create();
+
         if needs_mesh {
             self.geometries.insert(
                 key,
@@ -543,6 +594,7 @@ impl<'a> RenderContext3D<'a> {
             self.geometries.get_mut(&key).unwrap().outline =
                 Some(MeshOutline::new(self.three_d, &cpu));
         }
+
         self.geometry_uploads += 1;
         self.geometry_upload_ms += started.elapsed().as_secs_f64() * 1000.0;
     }
@@ -551,6 +603,7 @@ impl<'a> RenderContext3D<'a> {
         if data.outline_width <= 0.0 {
             return;
         }
+
         let [r, g, b, a] = data.outline_color.rgba();
         let outline = self
             .geometries
@@ -559,7 +612,9 @@ impl<'a> RenderContext3D<'a> {
             .outline
             .as_mut()
             .unwrap();
+
         outline.set_transformation(transformation.to_cols_array_2d().into());
+
         outline.render_with_material(
             &OutlineMaterial {
                 width: data.outline_width,
@@ -630,6 +685,7 @@ fn validate_mesh_program(
             ));
         }
     }
+
     for required in ["modelMatrix", "viewProjection"] {
         if !program.requires_uniform(required) {
             return Err(format!(
@@ -637,6 +693,7 @@ fn validate_mesh_program(
             ));
         }
     }
+
     for (name, available) in [
         ("normal", attributes.normal),
         ("tangent", attributes.tangent),
@@ -649,6 +706,7 @@ fn validate_mesh_program(
             ));
         }
     }
+
     Ok(())
 }
 
@@ -664,6 +722,7 @@ fn use_uniforms(
     program.use_uniform_if_required("projectionMatrix", camera.projection());
     program.use_uniform_if_required("cameraPosition", camera.position());
     program.use_uniform_if_required("sceneTime", time);
+
     let [r, g, b, a] = material.albedo.rgba();
     let color = three_d::Srgba::new(
         channel(r),
@@ -672,15 +731,18 @@ fn use_uniforms(
         channel(a * material.opacity),
     )
     .to_linear_srgb();
+
     program.use_uniform_if_required("materialColor", color);
     program.use_uniform_if_required("hasNormal", i32::from(attributes.normal));
     program.use_uniform_if_required("hasUv", i32::from(attributes.uv));
+
     for (name, value) in &shader.uniforms {
         if !program.requires_uniform(name) {
             return Err(format!(
                 "Mesh shader uniform `{name}` is missing or inactive."
             ));
         }
+
         match value {
             TrackValue::F32(value) => program.use_uniform(name, *value),
             TrackValue::Vector2(value) => {
@@ -691,6 +753,7 @@ fn use_uniforms(
             }
             TrackValue::Quad(value) => {
                 let [x, y, z, w] = value.to_array();
+
                 program.use_uniform(name, three_d::vec4(x, y, z, w))
             }
             TrackValue::Quaternion(value) => {
@@ -698,6 +761,7 @@ fn use_uniforms(
             }
             TrackValue::Color(value) => {
                 let [r, g, b, a] = value.rgba();
+
                 program.use_uniform(name, three_d::vec4(r, g, b, a))
             }
             TrackValue::I32(value) => program.use_uniform(name, *value),
@@ -706,6 +770,7 @@ fn use_uniforms(
             TrackValue::Enum(_) | TrackValue::String(_) => unreachable!(),
         }
     }
+
     Ok(())
 }
 
@@ -732,15 +797,18 @@ fn outline_vertices(mesh: &three_d::CpuMesh) -> (Vec<three_d::Vec3>, Vec<three_d
         } else {
             three_d::vec3(0.0, 0.0, 0.0)
         };
+
         for (edge, [from, to]) in [[1, 2], [2, 0], [0, 1]].into_iter().enumerate() {
             let from = position_key(vertices[from]);
             let to = position_key(vertices[to]);
             let key = if from <= to { (from, to) } else { (to, from) };
+
             edges.entry(key).or_default().push((triangle, edge, normal));
         }
     }
 
     let mut hidden = vec![[false; 3]; triangle_count];
+
     for adjacent in edges.values() {
         if let [
             (first_triangle, first_edge, first_normal),
@@ -756,12 +824,14 @@ fn outline_vertices(mesh: &three_d::CpuMesh) -> (Vec<three_d::Vec3>, Vec<three_d
     }
 
     let mut barycentric = Vec::with_capacity(positions.len());
+
     for hidden_edges in hidden {
         let mut triangle = [
             three_d::vec3(1.0, 0.0, 0.0),
             three_d::vec3(0.0, 1.0, 0.0),
             three_d::vec3(0.0, 0.0, 1.0),
         ];
+
         for (edge, hidden) in hidden_edges.into_iter().enumerate() {
             if hidden {
                 for barycentric in &mut triangle {
@@ -769,6 +839,7 @@ fn outline_vertices(mesh: &three_d::CpuMesh) -> (Vec<three_d::Vec3>, Vec<three_d
                 }
             }
         }
+
         barycentric.extend(triangle);
     }
 
@@ -818,6 +889,7 @@ pub(crate) fn validate_dimensions(size: glam::Vec3) -> Result<(), String> {
     if !size.is_finite() || size.min_element() < 0.0 {
         return Err("Primitive dimensions must be finite and nonnegative.".into());
     }
+
     Ok(())
 }
 
@@ -825,11 +897,13 @@ pub(crate) fn validate_transformation(transformation: glam::Mat4) -> Result<(), 
     if !transformation.is_finite() {
         return Err("Object transform must be finite.".into());
     }
+
     Ok(())
 }
 
 pub(crate) fn render_states(transparent: bool, premultiplied: bool) -> three_d::RenderStates {
     use three_d::{Blend, BlendEquationType as E, BlendMultiplierType as M};
+
     three_d::RenderStates {
         cull: three_d::Cull::None,
         write_mask: if transparent {
@@ -872,6 +946,7 @@ mod tests {
     fn geometry_keys_include_type_and_variant() {
         assert_eq!(GeometryKey::new::<Shape>(3), GeometryKey::new::<Shape>(3));
         assert_ne!(GeometryKey::new::<Shape>(3), GeometryKey::new::<Shape>(4));
+
         assert_ne!(
             GeometryKey::new::<Shape>(3),
             GeometryKey::new::<OtherShape>(3)
@@ -897,6 +972,7 @@ mod tests {
             let hidden_edges = (0..3)
                 .filter(|edge| triangle.iter().all(|vertex| vertex[*edge] == 1.0))
                 .count();
+
             assert_eq!(hidden_edges, 1);
         }
     }

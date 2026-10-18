@@ -33,6 +33,7 @@ impl SavedValue {
             TrackValue::Quad(v) => Self::Quad([v.a, v.b, v.c, v.d]),
         }
     }
+
     pub fn restore(
         &self,
         target: &TrackTarget,
@@ -48,9 +49,11 @@ impl SavedValue {
                 let TrackTarget::Property { info, .. } = target else {
                     return Err("Enum property is no longer available.".into());
                 };
+
                 let TrackChoices::Enum(choices) = info.choices else {
                     return Err("Enum choices are unavailable.".into());
                 };
+
                 TrackValue::Enum(
                     choices
                         .iter()
@@ -67,15 +70,19 @@ impl SavedValue {
                 TrackValue::Quad(crate::core::types::Quad::new(v[0], v[1], v[2], v[3]))
             }
         };
+
         if std::mem::discriminant(&value) != std::mem::discriminant(expected) {
             return Err("Override type no longer matches the script.".into());
         }
+
         value.validate()?;
+
         if let TrackTarget::Dynamic(schema) = target {
             schema.validate(&value)?;
         } else if target.clamp(value.clone()) != value {
             return Err("Override is outside the property limits.".into());
         }
+
         Ok(value)
     }
 }
@@ -87,6 +94,7 @@ pub(super) struct Overrides {
 impl Overrides {
     pub fn read(context: &ProjectContext) -> Result<Self, String> {
         let path = context.resolve(PATH).map_err(|e| e.to_string())?;
+
         match std::fs::read(path) {
             Ok(bytes) => Ok(Self {
                 values: ron::de::from_bytes(&bytes).map_err(|e| e.to_string())?,
@@ -147,16 +155,21 @@ mod tests {
         ]
         .into();
         let targets = [property.clone(), uniform.clone()];
+
         assert!(matches!(
             lookup(&saved, &property, &targets),
             Some(SavedValue::F32(2.0))
         ));
+
         assert!(matches!(
             lookup(&saved, &uniform, &targets),
             Some(SavedValue::F32(6.0))
         ));
+
         let legacy = [("pulse".into(), SavedValue::F32(4.0))].into();
+
         assert!(lookup(&legacy, &uniform, &targets).is_none());
+
         assert!(matches!(
             lookup(&legacy, &uniform, &[uniform.clone()]),
             Some(SavedValue::F32(4.0))

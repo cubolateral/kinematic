@@ -22,6 +22,7 @@ pub(super) fn draw_scrubber(
         ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
         end_text,
     );
+
     draw_list.add_line_h(
         playhead_x,
         layout.timeline_right(),
@@ -29,6 +30,7 @@ pub(super) fn draw_scrubber(
         ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg),
         2.0,
     );
+
     draw_list.add_line_h(
         layout.timeline_left,
         playhead_x,
@@ -45,6 +47,7 @@ pub(super) fn draw_time_grid_lines(
     time: TimeRange,
 ) {
     let step = grid_step(time, layout.timeline_width);
+
     if step <= 0.0 {
         return;
     }
@@ -55,6 +58,7 @@ pub(super) fn draw_time_grid_lines(
 
     while tick <= time.end + step * 0.001 {
         let x = time.x(layout, tick);
+
         draw_list.add_line_v(x, layout.viewport_top, layout.bottom, color, 1.0);
         tick += step;
     }
@@ -67,6 +71,7 @@ pub(super) fn draw_time_grid_labels(
     time: TimeRange,
 ) {
     let step = grid_step(time, layout.timeline_width);
+
     if step <= 0.0 {
         return;
     }
@@ -81,6 +86,7 @@ pub(super) fn draw_time_grid_labels(
             color,
             format_grid_time(tick, step),
         );
+
         tick += step;
     }
 }
@@ -108,6 +114,7 @@ pub(super) fn draw_time_panel(
     playhead_x: f32,
 ) {
     let text_color = ui.get_color_u32(dear_imgui_rs::StyleColor::Text);
+
     draw_list.add_line_v(
         playhead_x,
         layout.top + SCRUBBER_HEIGHT - 10.0,
@@ -137,6 +144,7 @@ pub(super) fn draw_time_panel(
         .rounding(crate::ui::CORNER_RADIUS)
         .filled(true)
         .build();
+
     draw_list
         .add_rect(
             min,
@@ -145,6 +153,7 @@ pub(super) fn draw_time_panel(
         )
         .rounding(crate::ui::CORNER_RADIUS)
         .build();
+
     draw_list.add_text(position, text_color, text);
 }
 
@@ -154,6 +163,7 @@ pub(super) fn draw_mouse_indicator(
     layout: Layout,
 ) {
     let mouse = ui.io().mouse_pos();
+
     if !layout.contains_timeline_x(mouse[0])
         || mouse[1] < layout.viewport_top
         || mouse[1] > layout.bottom
@@ -172,6 +182,7 @@ pub(super) fn draw_mouse_indicator(
 
 fn grid_step(time: TimeRange, width: f32) -> f32 {
     let span = time.end - time.start;
+
     if span <= 0.0 || width <= 0.0 {
         return 0.0;
     }
@@ -195,6 +206,7 @@ fn grid_step(time: TimeRange, width: f32) -> f32 {
 fn format_grid_time(time: f32, step: f32) -> String {
     let mut decimals = 0;
     let mut value = step.abs();
+
     while value > 0.0 && value < 1.0 && decimals < 6 {
         value *= 10.0;
         decimals += 1;
@@ -209,6 +221,7 @@ pub(super) fn format_time(time: f32, decimals: usize) -> String {
     let seconds = (ticks % (60 * scale)) as f64 / scale as f64;
     let width = 2 + usize::from(decimals > 0) * (decimals + 1);
     let minutes = ticks / (60 * scale);
+
     if minutes < 60 {
         format!("{minutes:02}:{seconds:0width$.decimals$}")
     } else {

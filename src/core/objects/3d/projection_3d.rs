@@ -67,16 +67,20 @@ impl Projection3DBuilder {
             pixels_per_unit.is_finite() && pixels_per_unit > 0.0,
             "Projection3D pixels per unit must be finite and positive."
         );
+
         if self.object.source.0.is_some() {
             self.object.shape.size *= self.object.settings.pixels_per_unit / pixels_per_unit;
         }
+
         self.object.settings.pixels_per_unit = pixels_per_unit;
+
         self
     }
 
     pub fn source(mut self, canvas: &impl ProjectionCanvas) -> Self {
         self.object.source = ProjectionSource(Some(canvas.texture()));
         self.object.shape.size = canvas.resolution() / self.object.settings.pixels_per_unit;
+
         self
     }
 }
@@ -88,12 +92,17 @@ fn draw_projection_3d(
 ) -> Result<(), String> {
     let shape = world.get::<&PlaneShape>(entity).unwrap();
     let size = (shape.size * 0.5).extend(1.0);
+
     validate_dimensions(size)?;
+
     let transformation = global_matrix3d(world, entity) * glam::Mat4::from_scale(size);
+
     validate_transformation(transformation)?;
+
     if transformation.determinant().abs() <= f32::EPSILON {
         return Ok(());
     }
+
     if context.render_mesh_shader_only(
         GeometryKey::new::<PlaneShape>(0),
         three_d::CpuMesh::square,
@@ -105,6 +114,7 @@ fn draw_projection_3d(
     )? {
         return Ok(());
     }
+
     let source = world
         .get::<&ProjectionSource>(entity)
         .unwrap()
@@ -115,8 +125,10 @@ fn draw_projection_3d(
         .ok_or("Projection3D source texture is unavailable.")?;
     let camera = context.camera;
     let mesh = context.geometry(GeometryKey::new::<PlaneShape>(0), three_d::CpuMesh::square);
+
     mesh.set_transformation(transformation.to_cols_array_2d().into());
     mesh.render_with_material(&Projection3DMaterial { texture }, camera, &[]);
+
     Ok(())
 }
 

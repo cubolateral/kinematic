@@ -10,6 +10,7 @@ pub(crate) struct ValueHandle(pub TrackValue);
 impl UserData for ValueHandle {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method(MetaMethod::ToString, |_, this, ()| Ok(this.0.to_string()));
+
         methods.add_meta_method(MetaMethod::Index, |_, this, name: String| {
             let index = if matches!(this.0, TrackValue::Quaternion(_)) {
                 ["x", "y", "z", "w"]
@@ -27,11 +28,13 @@ impl UserData for ValueHandle {
                 TrackValue::Quad(v) => vec![v.a, v.b, v.c, v.d],
                 _ => Vec::new(),
             };
+
             channels
                 .get(index)
                 .copied()
                 .ok_or_else(|| mlua::Error::runtime("Value component is out of range."))
         });
+
         for (op, subtract) in [(MetaMethod::Add, false), (MetaMethod::Sub, true)] {
             methods.add_meta_method(op, move |_, this, rhs: mlua::UserDataRef<ValueHandle>| {
                 let sign = if subtract { -1.0 } else { 1.0 };
@@ -53,9 +56,11 @@ impl UserData for ValueHandle {
                         ));
                     }
                 };
+
                 Ok(Self(value))
             });
         }
+
         methods.add_meta_method(MetaMethod::Mul, |_, this, rhs: Value| {
             let result = if let Value::Number(n) = rhs {
                 scale(&this.0, n as f32)?
@@ -74,15 +79,20 @@ impl UserData for ValueHandle {
             } else {
                 return Err(mlua::Error::runtime("Expected a scalar multiplier."));
             };
+
             result.validate().map_err(mlua::Error::runtime)?;
+
             Ok(Self(result))
         });
+
         methods.add_meta_method(MetaMethod::Div, |_, this, n: f32| {
             Ok(Self(scale(&this.0, 1.0 / n)?))
         });
+
         methods.add_meta_method(MetaMethod::Unm, |_, this, ()| {
             Ok(Self(scale(&this.0, -1.0)?))
         });
+
         methods.add_method("dot", |_, this, other: mlua::UserDataRef<Self>| {
             match (&this.0, &other.0) {
                 (TrackValue::Vector2(a), TrackValue::Vector2(b)) => Ok(a.dot(*b)),
@@ -90,6 +100,7 @@ impl UserData for ValueHandle {
                 _ => Err(mlua::Error::runtime("Dot product needs matching vectors.")),
             }
         });
+
         methods.add_method("cross", |_, this, other: mlua::UserDataRef<Self>| {
             match (&this.0, &other.0) {
                 (TrackValue::Vector3(a), TrackValue::Vector3(b)) => {
@@ -98,17 +109,20 @@ impl UserData for ValueHandle {
                 _ => Err(mlua::Error::runtime("Cross product needs vec3 values.")),
             }
         });
+
         methods.add_method("length", |_, this, ()| match this.0 {
             TrackValue::Vector2(v) => Ok(v.length()),
             TrackValue::Vector3(v) => Ok(v.length()),
             _ => Err(mlua::Error::runtime("Expected a vector.")),
         });
+
         methods.add_method("normalized", |_, this, ()| match this.0 {
             TrackValue::Vector2(v) => Ok(Self(TrackValue::Vector2(v.normalize_or_zero()))),
             TrackValue::Vector3(v) => Ok(Self(TrackValue::Vector3(v.normalize_or_zero()))),
             TrackValue::Quaternion(v) => Ok(Self(TrackValue::Quaternion(v.normalize()))),
             _ => Err(mlua::Error::runtime("Expected a vector or quaternion.")),
         });
+
         methods.add_method(
             "lerp",
             |_, this, (other, t): (mlua::UserDataRef<Self>, f32)| {
@@ -119,6 +133,7 @@ impl UserData for ValueHandle {
                         "Interpolation needs compatible finite values.",
                     ));
                 }
+
                 Ok(Self(this.0.lerp(&other.0, t)))
             },
         );
@@ -133,7 +148,9 @@ fn scale(value: &TrackValue, n: f32) -> Result<TrackValue> {
         TrackValue::Quad(v) => TrackValue::Quad(Quad::new(v.a * n, v.b * n, v.c * n, v.d * n)),
         _ => return Err(mlua::Error::runtime("Expected a vector, color or quad.")),
     };
+
     value.validate().map_err(mlua::Error::runtime)?;
+
     Ok(value)
 }
 
@@ -165,11 +182,13 @@ pub(crate) fn from_lua(
         }
         _ => matches!(value, Value::UserData(_)),
     };
+
     if !compatible {
         return Err(mlua::Error::runtime(
             "Property value has an incompatible Lua type.",
         ));
     }
+
     let result = match expected {
         TrackValue::Bool(_) => TrackValue::Bool(bool::from_lua(value, lua)?),
         TrackValue::U32(_) => TrackValue::U32(u32::from_lua(value, lua)?),
@@ -178,9 +197,11 @@ pub(crate) fn from_lua(
         TrackValue::String(_) => TrackValue::String(String::from_lua(value, lua)?),
         TrackValue::Enum(_) => {
             let name = String::from_lua(value, lua)?;
+
             let TrackChoices::Enum(choices) = choices else {
                 return Err(mlua::Error::runtime("Missing enum choices."));
             };
+
             TrackValue::Enum(
                 choices
                     .iter()
@@ -193,14 +214,19 @@ pub(crate) fn from_lua(
             let Value::UserData(value) = value else {
                 return Err(mlua::Error::runtime("Expected a Kinematic value."));
             };
+
             let actual = value.borrow::<ValueHandle>()?.0.clone();
+
             if std::mem::discriminant(&actual) != std::mem::discriminant(expected) {
                 return Err(mlua::Error::runtime("Incompatible property value type."));
             }
+
             actual
         }
     };
+
     result.validate().map_err(mlua::Error::runtime)?;
+
     Ok(result)
 }
 
@@ -213,22 +239,26 @@ pub(crate) fn register(lua: &Lua, api: &mlua::Table) -> Result<()> {
                     "Rectangle needs finite coordinates and nonnegative size.",
                 ));
             }
+
             Ok(RectHandle(crate::core::types::Rect::new(
                 x, y, width, height,
             )))
         })?,
     )?;
+
     api.set(
         "axis_angle",
         lua.create_function(|_, (axis, angle): (mlua::UserDataRef<ValueHandle>, f32)| {
             let TrackValue::Vector3(axis) = axis.0 else {
                 return Err(mlua::Error::runtime("Rotation axis must be vec3."));
             };
+
             if !angle.is_finite() || !axis.is_finite() || axis.length_squared() < f32::EPSILON {
                 return Err(mlua::Error::runtime(
                     "Rotation needs a finite angle and nonzero axis.",
                 ));
             }
+
             Ok(ValueHandle(TrackValue::Quaternion(
                 glam::Quat::from_axis_angle(axis.normalize(), angle),
             )))
@@ -241,39 +271,48 @@ pub(crate) fn register(lua: &Lua, api: &mlua::Table) -> Result<()> {
             Ok(ValueHandle(TrackValue::Vector2(glam::vec2(x, y))))
         })?,
     )?;
+
     api.set(
         "vec3",
         lua.create_function(|_, (x, y, z): (f32, f32, f32)| {
             Ok(ValueHandle(TrackValue::Vector3(glam::vec3(x, y, z))))
         })?,
     )?;
+
     api.set(
         "quat",
         lua.create_function(|_, (x, y, z, w): (f32, f32, f32, f32)| {
             let value = TrackValue::Quaternion(glam::Quat::from_xyzw(x, y, z, w));
+
             value.validate().map_err(mlua::Error::runtime)?;
+
             Ok(ValueHandle(value))
         })?,
     )?;
+
     api.set(
         "quad",
         lua.create_function(|_, (a, b, c, d): (f32, f32, f32, f32)| {
             Ok(ValueHandle(TrackValue::Quad(Quad::new(a, b, c, d))))
         })?,
     )?;
+
     api.set(
         "color",
         lua.create_function(|_, args: mlua::Variadic<Value>| {
             let color = if let Some(Value::String(hex)) = args.first() {
                 let hex = hex.to_str()?;
                 let hex = hex.strip_prefix('#').unwrap_or(&hex);
+
                 if !matches!(hex.len(), 6 | 8) {
                     return Err(mlua::Error::runtime(
                         "Color needs six or eight hexadecimal digits.",
                     ));
                 }
+
                 let n = u32::from_str_radix(hex, 16).map_err(mlua::Error::external)?;
                 let n = if hex.len() == 6 { (n << 8) | 255 } else { n };
+
                 Color::from([
                     ((n >> 24) & 255) as f32 / 255.0,
                     ((n >> 16) & 255) as f32 / 255.0,
@@ -282,20 +321,25 @@ pub(crate) fn register(lua: &Lua, api: &mlua::Table) -> Result<()> {
                 ])
             } else {
                 let mut rgba = [0.0, 0.0, 0.0, 1.0];
+
                 if !(3..=4).contains(&args.len()) {
                     return Err(mlua::Error::runtime("Color needs RGB or RGBA components."));
                 }
+
                 for (i, v) in args.iter().enumerate() {
                     rgba[i] = v
                         .as_number()
                         .ok_or_else(|| mlua::Error::runtime("Expected a color number."))?
                         as f32;
                 }
+
                 Color::from(rgba)
             };
+
             Ok(ValueHandle(TrackValue::Color(color)))
         })?,
     )?;
+
     Ok(())
 }
 
@@ -312,6 +356,7 @@ impl UserData for RectHandle {
                 _ => Err(mlua::Error::runtime("Unknown rectangle field.")),
             }
         });
+
         for (name, anchor) in [
             (
                 "middle",

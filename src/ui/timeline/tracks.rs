@@ -66,14 +66,18 @@ impl TrackView {
         let Some([start, end]) = visible_lifetime(lifetime, self.time) else {
             return;
         };
+
         let start_x = self.time.x(self.layout, start);
         let end_x = self.time.x(self.layout, end);
         let label = track.name();
         let text_clip = draw_list.push_clip_rect([start_x, top], [end_x, top + TRACK_HEIGHT], true);
+
         draw_list.add_text([start_x + PANEL_TEXT_PADDING, top], self.text, &label);
+
         drop(text_clip);
 
         let center = top + TRACK_HEIGHT - 3.0;
+
         draw_list.add_line_h(
             start_x,
             end_x,
@@ -85,6 +89,7 @@ impl TrackView {
         let loop_label_x = if let Some(repeat) = track.repeat {
             let repeat_start = time_offset + repeat.start;
             let visible_start = repeat_start.max(start);
+
             if visible_start < end {
                 draw_list.add_line_h(
                     self.time.x(self.layout, visible_start),
@@ -93,8 +98,10 @@ impl TrackView {
                     self.inactive,
                     SEGMENT_THICKNESS * 0.5,
                 );
+
                 let pixels_per_second =
                     self.layout.timeline_width / (self.time.end - self.time.start);
+
                 for cycle in visible_repeat_cycles(
                     repeat_start,
                     repeat.duration,
@@ -105,6 +112,7 @@ impl TrackView {
 
                     for pair in track.keyframes.windows(2) {
                         let [left, right] = pair else { continue };
+
                         if left.time < repeat.start
                             || right.time > repeat.start + repeat.duration
                             || left.easing.is_none()
@@ -115,6 +123,7 @@ impl TrackView {
 
                         let segment_start = (time_offset + left.time + offset).max(start);
                         let segment_end = (time_offset + right.time + offset).min(end);
+
                         if segment_end > segment_start {
                             draw_list.add_line_h(
                                 self.time.x(self.layout, segment_start),
@@ -132,10 +141,13 @@ impl TrackView {
                         {
                             continue;
                         }
+
                         let time = time_offset + keyframe.time + offset;
+
                         if time < start || time > end {
                             continue;
                         }
+
                         draw_keyframe(
                             ui,
                             draw_list,
@@ -145,6 +157,7 @@ impl TrackView {
                         );
                     }
                 }
+
                 Some(self.time.x(self.layout, visible_start) + 4.0)
             } else {
                 None
@@ -156,9 +169,11 @@ impl TrackView {
         if self.time.end > self.time.start {
             for pair in track.keyframes.windows(2) {
                 let [left, right] = pair else { continue };
+
                 if left.easing.is_some() && right.time > left.time {
                     let segment_start = (time_offset + left.time).max(start);
                     let segment_end = (time_offset + right.time).min(end);
+
                     if segment_end <= segment_start {
                         continue;
                     }
@@ -178,6 +193,7 @@ impl TrackView {
 
         for keyframe in &track.keyframes {
             let keyframe_time = time_offset + keyframe.time;
+
             if keyframe_time < start || keyframe_time > end {
                 continue;
             }
@@ -219,7 +235,9 @@ impl TrackView {
                         "Time: {}",
                         super::ruler::format_time(project_time, 2)
                     ));
+
                     ui.text(format!("Value: {}", track.display_value(&keyframe.value)));
+
                     match keyframe.easing {
                         Some(easing) => ui.text(format!("Easing: {easing:?}")),
                         None => ui.text("Easing: None"),
@@ -238,6 +256,7 @@ fn draw_keyframe(
     color: u32,
 ) {
     let size = text_size(ui, icons::DIAMOND);
+
     draw_list.add_text(
         [x - size[0] * 0.5, center - size[1] * 0.5],
         color,
@@ -271,6 +290,7 @@ pub(super) fn draw(
     };
 
     let view = TrackView::new(ui, layout, time);
+
     view.object(
         ui,
         draw_list,
@@ -298,8 +318,10 @@ fn visible_repeat_cycles(
     if visible[1] <= start || duration * pixels_per_second < 24.0 {
         return 0..0;
     }
+
     let first = (((visible[0].max(start) - start) / duration).floor() as u64).max(1);
     let end = ((visible[1] - start) / duration).ceil() as u64;
+
     first..end.max(first)
 }
 
@@ -313,6 +335,7 @@ mod tests {
             visible_repeat_cycles(3.0, 2.0, [103.0, 109.0], 20.0),
             50..53
         );
+
         assert_eq!(visible_repeat_cycles(3.0, 2.0, [0.0, 10.0], 20.0), 1..4);
     }
 

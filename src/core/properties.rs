@@ -20,7 +20,9 @@ impl PropertySchema {
                 self.name
             ));
         }
+
         value.validate()?;
+
         let in_range = match (value, self.limits) {
             (TrackValue::F32(v), TrackLimits::F32 { min, max }) => {
                 min.is_none_or(|m| *v >= m) && max.is_none_or(|m| *v <= m)
@@ -33,12 +35,14 @@ impl PropertySchema {
             }
             _ => true,
         };
+
         if !in_range || (!self.choices.is_empty() && !self.choices.contains(&value.to_string())) {
             return Err(format!(
                 "Property '{}' is outside its declared range or choices.",
                 self.name
             ));
         }
+
         Ok(())
     }
 
@@ -63,6 +67,7 @@ impl TrackValue {
             Self::Quad(v) => [v.a, v.b, v.c, v.d].iter().all(|v| v.is_finite()),
             _ => true,
         };
+
         if finite {
             Ok(())
         } else {

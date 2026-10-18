@@ -78,13 +78,17 @@ pub(crate) fn draw_complete_styled_path(
             let stroke_width = stroke_width_for_scale(style.stroke_width.max(0.0), scale)
                 * matrix.map_radius(1.0).unwrap_or(1.0);
             let mut bounds = bounds;
+
             bounds.outset((stroke_width * 0.5, stroke_width * 0.5));
+
             let clipped = transformed.op(
                 &skia_safe::Path::rect(bounds, None),
                 skia_safe::PathOp::Intersect,
             );
             let saved = canvas.save();
+
             canvas.reset_matrix();
+
             Some((clipped.unwrap_or(transformed), saved))
         })
         .flatten();
@@ -95,20 +99,26 @@ pub(crate) fn draw_complete_styled_path(
         skia_safe::Color4f::new(fill_r, fill_g, fill_b, fill_a * opacity),
         None,
     );
+
     paint.set_anti_alias(true);
     canvas.draw_path(path, &paint);
 
     if style.stroke_width > 0.0 {
         let [stroke_r, stroke_g, stroke_b, stroke_a] = style.stroke.rgba();
+
         paint.set_color4f(
             skia_safe::Color4f::new(stroke_r, stroke_g, stroke_b, stroke_a * opacity),
             None,
         );
+
         paint.set_style(skia_safe::PaintStyle::Stroke);
+
         let mut stroke_width = stroke_width_for_scale(style.stroke_width, scale);
+
         if oversized {
             stroke_width *= matrix.map_radius(1.0).unwrap_or(1.0);
         }
+
         paint.set_stroke_width(stroke_width);
         canvas.draw_path(path, &paint);
     }
@@ -135,6 +145,8 @@ pub(crate) fn styled_bounds(
     scale: Vector2,
 ) -> skia_safe::Rect {
     let padding = stroke_width_for_scale(style.stroke_width.max(0.0), scale) * 0.5;
+
     bounds.outset((padding, padding));
+
     bounds
 }

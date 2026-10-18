@@ -33,8 +33,10 @@ impl EditorGuideRenderer {
         guides: &EditorGuides3D,
     ) -> Result<(), String> {
         let (positions, colors) = guide_mesh(view_camera, camera.viewport().height, guides);
+
         if positions.is_empty() {
             self.mesh = None;
+
             return Ok(());
         }
 
@@ -46,6 +48,7 @@ impl EditorGuideRenderer {
             .into_iter()
             .map(|color| three_d::vec4(color[0], color[1], color[2], color[3]))
             .collect::<Vec<_>>();
+
         if self
             .mesh
             .as_ref()
@@ -55,6 +58,7 @@ impl EditorGuideRenderer {
                 positions: three_d::Positions::F32(positions),
                 ..Default::default()
             };
+
             self.mesh = Some(three_d::Mesh::new(context, &cpu));
         } else {
             self.mesh
@@ -63,12 +67,15 @@ impl EditorGuideRenderer {
                 .set_positions(&positions)
                 .map_err(|error| error.to_string())?;
         }
+
         let mesh = self.mesh.as_mut().unwrap();
+
         mesh.set_colors(&colors)
             .map_err(|error| error.to_string())?;
 
         mesh.render_with_material(&self.occluded, camera, &[]);
         mesh.render_with_material(&self.visible, camera, &[]);
+
         Ok(())
     }
 }
@@ -108,6 +115,7 @@ fn guide_mesh(
     let mut colors = Vec::new();
 
     let axis_extent = guide_extent.max(100.0);
+
     for (enabled, from, to, color) in [
         (
             guides.axes[0],
@@ -157,6 +165,7 @@ fn guide_mesh(
             glam::vec3(-half_width, -half_height, -distance),
         ]
         .map(|point| transform.transform_point3(point));
+
         for index in 0..4 {
             for [from, to] in [
                 [origin, corners[index]],
@@ -205,32 +214,40 @@ fn add_segment(
     let right = rotation * glam::Vec3::X;
     let up = rotation * glam::Vec3::Y;
     let forward = rotation * -glam::Vec3::Z;
+
     let Some((from, to)) = clip_segment_to_camera(camera, forward, from, to) else {
         return;
     };
+
     let direction = to - from;
+
     if !direction.is_finite() || direction.length_squared() <= f32::EPSILON {
         return;
     }
+
     let relative = |point: glam::Vec3| point - camera.camera_position;
     let screen = |point: glam::Vec3| {
         let point = relative(point);
         let depth = point.dot(forward);
         let point = glam::vec2(point.dot(right), point.dot(up));
+
         match camera.camera_mode {
             Camera3DMode::Perspective => point / depth,
             Camera3DMode::Orthogonal => point,
         }
     };
     let screen_direction = screen(to) - screen(from);
+
     if !screen_direction.is_finite() || screen_direction.length_squared() <= f32::EPSILON {
         return;
     }
+
     let screen_side = glam::vec2(-screen_direction.y, screen_direction.x).normalize();
     let side = right * screen_side.x + up * screen_side.y;
     let world_per_pixel = |point: glam::Vec3| match camera.camera_mode {
         Camera3DMode::Perspective => {
             let depth = relative(point).dot(forward);
+
             2.0 * depth * (camera.camera_fov * 0.5).tan() / viewport_height.max(1) as f32
         }
         Camera3DMode::Orthogonal => camera.camera_fov / viewport_height.max(1) as f32,
@@ -245,6 +262,7 @@ fn add_segment(
         to + to_side,
         to - to_side,
     ];
+
     positions.extend(vertices);
     colors.extend([color; 6]);
 }
@@ -258,6 +276,7 @@ fn clip_segment_to_camera(
     let from_depth = (from - camera.camera_position).dot(forward);
     let to_depth = (to - camera.camera_position).dot(forward);
     let depth_delta = to_depth - from_depth;
+
     if depth_delta.abs() <= f32::EPSILON {
         return (camera.camera_near..=camera.camera_far)
             .contains(&from_depth)
@@ -268,8 +287,10 @@ fn clip_segment_to_camera(
     let far = (camera.camera_far - from_depth) / depth_delta;
     let start = near.min(far).clamp(0.0, 1.0);
     let end = near.max(far).clamp(0.0, 1.0);
+
     (start < end).then(|| {
         let direction = to - from;
+
         (from + direction * start, from + direction * end)
     })
 }
@@ -288,6 +309,7 @@ mod tests {
             selection: None,
         };
         let (positions, colors) = guide_mesh(&Camera3D::default(), 720, &guides);
+
         assert_eq!(positions.len(), 6);
         assert_eq!(colors.len(), positions.len());
     }
@@ -295,15 +317,19 @@ mod tests {
     #[test]
     fn occluded_guides_use_xray_depth_without_writing_depth() {
         let renderer = EditorGuideRenderer::new();
+
         assert_eq!(
             renderer.occluded.render_states.depth_test,
             three_d::DepthTest::Always
         );
+
         assert!(!renderer.occluded.render_states.write_mask.depth);
+
         assert_eq!(
             renderer.visible.render_states.depth_test,
             three_d::DepthTest::LessOrEqual
         );
+
         let Blend::Enabled {
             source_alpha_multiplier,
             destination_alpha_multiplier,
@@ -312,6 +338,7 @@ mod tests {
         else {
             panic!("Editor guides must use alpha blending.");
         };
+
         assert_eq!(source_alpha_multiplier, M::One);
         assert_eq!(destination_alpha_multiplier, M::OneMinusSrcAlpha);
     }
@@ -321,6 +348,7 @@ mod tests {
         let camera = Camera3D::default();
         let mut positions = Vec::new();
         let mut colors = Vec::new();
+
         add_segment(
             &mut positions,
             &mut colors,
@@ -330,8 +358,11 @@ mod tests {
             glam::vec3(1.0, 0.0, 100.0),
             [1.0; 4],
         );
+
         let forward = -glam::Vec3::Z;
+
         assert!(!positions.is_empty());
+
         assert!(positions.iter().all(|point| {
             (*point - camera.camera_position).dot(forward) >= camera.camera_near - 0.0001
         }));
@@ -340,10 +371,13 @@ mod tests {
     #[test]
     fn guide_mesh_stays_one_pixel_wide_at_different_depths() {
         let mut camera = Camera3D::default();
+
         camera.camera_position = glam::Vec3::ZERO;
+
         let viewport_height = 720;
         let mut positions = Vec::new();
         let mut colors = Vec::new();
+
         add_segment(
             &mut positions,
             &mut colors,
@@ -353,9 +387,11 @@ mod tests {
             glam::vec3(1.0, 0.0, -10.0),
             [1.0; 4],
         );
+
         let projected_y = |point: glam::Vec3| {
             point.y / -point.z * viewport_height as f32 / (2.0 * (camera.camera_fov * 0.5).tan())
         };
+
         assert!((projected_y(positions[1]) - projected_y(positions[0]) - 1.0).abs() < 0.001);
         assert!((projected_y(positions[2]) - projected_y(positions[5]) - 1.0).abs() < 0.001);
     }

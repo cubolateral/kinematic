@@ -44,9 +44,11 @@ impl Default for Latex3DShape {
 impl Latex3DShape {
     fn geometry_key(&self, text: &str, part: usize) -> GeometryKey {
         let mut hash = DefaultHasher::new();
+
         text.hash(&mut hash);
         part.hash(&mut hash);
         self.thickness.to_bits().hash(&mut hash);
+
         GeometryKey::new::<Latex3DShape>(hash.finish())
     }
 }
@@ -85,6 +87,7 @@ impl Default for Latex3D {
 
 fn latex_3d_box(world: &hecs::World, entity: hecs::Entity) -> Vector3 {
     let shape = world.get::<&Latex3DShape>(entity).unwrap();
+
     (geometry(&shape.text).size * shape.size.max(0.0) + glam::Vec2::splat(shape.thickness.max(0.0)))
         .extend(shape.depth.abs())
 }
@@ -99,6 +102,7 @@ fn validate_latex_shape(shape: &Latex3DShape) -> Result<(), String> {
     {
         return Err("LaTeX dimensions must be finite and nonnegative.".into());
     }
+
     Ok(())
 }
 
@@ -108,10 +112,14 @@ fn draw_latex_object(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     let shape = world.get::<&Latex3DShape>(entity).unwrap();
+
     validate_latex_shape(&shape)?;
+
     let material = world.get::<&Material>(entity).unwrap();
     let transform = global_matrix3d(world, entity);
+
     draw_latex_3d(&shape, &material, transform, context)?;
+
     Ok(())
 }
 
@@ -127,15 +135,21 @@ pub fn draw_latex_3d(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     validate_latex_shape(shape)?;
+
     let text = &shape.text;
     let transform = latex_transform(shape, transform);
+
     if material.opacity <= 0.0 || text.is_empty() {
         return Ok(());
     }
+
     let formula = geometry(text);
+
     for (index, part) in formula.parts.iter().enumerate() {
         let mut material = material.clone();
+
         material.albedo = part.color.unwrap_or(material.albedo);
+
         context.render_material(
             shape.geometry_key(text, index),
             || {
@@ -144,12 +158,14 @@ pub fn draw_latex_3d(
                 } else {
                     part.path.clone()
                 };
+
                 extruded_path_mesh(&path, LATEX_TESSELLATION_TOLERANCE)
             },
             transform,
             &material,
         )?;
     }
+
     Ok(())
 }
 

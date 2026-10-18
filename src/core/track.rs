@@ -19,6 +19,7 @@ pub enum TrackTarget {
         type_id: std::any::TypeId,
         info: &'static TrackInfo,
     },
+
     Uniform(String),
     Dynamic(std::sync::Arc<crate::core::PropertySchema>),
     Component {
@@ -128,6 +129,7 @@ impl TrackTarget {
             }
             Self::Component { target, channel } => {
                 let current = target.get(world, entity);
+
                 target.set(world, entity, current.with_channel(&value, *channel));
             }
         }
@@ -218,11 +220,13 @@ impl Track {
         let Some(channel) = self.target.channel() else {
             return self.target.name().to_owned();
         };
+
         let suffix = match self.keyframes.first().map(|frame| &frame.value) {
             Some(TrackValue::Color(_)) => ["r", "g", "b", "a"][channel as usize],
             Some(TrackValue::Quad(_)) => ["a", "b", "c", "d"][channel as usize],
             _ => ["x", "y", "z", "w"][channel as usize],
         };
+
         format!("{}.{}", self.target.name(), suffix)
     }
 
@@ -236,6 +240,7 @@ impl Track {
     pub fn update(&mut self, world: &hecs::World, entity: hecs::Entity, time: f32) {
         let time = self.repeat.map_or(time, |repeat| repeat.local_time(time));
         let (left, right) = self.find_keyframes(time);
+
         if let Some(value) =
             Self::sample_keyframes(left, right, time).map(|value| self.target.clamp(value))
         {
@@ -251,6 +256,7 @@ impl Track {
             .partition_point(|keyframe| keyframe.time <= time);
         let left = right.checked_sub(1).map(|index| &self.keyframes[index]);
         let right = self.keyframes.get(right);
+
         Self::sample_keyframes(left, right, time).map(|value| self.target.clamp(value))
     }
 
@@ -297,6 +303,7 @@ impl Track {
                         let TrackValue::Quaternion(start) = &left.value else {
                             panic!("Axis-angle interpolation requires a quaternion track.");
                         };
+
                         TrackValue::Quaternion(normalized_quaternion(
                             normalized_quaternion(*start)
                                 * Quaternion::from_axis_angle(axis, angle * t),
@@ -322,6 +329,7 @@ impl Track {
         easing: Easing,
     ) {
         self.truncate_at(start_time);
+
         if duration == 0.0 {
             // Preserve the value before a standalone instant change. If another
             // tween ends now, its final keyframe already provides that value.
@@ -334,6 +342,7 @@ impl Track {
             }
 
             self.set_keyframe(start_time, to, None);
+
             return;
         }
 
@@ -353,6 +362,7 @@ impl Track {
         easing: Easing,
     ) {
         self.truncate_at(start_time);
+
         let from = normalized_quaternion(from);
         let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
 
@@ -364,6 +374,7 @@ impl Track {
                 duration,
                 easing,
             );
+
             return;
         }
 
@@ -373,6 +384,7 @@ impl Track {
             Some(easing),
             TrackInterpolation::QuaternionAxisAngle { axis, angle },
         );
+
         self.set_keyframe(start_time + duration, TrackValue::Quaternion(to), None);
     }
 
@@ -392,6 +404,7 @@ impl Track {
         let end = self
             .keyframes
             .partition_point(|keyframe| keyframe.time <= time);
+
         if end == self.keyframes.len() {
             return;
         }
@@ -399,16 +412,20 @@ impl Track {
         let value = self
             .sample(time)
             .expect("A truncated track must have a value.");
+
         if end > 0 {
             let original_end = self.keyframes[end - 1]
                 .original_end
                 .clone()
                 .unwrap_or_else(|| {
                     let next = &self.keyframes[end];
+
                     (next.time, next.value.clone())
                 });
+
             self.keyframes[end - 1].original_end = Some(original_end);
         }
+
         self.keyframes.truncate(end);
         self.set_keyframe(time, value, None);
     }
@@ -425,6 +442,7 @@ impl Track {
         interpolation: TrackInterpolation,
     ) {
         self.clear_current_tween_range();
+
         let value = self.target.clamp(value);
 
         if let Some(last) = self.keyframes.last_mut() {
@@ -440,6 +458,7 @@ impl Track {
                 last.easing = easing;
                 last.interpolation = interpolation;
                 last.original_end = None;
+
                 return;
             }
         }
@@ -553,25 +572,30 @@ impl TrackValue {
         match (self, value) {
             (Self::Vector2(current), Self::Vector2(next)) => {
                 let mut result = *current;
+
                 match index {
                     0 => result.x = next.x,
                     1 => result.y = next.y,
                     _ => unreachable!(),
                 }
+
                 Self::Vector2(result)
             }
             (Self::Vector3(current), Self::Vector3(next)) => {
                 let mut result = *current;
+
                 match index {
                     0 => result.x = next.x,
                     1 => result.y = next.y,
                     2 => result.z = next.z,
                     _ => unreachable!(),
                 }
+
                 Self::Vector3(result)
             }
             (Self::Quad(current), Self::Quad(next)) => {
                 let mut result = *current;
+
                 match index {
                     0 => result.a = next.a,
                     1 => result.b = next.b,
@@ -579,11 +603,14 @@ impl TrackValue {
                     3 => result.d = next.d,
                     _ => unreachable!(),
                 }
+
                 Self::Quad(result)
             }
             (Self::Color(current), Self::Color(next)) => {
                 let mut channels = current.rgba();
+
                 channels[index as usize] = next.rgba()[index as usize];
+
                 Self::Color(Color::from(channels))
             }
             _ => panic!("Track values must have the same composite type."),
@@ -594,6 +621,7 @@ impl TrackValue {
         if self.channels() == 1 {
             return u8::from(self != to);
         }
+
         (0..self.channels()).fold(0, |mask, index| {
             mask | (u8::from(self.channel(index) != to.channel(index)) << index)
         })
@@ -665,6 +693,7 @@ impl TrackValue {
             (Self::Quaternion(a), Self::Quaternion(b)) => {
                 let a = normalized_quaternion(*a);
                 let b = normalized_quaternion(*b);
+
                 Self::Quaternion(a.slerp(b, t).normalize())
             }
             (Self::Color(a), Self::Color(b)) => {
@@ -708,6 +737,7 @@ impl std::fmt::Display for TrackValue {
             Self::Quaternion(v) => write!(f, "[{:.2}, {:.2}, {:.2}, {:.2}]", v.x, v.y, v.z, v.w),
             Self::Color(value) => {
                 let [r, g, b, a] = value.rgba();
+
                 write!(f, "[{r:.2}, {g:.2}, {b:.2}, {a:.2}]")
             }
             Self::String(value) => f.write_str(value),
@@ -819,8 +849,11 @@ pub(crate) fn standalone_value(
     entity: Option<hecs::Entity>,
 ) -> (hecs::Entity, TrackTarget) {
     animator.assert_finite_scope();
+
     let mut node = TreeNode::default();
+
     node.activate(0.0);
+
     let bundle = (
         StandaloneTrackValue(initial),
         Animation::default(),
@@ -829,10 +862,12 @@ pub(crate) fn standalone_value(
     );
     let entity = if let Some(entity) = entity {
         world.borrow_mut().spawn_at(entity, bundle);
+
         entity
     } else {
         world.borrow_mut().spawn(bundle)
     };
+
     (
         entity,
         TrackTarget::property(
@@ -860,7 +895,9 @@ pub(crate) fn standalone_track<T: TrackValueType>(
         },
         |world, entity, value| {
             let old = (STANDALONE_TRACK_INFO.get)(world, entity);
+
             (STANDALONE_TRACK_INFO.set)(world, entity, value.into_track_value());
+
             T::from_track_value(old).expect("Standalone track value type must remain consistent.")
         },
         animator,
@@ -892,6 +929,7 @@ impl<T: TrackValueType> TrackHandle<T> {
     /// Returns the current component field value without creating a tween.
     pub fn get(&self) -> T {
         let world = self.world.borrow();
+
         self.clamp((self.get)(&world, self.entity))
     }
 
@@ -902,6 +940,7 @@ impl<T: TrackValueType> TrackHandle<T> {
     {
         let track = self.clone();
         let mut callback = callback;
+
         self.animator
             .signal(self.entity, move |frame| callback(track.clone(), frame))
     }
@@ -911,8 +950,10 @@ impl<T: TrackValueType> TrackHandle<T> {
         let value = self.clamp(value);
         let old_value = {
             let mut world = self.world.borrow_mut();
+
             (self.replace)(&mut world, self.entity, value)
         };
+
         self.animator.record_signal_override(
             self.entity,
             self.type_id,
@@ -930,9 +971,11 @@ impl<T: TrackValueType> TrackHandle<T> {
     #[doc(hidden)]
     pub fn set_for<Object>(&self, value: T) -> Tween<Object> {
         self.animator.assert_timeline_mutation();
+
         let value = self.clamp(value);
         let old_value = {
             let mut world = self.world.borrow_mut();
+
             (self.replace)(&mut world, self.entity, value.clone())
         };
 
@@ -948,13 +991,18 @@ impl<T: TrackValueType> TrackHandle<T> {
     #[doc(hidden)]
     pub fn update_for<Object>(&self, update: impl FnOnce(T) -> T) -> Tween<Object> {
         self.animator.assert_timeline_mutation();
+
         let (old_value, new_value) = {
             let world = self.world.borrow();
             let old_value = (self.get)(&world, self.entity);
             let new_value = self.clamp(update(old_value.clone()));
+
             drop(world);
+
             let mut world = self.world.borrow_mut();
+
             (self.replace)(&mut world, self.entity, new_value.clone());
+
             (old_value, new_value)
         };
 
@@ -970,10 +1018,13 @@ impl<T: TrackValueType> TrackHandle<T> {
     #[doc(hidden)]
     pub fn from_for<Object>(&self, from: T, to: T) -> Tween<Object> {
         self.animator.assert_timeline_mutation();
+
         let from = self.clamp(from);
         let to = self.clamp(to);
         let mut world = self.world.borrow_mut();
+
         (self.replace)(&mut world, self.entity, to.clone());
+
         drop(world);
 
         self.tween(from, to)
@@ -1017,15 +1068,20 @@ impl TrackHandle<Quaternion> {
     #[doc(hidden)]
     pub fn rotate_to_axis_for<Object>(&self, axis: Vector3, angle: f32) -> Tween<Object> {
         self.animator.assert_timeline_mutation();
+
         assert!(
             axis.is_finite() && axis.length_squared() > f32::EPSILON,
             "Rotation axis must be finite and non-zero."
         );
+
         assert!(angle.is_finite(), "Rotation angle must be finite.");
+
         let from = normalized_quaternion(self.get());
         let to = normalized_quaternion(Quaternion::from_axis_angle(axis.normalize(), angle));
         let mut world = self.world.borrow_mut();
+
         (self.replace)(&mut world, self.entity, to);
+
         self.tween(from, to)
     }
 
@@ -1039,17 +1095,22 @@ impl TrackHandle<Quaternion> {
     #[doc(hidden)]
     pub fn rotate_for<Object>(&self, axis: Vector3, angle: f32) -> Tween<Object> {
         self.animator.assert_timeline_mutation();
+
         let from = normalized_quaternion(self.get());
+
         assert!(
             axis.is_finite() && axis.length_squared() > f32::EPSILON,
             "Rotation axis must be finite and non-zero."
         );
+
         assert!(angle.is_finite(), "Rotation angle must be finite.");
+
         let axis = axis.normalize();
         let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
 
         {
             let mut world = self.world.borrow_mut();
+
             (self.replace)(&mut world, self.entity, to);
         }
 
@@ -1173,6 +1234,7 @@ mod tests {
         (BoundedValues::track(2).set)(&world, entity, TrackValue::U32(200));
 
         let values = world.get::<&BoundedValues>(entity).unwrap();
+
         assert_eq!(values.float, 1.0);
         assert_eq!(values.signed, -10);
         assert_eq!(values.unsigned, 100);
@@ -1181,6 +1243,7 @@ mod tests {
     #[test]
     fn bounded_track_clamps_endpoints_and_interpolation_overshoot() {
         let mut track = Track::new(&BOUNDED_TRACK_INFO);
+
         track.add_tween(
             0.0,
             TrackValue::F32(-1.0),
@@ -1199,15 +1262,19 @@ mod tests {
         let mut track = tween_track();
 
         let _ = track.find_keyframes(5.0);
+
         assert_eq!(track.current_tween_range, (0.0, 10.0));
 
         let _ = track.find_keyframes(8.0);
+
         assert_eq!(track.current_tween_range, (0.0, 10.0));
 
         let _ = track.find_keyframes(15.0);
+
         assert_eq!(track.current_tween_range, (10.0, 20.0));
 
         let _ = track.find_keyframes(5.0);
+
         assert_eq!(track.current_tween_range, (0.0, 10.0));
     }
 
@@ -1216,11 +1283,13 @@ mod tests {
         let mut track = offset_tween_track();
 
         let (left, right) = track.find_keyframes(1.0);
+
         assert!(left.is_none());
         assert_eq!(right.unwrap().time, 3.0);
         assert_eq!(track.current_tween_range, (0.0, 3.0));
 
         let (left, right) = track.find_keyframes(2.0);
+
         assert!(left.is_none());
         assert_eq!(right.unwrap().time, 3.0);
         assert_eq!(track.current_tween_range, (0.0, 3.0));
@@ -1231,11 +1300,13 @@ mod tests {
         let mut track = tween_track();
 
         let (left, right) = track.find_keyframes(25.0);
+
         assert_eq!(left.unwrap().time, 20.0);
         assert!(right.is_none());
         assert_eq!(track.current_tween_range, (20.0, f32::INFINITY));
 
         let (left, right) = track.find_keyframes(30.0);
+
         assert_eq!(left.unwrap().time, 20.0);
         assert!(right.is_none());
         assert_eq!(track.current_tween_range, (20.0, f32::INFINITY));
@@ -1246,6 +1317,7 @@ mod tests {
         let mut track = tween_track();
 
         let _ = track.find_keyframes(5.0);
+
         assert_eq!(track.current_tween_range, (0.0, 10.0));
 
         track.set_keyframe(30.0, TrackValue::F32(30.0), None);
@@ -1256,6 +1328,7 @@ mod tests {
     #[test]
     fn instant_keyframe_preserves_the_tween_ending_at_the_same_time() {
         let mut track = Track::new(&TEST_TRACK_INFO);
+
         track.add_tween(
             0.0,
             TrackValue::F32(0.0),
@@ -1263,6 +1336,7 @@ mod tests {
             1.0,
             Easing::Linear,
         );
+
         track.add_tween(
             1.0,
             TrackValue::F32(1.0),
@@ -1272,15 +1346,18 @@ mod tests {
         );
 
         let (left, right) = track.find_keyframes(0.5);
+
         assert_eq!(left.unwrap().value, TrackValue::F32(0.0));
         assert_eq!(right.unwrap().value, TrackValue::F32(1.0));
 
         let coincident = track.keyframes_at(1.0);
+
         assert_eq!(coincident.len(), 2);
         assert_eq!(coincident[0].value, TrackValue::F32(1.0));
         assert_eq!(coincident[1].value, TrackValue::F32(0.0));
 
         let (left, right) = track.find_keyframes(1.0);
+
         assert_eq!(left.unwrap().value, TrackValue::F32(0.0));
         assert!(right.is_none());
     }
@@ -1289,6 +1366,7 @@ mod tests {
     fn vector3_tracks_lerp_and_convert() {
         let a = Vector3::new(2.0, 4.0, -2.0).into_track_value();
         let b = Vector3::new(10.0, -4.0, 6.0).into_track_value();
+
         assert_eq!(
             Vector3::from_track_value(a.lerp(&b, 0.25)),
             Some(Vector3::new(4.0, 2.0, 0.0))
@@ -1299,16 +1377,21 @@ mod tests {
     fn quaternion_tracks_slerp_normalize_and_take_the_short_path() {
         let a = Quaternion::IDENTITY;
         let b = Quaternion::from_rotation_y(std::f32::consts::FRAC_PI_2);
+
         for target in [b, -b, b * 2.0] {
             let value = a.into_track_value().lerp(&target.into_track_value(), 0.5);
             let q = Quaternion::from_track_value(value).unwrap();
+
             assert!((q.length() - 1.0).abs() < 1e-6);
+
             assert!(q.abs_diff_eq(
                 Quaternion::from_rotation_y(std::f32::consts::FRAC_PI_4),
                 1e-6
             ));
         }
+
         let same = b.into_track_value().lerp(&(-b).into_track_value(), 0.5);
+
         assert!(
             Quaternion::from_track_value(same)
                 .unwrap()
@@ -1411,16 +1494,20 @@ mod tests {
 
     fn tween_track() -> Track {
         let mut track = Track::new(&TEST_TRACK_INFO);
+
         track.set_keyframe(0.0, TrackValue::F32(0.0), Some(Easing::Linear));
         track.set_keyframe(10.0, TrackValue::F32(10.0), Some(Easing::Linear));
         track.set_keyframe(20.0, TrackValue::F32(20.0), None);
+
         track
     }
 
     fn offset_tween_track() -> Track {
         let mut track = Track::new(&TEST_TRACK_INFO);
+
         track.set_keyframe(3.0, TrackValue::F32(3.0), Some(Easing::Linear));
         track.set_keyframe(10.0, TrackValue::F32(10.0), None);
+
         track
     }
 
@@ -1490,11 +1577,13 @@ fn clamp_numeric<T: PartialOrd>(mut value: T, min: Option<T>, max: Option<T>) ->
     {
         value = min;
     }
+
     if let Some(max) = max
         && value > max
     {
         value = max;
     }
+
     value
 }
 
@@ -1503,10 +1592,13 @@ fn clamp_numeric<T: PartialOrd>(mut value: T, min: Option<T>, max: Option<T>) ->
 pub enum TrackLimits {
     /// An unbounded track.
     None,
+
     /// Bounds for an `f32` track.
     F32 { min: Option<f32>, max: Option<f32> },
+
     /// Bounds for an `i32` track.
     I32 { min: Option<i32>, max: Option<i32> },
+
     /// Bounds for a `u32` track.
     U32 { min: Option<u32>, max: Option<u32> },
 }
@@ -1557,7 +1649,9 @@ pub(crate) fn quaternion_with_euler_axis(
     angle: f32,
 ) -> Quaternion {
     assert!(angle.is_finite(), "Rotation angle must be finite.");
+
     let (mut x, mut y, mut z) = normalized_quaternion(value).to_euler(glam::EulerRot::XYZ);
+
     if axis == Vector3::X {
         x = angle;
     } else if axis == Vector3::Y {
@@ -1567,5 +1661,6 @@ pub(crate) fn quaternion_with_euler_axis(
     } else {
         panic!("Euler rotation axis must be X, Y, or Z.");
     }
+
     normalized_quaternion(Quaternion::from_euler(glam::EulerRot::XYZ, x, y, z))
 }

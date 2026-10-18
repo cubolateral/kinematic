@@ -48,8 +48,10 @@ fn draw_top_bar(
     let Some(_bar) = ui.begin_main_menu_bar() else {
         return false;
     };
+
     draw_project_menu(code, settings, ui);
     ui.set_cursor_pos_x(ui.cursor_pos_x() + ui.content_region_avail_width() - ui.frame_height());
+
     export::draw(editor, ui)
 }
 
@@ -62,14 +64,18 @@ fn draw_project_menu(
         if ui.menu_item("Open / Create Project") {
             code.projects_open = true;
         }
+
         if ui.menu_item("Project settings") {
             settings.project_open = true;
         }
+
         ui.separator();
+
         if ui.menu_item("Quit") {
             code.request_exit();
         }
     }
+
     if let Some(_menu) = ui.begin_menu("Editor") {
         if ui.menu_item("Editor settings") {
             settings.editor_open = true;
@@ -80,12 +86,15 @@ fn draw_project_menu(
 impl Ui {
     pub fn new(context: &mut dear_imgui_rs::Context) -> Self {
         let mut flags = context.io().config_flags();
+
         flags.insert(dear_imgui_rs::ConfigFlags::DOCKING_ENABLE);
         context.io_mut().set_config_flags(flags);
         context.io_mut().set_config_drag_click_to_input_text(true);
 
         let mut code = code::State::default();
+
         code.projects_open = true;
+
         Self {
             needs_initial_layout: true,
             code,
@@ -109,11 +118,13 @@ impl Ui {
         let fullscreen_shortcut = plain_keyboard_input
             && (self.is_fullscreen || !editor.is_exporting())
             && inputs::active(ui, InputAction::ToggleFullscreen);
+
         if self.is_fullscreen {
             let fullscreen_button = preview::draw_fullscreen(editor, ui);
 
             if fullscreen_shortcut || fullscreen_button {
                 self.is_fullscreen = false;
+
                 ui.set_window_focus(Some(inspector::WINDOW_NAME));
             }
 
@@ -121,12 +132,15 @@ impl Ui {
         }
 
         let export_started = draw_top_bar(editor, ui, &mut self.code, &mut self.settings);
+
         if export_started {
             self.preview.show_preview();
         }
+
         workspace::draw(ui);
 
         let initial_layout = self.needs_initial_layout;
+
         if initial_layout {
             self.needs_initial_layout = false;
         }
@@ -134,17 +148,23 @@ impl Ui {
         if let Some(documents) = &mut editor.documents {
             self.code.draw(documents, &self.appearance.editor, ui);
         }
+
         let is_exporting = editor.is_exporting();
         let fullscreen_button = {
             let _disabled = ui.begin_disabled_with_cond(is_exporting);
+
             if scene_tree::draw(editor, ui, &mut self.scene_tree) {
                 self.preview.edit_canvas(editor.selected_canvas());
             }
+
             if settings::draw(&mut self.appearance, &mut self.settings, Some(editor), ui) {
                 settings::save(&self.appearance);
             }
+
             preview::draw(editor, ui, &mut self.preview, !self.code.focused);
+
             inspector::draw(editor, ui, &mut self.inspector);
+
             timeline::draw(editor, ui, &mut self.timeline, !self.code.focused)
         };
 
@@ -168,34 +188,43 @@ impl Ui {
             &self.appearance.editor,
         );
     }
+
     pub(crate) fn draw_projects(&mut self, editor: Option<&mut Editor>, ui: &dear_imgui_rs::Ui) {
         let _theme = self.appearance.push(ui);
         let _font = ui.push_font(self.font);
+
         if editor.is_none() {
             if let Some(_bar) = ui.begin_main_menu_bar() {
                 draw_project_menu(&mut self.code, &mut self.settings, ui);
             }
         }
+
         if editor.is_none() && settings::draw(&mut self.appearance, &mut self.settings, None, ui) {
             settings::save(&self.appearance);
         }
+
         self.code.projects(editor, ui);
     }
+
     pub(crate) fn request_exit(&mut self) {
         self.code.request_exit();
     }
+
     pub(crate) fn take_project_action(&mut self) -> Option<ProjectAction> {
         self.code.take_action()
     }
+
     pub(crate) fn project_error(&mut self, error: String) {
         self.code.error = Some(error);
     }
+
     pub(crate) fn reload_appearance(&mut self) {
         self.appearance = settings::load();
     }
 
     pub(crate) fn restore_project_view(&mut self, editor: &Editor) {
         let (mode, fullscreen) = editor.cached_view();
+
         self.code.projects_open = false;
         self.settings = settings::State::default();
         self.preview = preview::State::new(mode);

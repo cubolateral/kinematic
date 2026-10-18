@@ -4,6 +4,7 @@ use kinematic_macros::Trackable;
 fn centered_box_bounds(world: &hecs::World, entity: hecs::Entity) -> skia_safe::Rect {
     let draw = world.get::<&Draw2D>(entity).unwrap();
     let size = (draw.box_size)(world, entity);
+
     skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y)
 }
 

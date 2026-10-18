@@ -14,7 +14,9 @@ pub trait SimulationObject: Object {
 #[doc(hidden)]
 pub fn schedule_simulation_update(handler: &impl ObjectHandler) {
     let animator = handler.object_animator();
+
     animator.assert_finite_scope();
+
     handler
         .object_world()
         .borrow()
@@ -27,7 +29,9 @@ pub fn schedule_simulation_update(handler: &impl ObjectHandler) {
 #[doc(hidden)]
 pub fn schedule_simulation_checkpoint(handler: &impl ObjectHandler) {
     let animator = handler.object_animator();
+
     animator.assert_finite_scope();
+
     handler
         .object_world()
         .borrow()
@@ -48,6 +52,7 @@ where
 {
     let world = handler.object_world();
     let world = world.borrow();
+
     world
         .get::<&Simulation>(handler.entity())
         .expect("Simulated object must contain a Simulation component.")
@@ -81,7 +86,9 @@ pub fn schedule_simulation_write<H>(
     H::Object: SimulationObject,
 {
     let animator = handler.object_animator();
+
     animator.assert_finite_scope();
+
     handler
         .object_world()
         .borrow()

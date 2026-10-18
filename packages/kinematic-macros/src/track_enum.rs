@@ -27,10 +27,12 @@ pub fn derive_track_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStr
 
     let variant_names: Vec<_> = variants.iter().map(|variant| &variant.ident).collect();
     let mut generics = input.generics.clone();
+
     generics
         .make_where_clause()
         .predicates
         .push(syn::parse_quote!(Self: Clone));
+
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
     quote! {

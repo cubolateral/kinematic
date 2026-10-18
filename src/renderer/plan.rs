@@ -18,26 +18,36 @@ pub(crate) fn order_dependencies(
         if done.contains(&entity) {
             return Ok(());
         }
+
         if visiting.contains(&entity) {
             return Err("Canvas dependency cycle detected.".into());
         }
+
         let dependencies = graph
             .get(&entity)
             .ok_or("Canvas dependency is missing or inactive.")?;
+
         visiting.push(entity);
+
         for dependency in dependencies {
             visit(*dependency, graph, visiting, done)?;
         }
+
         visiting.pop();
         done.push(entity);
+
         Ok(())
     }
+
     let mut ordered = Vec::new();
     let mut keys: Vec<_> = graph.keys().copied().collect();
+
     keys.sort_by_key(|entity| entity.to_bits());
+
     for entity in keys {
         visit(entity, graph, &mut Vec::new(), &mut ordered)?;
     }
+
     Ok(ordered)
 }
 
@@ -56,13 +66,16 @@ pub(crate) fn visible_subtree_3d(
         {
             return;
         }
+
         result.push(entity);
+
         for child in crate::core::objects::child_iter(world, entity) {
             visit(world, child, result);
         }
     }
 
     result.clear();
+
     visit(world, root, result);
 }
 
@@ -71,13 +84,18 @@ pub(crate) fn active_subtree(world: &hecs::World, root: hecs::Entity) -> Vec<hec
         if !world.get::<&TreeNode>(entity).is_ok_and(|n| n.is_activated) {
             return;
         }
+
         result.push(entity);
+
         for child in crate::core::objects::child_iter(world, entity) {
             visit(world, child, result);
         }
     }
+
     let mut result = Vec::new();
+
     visit(world, root, &mut result);
+
     result
 }
 
@@ -91,38 +109,48 @@ pub(crate) fn canvas_plan_for(scene: &Scene, output: hecs::Entity) -> Result<Ren
     let root = scene.root().entity();
     let scene_id = world.get::<&SceneIdentity>(root).unwrap().0;
     let mut graph = HashMap::new();
+
     for entity in active_subtree(&world, root) {
         if world.get::<&CanvasSettings>(entity).is_err() {
             continue;
         }
+
         let mut dependencies = Vec::new();
+
         for child in active_subtree(&world, entity) {
             if let Ok(source) = world.get::<&ProjectionSource>(child) {
                 let source = source.0.ok_or("Projection requires a canvas source.")?;
+
                 if source.scene != scene_id {
                     return Err("Projection source belongs to another scene.".into());
                 }
+
                 if world.get::<&CanvasSettings>(source.entity).is_err() {
                     return Err("Projection requires a canvas source.".into());
                 }
+
                 if !dependencies.contains(&source.entity) {
                     dependencies.push(source.entity);
                 }
             }
+
             if let Ok(shader) = world.get::<&ImageShaderData>(child) {
                 for source in shader.textures.values() {
                     if source.scene != scene_id {
                         return Err("Image shader texture belongs to another scene.".into());
                     }
+
                     if world.get::<&CanvasSettings>(source.entity).is_err() {
                         return Err("Image shader texture requires a canvas source.".into());
                     }
+
                     if !dependencies.contains(&source.entity) {
                         dependencies.push(source.entity);
                     }
                 }
             }
         }
+
         graph.insert(entity, dependencies);
     }
 
@@ -134,25 +162,34 @@ pub(crate) fn canvas_plan_for(scene: &Scene, output: hecs::Entity) -> Result<Ren
         if reachable.contains_key(&entity) {
             return Ok(());
         }
+
         let dependencies = graph
             .get(&entity)
             .ok_or("Canvas dependency is missing or inactive.")?;
+
         reachable.insert(entity, dependencies.clone());
+
         for dependency in dependencies {
             collect(*dependency, graph, reachable)?;
         }
+
         Ok(())
     }
 
     let mut reachable = HashMap::new();
+
     collect(output, &graph, &mut reachable)?;
+
     for entity in reachable.keys() {
         validate_canvas(&world, *entity)?;
     }
+
     let order = order_dependencies(&reachable)?;
     let mut sources = HashMap::new();
+
     for entity in &order {
         let mut textures = Vec::new();
+
         for child in active_subtree(&world, *entity) {
             if let Some(source) = world
                 .get::<&ProjectionSource>(child)
@@ -162,6 +199,7 @@ pub(crate) fn canvas_plan_for(scene: &Scene, output: hecs::Entity) -> Result<Ren
             {
                 textures.push(source);
             }
+
             if let Ok(shader) = world.get::<&ImageShaderData>(child) {
                 for source in shader.textures.values() {
                     if !textures.contains(source) {
@@ -170,8 +208,10 @@ pub(crate) fn canvas_plan_for(scene: &Scene, output: hecs::Entity) -> Result<Ren
                 }
             }
         }
+
         sources.insert(*entity, textures);
     }
+
     Ok(RenderPlan { order, sources })
 }
 
@@ -197,12 +237,14 @@ impl PlanCache {
         let identity = scene.render_key().0;
         let revision = scene.plan_revision();
         let output = scene.view_texture().entity;
+
         if self
             .entries
             .get(&identity)
             .is_none_or(|entry| entry.revision != revision || entry.output != output)
         {
             let plan = canvas_plan_for(scene, output)?;
+
             self.entries.insert(
                 identity,
                 CachedPlan {
@@ -213,6 +255,7 @@ impl PlanCache {
                 },
             );
         }
+
         if self.entries.len() > 32 {
             if let Some(oldest) = self
                 .entries
@@ -224,8 +267,11 @@ impl PlanCache {
                 self.entries.remove(&oldest);
             }
         }
+
         let entry = self.entries.get_mut(&identity).unwrap();
+
         entry.last_used = frame;
+
         Ok(&entry.plan)
     }
 }
@@ -238,32 +284,46 @@ mod tests {
     #[test]
     fn plans_survive_frames_and_scene_switches_and_follow_lifetimes() {
         let mut first = Scene::new();
+
         first.wait(1.0);
+
         let projection = projection_2d().source(&first.world_3d()).build(&mut first);
+
         first.world_2d().add(&projection);
         first.update(0.0);
+
         let second = Scene::new();
+
         second.update(0.0);
+
         let mut cache = PlanCache::default();
         let initial = cache.get(&first, 1).unwrap();
+
         assert_eq!(initial.order, vec![first.world_2d().entity()]);
+
         let allocation = initial.order.as_ptr();
+
         cache.get(&second, 2).unwrap();
         first.update(0.5);
         assert_eq!(cache.get(&first, 3).unwrap().order.as_ptr(), allocation);
         assert_eq!(cache.entries.len(), 2);
         first.update(1.0);
+
         assert_eq!(
             cache.get(&first, 4).unwrap().order,
             vec![first.world_3d().entity(), first.world_2d().entity()]
         );
+
         first.update(0.0);
+
         assert_eq!(
             cache.get(&first, 5).unwrap().order,
             vec![first.world_2d().entity()]
         );
+
         first.invalidate();
         cache.get(&first, 6).unwrap();
+
         assert_eq!(
             cache.entries[&first.render_key().0].revision,
             first.plan_revision()
@@ -275,15 +335,21 @@ mod tests {
         let shader = ImageShader::new("#version 330 core\nvoid main() {}");
         let mut scene = Scene::new_with_resolution((64, 64));
         let extra = canvas_2d().resolution((64, 64)).build(&mut scene);
+
         scene.add_canvas_2d(&extra);
+
         let first = rect()
             .shader(&shader)
             .texture("source", &extra)
             .build(&mut scene);
+
         scene.world_2d().add(&first);
+
         let second = projection_2d().source(&scene.world_2d()).build(&mut scene);
+
         extra.add(&second);
         scene.update(0.0);
+
         assert_eq!(
             canvas_plan_for(&scene, scene.world_2d().entity())
                 .err()

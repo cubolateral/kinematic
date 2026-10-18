@@ -24,6 +24,7 @@ pub(super) fn update(
 
     if state.interaction == Interaction::Event {
         timeline.is_controlling = false;
+
         return;
     }
 
@@ -37,6 +38,7 @@ pub(super) fn update(
 
     if state.interaction == Interaction::Zoom && left_down {
         let anchor = ((mouse[0] - layout.timeline_left) / layout.timeline_width).clamp(0.0, 1.0);
+
         state.zoom(mouse_delta[1], anchor);
     }
 
@@ -45,11 +47,13 @@ pub(super) fn update(
     }
 
     timeline.is_controlling = state.interaction == Interaction::Scrubber && right_down;
+
     if timeline.is_controlling {
         let (start, end) = state.view_range();
         let visible_time = start
             + ((mouse[0] - layout.timeline_left) / layout.timeline_width).clamp(0.0, 1.0)
                 * (end - start);
+
         timeline.go_to(visible_time);
     }
 }

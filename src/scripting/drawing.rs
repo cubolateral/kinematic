@@ -26,22 +26,28 @@ impl UserData for Matrix {
             mlua::MetaMethod::Mul,
             |_, this, rhs: mlua::UserDataRef<Self>| Ok(Self(this.0 * rhs.0)),
         );
+
         m.add_method("translate", |_, this, v: mlua::UserDataRef<ValueHandle>| {
             let TrackValue::Vector3(v) = v.0 else {
                 return Err(mlua::Error::runtime("Translation needs vec3."));
             };
+
             Ok(Self(this.0 * glam::Mat4::from_translation(v)))
         });
+
         m.add_method("scale", |_, this, v: mlua::UserDataRef<ValueHandle>| {
             let TrackValue::Vector3(v) = v.0 else {
                 return Err(mlua::Error::runtime("Scale needs vec3."));
             };
+
             Ok(Self(this.0 * glam::Mat4::from_scale(v)))
         });
+
         m.add_method("rotate", |_, this, v: mlua::UserDataRef<ValueHandle>| {
             let TrackValue::Quaternion(v) = v.0 else {
                 return Err(mlua::Error::runtime("Rotation needs a quaternion."));
             };
+
             Ok(Self(this.0 * glam::Mat4::from_quat(v)))
         });
     }
@@ -53,31 +59,40 @@ impl UserData for PathHandle {
         m.add_method_mut("move_to", |_, this, (x, y): (f32, f32)| {
             finite(&[x, y])?;
             this.0.move_to((x, y));
+
             Ok(())
         });
+
         m.add_method_mut("line_to", |_, this, (x, y): (f32, f32)| {
             finite(&[x, y])?;
             this.0.line_to((x, y));
+
             Ok(())
         });
+
         m.add_method_mut(
             "quad_to",
             |_, this, (x1, y1, x2, y2): (f32, f32, f32, f32)| {
                 finite(&[x1, y1, x2, y2])?;
                 this.0.quad_to((x1, y1), (x2, y2));
+
                 Ok(())
             },
         );
+
         m.add_method_mut(
             "cubic_to",
             |_, this, (x1, y1, x2, y2, x3, y3): (f32, f32, f32, f32, f32, f32)| {
                 finite(&[x1, y1, x2, y2, x3, y3])?;
                 this.0.cubic_to((x1, y1), (x2, y2), (x3, y3));
+
                 Ok(())
             },
         );
+
         m.add_method_mut("close", |_, this, ()| {
             this.0.close();
+
             Ok(())
         });
     }
@@ -117,35 +132,44 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
         "path",
         lua.create_function(|_, ()| Ok(PathHandle(skia_safe::PathBuilder::new())))?,
     )?;
+
     api.set(
         "mat4",
         lua.create_function(|_, values: Option<Vec<f32>>| {
             let matrix = if let Some(values) = values {
                 finite(&values)?;
+
                 let values: [f32; 16] = values.try_into().map_err(|_| {
                     mlua::Error::runtime("Matrix needs sixteen column-major values.")
                 })?;
+
                 glam::Mat4::from_cols_array(&values)
             } else {
                 glam::Mat4::IDENTITY
             };
+
             Ok(Matrix(matrix))
         })?,
     )?;
+
     api.set(
         "mesh",
         lua.create_function(|_, options: Table| {
             let vertices = options.get::<Vec<Vec<f32>>>("vertices")?;
+
             if vertices.is_empty() || vertices.len() > 1_000_000 {
                 return Err(mlua::Error::runtime(
                     "Mesh needs between one and one million vertices.",
                 ));
             }
+
             let vector3 = |v: Vec<f32>| -> Result<three_d::Vec3> {
                 finite(&v)?;
+
                 if v.len() != 3 {
                     return Err(mlua::Error::runtime("Mesh vertex needs three components."));
                 }
+
                 Ok(three_d::vec3(v[0], v[1], v[2]))
             };
             let positions = vertices
@@ -153,6 +177,7 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                 .map(vector3)
                 .collect::<Result<Vec<_>>>()?;
             let mut indices = options.get::<Vec<u32>>("indices")?;
+
             if !indices.len().is_multiple_of(3)
                 || indices.len() > 3_000_000
                 || indices
@@ -163,9 +188,11 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                     "Mesh indices must be one-based valid triangles.",
                 ));
             }
+
             for index in &mut indices {
                 *index -= 1;
             }
+
             let normals = options
                 .get::<Option<Vec<Vec<f32>>>>("normals")?
                 .map(|vs| vs.into_iter().map(vector3).collect::<Result<Vec<_>>>())
@@ -176,9 +203,11 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                     vs.into_iter()
                         .map(|v| {
                             finite(&v)?;
+
                             if v.len() != 2 {
                                 return Err(mlua::Error::runtime("UV needs two components."));
                             }
+
                             Ok(three_d::vec2(v[0], v[1]))
                         })
                         .collect::<Result<Vec<_>>>()
@@ -194,12 +223,15 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                                     "Vertex color needs a color value.",
                                 ));
                             };
+
                             let c = c.rgba().map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8);
+
                             Ok(three_d::Srgba::new(c[0], c[1], c[2], c[3]))
                         })
                         .collect::<Result<Vec<_>>>()
                 })
                 .transpose()?;
+
             if normals.as_ref().is_some_and(|v| v.len() != positions.len())
                 || uvs.as_ref().is_some_and(|v| v.len() != positions.len())
                 || colors.as_ref().is_some_and(|v| v.len() != positions.len())
@@ -208,6 +240,7 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                     "Mesh attributes must match the vertex count.",
                 ));
             }
+
             let mut mesh = three_d::CpuMesh {
                 positions: three_d::Positions::F32(positions),
                 indices: three_d::Indices::U32(indices),
@@ -216,25 +249,34 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                 colors,
                 ..Default::default()
             };
+
             if mesh.normals.is_none() {
                 mesh.compute_normals();
             }
+
             let key = format!("{mesh:?}");
+
             Ok(MESHES.with(|cache| {
                 let mut cache = cache.borrow_mut();
+
                 cache.retain(|_, v| v.strong_count() > 0);
+
                 if let Some(existing) = cache.get(&key).and_then(Weak::upgrade) {
                     return MeshHandle(existing);
                 };
+
                 let data = Arc::new(MeshData {
                     id: NEXT_MESH.fetch_add(1, Ordering::Relaxed),
                     mesh,
                 });
+
                 cache.insert(key, Arc::downgrade(&data));
+
                 MeshHandle(data)
             }))
         })?,
     )?;
+
     Ok(())
 }
 
@@ -261,36 +303,48 @@ impl Context2D {
         if !self.active.get() {
             return Err(mlua::Error::runtime("Drawing context has expired."));
         }
+
         let mut commands = self.commands.borrow_mut();
+
         if commands.len() >= 100_000 {
             return Err(mlua::Error::runtime("Drawing exceeds 100000 commands."));
         }
+
         commands.push(command);
+
         Ok(())
     }
 }
 fn paint(value: Value, stroke: Option<f32>) -> Result<skia_safe::Paint> {
     let mut paint = skia_safe::Paint::default();
+
     paint.set_anti_alias(true);
+
     match value {
         Value::UserData(value) => {
             let value = value.borrow::<ValueHandle>()?;
+
             let TrackValue::Color(color) = value.0 else {
                 return Err(mlua::Error::runtime("Paint needs a color or gradient."));
             };
+
             let [r, g, b, a] = color.rgba();
+
             paint.set_color4f(skia_safe::Color4f::new(r, g, b, a), None);
         }
         Value::Table(gradient) => {
             let start = gradient.get::<Vec<f32>>("from")?;
             let end = gradient.get::<Vec<f32>>("to")?;
+
             if start.len() != 2 || end.len() != 2 {
                 return Err(mlua::Error::runtime(
                     "Gradient endpoints need two coordinates.",
                 ));
             }
+
             finite(&start)?;
             finite(&end)?;
+
             let colors = gradient
                 .get::<Vec<mlua::UserDataRef<ValueHandle>>>("colors")?
                 .iter()
@@ -298,13 +352,17 @@ fn paint(value: Value, stroke: Option<f32>) -> Result<skia_safe::Paint> {
                     let TrackValue::Color(color) = value.0 else {
                         return Err(mlua::Error::runtime("Gradient needs colors."));
                     };
+
                     let [r, g, b, a] = color.rgba();
+
                     Ok(skia_safe::Color4f::new(r, g, b, a))
                 })
                 .collect::<Result<Vec<_>>>()?;
+
             if colors.len() < 2 {
                 return Err(mlua::Error::runtime("Gradient needs at least two colors."));
             }
+
             let shader = skia_safe::gradient::shaders::linear_gradient(
                 ((start[0], start[1]), (end[0], end[1])),
                 &skia_safe::gradient::Gradient::new(
@@ -318,19 +376,24 @@ fn paint(value: Value, stroke: Option<f32>) -> Result<skia_safe::Paint> {
                 None,
             )
             .ok_or_else(|| mlua::Error::runtime("Invalid gradient."))?;
+
             paint.set_shader(shader);
         }
         _ => return Err(mlua::Error::runtime("Paint needs a color or gradient.")),
     }
+
     if let Some(width) = stroke {
         finite(&[width])?;
+
         if width < 0.0 {
             return Err(mlua::Error::runtime("Stroke width must be nonnegative."));
         }
+
         paint
             .set_style(skia_safe::paint::Style::Stroke)
             .set_stroke_width(width);
     }
+
     Ok(paint)
 }
 impl UserData for Context2D {
@@ -338,48 +401,65 @@ impl UserData for Context2D {
         m.add_method("save", |_, this, ()| {
             this.push(Command2D::Save)?;
             this.depth.set(this.depth.get() + 1);
+
             Ok(())
         });
+
         m.add_method("restore", |_, this, ()| {
             if this.depth.get() == 0 {
                 return Err(mlua::Error::runtime("Unbalanced drawing restore."));
             }
+
             this.push(Command2D::Restore)?;
             this.depth.set(this.depth.get() - 1);
+
             Ok(())
         });
+
         m.add_method("layer", |_, this, alpha: f32| {
             finite(&[alpha])?;
+
             if !(0.0..=1.0).contains(&alpha) {
                 return Err(mlua::Error::runtime(
                     "Layer opacity must be between zero and one.",
                 ));
             }
+
             this.push(Command2D::Layer(alpha))?;
             this.depth.set(this.depth.get() + 1);
+
             Ok(())
         });
+
         m.add_method("translate", |_, this, (x, y): (f32, f32)| {
             finite(&[x, y])?;
+
             this.push(Command2D::Translate(x, y))
         });
+
         m.add_method("scale", |_, this, (x, y): (f32, f32)| {
             finite(&[x, y])?;
+
             this.push(Command2D::Scale(x, y))
         });
+
         m.add_method("rotate", |_, this, r: f32| {
             finite(&[r])?;
+
             this.push(Command2D::Rotate(r))
         });
+
         m.add_method("clip", |_, this, path: mlua::UserDataRef<PathHandle>| {
             this.push(Command2D::Clip(path.0.snapshot()))
         });
+
         m.add_method(
             "fill",
             |_, this, (path, color): (mlua::UserDataRef<PathHandle>, Value)| {
                 this.push(Command2D::Path(path.0.snapshot(), paint(color, None)?))
             },
         );
+
         m.add_method(
             "stroke",
             |_, this, (path, color, width): (mlua::UserDataRef<PathHandle>, Value, f32)| {
@@ -389,29 +469,35 @@ impl UserData for Context2D {
                 ))
             },
         );
+
         m.add_method(
             "rect",
             |_, this, (x, y, w, h, color): (f32, f32, f32, f32, Value)| {
                 finite(&[x, y, w, h])?;
+
                 this.push(Command2D::Path(
                     skia_safe::Path::rect(skia_safe::Rect::from_xywh(x, y, w, h), None),
                     paint(color, None)?,
                 ))
             },
         );
+
         m.add_method(
             "circle",
             |_, this, (x, y, r, color): (f32, f32, f32, Value)| {
                 finite(&[x, y, r])?;
+
                 if r < 0.0 {
                     return Err(mlua::Error::runtime("Circle radius must be nonnegative."));
                 }
+
                 this.push(Command2D::Path(
                     skia_safe::Path::circle((x, y), r, None),
                     paint(color, None)?,
                 ))
             },
         );
+
         m.add_method(
             "image",
             |_,
@@ -424,15 +510,18 @@ impl UserData for Context2D {
                 f32,
             )| {
                 finite(&[x, y, width, height])?;
+
                 if width < 0.0 || height < 0.0 {
                     return Err(mlua::Error::runtime("Image size must be nonnegative."));
                 }
+
                 this.push(Command2D::Image(
                     super::resources::image(&image).clone(),
                     skia_safe::Rect::from_xywh(x, y, width, height),
                 ))
             },
         );
+
         m.add_method(
             "text",
             |_,
@@ -446,9 +535,11 @@ impl UserData for Context2D {
                 Option<mlua::UserDataRef<super::resources::FontHandle>>,
             )| {
                 finite(&[x, y, size])?;
+
                 if !(0.0..=4096.0).contains(&size) || text.len() > 100_000 {
                     return Err(mlua::Error::runtime("Text exceeds drawing limits."));
                 }
+
                 let font = if let Some(font) = font {
                     font.0.skia_font(size)
                 } else {
@@ -459,6 +550,7 @@ impl UserData for Context2D {
                         size,
                     )
                 };
+
                 this.push(Command2D::Text(text, x, y, font, paint(color, None)?))
             },
         );
@@ -471,18 +563,22 @@ fn arguments(
 ) -> Result<(Table, Value)> {
     let props = runtime.lua.create_table()?;
     let uniforms = runtime.lua.create_table()?;
+
     for target in super::native::properties(world, entity) {
         let fields = if target.uniform_name().is_some() {
             &uniforms
         } else {
             &props
         };
+
         fields.set(
             target.name(),
             super::value::to_lua(&runtime.lua, target.get(world, entity))?,
         )?;
     }
+
     props.set("uniforms", uniforms)?;
+
     let state = world
         .get::<&Simulation>(entity)
         .ok()
@@ -490,6 +586,7 @@ fn arguments(
         .map(|s| s.value(&runtime.lua))
         .transpose()?
         .unwrap_or(Value::Nil);
+
     Ok((props, state))
 }
 pub(super) fn bounds_2d(world: &hecs::World, entity: hecs::Entity) -> skia_safe::Rect {
@@ -504,29 +601,37 @@ pub(super) fn bounds_2d(world: &hecs::World, entity: hecs::Entity) -> skia_safe:
             .borrow()
             .get(&entity)
             .and_then(|c| c.bounds.clone());
+
         let Some(callback) = callback else {
             return Ok(skia_safe::Rect::new_empty());
         };
+
         let (props, state) = arguments(&runtime, world, entity)?;
         let bounds = runtime.draw_call(|| callback.call::<Table>((props, state)))?;
         let values = bound_fields(&runtime.lua, bounds, &["x", "y", "width", "height"])?;
+
         if values.len() != 4 {
             return Err(mlua::Error::runtime(
                 "2D bounds must return {x,y,width,height}.",
             ));
         }
+
         finite(&values)?;
+
         if values[2] < 0.0 || values[3] < 0.0 {
             return Err(mlua::Error::runtime("Bounds size cannot be negative."));
         }
+
         Ok(skia_safe::Rect::from_xywh(
             values[0], values[1], values[2], values[3],
         ))
     })();
+
     match result {
         Ok(bounds) => bounds,
         Err(error) => {
             report(world, entity, "Bounds", error);
+
             skia_safe::Rect::new_empty()
         }
     }
@@ -543,9 +648,11 @@ pub(super) fn bounds_3d(world: &hecs::World, entity: hecs::Entity) -> (glam::Vec
             .borrow()
             .get(&entity)
             .and_then(|c| c.bounds.clone());
+
         let Some(callback) = callback else {
             return Ok((glam::Vec3::ZERO, glam::Vec3::ZERO));
         };
+
         let (props, state) = arguments(&runtime, world, entity)?;
         let bounds = runtime.draw_call(|| callback.call::<Table>((props, state)))?;
         let values = bound_fields(
@@ -553,20 +660,26 @@ pub(super) fn bounds_3d(world: &hecs::World, entity: hecs::Entity) -> (glam::Vec
             bounds,
             &["x", "y", "z", "width", "height", "depth"],
         )?;
+
         finite(&values)?;
+
         let min = glam::vec3(values[0], values[1], values[2]);
         let max = min + glam::vec3(values[3], values[4], values[5]);
+
         if (max - min).min_element() < 0.0 {
             return Err(mlua::Error::runtime(
                 "Bounds dimensions cannot be negative.",
             ));
         }
+
         Ok((min, max))
     })();
+
     match result {
         Ok(bounds) => bounds,
         Err(error) => {
             report(world, entity, "Bounds", error);
+
             (glam::Vec3::ZERO, glam::Vec3::ZERO)
         }
     }
@@ -598,9 +711,11 @@ pub(super) fn draw_2d(
             .borrow()
             .get(&entity)
             .and_then(|c| c.draw.clone());
+
         let Some(callback) = callback else {
             return Ok(());
         };
+
         let context = Context2D {
             active: Rc::new(Cell::new(true)),
             commands: Rc::new(RefCell::new(Vec::new())),
@@ -608,12 +723,16 @@ pub(super) fn draw_2d(
         };
         let (props, state) = arguments(&runtime, world, entity)?;
         let result = runtime.draw_call(|| callback.call::<()>((context.clone(), props, state)));
+
         context.active.set(false);
         result?;
+
         if context.depth.get() != 0 {
             return Err(mlua::Error::runtime("Unbalanced drawing save/layer."));
         }
+
         let save = canvas.save();
+
         for command in context.commands.borrow().iter() {
             match command {
                 Command2D::Save => {
@@ -624,6 +743,7 @@ pub(super) fn draw_2d(
                 }
                 Command2D::Layer(alpha) => {
                     let mut paint = skia_safe::Paint::default();
+
                     paint.set_alpha_f(*alpha);
                     canvas.save_layer(&skia_safe::canvas::SaveLayerRec::default().paint(&paint));
                 }
@@ -650,9 +770,12 @@ pub(super) fn draw_2d(
                 }
             }
         }
+
         canvas.restore_to_count(save);
+
         Ok(())
     })();
+
     if let Err(error) = result {
         report(world, entity, "Draw", error);
     }
@@ -675,17 +798,21 @@ impl UserData for Context3D {
                 if !this.active.get() {
                     return Err(mlua::Error::runtime("Drawing context has expired."));
                 }
+
                 if this.commands.borrow().len() >= 100_000 {
                     return Err(mlua::Error::runtime(
                         "Mesh submissions exceed the frame limit.",
                     ));
                 }
+
                 this.commands
                     .borrow_mut()
                     .push((mesh.clone(), matrix.map_or(glam::Mat4::IDENTITY, |m| m.0)));
+
                 Ok(())
             },
         );
+
         m.add_method(
             "instances",
             |_,
@@ -699,9 +826,11 @@ impl UserData for Context3D {
                         "Invalid drawing context or instance count.",
                     ));
                 }
+
                 this.commands
                     .borrow_mut()
                     .extend(matrices.into_iter().map(|m| (mesh.clone(), m.0)));
+
                 Ok(())
             },
         );
@@ -723,21 +852,26 @@ pub(super) fn draw_3d(
             .borrow()
             .get(&entity)
             .and_then(|c| c.draw.clone());
+
         let Some(callback) = callback else {
             return Ok(());
         };
+
         let context = Context3D {
             active: Rc::new(Cell::new(true)),
             commands: Rc::new(RefCell::new(Vec::new())),
         };
         let (props, state) = arguments(&runtime, world, entity)?;
         let result = runtime.draw_call(|| callback.call::<()>((context.clone(), props, state)));
+
         context.active.set(false);
         result?;
+
         let material = world
             .get::<&Material>(entity)
             .map_err(mlua::Error::external)?;
         let global = global_matrix3d(world, entity);
+
         for (mesh, matrix) in context.commands.borrow().iter() {
             render
                 .render_material(
@@ -748,8 +882,10 @@ pub(super) fn draw_3d(
                 )
                 .map_err(mlua::Error::runtime)?;
         }
+
         Ok(())
     })();
+
     result.map_err(|error: mlua::Error| {
         world
             .get::<&ScriptObject>(entity)
@@ -765,10 +901,12 @@ pub(super) fn draw_3d(
 fn bound_fields(lua: &Lua, bounds: Table, names: &[&str]) -> Result<Vec<f32>> {
     for field in bounds.clone().pairs::<String, Value>() {
         let (name, _) = field?;
+
         if !names.contains(&name.as_str()) {
             return Err(mlua::Error::runtime("Unknown bounds field."));
         }
     }
+
     names
         .iter()
         .map(|name| {
@@ -781,6 +919,7 @@ fn bound_fields(lua: &Lua, bounds: Table, names: &[&str]) -> Result<Vec<f32>> {
             else {
                 unreachable!()
             };
+
             Ok(value)
         })
         .collect()

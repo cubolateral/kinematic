@@ -38,10 +38,12 @@ impl Default for TorusShape {
 impl TorusShape {
     fn geometry_key(&self) -> GeometryKey {
         let mut hash = DefaultHasher::new();
+
         self.major_radius.to_bits().hash(&mut hash);
         self.minor_radius.to_bits().hash(&mut hash);
         self.major_segments.hash(&mut hash);
         self.minor_segments.hash(&mut hash);
+
         GeometryKey::new::<Self>(hash.finish())
     }
 }
@@ -70,6 +72,7 @@ impl Default for Torus {
                 on_draw: draw_torus,
                 box_size: |world, entity| {
                     let shape = world.get::<&TorusShape>(entity).unwrap();
+
                     glam::vec3(
                         2.0 * (shape.major_radius + shape.minor_radius),
                         2.0 * shape.minor_radius,
@@ -86,9 +89,11 @@ fn validate_segments(major: u32, minor: u32) -> Result<(), String> {
     if !(3..=256).contains(&major) {
         return Err("Torus major segments must be between 3 and 256.".into());
     }
+
     if !(3..=256).contains(&minor) {
         return Err("Torus minor segments must be between 3 and 256.".into());
     }
+
     Ok(())
 }
 
@@ -100,9 +105,11 @@ fn torus_mesh(major_radius: f32, minor_radius: f32, major: u32, minor: u32) -> t
 
     for major_index in 0..major {
         let major_angle = major_index as f32 * major_step;
+
         for minor_index in 0..minor {
             let minor_angle = minor_index as f32 * minor_step;
             let ring_radius = major_radius + minor_radius * minor_angle.cos();
+
             positions.push(three_d::vec3(
                 ring_radius * major_angle.cos(),
                 minor_radius * minor_angle.sin(),
@@ -117,6 +124,7 @@ fn torus_mesh(major_radius: f32, minor_radius: f32, major: u32, minor: u32) -> t
             let b = ((major_index + 1) % major) * minor + minor_index;
             let c = ((major_index + 1) % major) * minor + (minor_index + 1) % minor;
             let d = major_index * minor + (minor_index + 1) % minor;
+
             indices.extend_from_slice(&[a, d, c, a, c, b]);
         }
     }
@@ -126,7 +134,9 @@ fn torus_mesh(major_radius: f32, minor_radius: f32, major: u32, minor: u32) -> t
         indices: three_d::Indices::U32(indices),
         ..Default::default()
     };
+
     mesh.compute_normals();
+
     mesh
 }
 
@@ -136,7 +146,9 @@ fn draw_torus(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     let shape = world.get::<&TorusShape>(entity).unwrap();
+
     validate_segments(shape.major_segments, shape.minor_segments)?;
+
     if !shape.major_radius.is_finite()
         || shape.major_radius < 0.0
         || !shape.minor_radius.is_finite()
@@ -144,14 +156,18 @@ fn draw_torus(
     {
         return Err("Torus radii must be finite and nonnegative.".into());
     }
+
     let size = glam::vec3(
         shape.major_radius + shape.minor_radius,
         shape.minor_radius,
         shape.major_radius + shape.minor_radius,
     );
+
     validate_dimensions(size)?;
+
     let transformation = global_matrix3d(world, entity);
     let material = world.get::<&Material>(entity).unwrap();
+
     context.render_material(
         shape.geometry_key(),
         || {
@@ -184,6 +200,7 @@ mod tests {
             .major_segments(12)
             .minor_segments(8)
             .build(&mut scene);
+
         assert_eq!(torus.get(TorusShape::major_radius_property()), 1.0);
         assert_eq!(torus.get(TorusShape::minor_radius_property()), 0.25);
         assert_eq!(torus.get(TorusShape::major_segments_property()), 12);
@@ -194,6 +211,7 @@ mod tests {
     #[test]
     fn torus_mesh_has_two_triangles_per_segment_quad() {
         let mesh = torus_mesh(1.0, 0.25, 12, 8);
+
         assert_eq!(mesh.triangle_count(), 12 * 8 * 2);
         assert_eq!(mesh.positions.len(), 12 * 8);
         assert!(mesh.normals.as_ref().unwrap()[0].x > 0.9);
@@ -213,10 +231,13 @@ mod tests {
     fn torus_geometry_key_includes_radii_and_segments() {
         let shape = TorusShape::default();
         let mut changed = shape.clone();
+
         changed.major_radius = 1.0;
+
         assert_ne!(shape.geometry_key(), changed.geometry_key());
 
         changed = shape.clone();
+
         changed.minor_segments += 1;
         assert_ne!(shape.geometry_key(), changed.geometry_key());
     }

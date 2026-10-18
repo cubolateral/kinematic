@@ -65,10 +65,13 @@ impl Renderer {
                 self.message = None;
                 self.progress = 0.0;
                 self.succeeded = false;
+
                 true
             }
+
             Err(error) => {
                 self.message = Some(error.to_string());
+
                 false
             }
         }
@@ -100,6 +103,7 @@ impl Renderer {
             Ok(path) => {
                 self.message = Some(format!("Screenshot saved: {}.", path.display()));
             }
+
             Err(error) => self.message = Some(error.to_string()),
         }
     }
@@ -135,10 +139,12 @@ impl Renderer {
         }
 
         export.frame_index += 1;
+
         self.progress = export.frame_index as f32 / export.frame_count as f32;
 
         if export.frame_index < export.frame_count {
             let next_time = frame_time(export.frame_index, export.fps);
+
             return Ok(FrameResult::Continue(next_time));
         }
 
@@ -155,8 +161,10 @@ impl Renderer {
             .take()
             .expect("An export must remain active until encoding finishes.");
         let output_path = export.output_path;
+
         if let Err(error) = export.encoder.finish() {
             let _ = remove_output_file(&output_path);
+
             return Err(error);
         }
 
@@ -168,6 +176,7 @@ impl Renderer {
 
     pub fn fail(&mut self, error: &RenderError) {
         let _ = self.discard_export();
+
         self.message = Some(error.to_string());
     }
 
@@ -210,6 +219,7 @@ impl Renderer {
         let frame_size = frame_size(resolution)?;
 
         std::fs::create_dir_all(&self.output_directory)?;
+
         let output_path = available_path(&self.output_directory, project_name, "mp4");
 
         let encoder = Encoder::new(&output_path, resolution, fps, silent)?;
@@ -251,6 +261,7 @@ impl Renderer {
             gl.bind_buffer(glow::PIXEL_PACK_BUFFER, None);
             gl.pixel_store_i32(glow::PACK_ALIGNMENT, 1);
         }
+
         self.readback_buffers = Some([first, second]);
 
         Ok(())
@@ -260,8 +271,11 @@ impl Renderer {
         let Some(export) = self.export.take() else {
             return Ok(());
         };
+
         let output_path = export.output_path.clone();
+
         drop(export);
+
         remove_output_file(&output_path)
     }
 }
@@ -320,21 +334,25 @@ fn validate_project(
             "Project name must be a non-empty file name.".to_owned(),
         ));
     }
+
     if resolution.0 == 0 || resolution.1 == 0 {
         return Err(RenderError::InvalidProject(
             "Project resolution must be greater than zero.".to_owned(),
         ));
     }
+
     if !resolution.0.is_multiple_of(2) || !resolution.1.is_multiple_of(2) {
         return Err(RenderError::InvalidProject(
             "Project resolution must use even dimensions for YUV 4:2:0 output.".to_owned(),
         ));
     }
+
     if fps == 0 {
         return Err(RenderError::InvalidProject(
             "Project frame rate must be greater than zero.".to_owned(),
         ));
     }
+
     if !duration.is_finite() || duration < 0.0 {
         return Err(RenderError::InvalidProject(
             "Project duration must be a finite, non-negative value.".to_owned(),
@@ -348,12 +366,14 @@ fn validate_project(
 
 fn available_path(directory: &std::path::Path, name: &str, extension: &str) -> std::path::PathBuf {
     let initial = directory.join(format!("{name}.{extension}"));
+
     if !initial.exists() {
         return initial;
     }
 
     for index in 0_u64.. {
         let candidate = directory.join(format!("{name}-{index}.{extension}"));
+
         if !candidate.exists() {
             return candidate;
         }
@@ -378,6 +398,7 @@ fn save_screenshot(
     output_directory: &std::path::Path,
 ) -> Result<std::path::PathBuf, RenderError> {
     validate_project(project_name, resolution, 1, 0.0)?;
+
     let size = frame_size(resolution)?;
     let row_bytes = usize::try_from(resolution.0).unwrap() * 4;
     let mut pixels = vec![0; size];
@@ -387,6 +408,7 @@ fn save_screenshot(
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(framebuffer));
         gl.read_buffer(glow::COLOR_ATTACHMENT0);
         gl.pixel_store_i32(glow::PACK_ALIGNMENT, 1);
+
         gl.read_pixels(
             0,
             0,
@@ -396,13 +418,16 @@ fn save_screenshot(
             glow::UNSIGNED_BYTE,
             glow::PixelPackData::Slice(Some(&mut pixels)),
         );
+
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
     }
 
     let height = usize::try_from(resolution.1).unwrap();
+
     for row in 0..height / 2 {
         let opposite = height - row - 1;
         let (top, bottom) = pixels.split_at_mut(opposite * row_bytes);
+
         top[row * row_bytes..(row + 1) * row_bytes].swap_with_slice(&mut bottom[..row_bytes]);
     }
 
@@ -420,6 +445,7 @@ fn save_screenshot(
         .ok_or_else(|| RenderError::Graphics("Screenshot PNG encoding failed.".to_owned()))?;
 
     std::fs::create_dir_all(output_directory)?;
+
     let path = available_path(
         output_directory,
         &format!("{project_name}-screenshot"),
@@ -429,6 +455,7 @@ fn save_screenshot(
         .write(true)
         .create_new(true)
         .open(&path)?;
+
     std::io::Write::write_all(&mut file, png.as_bytes())?;
 
     Ok(path)
@@ -454,6 +481,7 @@ fn frame_size(resolution: (u32, u32)) -> Result<usize, RenderError> {
         .ok_or_else(|| {
             RenderError::InvalidProject("Project frame size is too large.".to_owned())
         })?;
+
     i32::try_from(size).map_err(|_| {
         RenderError::InvalidProject("Project frame size is too large for OpenGL.".to_owned())
     })?;
@@ -474,6 +502,7 @@ fn enqueue_readback(
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(framebuffer));
         gl.read_buffer(glow::COLOR_ATTACHMENT0);
         gl.bind_buffer(glow::PIXEL_PACK_BUFFER, Some(buffer));
+
         gl.read_pixels(
             0,
             0,
@@ -483,6 +512,7 @@ fn enqueue_readback(
             glow::UNSIGNED_BYTE,
             glow::PixelPackData::BufferOffset(0),
         );
+
         gl.bind_buffer(glow::PIXEL_PACK_BUFFER, None);
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
     }
@@ -506,6 +536,7 @@ fn write_readback(
             frame_size as i32,
             glow::MAP_READ_BIT,
         );
+
         if pointer.is_null() {
             gl.bind_buffer(glow::PIXEL_PACK_BUFFER, None);
 
@@ -531,6 +562,7 @@ fn create_readback_buffer(
     let buffer = unsafe { gl.create_buffer() }.map_err(|error| {
         RenderError::Graphics(format!("OpenGL readback buffer creation failed: {error}."))
     })?;
+
     unsafe {
         gl.bind_buffer(glow::PIXEL_PACK_BUFFER, Some(buffer));
         gl.buffer_data_size(glow::PIXEL_PACK_BUFFER, buffer_size, glow::STREAM_READ);
@@ -550,21 +582,27 @@ mod tests {
             std::process::id(),
             std::thread::current().id()
         ));
+
         std::fs::create_dir_all(&directory).unwrap();
 
         let initial = directory.join("Example project.mp4");
+
         assert_eq!(
             available_path(&directory, "Example project", "mp4"),
             initial,
         );
+
         std::fs::write(&initial, []).unwrap();
 
         let first_suffix = directory.join("Example project-0.mp4");
+
         assert_eq!(
             available_path(&directory, "Example project", "mp4"),
             first_suffix,
         );
+
         std::fs::write(&first_suffix, []).unwrap();
+
         assert_eq!(
             available_path(&directory, "Example project", "mp4"),
             directory.join("Example project-1.mp4"),
@@ -580,10 +618,12 @@ mod tests {
             std::process::id(),
             std::thread::current().id()
         ));
+
         std::fs::write(&path, b"incomplete").unwrap();
 
         remove_output_file(&path).unwrap();
         assert!(!path.exists());
+
         remove_output_file(&path).unwrap();
     }
 

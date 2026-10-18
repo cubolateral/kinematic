@@ -12,6 +12,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let mut spatial = None;
     let mut simulation = None;
     let mut image_shader = false;
+
     for attr in &input.attrs {
         if attr.path().is_ident("object") {
             if let Err(error) = attr.parse_nested_meta(|meta| {
@@ -26,12 +27,14 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 } else {
                     return Err(meta.error("Unknown object option."));
                 }
+
                 Ok(())
             }) {
                 return error.to_compile_error().into();
             }
         }
     }
+
     let alias = match alias {
         Some(alias) => alias,
         None => {
@@ -54,11 +57,13 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             .into();
         }
     };
+
     if !["2d", "3d", "none"].contains(&spatial.as_str()) {
         return syn::Error::new_spanned(object_name, "Spatial dimension must be 2d, 3d or none.")
             .to_compile_error()
             .into();
     }
+
     let builder_alias = match syn::parse_str::<syn::Ident>(&alias) {
         Ok(alias) => alias,
         Err(_) => {
@@ -118,6 +123,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         trackable_infos.push(quote! {
             <#field_ty>::INFO
         });
+
         trackable_types.push(field_ty);
 
         component_accessors.push(quote! {
@@ -170,6 +176,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         /// Applies a shared GLSL image shader to this object's rendered image.
         pub fn shader(mut self, shader: &crate::core::objects::ImageShader) -> Self {
             self.image_shader = Some(crate::core::objects::ImageShaderData::new(shader.clone()));
+
             self
         }
 
@@ -183,6 +190,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 .as_mut()
                 .expect("Call shader before configuring image shader uniforms.")
                 .uniform(name, value);
+
             self
         }
 
@@ -196,6 +204,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 .as_mut()
                 .expect("Call shader before configuring image shader textures.")
                 .texture(name, canvas);
+
             self
         }
 
@@ -205,6 +214,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 .as_mut()
                 .expect("Call shader before configuring image shader padding.")
                 .padding(padding);
+
             self
         }
     });
@@ -215,6 +225,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 self.mesh_shader = Some(
                     crate::core::objects::MeshShaderData::with_shader(shader.clone())
                 );
+
                 self
             }
 
@@ -227,6 +238,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 self.mesh_shader
                     .get_or_insert_with(Default::default)
                     .uniform(name, value);
+
                 self
             }
 
@@ -235,6 +247,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                 self.mesh_shader
                     .get_or_insert_with(Default::default)
                     .bounds_padding(padding);
+
                 self
             }
         }
@@ -312,6 +325,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                         (&mut self.#field_idents as *mut #field_types).cast::<u8>(),
                         hecs::TypeInfo::of::<#field_types>(),
                     );
+
                     std::mem::forget(self.#field_idents);
                 )*
             }
@@ -332,6 +346,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
                                 .then(left.1.cmp(&right.1))
                         });
                         let mut ids = [std::any::TypeId::of::<()>(); #field_count];
+
                         for (id, info) in ids.iter_mut().zip(types.iter()) {
                             *id = info.1;
                         }
@@ -343,6 +358,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             fn with_static_type_info<T>(f: impl FnOnce(&[hecs::TypeInfo]) -> T) -> T {
                 let mut info = [#(hecs::TypeInfo::of::<#field_types>()),*];
                 info.sort_unstable();
+
                 f(&info)
             }
 
@@ -388,6 +404,7 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             /// Sets the user-facing name attached to this object.
             pub fn name(mut self, name: impl Into<std::string::String>) -> Self {
                 self.name = name.into();
+
                 self
             }
 

@@ -23,6 +23,7 @@ pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
             tabs([inspector::WINDOW_NAME]),
         ),
     );
+
     ui.dockspace()
         .layout(&layout, DockLayoutApply::IfMissing)
         .build()

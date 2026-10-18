@@ -14,6 +14,7 @@ impl Random {
     pub fn new(seed: u64) -> Self {
         let mut mixer = seed;
         let state = std::array::from_fn(|_| split_mix64(&mut mixer));
+
         Self { seed, state }
     }
 
@@ -22,6 +23,7 @@ impl Random {
         let mut key_mixer = key;
         let mixed_key = split_mix64(&mut key_mixer);
         let mut seed_mixer = self.seed ^ mixed_key;
+
         Self::new(split_mix64(&mut seed_mixer))
     }
 
@@ -58,7 +60,9 @@ impl Random {
         self.state[1] ^= self.state[2];
         self.state[0] ^= self.state[3];
         self.state[2] ^= temporary;
+
         self.state[3] = self.state[3].rotate_left(45);
+
         result
     }
 
@@ -115,38 +119,46 @@ impl Random {
     /// Generates a uniformly distributed value in `range`.
     pub fn range_u32(&mut self, range: std::ops::Range<u32>) -> u32 {
         assert!(range.start < range.end, "Random ranges must not be empty.");
+
         range.start + self.bounded_u64(u64::from(range.end - range.start)) as u32
     }
 
     /// Generates a uniformly distributed value in `range`.
     pub fn range_u64(&mut self, range: std::ops::Range<u64>) -> u64 {
         assert!(range.start < range.end, "Random ranges must not be empty.");
+
         range.start + self.bounded_u64(range.end - range.start)
     }
 
     /// Generates a uniformly distributed value in `range`.
     pub fn range_usize(&mut self, range: std::ops::Range<usize>) -> usize {
         assert!(range.start < range.end, "Random ranges must not be empty.");
+
         range.start + self.bounded_u64((range.end - range.start) as u64) as usize
     }
 
     /// Generates a uniformly distributed value in `range`.
     pub fn range_i32(&mut self, range: std::ops::Range<i32>) -> i32 {
         assert!(range.start < range.end, "Random ranges must not be empty.");
+
         let width = (i64::from(range.end) - i64::from(range.start)) as u64;
+
         (i64::from(range.start) + self.bounded_u64(width) as i64) as i32
     }
 
     /// Generates a uniformly distributed value in `range`.
     pub fn range_i64(&mut self, range: std::ops::Range<i64>) -> i64 {
         assert!(range.start < range.end, "Random ranges must not be empty.");
+
         let width = (i128::from(range.end) - i128::from(range.start)) as u64;
+
         (i128::from(range.start) + i128::from(self.bounded_u64(width))) as i64
     }
 
     /// Generates a uniformly distributed value in `range`.
     pub fn range_f32(&mut self, range: std::ops::Range<f32>) -> f32 {
         let width = range.end - range.start;
+
         assert!(
             range.start.is_finite()
                 && range.end.is_finite()
@@ -154,12 +166,14 @@ impl Random {
                 && range.start < range.end,
             "Random ranges must be finite and non-empty."
         );
+
         range.start + width * self.f32()
     }
 
     /// Generates a uniformly distributed value in `range`.
     pub fn range_f64(&mut self, range: std::ops::Range<f64>) -> f64 {
         let width = range.end - range.start;
+
         assert!(
             range.start.is_finite()
                 && range.end.is_finite()
@@ -167,6 +181,7 @@ impl Random {
                 && range.start < range.end,
             "Random ranges must be finite and non-empty."
         );
+
         range.start + width * self.f64()
     }
 
@@ -176,6 +191,7 @@ impl Random {
             probability.is_finite() && (0.0..=1.0).contains(&probability),
             "Chance must be between zero and one."
         );
+
         probability > 0.0 && (probability == 1.0 || self.f64() < probability)
     }
 
@@ -190,6 +206,7 @@ impl Random {
             None
         } else {
             let index = self.range_usize(0..values.len());
+
             Some(&mut values[index])
         }
     }
@@ -202,24 +219,30 @@ impl Random {
         if values.is_empty() || values.len() != weights.len() {
             return None;
         }
+
         let total = weights.iter().try_fold(0.0, |total, weight| {
             (weight.is_finite() && *weight >= 0.0).then_some(total + weight)
         })?;
+
         if !total.is_finite() || total <= 0.0 {
             return None;
         }
 
         let mut target = self.range_f64(0.0..total);
         let mut last_positive = None;
+
         for (value, weight) in values.iter().zip(weights) {
             if *weight > 0.0 {
                 last_positive = Some(value);
             }
+
             if target < *weight {
                 return Some(value);
             }
+
             target -= weight;
         }
+
         last_positive
     }
 
@@ -227,10 +250,13 @@ impl Random {
     pub fn choose_multiple<'a, T>(&mut self, values: &'a [T], amount: usize) -> Vec<&'a T> {
         let amount = amount.min(values.len());
         let mut indices = (0..values.len()).collect::<Vec<_>>();
+
         for index in 0..amount {
             let selected = self.range_usize(index..indices.len());
+
             indices.swap(index, selected);
         }
+
         indices[..amount]
             .iter()
             .map(|index| &values[*index])
@@ -241,6 +267,7 @@ impl Random {
     pub fn shuffle<T>(&mut self, values: &mut [T]) {
         for end in (1..values.len()).rev() {
             let selected = self.range_usize(0..end + 1);
+
             values.swap(end, selected);
         }
     }
@@ -251,18 +278,23 @@ impl Random {
             mean.is_finite() && standard_deviation.is_finite() && standard_deviation >= 0.0,
             "Normal distribution parameters must be finite and its deviation non-negative."
         );
+
         if standard_deviation == 0.0 {
             return mean;
         }
+
         let radius = (-2.0 * (1.0 - self.f64()).ln()).sqrt();
         let angle = std::f64::consts::TAU * self.f64();
+
         mean + standard_deviation * radius * angle.cos()
     }
 
     fn bounded_u64(&mut self, bound: u64) -> u64 {
         let threshold = bound.wrapping_neg() % bound;
+
         loop {
             let value = self.u64();
+
             if value >= threshold {
                 return value % bound;
             }
@@ -272,9 +304,12 @@ impl Random {
 
 fn split_mix64(state: &mut u64) -> u64 {
     *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+
     let mut value = *state;
+
     value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+
     value ^ (value >> 31)
 }
 
@@ -286,6 +321,7 @@ mod tests {
     fn equal_seeds_produce_equal_values() {
         let mut first = Random::new(42);
         let mut second = Random::new(42);
+
         assert_eq!((first.u64(), first.u128()), (second.u64(), second.u128()));
         assert_eq!((first.f32(), first.f64()), (second.f32(), second.f64()));
     }
@@ -293,6 +329,7 @@ mod tests {
     #[test]
     fn algorithm_sequence_is_stable() {
         let mut random = Random::new(42);
+
         assert_eq!(
             [random.u64(), random.u64(), random.u64()],
             [
@@ -307,9 +344,11 @@ mod tests {
     fn forks_ignore_consumed_parent_state() {
         let parent = Random::new(12);
         let mut consumed = parent.clone();
+
         for _ in 0..100 {
             consumed.u64();
         }
+
         assert_eq!(parent.fork(7).u64(), consumed.fork(7).u64());
         assert_ne!(parent.fork(7).u64(), parent.fork(8).u64());
         assert_eq!(parent.fork(7).u64(), 12_454_396_449_278_183_096);
@@ -318,6 +357,7 @@ mod tests {
     #[test]
     fn ranges_stay_within_their_bounds() {
         let mut random = Random::new(9);
+
         for _ in 0..1_000 {
             assert!((10..20).contains(&random.range_u32(10..20)));
             assert!((-20..-10).contains(&random.range_i64(-20..-10)));
@@ -329,14 +369,20 @@ mod tests {
     fn chooses_and_mutates_values() {
         let mut random = Random::new(4);
         let values = [10, 20, 30, 40];
+
         assert!(values.contains(random.choose(&values).unwrap()));
+
         let chosen = random.choose_multiple(&values, 3);
+
         assert_eq!(chosen.len(), 3);
         assert_ne!(chosen[0], chosen[1]);
 
         let mut mutable = values;
+
         *random.choose_mut(&mut mutable).unwrap() = 99;
+
         assert!(mutable.contains(&99));
+
         assert_eq!(
             random.choose_weighted(&values, &[0.0, 0.0, 1.0, 0.0]),
             Some(&30)
@@ -347,7 +393,9 @@ mod tests {
     fn shuffle_is_deterministic_and_preserves_values() {
         let mut first = [1, 2, 3, 4, 5, 6];
         let mut second = first;
+
         Random::new(81).shuffle(&mut first);
+
         Random::new(81).shuffle(&mut second);
         assert_eq!(first, second);
         first.sort();
@@ -366,6 +414,7 @@ mod tests {
             .map(|sample| (sample - mean).powi(2))
             .sum::<f64>()
             / samples.len() as f64;
+
         assert!((mean - 4.0).abs() < 0.05);
         assert!((variance.sqrt() - 2.0).abs() < 0.05);
     }

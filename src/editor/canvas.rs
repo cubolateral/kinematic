@@ -36,22 +36,27 @@ impl Canvas {
         let imgui_texture_id = imgui_renderer
             .register_external_texture(glow_imgui::NativeTexture(target.texture().0))
             .expect("Preview texture must register with ImGui.");
+
         Self {
             target,
             imgui_texture_id,
         }
     }
+
     pub fn size(&self) -> (u32, u32) {
         self.target.size
     }
+
     pub fn imgui_texture_id(&self) -> dear_imgui_rs::TextureId {
         self.imgui_texture_id.texture_id()
     }
+
     pub(crate) fn unregister(&self, renderer: &mut dear_imgui_glow::GlowRenderer) {
         renderer
             .unregister_external_texture(self.imgui_texture_id)
             .expect("Preview texture must still be registered.");
     }
+
     pub fn framebuffer(&self) -> glow::NativeFramebuffer {
         self.target.framebuffer()
     }

@@ -23,6 +23,7 @@ pub(super) fn text_button_colored(ui: &Ui, label: &str, size: [f32; 2], color: S
     } else {
         color
     };
+
     ui.get_window_draw_list()
         .add_text(text_position, ui.get_color_u32(text_color), label);
 

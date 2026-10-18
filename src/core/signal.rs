@@ -73,8 +73,10 @@ impl SignalContext {
         animator: AnimatorHandle,
     ) -> SignalHandle {
         let id = self.next_id.get();
+
         self.next_id
             .set(id.checked_add(1).expect("Too many signals."));
+
         self.signals.borrow_mut().push(ScheduledSignal {
             id,
             target,
@@ -82,6 +84,7 @@ impl SignalContext {
             end: std::cell::Cell::new(f32::INFINITY),
             callback: std::rc::Rc::new(std::cell::RefCell::new(Box::new(callback))),
         });
+
         SignalHandle {
             id,
             context: std::rc::Rc::clone(self),
@@ -95,6 +98,7 @@ impl SignalContext {
             .iter()
             .find(|signal| signal.id == id)
             .expect("Signal handle must refer to an existing signal.");
+
         signal.end.set(signal.end.get().min(end));
     }
 
@@ -132,12 +136,14 @@ impl SignalContext {
         }
 
         let mut overrides = self.overrides.borrow_mut();
+
         if overrides
             .iter()
             .any(|saved| saved.entity == entity && saved.target.same(&target))
         {
             return;
         }
+
         overrides.push(SignalOverride {
             entity,
             target,
@@ -156,6 +162,7 @@ impl SignalContext {
     pub(crate) fn evaluate(&self, world: &SceneWorld, time: f32, fps: u32) {
         let callbacks = {
             let world = world.borrow();
+
             self.signals
                 .borrow()
                 .iter()
@@ -175,15 +182,19 @@ impl SignalContext {
             index: frame_index(time, fps),
             dt: frame_dt(fps),
         };
+
         for callback in callbacks {
             assert!(
                 !self.evaluating.replace(true),
                 "Signals cannot be evaluated recursively."
             );
+
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 callback.borrow_mut()(frame);
             }));
+
             self.evaluating.set(false);
+
             if let Err(error) = result {
                 std::panic::resume_unwind(error);
             }

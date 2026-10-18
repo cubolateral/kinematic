@@ -38,20 +38,26 @@ impl CanvasSettings {
             dimension,
         }
     }
+
     pub fn validate(&self) -> Result<(), String> {
         let (w, h) = self.resolution;
+
         if w == 0 || h == 0 || w > i32::MAX as u32 || h > i32::MAX as u32 {
             return Err(
                 "Canvas resolution must be explicitly set to positive i32 dimensions.".into(),
             );
         }
+
         Ok(())
     }
+
     pub fn resolution(&self) -> (u32, u32) {
         self.resolution
     }
+
     pub fn aspect_ratio(&self) -> Result<f32, String> {
         self.validate()?;
+
         Ok(self.resolution.0 as f32 / self.resolution.1 as f32)
     }
 }
@@ -76,6 +82,7 @@ pub trait ProjectionCanvas: ObjectHandler + sealed::Sealed {
             .get::<&CanvasSettings>(self.entity())
             .expect("Canvas handler must contain CanvasSettings.")
             .resolution;
+
         glam::vec2(resolution.0 as f32, resolution.1 as f32)
     }
 }
@@ -108,7 +115,9 @@ pub(crate) fn validate_canvas(world: &hecs::World, entity: hecs::Entity) -> Resu
     let settings = world
         .get::<&CanvasSettings>(entity)
         .map_err(|_| "Canvas is unavailable.")?;
+
     settings.validate()?;
+
     match settings.dimension {
         CanvasDimension::Two => world
             .get::<&Camera2D>(entity)
@@ -119,5 +128,6 @@ pub(crate) fn validate_canvas(world: &hecs::World, entity: hecs::Entity) -> Resu
             .map_err(|_| "Canvas3D camera is missing.")?
             .validate()?,
     }
+
     Ok(())
 }

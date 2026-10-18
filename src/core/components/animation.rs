@@ -49,6 +49,7 @@ impl Animation {
     ) -> Option<TrackValue> {
         let mut result = None;
         let mut value = base;
+
         for track in &self.tracks {
             if track.track.target.same_field(&target)
                 && let Some(sample) = track.track.sample(time)
@@ -57,9 +58,11 @@ impl Animation {
                     Some(channel) => value.with_channel(&sample, channel),
                     None => sample,
                 };
+
                 result = Some(value.clone());
             }
         }
+
         result
     }
 
@@ -74,6 +77,7 @@ impl Animation {
                 self.tracks.push(AnimationTrack {
                     track: Track::for_target(target),
                 });
+
                 self.tracks.len() - 1
             }
         };

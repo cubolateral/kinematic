@@ -26,6 +26,7 @@ pub trait SimulationState: Clone + Send + Sync + 'static {
     /// Propagates a failed step without publishing partial simulation state.
     fn try_on_update(&mut self, context: &SimulationContext<'_>) -> Result<(), String> {
         self.on_update(context);
+
         Ok(())
     }
 }
@@ -49,6 +50,7 @@ impl SimulationContext<'_> {
         target: &crate::core::TrackTarget,
     ) -> crate::core::TrackValue {
         let base = target.get(self.world, entity);
+
         self.world
             .get::<&Animation>(entity)
             .ok()
@@ -74,12 +76,14 @@ impl SimulationContext<'_> {
             .get::<&T>(self.entity)
             .unwrap_or_else(|_| panic!("Simulation entity must contain the requested component.")))
         .clone();
+
         let Ok(animation) = self.world.get::<&Animation>(self.entity) else {
             return component;
         };
 
         let mut snapshot = hecs::World::new();
         let entity = snapshot.spawn((component,));
+
         for track in (T::info().get)() {
             if let Some(value) = animation.sample(
                 std::any::TypeId::of::<T>(),
@@ -90,6 +94,7 @@ impl SimulationContext<'_> {
                 (track.set)(&snapshot, entity, value);
             }
         }
+
         snapshot.remove_one::<T>(entity).unwrap()
     }
 }
@@ -135,9 +140,13 @@ pub trait SimulationState3D: SimulationState {
 
 trait ErasedSimulation: Send + Sync {
     fn clone_box(&self) -> Box<dyn ErasedSimulation>;
+
     fn on_update(&mut self, context: &SimulationContext<'_>) -> Result<(), String>;
+
     fn state(&self) -> &dyn Any;
+
     fn state_mut(&mut self) -> &mut dyn Any;
+
     fn draw_2d(
         &mut self,
         _world: &hecs::World,
@@ -145,9 +154,11 @@ trait ErasedSimulation: Send + Sync {
         _canvas: &skia_safe::Canvas,
     ) {
     }
+
     fn box_2d(&self, _world: &hecs::World, _entity: hecs::Entity) -> glam::Vec2 {
         glam::Vec2::ZERO
     }
+
     fn draw_3d(
         &mut self,
         _world: &hecs::World,
@@ -156,6 +167,7 @@ trait ErasedSimulation: Send + Sync {
     ) -> Result<(), String> {
         Ok(())
     }
+
     fn box_3d(&self, _world: &hecs::World, _entity: hecs::Entity) -> glam::Vec3 {
         glam::Vec3::ZERO
     }
@@ -283,9 +295,11 @@ enum SimulationOperation {
     Update {
         time: f32,
     },
+
     Checkpoint {
         time: f32,
     },
+
     Mutation {
         time: f32,
         apply: Arc<dyn Fn(&mut dyn Any) -> Result<(), String> + Send + Sync>,
@@ -343,6 +357,7 @@ impl Clone for Simulation {
 impl Default for Simulation {
     fn default() -> Self {
         let state: Box<dyn ErasedSimulation> = Box::new(EmptyState);
+
         Self {
             auto_update: true,
             dependencies: Vec::new(),
@@ -439,6 +454,7 @@ impl Simulation {
     pub(crate) fn schedule_checkpoint(&mut self, time: f32) {
         self.operations
             .push(SimulationOperation::Checkpoint { time });
+
         self.reset_replay();
     }
 
@@ -449,6 +465,7 @@ impl Simulation {
     ) {
         self.schedule_fallible_mutation(time, move |state| {
             mutation(state);
+
             Ok(())
         });
     }
@@ -462,6 +479,7 @@ impl Simulation {
             self.initial.state_mut().is::<S>(),
             "Simulation state must match the state associated with its object."
         );
+
         self.operations.push(SimulationOperation::Mutation {
             time,
             apply: Arc::new(move |state| {
@@ -472,6 +490,7 @@ impl Simulation {
                 )
             }),
         });
+
         self.reset_replay();
     }
 
@@ -479,6 +498,7 @@ impl Simulation {
         self.current_frame = 0;
         self.initial_frame_processed = false;
         self.current = self.initial.clone();
+
         self.checkpoints.truncate(1);
     }
 
@@ -531,6 +551,7 @@ impl Simulation {
                         && (target_frame < self.current_frame
                             || checkpoint.frame > self.current_frame)
                 });
+
             if let Some((index, checkpoint)) = checkpoint {
                 self.current_frame = checkpoint.frame;
                 self.current = checkpoint.state.clone_box();
@@ -544,10 +565,12 @@ impl Simulation {
 
         let dt = frame_dt(fps);
         let checkpoint_interval = u64::from(fps.max(1)) * CHECKPOINT_INTERVAL_SECONDS;
+
         if !self.initial_frame_processed {
             if !before_step(start_time)? {
                 return Ok(false);
             }
+
             self.run_frame(
                 self.frame_operations(0, dt, start_time),
                 auto_update_at(start_time),
@@ -559,17 +582,23 @@ impl Simulation {
                     dt,
                 },
             )?;
+
             self.initial_frame_processed = true;
         }
+
         while self.current_frame < target_frame {
             if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
                 return Ok(false);
             }
+
             let time = start_time + (self.current_frame + 1) as f32 * dt;
+
             if !before_step(time)? {
                 return Ok(false);
             }
+
             self.current_frame += 1;
+
             self.run_frame(
                 self.frame_operations(self.current_frame, dt, start_time),
                 auto_update_at(time),
@@ -581,10 +610,12 @@ impl Simulation {
                     dt,
                 },
             )?;
+
             if self.current_frame.is_multiple_of(checkpoint_interval) {
                 self.save_checkpoint();
             }
         }
+
         Ok(true)
     }
 
@@ -599,16 +630,22 @@ impl Simulation {
             .get::<&super::TreeNode>(entity)
             .map_err(|e| e.to_string())?;
         let start = node.lifetime[0];
+
         if time < start {
             return Ok(true);
         }
+
         let time = time.min(node.lifetime[1]);
+
         drop(node);
+
         let target = crate::core::frame_index((time - start).max(0.0), fps);
         let mut simulation = {
             let mut stored = world.get::<&mut Self>(entity).map_err(|e| e.to_string())?;
             let simulation = std::mem::take(&mut *stored);
+
             stored.auto_update = simulation.auto_update;
+
             simulation
         };
         let dependencies = simulation.dependencies.clone();
@@ -643,10 +680,13 @@ impl Simulation {
                         return Ok(false);
                     }
                 }
+
                 Ok(true)
             },
         );
+
         *world.get::<&mut Self>(entity).map_err(|e| e.to_string())? = simulation;
+
         result
     }
 
@@ -663,6 +703,7 @@ impl Simulation {
 
     fn frame_operations(&self, frame: u64, dt: f32, start_time: f32) -> Vec<SimulationOperation> {
         let epsilon = f32::EPSILON * (start_time.abs() + frame as f32 * dt + 1.0) * 4.0;
+
         if frame == 0 {
             return self
                 .operations
@@ -674,6 +715,7 @@ impl Simulation {
 
         let previous = start_time + (frame - 1) as f32 * dt;
         let current = start_time + frame as f32 * dt;
+
         self.operations
             .iter()
             .filter(|operation| {
@@ -695,6 +737,7 @@ impl Simulation {
         let has_checkpoint = operations
             .iter()
             .any(|operation| matches!(operation, SimulationOperation::Checkpoint { .. }));
+
         for operation in operations {
             match operation {
                 SimulationOperation::Update { .. } => self.current.on_update(&context)?,
@@ -704,12 +747,15 @@ impl Simulation {
                 }
             }
         }
+
         if auto_update && !has_update {
             self.current.on_update(&context)?;
         }
+
         if has_checkpoint {
             self.save_checkpoint();
         }
+
         Ok(())
     }
 
@@ -739,6 +785,7 @@ impl Simulation {
     /// Returns centered visual bounds for the current 2D simulation state.
     pub fn visual_bounds_2d(world: &hecs::World, entity: hecs::Entity) -> skia_safe::Rect {
         let size = Self::box_2d(world, entity);
+
         skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y)
     }
 
@@ -754,7 +801,9 @@ impl Simulation {
             .expect("Simulated object must contain a Simulation component.")
             .current
             .draw_3d(world, entity, context);
+
         context.set_current_transform(previous);
+
         result
     }
 
@@ -868,6 +917,7 @@ mod tests {
             _canvas: &skia_safe::Canvas,
         ) {
             self.draws += 1;
+
             *self.observed.lock().unwrap() = self.draws;
         }
     }
@@ -876,7 +926,9 @@ mod tests {
         let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
         let mut world = hecs::World::new();
         let entity = world.spawn(());
+
         simulation.current.draw_2d(&world, entity, surface.canvas());
+
         *value.lock().unwrap()
     }
 
@@ -888,6 +940,7 @@ mod tests {
     ) {
         let mut world = hecs::World::new();
         let entity = world.spawn((Animation::default(),));
+
         simulation
             .seek(&world, entity, target_frame, fps, 0.0, auto_update_at)
             .unwrap();
@@ -935,18 +988,23 @@ mod tests {
         });
 
         seek(&mut simulation, 110, 20, |_| true);
+
         let first = observed(&mut simulation, &value);
+
         assert!(
             simulation
                 .checkpoints
                 .iter()
                 .any(|checkpoint| checkpoint.frame == 20 * CHECKPOINT_INTERVAL_SECONDS)
         );
+
         seek(&mut simulation, 3, 20, |_| true);
         assert_eq!(observed(&mut simulation, &value).0, 4);
+
         seek(&mut simulation, 110, 20, |_| true);
 
         let replayed = observed(&mut simulation, &value);
+
         assert_eq!(replayed.0, 111);
         assert!((replayed.1 - 5.55).abs() < 1e-5);
         assert_eq!(first, replayed);
@@ -959,6 +1017,7 @@ mod tests {
 
         seek(&mut simulation, 100, 20, |_| true);
         assert_eq!(*updates.lock().unwrap(), 101);
+
         seek(&mut simulation, 102, 20, |_| true);
 
         assert_eq!(*updates.lock().unwrap(), 103);
@@ -968,13 +1027,16 @@ mod tests {
     fn initial_frame_checkpoint_avoids_replaying_updates() {
         let updates = Arc::new(Mutex::new(0));
         let mut simulation = Simulation::new(ReplayCounter(Arc::clone(&updates)));
+
         for _ in 0..3 {
             simulation.schedule_update(0.0);
         }
+
         simulation.schedule_checkpoint(0.0);
 
         seek(&mut simulation, 10, 20, |_| false);
         assert_eq!(*updates.lock().unwrap(), 3);
+
         seek(&mut simulation, 0, 20, |_| false);
         assert_eq!(*updates.lock().unwrap(), 3);
     }
@@ -988,9 +1050,12 @@ mod tests {
         });
 
         seek(&mut simulation, 110, 20, |_| true);
+
         let first = *value.lock().unwrap();
+
         seek(&mut simulation, 3, 20, |_| true);
         assert_ne!(*value.lock().unwrap(), first);
+
         seek(&mut simulation, 110, 20, |_| true);
 
         assert_eq!(*value.lock().unwrap(), first);
@@ -1017,10 +1082,13 @@ mod tests {
             elapsed: 0.0,
             observed: Arc::clone(&value),
         });
+
         for _ in 0..manual_updates {
             simulation.schedule_update(0.0);
         }
+
         seek(&mut simulation, 0, 10, |_| auto_update);
+
         observed(&mut simulation, &value).0
     }
 

@@ -60,13 +60,18 @@ fn draw_sphere(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     let shape = world.get::<&SphereShape>(entity).unwrap();
+
     if !(3..=256).contains(&shape.segments) {
         return Err("Sphere segments must be between 3 and 256.".into());
     }
+
     let size = glam::Vec3::splat(shape.radius);
+
     validate_dimensions(size)?;
+
     let transformation = global_matrix3d(world, entity) * glam::Mat4::from_scale(size);
     let material = world.get::<&Material>(entity).unwrap();
+
     context.render_material(
         GeometryKey::new::<SphereShape>(u64::from(shape.segments)),
         || three_d::CpuMesh::sphere(shape.segments),

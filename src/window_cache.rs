@@ -27,21 +27,26 @@ impl WindowCache {
         let Ok(path) = crate::storage::global_path(CACHE_PATH) else {
             return Self::default();
         };
+
         match std::fs::read_to_string(path) {
             Ok(contents) => match ron::from_str(&contents) {
                 Ok(cache) if Self::is_valid(&cache) => cache,
                 Ok(_) => {
                     eprintln!("Could not use {CACHE_PATH}: window size must be valid.");
+
                     Self::default()
                 }
+
                 Err(error) => {
                     eprintln!("Could not parse {CACHE_PATH}: {error}.");
+
                     Self::default()
                 }
             },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Self::default(),
             Err(error) => {
                 eprintln!("Could not read {CACHE_PATH}: {error}.");
+
                 Self::default()
             }
         }
@@ -51,8 +56,10 @@ impl WindowCache {
         if window.is_minimized() {
             return;
         }
+
         if window.is_maximized() {
             self.maximized = true;
+
             return;
         }
 
@@ -83,7 +90,9 @@ fn write(cache: &WindowCache, path: &Path) -> Result<(), Box<dyn std::error::Err
     }
 
     let contents = ron::ser::to_string_pretty(cache, ron::ser::PrettyConfig::default())?;
+
     std::fs::write(path, format!("{contents}\n"))?;
+
     Ok(())
 }
 
@@ -109,6 +118,7 @@ mod tests {
 
         let contents = std::fs::read_to_string(&path).unwrap();
         let loaded: WindowCache = ron::from_str(&contents).unwrap();
+
         assert_eq!(loaded, cache);
         assert!(contents.contains("position: Some((-1920, 120))"));
         assert!(contents.contains("size: (1600, 900)"));
@@ -120,6 +130,7 @@ mod tests {
     #[test]
     fn window_cache_rejects_invalid_sizes() {
         assert!(WindowCache::is_valid(&WindowCache::default()));
+
         assert!(!WindowCache::is_valid(&WindowCache {
             size: (0, 720),
             ..WindowCache::default()

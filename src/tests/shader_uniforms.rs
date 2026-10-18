@@ -13,15 +13,18 @@ impl UniformScene {
             .shader(&shader)
             .uniform("u_progress", 0.0_f32)
             .build(scene);
+
         scene.world_2d().add(&object);
 
         object.set_uniform("u_progress", 0.25_f32);
+
         object
             .uniform_from("u_progress", 0.0_f32, 1.0_f32)
             .position_x(10.0)
             .duration(2.0)
             .easing(Easing::Linear)
             .play();
+
         self.object = Some(object);
     }
 }
@@ -30,10 +33,13 @@ impl UniformScene {
 fn public_uniform_api_uses_the_normal_timeline() {
     let mut scene = Scene::new();
     let mut builder = UniformScene { object: None };
+
     {
         builder.build(&mut scene);
+
         scene.finish_build()
     };
+
     let object = builder.object.unwrap();
 
     scene.update(1.0);

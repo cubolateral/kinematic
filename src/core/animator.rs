@@ -94,6 +94,7 @@ impl ScheduledTween {
         if self.mask == 0 {
             return true;
         }
+
         if self.rotation.is_some() || self.from != self.to || self.mask.count_ones() != 1 {
             return false;
         }
@@ -116,6 +117,7 @@ impl ScheduledTween {
                 && tween.target.same_field(&self.target)
                 && tween.mask & self.mask != 0
         });
+
         if next.is_some_and(|next| next.start < self.start + self.duration)
             || repeats.iter().any(|repeat| {
                 repeat.tweens.iter().any(|tween| {
@@ -147,11 +149,14 @@ impl ScheduledTween {
 
     fn append(self, animation: &mut Animation, offset: f32) {
         let start = offset + self.start;
+
         for channel in 0..self.from.channels() {
             let bit = 1 << channel;
+
             if self.mask & bit == 0 {
                 continue;
             }
+
             let target = if self.from.channels() == 1 {
                 self.target.clone()
             } else {
@@ -168,10 +173,12 @@ impl ScheduledTween {
             } else {
                 self.to.clone()
             };
+
             if let Some((axis, angle)) = self.rotation {
                 let TrackValue::Quaternion(from) = from else {
                     unreachable!("Rotation must have a quaternion starting value.");
                 };
+
                 track.add_rotation_tween(start, from, axis, angle, self.duration, self.easing);
             } else {
                 track.add_tween(start, from, to, self.duration, self.easing);
@@ -311,10 +318,13 @@ impl Schedule {
                     axis.is_finite() && axis.length_squared() > f32::EPSILON,
                     "Rotation axis must be finite and non-zero."
                 );
+
                 assert!(angle.is_finite(), "Rotation angle must be finite.");
+
                 let axis = axis.normalize();
                 let from = normalized_quaternion(from);
                 let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
+
                 Self::tween(ScheduledTween {
                     start: 0.0,
                     entity,
@@ -343,10 +353,13 @@ impl Schedule {
                     axis.is_finite() && axis.length_squared() > f32::EPSILON,
                     "Rotation axis must be finite and non-zero."
                 );
+
                 assert!(angle.is_finite(), "Rotation angle must be finite.");
+
                 let axis = axis.normalize();
                 let from = normalized_quaternion(from);
                 let to = normalized_quaternion(from * Quaternion::from_axis_angle(axis, angle));
+
                 Self::tween(ScheduledTween {
                     start: 0.0,
                     entity,
@@ -363,6 +376,7 @@ impl Schedule {
             }
             Task::Wait(duration) => {
                 validate_duration(duration);
+
                 Self {
                     duration,
                     ..Self::default()
@@ -376,6 +390,7 @@ impl Schedule {
 
     fn tween(tween: ScheduledTween) -> Self {
         validate_duration(tween.duration);
+
         Self {
             duration: tween.duration,
             tweens: vec![tween],
@@ -385,24 +400,31 @@ impl Schedule {
 
     fn group(tasks: Vec<Task>, scheduling: Scheduling) -> Self {
         let mut result = Self::default();
+
         for task in tasks {
             result.append(Self::from_task(task), scheduling);
         }
+
         result
     }
 
     fn append(&mut self, mut child: Self, scheduling: Scheduling) {
         let offset = scheduling.offset(self.duration);
+
         if !child.parallel {
             self.duration = self.duration.max(offset + child.duration);
         }
+
         validate_duration(self.duration);
+
         for tween in &mut child.tweens {
             tween.start += offset;
         }
+
         for repeat in &mut child.repeats {
             repeat.start += offset;
         }
+
         self.tweens.extend(child.tweens);
         self.repeats.extend(child.repeats);
     }
@@ -412,14 +434,17 @@ impl Schedule {
             self.repeats.is_empty(),
             "Repeat cycles cannot contain another repeat."
         );
+
         assert!(
             self.duration.is_finite() && self.duration > 0.0,
             "Repeat cycles must have a finite, positive duration."
         );
+
         assert!(
             !self.tweens.is_empty(),
             "Repeat cycles must contain an animation."
         );
+
         Self {
             duration: 0.0,
             parallel: false,
@@ -434,6 +459,7 @@ impl Schedule {
                         if tween.mask == 0 {
                             tween.mask = (1 << tween.from.channels()) - 1;
                         }
+
                         tween
                     })
                     .collect(),
@@ -444,36 +470,48 @@ impl Schedule {
     pub(crate) fn compile(mut self, scene: &Scene) -> f32 {
         // Stable ordering preserves instantaneous changes at shared endpoints.
         self.tweens.sort_by(|a, b| a.start.total_cmp(&b.start));
+
         let world = scene.world();
         let mut tweens = self.tweens.into_iter();
+
         while let Some(tween) = tweens.next() {
             let mut animation = world.get::<&mut Animation>(tween.entity).unwrap();
+
             if !tween.redundant(&animation, &world, tweens.as_slice(), &self.repeats) {
                 tween.append(&mut animation, 0.0);
             }
         }
+
         for mut repeat in self.repeats {
             repeat.tweens.sort_by(|a, b| a.start.total_cmp(&b.start));
+
             let mut initialized: Vec<(hecs::Entity, TrackTarget)> = Vec::new();
+
             for tween in repeat.tweens {
                 let mut animation = world.get::<&mut Animation>(tween.entity).unwrap();
+
                 for channel in 0..tween.from.channels() {
                     if tween.mask & (1 << channel) == 0 {
                         continue;
                     }
+
                     let target = if tween.from.channels() == 1 {
                         tween.target.clone()
                     } else {
                         tween.target.clone().component(channel)
                     };
+
                     if initialized.iter().any(|(entity, initialized)| {
                         *entity == tween.entity && initialized.same(&target)
                     }) {
                         continue;
                     }
+
                     initialized.push((tween.entity, target.clone()));
+
                     let name = target.name().to_owned();
                     let track = animation.target_mut(target);
+
                     assert!(
                         track.repeat.is_none()
                             && track
@@ -483,6 +521,7 @@ impl Schedule {
                         "Repeat overlaps another animation on property '{}'.",
                         name
                     );
+
                     track.add_tween(
                         repeat.start,
                         tween.from.clone(),
@@ -490,16 +529,20 @@ impl Schedule {
                         0.0,
                         Easing::Linear,
                     );
+
                     track.repeat = Some(TrackRepeat {
                         start: repeat.start,
                         duration: repeat.duration,
                     });
                 }
+
                 tween.append(&mut animation, repeat.start);
             }
         }
+
         drop(world);
         scene.compile_runtime();
+
         self.duration
     }
 }
@@ -514,6 +557,7 @@ fn validate_duration(duration: f32) {
 impl Animator {
     pub(crate) fn with_scene_time(scene_time: std::rc::Rc<std::cell::Cell<f32>>) -> Self {
         scene_time.set(0.0);
+
         let state = std::rc::Rc::new(std::cell::RefCell::new(AnimatorState {
             schedule: Schedule::default(),
             start_time: 0.0,
@@ -526,6 +570,7 @@ impl Animator {
             active: std::cell::RefCell::new(std::rc::Rc::downgrade(&state)),
             signals: std::rc::Rc::new(SignalContext::default()),
         });
+
         Self {
             handle: AnimatorHandle { state, context },
         }
@@ -537,10 +582,12 @@ impl Animator {
 
     pub(crate) fn group(&self, scheduling: Scheduling, repeating: bool) -> Self {
         let state = self.handle.state.borrow();
+
         assert!(
             !repeating || !state.repeating,
             "Repeat cycles cannot contain another repeat."
         );
+
         Self {
             handle: AnimatorHandle {
                 state: std::rc::Rc::new(std::cell::RefCell::new(AnimatorState {
@@ -558,6 +605,7 @@ impl Animator {
     pub(crate) fn take_schedule(&self) -> Schedule {
         let mut state = self.handle.state.borrow_mut();
         let duration = state.schedule.duration;
+
         std::mem::replace(
             &mut state.schedule,
             Schedule {
@@ -575,10 +623,13 @@ impl Animator {
 impl AnimatorHandle {
     pub(crate) fn activate(&self) -> Self {
         let previous = self.active();
+
         self.context
             .active
             .replace(std::rc::Rc::downgrade(&self.state));
+
         self.sync_scene_time();
+
         previous
     }
 
@@ -607,6 +658,7 @@ impl AnimatorHandle {
     #[doc(hidden)]
     pub fn assert_finite_scope(&self) {
         self.assert_timeline_mutation();
+
         assert!(
             !self.active().state.borrow().repeating,
             "Repeat cycles can only schedule animations and waits; create, attach, or remove objects outside repeat."
@@ -624,6 +676,7 @@ impl AnimatorHandle {
 
     pub(crate) fn assert_event_scope(&self) {
         self.assert_timeline_mutation();
+
         assert!(
             !self.active().state.borrow().repeating,
             "Events cannot be used inside repeat cycles."
@@ -636,8 +689,11 @@ impl AnimatorHandle {
         callback: impl FnMut(SignalFrame) + 'static,
     ) -> SignalHandle {
         let active = self.active();
+
         active.assert_finite_scope();
+
         let start = active.state.borrow().time();
+
         self.context.signals.add(target, start, callback, active)
     }
 
@@ -682,6 +738,7 @@ impl AnimatorHandle {
             if let Some(parent) = state.parent.as_ref().and_then(|parent| parent.upgrade()) {
                 append(&parent.borrow(), entity, animation);
             }
+
             let mut tweens = state
                 .schedule
                 .tweens
@@ -689,10 +746,13 @@ impl AnimatorHandle {
                 .filter(|t| t.entity == entity)
                 .cloned()
                 .collect::<Vec<_>>();
+
             tweens.sort_by(|a, b| a.start.total_cmp(&b.start));
+
             for tween in tweens {
                 tween.append(animation, state.start_time);
             }
+
             for repeat in &state.schedule.repeats {
                 let mut initialized: Vec<TrackTarget> = Vec::new();
                 let mut tweens = repeat
@@ -701,23 +761,30 @@ impl AnimatorHandle {
                     .filter(|t| t.entity == entity)
                     .cloned()
                     .collect::<Vec<_>>();
+
                 tweens.sort_by(|a, b| a.start.total_cmp(&b.start));
+
                 for tween in tweens {
                     for channel in 0..tween.from.channels() {
                         if tween.mask & (1 << channel) == 0 {
                             continue;
                         }
+
                         let target = if tween.from.channels() == 1 {
                             tween.target.clone()
                         } else {
                             tween.target.clone().component(channel)
                         };
+
                         if initialized.iter().any(|previous| previous.same(&target)) {
                             continue;
                         }
+
                         initialized.push(target.clone());
+
                         let track = animation.target_mut(target);
                         let start = state.start_time + repeat.start;
+
                         track.add_tween(
                             start,
                             tween.from.clone(),
@@ -725,20 +792,26 @@ impl AnimatorHandle {
                             0.0,
                             Easing::Linear,
                         );
+
                         track.repeat = Some(TrackRepeat {
                             start,
                             duration: repeat.duration,
                         });
                     }
+
                     tween.append(animation, state.start_time + repeat.start);
                 }
             }
         }
+
         let active = self.active();
         let state = active.state.borrow();
         let mut animation = Animation::default();
+
         append(&state, entity, &mut animation);
+
         let base = target.get(world, entity);
+
         animation
             .sample_target(target, state.time(), base.clone())
             .unwrap_or(base)
@@ -750,13 +823,17 @@ impl AnimatorHandle {
 
     pub(crate) fn schedule(&self, schedule: Schedule) {
         self.assert_timeline_mutation();
+
         let active = self.active();
         let mut state = active.state.borrow_mut();
+
         assert!(
             !state.repeating || schedule.repeats.is_empty(),
             "Repeat cycles cannot contain another repeat."
         );
+
         let scheduling = state.scheduling;
+
         state.schedule.append(schedule, scheduling);
         self.context.time.set(state.time());
     }

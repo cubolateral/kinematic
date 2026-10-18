@@ -35,25 +35,31 @@ impl ImageShaders {
         texture: impl Fn(CanvasTexture) -> Option<glow::NativeTexture>,
     ) -> Result<(), String> {
         validate_shader_values(data)?;
+
         if data.shader.source.lines().next().map(str::trim) != Some("#version 330 core") {
             return Err("Image shader must start with `#version 330 core`.".into());
         }
+
         let program = self.program(data)?;
         let vao = match self.vao {
             Some(vao) => vao,
             None => {
                 let vao = unsafe { self.gl.create_vertex_array()? };
+
                 self.vao = Some(vao);
+
                 vao
             }
         };
         let maximum = unsafe { self.gl.get_parameter_i32(glow::MAX_TEXTURE_IMAGE_UNITS) } as usize;
+
         if data.textures.len() + 1 > maximum {
             return Err(format!(
                 "Image shader uses {} textures, but OpenGL supports {maximum}.",
                 data.textures.len() + 1
             ));
         }
+
         for (name, expected) in [
             ("k_image", glow::SAMPLER_2D),
             ("k_resolution", glow::FLOAT_VEC2),
@@ -66,12 +72,16 @@ impl ImageShaders {
         }
 
         reset_gl(&self.gl, output.size);
+
         unsafe {
             self.gl
                 .bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(output.framebuffer()));
+
             self.gl.use_program(Some(program));
             self.gl.bind_vertex_array(Some(vao));
+
             bind_texture(&self.gl, program, "k_image", 0, input.texture());
+
             uniform_2f(
                 &self.gl,
                 program,
@@ -79,7 +89,9 @@ impl ImageShaders {
                 output.size.0 as f32,
                 output.size.1 as f32,
             );
+
             uniform_1f(&self.gl, program, "k_time", time);
+
             uniform_1f(&self.gl, program, "k_alpha", alpha);
 
             for (name, value) in &data.uniforms {
@@ -98,7 +110,9 @@ impl ImageShaders {
                     TrackValue::Bool(_) => glow::BOOL,
                     TrackValue::Enum(_) | TrackValue::String(_) => unreachable!(),
                 };
+
                 validate_uniform_type(&self.gl, program, name, expected)?;
+
                 match value {
                     TrackValue::F32(value) => self.gl.uniform_1_f32(Some(&location), *value),
                     TrackValue::Vector2(value) => {
@@ -110,6 +124,7 @@ impl ImageShaders {
                     }
                     TrackValue::Quad(value) => {
                         let [x, y, z, w] = value.to_array();
+
                         self.gl.uniform_4_f32(Some(&location), x, y, z, w)
                     }
                     TrackValue::Quaternion(value) => {
@@ -118,6 +133,7 @@ impl ImageShaders {
                     }
                     TrackValue::Color(value) => {
                         let [r, g, b, a] = value.rgba();
+
                         self.gl.uniform_4_f32(Some(&location), r, g, b, a)
                     }
                     TrackValue::I32(value) => self.gl.uniform_1_i32(Some(&location), *value),
@@ -128,14 +144,19 @@ impl ImageShaders {
                     TrackValue::Enum(_) | TrackValue::String(_) => unreachable!(),
                 }
             }
+
             for (index, (name, canvas)) in data.textures.iter().enumerate() {
                 validate_uniform_type(&self.gl, program, name, glow::SAMPLER_2D)?;
+
                 let texture = texture(*canvas)
                     .ok_or_else(|| format!("Image shader texture `{name}` is unavailable."))?;
+
                 bind_texture(&self.gl, program, name, index as u32 + 1, texture);
             }
+
             self.gl.draw_arrays(glow::TRIANGLES, 0, 3);
         }
+
         Ok(())
     }
 
@@ -143,6 +164,7 @@ impl ImageShaders {
         if let Some(program) = self.programs.get(&data.shader.id) {
             return Ok(*program);
         }
+
         let program = unsafe {
             let vertex = compile(
                 &self.gl,
@@ -153,10 +175,12 @@ impl ImageShaders {
                 Ok(shader) => shader,
                 Err(error) => {
                     self.gl.delete_shader(vertex);
+
                     return Err(error);
                 }
             };
             let program = self.gl.create_program()?;
+
             self.gl.attach_shader(program, vertex);
             self.gl.attach_shader(program, fragment);
             self.gl.link_program(program);
@@ -164,14 +188,20 @@ impl ImageShaders {
             self.gl.detach_shader(program, fragment);
             self.gl.delete_shader(vertex);
             self.gl.delete_shader(fragment);
+
             if !self.gl.get_program_link_status(program) {
                 let diagnostic = self.gl.get_program_info_log(program);
+
                 self.gl.delete_program(program);
+
                 return Err(format!("Image shader link failed:\n{diagnostic}"));
             }
+
             program
         };
+
         self.programs.insert(data.shader.id, program);
+
         Ok(program)
     }
 }
@@ -185,8 +215,10 @@ unsafe fn validate_uniform_type(
     let count = unsafe { gl.get_active_uniforms(program) };
     let actual = (0..count).find_map(|index| {
         let uniform = unsafe { gl.get_active_uniform(program, index) }?;
+
         (uniform.name == name).then_some(uniform.utype)
     });
+
     match actual {
         None => Err(format!(
             "Image shader uniform `{name}` is missing or inactive."
@@ -204,15 +236,20 @@ unsafe fn compile(
     source: &str,
 ) -> Result<glow::NativeShader, String> {
     let shader = unsafe { gl.create_shader(kind)? };
+
     unsafe {
         gl.shader_source(shader, source);
         gl.compile_shader(shader);
+
         if !gl.get_shader_compile_status(shader) {
             let diagnostic = gl.get_shader_info_log(shader);
+
             gl.delete_shader(shader);
+
             return Err(format!("Image shader compilation failed:\n{diagnostic}"));
         }
     }
+
     Ok(shader)
 }
 
@@ -226,6 +263,7 @@ unsafe fn bind_texture(
     unsafe {
         gl.active_texture(glow::TEXTURE0 + unit);
         gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+
         if let Some(location) = gl.get_uniform_location(program, name) {
             gl.uniform_1_i32(Some(&location), unit as i32);
         }
@@ -250,6 +288,7 @@ impl Drop for ImageShaders {
             for (_, program) in self.programs.drain() {
                 self.gl.delete_program(program);
             }
+
             if let Some(vao) = self.vao.take() {
                 self.gl.delete_vertex_array(vao);
             }

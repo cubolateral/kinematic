@@ -26,6 +26,7 @@ pub(super) fn draw(
     transport_controls(timeline, ui, interactive);
 
     ui.same_line();
+
     let toggle_fullscreen = fullscreen_button(ui, is_fullscreen);
 
     ui.same_line();
@@ -43,6 +44,7 @@ pub(super) fn draw(
 
 pub(in crate::ui) fn shortcuts(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interactive: bool) {
     let io = ui.io();
+
     if !interactive || io.want_text_input() || ui.is_any_item_active() {
         return;
     }
@@ -52,12 +54,15 @@ pub(in crate::ui) fn shortcuts(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, 
     } else if inputs::active(ui, InputAction::PreviousFrame) {
         timeline.previous_frame();
     }
+
     if inputs::active(ui, InputAction::ToggleLoop) {
         timeline.toggle_loop();
     }
+
     if inputs::active(ui, InputAction::PlayPause) {
         timeline.toggle();
     }
+
     if inputs::active(ui, InputAction::GoToEnd) {
         timeline.go_to_end();
     } else if inputs::active(ui, InputAction::NextFrame) {
@@ -80,6 +85,7 @@ pub(in crate::ui) fn fullscreen_controls(
         let _disabled = ui.begin_disabled_with_cond(!interactive);
 
         ui.set_cursor_screen_pos([scrubber_min[0], buttons_y]);
+
         let response = draw(timeline, ui, fps, interactive, true);
 
         let mouse = ui.io().mouse_pos();
@@ -105,6 +111,7 @@ pub(in crate::ui) fn fullscreen_controls(
             }
         } else if panel_hovered && !blocked_by_button && ui.is_mouse_clicked(left) {
             timeline.is_controlling = true;
+
             timeline.go_to(time_at_position(
                 mouse[0],
                 scrubber_min[0],
@@ -173,6 +180,7 @@ fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interacti
     }
 
     ui.same_line();
+
     let clicked = controls::text_button_colored(
         ui,
         icons::RETWEET,
@@ -183,9 +191,11 @@ fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interacti
             dear_imgui_rs::StyleColor::TextDisabled
         },
     );
+
     if ui.is_item_hovered() {
         inputs::tooltip(ui, InputAction::ToggleLoop, "Toggle loop");
     }
+
     if clicked && interactive {
         timeline.toggle_loop();
     }
@@ -250,6 +260,7 @@ fn draw_fullscreen_scrubber(
         ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg),
         FULLSCREEN_SCRUBBER_THICKNESS,
     );
+
     draw_list.add_line_h(
         min[0],
         progress_x,
@@ -257,6 +268,7 @@ fn draw_fullscreen_scrubber(
         ui.get_color_u32(dear_imgui_rs::StyleColor::SliderGrabActive),
         FULLSCREEN_SCRUBBER_THICKNESS,
     );
+
     draw_list
         .add_circle(
             [progress_x, line_y],
@@ -265,6 +277,7 @@ fn draw_fullscreen_scrubber(
         )
         .filled(true)
         .build();
+
     draw_list.add_text(
         [duration_x, line_y + 4.0],
         ui.get_color_u32(dear_imgui_rs::StyleColor::Text),

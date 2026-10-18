@@ -12,9 +12,11 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     let is_exporting = editor.is_exporting();
     let plain_keyboard_input =
         !is_exporting && !ui.io().want_text_input() && !ui.is_any_item_active();
+
     if plain_keyboard_input && inputs::active(ui, InputAction::ToggleMargin) {
         editor.toggle_margin();
     }
+
     let margin = editor.margin_visible().then(|| editor.margin_size());
     let preview = image::preview(editor);
     let window_flags = dear_imgui_rs::WindowFlags::NO_DECORATION
@@ -44,6 +46,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     timeline::shortcuts(editor.timeline_mut(), ui, !is_exporting);
 
     let is_controlling = editor.timeline_mut().is_controlling;
+
     if !controls_visible(
         ui.io().mouse_pos(),
         viewport_pos,
@@ -51,6 +54,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
         is_controlling,
     ) {
         editor.timeline_mut().is_controlling = false;
+
         return false;
     }
 

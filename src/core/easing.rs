@@ -9,8 +9,10 @@ pub enum Easing {
     InOutQuad,
     InCubic,
     OutCubic,
+
     #[default]
     InOutCubic,
+
     InQuart,
     OutQuart,
     InOutQuart,
@@ -152,11 +154,13 @@ impl Easing {
             Self::InBack => {
                 let c1 = 1.70158;
                 let c3 = c1 + 1.0;
+
                 c3 * x.powi(3) - c1 * x.powi(2)
             }
             Self::OutBack => {
                 let c1 = 1.70158;
                 let c3 = c1 + 1.0;
+
                 1.0 + c3 * (x - 1.0).powi(3) + c1 * (x - 1.0).powi(2)
             }
             Self::InOutBack => {
@@ -224,12 +228,15 @@ impl Easing {
             n1 * x * x
         } else if x < 2.0 / d1 {
             let x = x - 1.5 / d1;
+
             n1 * x * x + 0.75
         } else if x < 2.5 / d1 {
             let x = x - 2.25 / d1;
+
             n1 * x * x + 0.9375
         } else {
             let x = x - 2.625 / d1;
+
             n1 * x * x + 0.984375
         }
     }
@@ -248,6 +255,7 @@ mod tests {
                 easing.evaluate(0.0).abs() < 0.000_001,
                 "{easing:?} must start at zero."
             );
+
             assert!(
                 (easing.evaluate(1.0) - 1.0).abs() < 0.000_001,
                 "{easing:?} must end at one."

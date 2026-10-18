@@ -25,6 +25,7 @@ impl Text2DHandler {
             .get::<&Draw2D>(self.entity())
             .unwrap()
             .opacity;
+
         Task::All(vec![
             Task::RuntimeTween {
                 entity: self.entity(),

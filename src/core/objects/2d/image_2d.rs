@@ -42,6 +42,7 @@ impl Default for Image2D {
                     let shape = world.get::<&RectShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
+
                     styled_bounds(*rect_path(&shape).bounds(), &style, transform.scale)
                 },
                 ..Default::default()
@@ -56,8 +57,11 @@ impl Image2DBuilder {
     /// Loads an image and adopts its pixel dimensions as the rectangle size.
     pub fn source(mut self, path: impl AsRef<Path>) -> Self {
         self.object.source = ImageSource::load(path);
+
         let (width, height) = self.object.source.dimensions();
+
         self.object.shape.size = Vector2::new(width as f32, height as f32);
+
         self
     }
 }
@@ -70,6 +74,7 @@ impl Image2DHandler {
         let world = self.world.borrow();
         let source = world.get::<&ImageSource>(self.entity).unwrap();
         let shape = world.get::<&RectShape>(self.entity).unwrap();
+
         source.pixel_color(point, shape.size)
     }
 }
@@ -81,12 +86,15 @@ fn draw_image_object(
     opacity: f32,
 ) {
     let source = world.get::<&ImageSource>(entity).unwrap();
+
     let Some(image) = source.image() else {
         return;
     };
+
     let shape = world.get::<&RectShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
+
     draw_image_2d(image, &shape, &style, transform.scale, opacity, canvas);
 }
 
@@ -100,17 +108,23 @@ pub fn draw_image_2d(
     canvas: &skia_safe::Canvas,
 ) {
     let size = shape.size;
+
     if !size.is_finite() || size.x <= 0.0 || size.y <= 0.0 {
         return;
     }
+
     let path = rect_path(shape);
     let bounds = skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y);
     let mut paint = skia_safe::Paint::default();
+
     paint.set_alpha_f(opacity);
+
     let saved = canvas.save();
+
     canvas.clip_path(&path, None, true);
     canvas.draw_image_rect(image, None, bounds, &paint);
     canvas.restore_to_count(saved);
+
     draw_styled_path(&path, style, scale, opacity, canvas);
 }
 
@@ -126,6 +140,7 @@ mod tests {
         let path = write_test_image();
         let mut scene = Scene::new();
         let image = image_2d().source(&path).build(&mut scene);
+
         std::fs::remove_file(path).unwrap();
 
         assert_eq!(image.box_size(), vec2(2.0, 1.0));

@@ -9,10 +9,13 @@ use glow::HasContext;
 fn graphics_canvas_projection_alpha_orientation() {
     let sdl = sdl3::init().unwrap();
     let video = sdl.video().unwrap();
+
     video.gl_attr().set_context_version(3, 3);
+
     video
         .gl_attr()
         .set_context_profile(sdl3::video::GLProfile::Core);
+
     let window = video
         .window("Canvas test", 64, 64)
         .hidden()
@@ -20,7 +23,9 @@ fn graphics_canvas_projection_alpha_orientation() {
         .build()
         .unwrap();
     let context = window.gl_create_context().unwrap();
+
     window.gl_make_current(&context).unwrap();
+
     let load = |name: &str| {
         video
             .gl_get_proc_address(name)
@@ -53,45 +58,59 @@ fn graphics_canvas_projection_alpha_orientation() {
         .position(vec2(0.0, 16.0))
         .fill(Color::BLUE)
         .build(&mut scene);
+
     overlay.add(&top);
     overlay.add(&bottom);
+
     let world = scene.world_3d();
+
     world
         .camera_position(vec3(0.0, 0.0, 2.0))
         .camera_fov(std::f32::consts::FRAC_PI_2)
         .immediate();
+
     let screen = projection_3d()
         .source(&overlay)
         .size(vec2(4.0, 4.0))
         .build(&mut scene);
+
     world.add(&screen);
     scene.root().view_2d(false).immediate();
     scene.update(0.0);
     renderer.render(&scene, &mut output, &mut skia).unwrap();
+
     let source_texture = renderer.targets[&overlay.texture()].texture();
     let first = read(&gl, &output);
+
     assert_pixel(&first, 32, 48, [64, 32, 0, 255]);
+
     assert_pixel(
         &read(&gl, &renderer.targets[&world.texture()]),
         32,
         48,
         [64, 32, 0, 128],
     );
+
     assert_pixel(&first, 32, 16, [0, 0, 255, 255]);
     renderer.render(&scene, &mut output, &mut skia).unwrap();
     assert_eq!(read(&gl, &output), first);
+
     verify_export(&gl, &output, &first);
+
     assert_eq!(
         renderer.targets[&overlay.texture()].texture(),
         source_texture
     );
+
     world.clear(Color::BLUE).play();
     scene.update(0.0);
     renderer.render(&scene, &mut output, &mut skia).unwrap();
+
     assert_pixel(&read(&gl, &output), 32, 48, [64, 32, 127, 255]);
     screen.remove();
     scene.update(1.0);
     renderer.render(&scene, &mut output, &mut skia).unwrap();
+
     assert_pixel(&read(&gl, &output), 32, 48, [0, 0, 255, 255]);
 
     let cube = cube().size(vec3(0.8, 0.8, 0.8)).build(&mut scene);
@@ -107,37 +126,47 @@ fn graphics_canvas_projection_alpha_orientation() {
         .unlit(true)
         .albedo(Color::RED)
         .build(&mut scene);
+
     world.add(&cube);
     world.add(&ball);
     world.add(&plane);
     scene.update(1.0);
     renderer.render(&scene, &mut output, &mut skia).unwrap();
+
     let pixels = read(&gl, &output);
+
     assert_ne!(
         &pixels[(32 * 64 + 32) * 4..(32 * 64 + 32) * 4 + 4],
         &[0, 0, 255, 255]
     );
+
     assert_pixel(&pixels, 48, 32, [0, 255, 0, 255]);
+
     assert_pixel(&pixels, 16, 32, [255, 0, 0, 255]);
 
     let light = directional_light()
         .color(Color::RED)
         .intensity(2.0)
         .build(&mut scene);
+
     world.add(&light);
     scene.update(1.0);
     renderer.render(&scene, &mut output, &mut skia).unwrap();
+
     let lit = read(&gl, &output);
+
     assert_ne!(
         &lit[(32 * 64 + 32) * 4..(32 * 64 + 32) * 4 + 4],
         &pixels[(32 * 64 + 32) * 4..(32 * 64 + 32) * 4 + 4]
     );
+
     light.remove();
     scene.update(1.0);
     renderer.render(&scene, &mut output, &mut skia).unwrap();
     assert_eq!(read(&gl, &output), pixels);
 
     let projection = projection_2d().source(&world).build(&mut scene);
+
     overlay.add(&projection);
     scene.root().view_2d(true).immediate();
     scene.update(1.0);
@@ -146,24 +175,32 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     let target_texture = renderer.targets[&overlay.texture()].texture();
     let geometries: Vec<_> = renderer.geometries.keys().copied().collect();
+
     assert!(!geometries.is_empty());
+
     let second = Scene::new_with_resolution((64, 64));
+
     second.update(0.0);
     renderer.render(&second, &mut output, &mut skia).unwrap();
+
     assert_eq!(
         renderer.targets[&overlay.texture()].texture(),
         target_texture
     );
+
     assert!(
         geometries
             .iter()
             .all(|key| renderer.geometries.contains_key(key))
     );
+
     renderer.render(&scene, &mut output, &mut skia).unwrap();
+
     assert_eq!(
         renderer.targets[&overlay.texture()].texture(),
         target_texture
     );
+
     assert_eq!(read(&gl, &output), pixels);
 
     let group_shader = ImageShader::new(
@@ -202,19 +239,24 @@ fn graphics_canvas_projection_alpha_orientation() {
         .size(vec2(24.0, 24.0))
         .fill(Color::BLUE)
         .build(&mut shader_scene);
+
     group.add(&child);
     shader_scene.world_2d().add(&group);
     shader_scene.update(0.25);
+
     renderer
         .render(&shader_scene, &mut output, &mut skia)
         .unwrap();
+
     assert_pixel(&read(&gl, &output), 32, 32, [0, 255, 64, 255]);
     group.set_uniform("gain", 0.5_f32);
     assert_eq!(group.get_uniform::<f32>("gain"), 0.5);
     shader_scene.update(0.25);
+
     renderer
         .render(&shader_scene, &mut output, &mut skia)
         .unwrap();
+
     assert_pixel(&read(&gl, &output), 32, 32, [0, 128, 64, 255]);
 
     let inherited_mesh_shader = MeshShader::fragment(
@@ -230,11 +272,13 @@ fn graphics_canvas_projection_alpha_orientation() {
          }",
     );
     let mut mesh_scene = Scene::new_with_resolution((64, 64));
+
     mesh_scene
         .world_3d()
         .camera_position(vec3(0.0, 0.0, 2.0))
         .camera_fov(std::f32::consts::FRAC_PI_2)
         .immediate();
+
     let group = group_3d()
         .mesh_shader(&inherited_mesh_shader)
         .mesh_uniform("gain", 1.0)
@@ -244,19 +288,24 @@ fn graphics_canvas_projection_alpha_orientation() {
         .albedo(Color::RED)
         .mesh_uniform("gain", 0.5)
         .build(&mut mesh_scene);
+
     group.add(&child);
     mesh_scene.world_3d().add(&group);
     mesh_scene.root().view_2d(false).immediate();
     mesh_scene.update(0.25);
+
     renderer
         .render(&mesh_scene, &mut output, &mut skia)
         .unwrap();
+
     assert_pixel(&read(&gl, &output), 32, 32, [128, 64, 0, 255]);
     child.set_uniform("gain", 0.25_f32);
     mesh_scene.update(0.25);
+
     renderer
         .render(&mesh_scene, &mut output, &mut skia)
         .unwrap();
+
     assert_pixel(&read(&gl, &output), 32, 32, [64, 64, 0, 255]);
 
     let custom_mesh_shader = MeshShader::program(
@@ -270,44 +319,55 @@ fn graphics_canvas_projection_alpha_orientation() {
          void main() { outColor = vec4(0.0, 0.0, 1.0, 1.0); }",
     );
     let mut program_scene = Scene::new_with_resolution((64, 64));
+
     program_scene
         .world_3d()
         .camera_position(vec3(0.0, 0.0, 2.0))
         .camera_fov(std::f32::consts::FRAC_PI_2)
         .immediate();
+
     let object = crate::core::objects::cube()
         .size(vec3(1.0, 1.0, 1.0))
         .mesh_shader(&custom_mesh_shader)
         .build(&mut program_scene);
+
     program_scene.world_3d().add(&object);
     program_scene.root().view_2d(false).immediate();
     program_scene.update(0.0);
+
     renderer
         .render(&program_scene, &mut output, &mut skia)
         .unwrap();
+
     assert_pixel(&read(&gl, &output), 32, 32, [0, 0, 255, 255]);
 
     reset_gl(&gl, (64, 64));
     assert_eq!(unsafe { gl.get_error() }, glow::NO_ERROR);
+
     let allocations: Vec<_> = renderer
         .targets
         .values()
         .map(|target| (target.texture(), target.framebuffer()))
         .collect();
+
     drop(renderer);
+
     for (texture, framebuffer) in allocations {
         assert!(!unsafe { gl.is_texture(texture) });
         assert!(!unsafe { gl.is_framebuffer(framebuffer) });
     }
+
     drop(output);
     skia.flush_and_submit();
 }
 
 fn read(gl: &glow::Context, target: &Target) -> Vec<u8> {
     let mut pixels = vec![0; 64 * 64 * 4];
+
     unsafe {
         gl.bind_buffer(glow::PIXEL_PACK_BUFFER, None);
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(target.framebuffer()));
+
         gl.read_pixels(
             0,
             0,
@@ -322,6 +382,7 @@ fn read(gl: &glow::Context, target: &Target) -> Vec<u8> {
 }
 fn assert_pixel(pixels: &[u8], x: usize, y: usize, expected: [u8; 4]) {
     let actual = &pixels[(y * 64 + x) * 4..(y * 64 + x) * 4 + 4];
+
     assert!(
         actual.iter().zip(expected).all(|(a, b)| a.abs_diff(b) <= 2),
         "Pixel ({x}, {y}): {actual:?}, expected {expected:?}."
@@ -330,6 +391,7 @@ fn assert_pixel(pixels: &[u8], x: usize, y: usize, expected: [u8; 4]) {
 
 fn verify_export(gl: &glow::Context, target: &Target, preview: &[u8]) {
     use crate::renderer::{Encoder, Export, FrameResult, Renderer};
+
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -339,6 +401,7 @@ fn verify_export(gl: &glow::Context, target: &Target, preview: &[u8]) {
         std::process::id()
     ));
     let mut exporter = Renderer::new(target.size);
+
     exporter.export = Some(Export {
         encoder: Encoder::new(&path, target.size, 30, true).unwrap(),
         output_path: path.clone(),
@@ -346,25 +409,31 @@ fn verify_export(gl: &glow::Context, target: &Target, preview: &[u8]) {
         frame_index: 0,
         fps: 30,
     });
+
     assert!(matches!(
         exporter
             .process_frame(gl, target.framebuffer(), target.size)
             .unwrap(),
         FrameResult::Finished
     ));
+
     exporter.shutdown(gl);
+
     let decoded = std::process::Command::new("ffmpeg")
         .args(["-v", "error", "-i"])
         .arg(&path)
         .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "-"])
         .output()
         .unwrap();
+
     std::fs::remove_file(path).unwrap();
     assert!(decoded.status.success());
     assert_eq!(decoded.stdout.len(), preview.len());
+
     for (x, y) in [(32, 16), (32, 48)] {
         let source = &preview[(y * 64 + x) * 4..(y * 64 + x) * 4 + 4];
         let destination = &decoded.stdout[((63 - y) * 64 + x) * 4..((63 - y) * 64 + x) * 4 + 4];
+
         assert!(
             source
                 .iter()

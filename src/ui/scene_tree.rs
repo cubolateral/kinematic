@@ -29,6 +29,7 @@ pub(super) struct State {
 impl State {
     fn sync(&mut self, scene: &Scene) {
         let scene_key = scene.render_key().0;
+
         if self.scene_key != Some(scene_key) {
             self.expanded = [
                 scene.root().entity(),
@@ -36,6 +37,7 @@ impl State {
                 scene.world_3d().entity(),
             ]
             .into();
+
             self.scene_key = Some(scene_key);
         }
     }
@@ -58,7 +60,9 @@ struct ObjectRow {
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) -> bool {
     let is_exporting = editor.is_exporting();
     let selected = editor.selected_entity();
+
     state.sync(editor.scene_mut());
+
     let root = editor.scene_mut().root().entity();
     let world = editor.scene_mut().world();
     let mut clicked = None;
@@ -68,6 +72,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
     let _text_align = ui.push_style_var(dear_imgui_rs::StyleVar::SelectableTextAlign([0.0, 0.5]));
 
     hide_single_window_tab(ui);
+
     ui.window(WINDOW_NAME).build(|| {
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
         let spacing = unsafe { ui.style().item_spacing() };
@@ -95,8 +100,10 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             }),
             root_name.get(),
         );
+
         if state.expanded.contains(&root) && !active_children(&world, root).is_empty() {
             let x = position[0] + INDENT * 0.5;
+
             draw_list
                 .add_line(
                     [x, position[1] + ROW_HEIGHT * 0.5 + 6.0],
@@ -105,9 +112,11 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 )
                 .build();
         }
+
         drop(draw_list);
 
         let root_toggle = draw_arrow(ui, position, state.expanded.contains(&root), root_clicked);
+
         if root_toggle {
             state.toggle(root);
         } else if root_clicked {
@@ -116,6 +125,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
         let root_visibility = object_visibility(&world, root).unwrap_or(true);
         let mut rows = vec![];
+
         collect_rows(
             &world,
             &state.expanded,
@@ -126,6 +136,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             root_visibility,
             &mut rows,
         );
+
         if rows.is_empty() && state.expanded.contains(&root) {
             ui.text_disabled("   No objects.");
         } else {
@@ -157,12 +168,15 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
     if let Some(entity) = edit_clicked {
         editor.select_entity(entity);
+
         true
     } else if let Some(entity) = clicked {
         editor.select_entity(entity);
+
         false
     } else if empty_clicked {
         editor.clear_selection();
+
         false
     } else {
         false
@@ -193,6 +207,7 @@ fn draw_row(
     let control_count = 1.0 + f32::from(visibility.is_some());
     let selectable_width = (row_width - ROW_HEIGHT * control_count).max(1.0);
     let was_clicked = selectable_row(ui, row_id, [selectable_width, ROW_HEIGHT]);
+
     if ui.is_item_hovered() {
         if let Ok(inspection) = world.get::<&Inspection>(entity) {
             ui.tooltip_text(format!("Type: {}", inspection.object_name));
@@ -209,16 +224,20 @@ fn draw_row(
 
     let line_color = ui.get_color_u32(dear_imgui_rs::StyleColor::TreeLines);
     let middle = position[1] + ROW_HEIGHT * 0.5;
+
     for (depth, continues) in row.branches.iter().enumerate() {
         if *continues {
             let x = position[0] + INDENT * (depth as f32 + 0.5);
+
             draw_list
                 .add_line([x, position[1]], [x, position[1] + ROW_HEIGHT], line_color)
                 .build();
         }
     }
+
     let branch_x = position[0] + INDENT * (row.branches.len() as f32 + 0.5);
     let arrow_x = branch_x + INDENT * 0.5;
+
     draw_list
         .add_line(
             [branch_x, position[1]],
@@ -233,15 +252,19 @@ fn draw_row(
             line_color,
         )
         .build();
+
     draw_list
         .add_line([branch_x, middle], [arrow_x, middle], line_color)
         .build();
+
     if has_children && state.expanded.contains(&entity) {
         let x = arrow_x + INDENT * 0.5;
+
         draw_list
             .add_line([x, middle + 6.0], [x, position[1] + ROW_HEIGHT], line_color)
             .build();
     }
+
     draw_list.add_text(
         [arrow_x + INDENT + NAME_SPACING, text_y],
         ui.get_color_u32(if is_highlighted {
@@ -251,9 +274,13 @@ fn draw_row(
         }),
         name.get(),
     );
+
     drop(text_clip);
+
     drop(draw_list);
+
     drop(name);
+
     let toggled = has_children
         && draw_arrow(
             ui,
@@ -261,9 +288,11 @@ fn draw_row(
             state.expanded.contains(&entity),
             was_clicked && ui.io().mouse_pos()[0] < position[0] + selectable_width,
         );
+
     if toggled {
         state.toggle(entity);
     }
+
     ui.get_window_draw_list()
         .add_rect(
             [position[0] + selectable_width, position[1]],
@@ -272,12 +301,16 @@ fn draw_row(
         )
         .filled(true)
         .build();
+
     ui.same_line_with_spacing(0.0, 0.0);
+
     if edit_button(ui, entity) {
         *edit_clicked = Some(entity);
     }
+
     if let Some(visibility) = visibility {
         ui.same_line_with_spacing(0.0, 0.0);
+
         *visibility_changed |=
             visibility_button(world, ui, entity, visibility, effective_visibility);
     }
@@ -302,11 +335,14 @@ fn draw_arrow(ui: &dear_imgui_rs::Ui, position: [f32; 2], expanded: bool, clicke
             [center[0] - 2.0, center[1] + 4.0],
         )
     };
+
     ui.get_window_draw_list()
         .add_triangle(a, b, c, ui.get_color_u32(dear_imgui_rs::StyleColor::Text))
         .filled(true)
         .build();
+
     let mouse_x = ui.io().mouse_pos()[0];
+
     clicked && mouse_x >= position[0] && mouse_x < position[0] + INDENT
 }
 
@@ -323,12 +359,14 @@ fn collect_rows(
     if !expanded.contains(&parent) {
         return;
     }
+
     let children = active_children(world, parent);
 
     for (index, entity) in children.iter().copied().enumerate() {
         let is_last = index + 1 == children.len();
         let is_selected = ancestor_selected || selected == Some(entity);
         let visibility = object_visibility(world, entity).unwrap_or(true);
+
         rows.push(ObjectRow {
             entity,
             branches: branches.clone(),
@@ -338,6 +376,7 @@ fn collect_rows(
         });
 
         branches.push(!is_last);
+
         collect_rows(
             world,
             expanded,
@@ -348,6 +387,7 @@ fn collect_rows(
             ancestor_visible && visibility,
             rows,
         );
+
         branches.pop();
     }
 }
@@ -360,9 +400,11 @@ fn edit_button(ui: &dear_imgui_rs::Ui, entity: hecs::Entity) -> bool {
         [ROW_HEIGHT, ROW_HEIGHT],
         dear_imgui_rs::StyleColor::Text,
     );
+
     if ui.is_item_hovered() {
         ui.tooltip_text("Edit in the matching canvas");
     }
+
     clicked
 }
 
@@ -384,9 +426,11 @@ fn visibility_button(
             dear_imgui_rs::StyleColor::TextDisabled
         },
     );
+
     if ui.is_item_hovered() {
         ui.tooltip_text(if visibility { "Hide" } else { "Show" });
     }
+
     if clicked {
         if let Ok(mut draw) = world.get::<&mut Draw2D>(entity) {
             draw.visibility = !draw.visibility;
@@ -394,6 +438,7 @@ fn visibility_button(
             draw.visibility = !draw.visibility;
         }
     }
+
     clicked
 }
 
@@ -443,7 +488,9 @@ mod tests {
     fn only_root_and_builtin_worlds_start_expanded() {
         let scene = Scene::new();
         let mut state = State::default();
+
         state.sync(&scene);
+
         assert_eq!(
             state.expanded,
             [
@@ -453,11 +500,15 @@ mod tests {
             ]
             .into()
         );
+
         state.toggle(scene.world_2d().entity());
         state.sync(&scene);
         assert!(!state.expanded.contains(&scene.world_2d().entity()));
+
         let next_scene = Scene::new();
+
         state.sync(&next_scene);
+
         assert_eq!(
             state.expanded,
             [
@@ -496,6 +547,7 @@ mod tests {
             ..State::default()
         };
         let mut rows = vec![];
+
         collect_rows(
             &world,
             &state.expanded,
@@ -506,10 +558,12 @@ mod tests {
             true,
             &mut rows,
         );
+
         assert_eq!(
             rows.iter().map(|row| row.entity).collect::<Vec<_>>(),
             vec![node, child, sibling]
         );
+
         assert_eq!(rows[1].branches, vec![true]);
         assert!(rows[1].is_last);
         assert!(rows[1].ancestor_selected);
@@ -517,6 +571,7 @@ mod tests {
 
         state.toggle(node);
         rows.clear();
+
         collect_rows(
             &world,
             &state.expanded,
@@ -527,14 +582,17 @@ mod tests {
             true,
             &mut rows,
         );
+
         assert_eq!(
             rows.iter().map(|row| row.entity).collect::<Vec<_>>(),
             vec![node, sibling]
         );
+
         state.toggle(node);
         assert_eq!(state.expanded, [root, node].into());
         state.toggle(root);
         rows.clear();
+
         collect_rows(
             &world,
             &state.expanded,
@@ -545,6 +603,7 @@ mod tests {
             true,
             &mut rows,
         );
+
         assert!(rows.is_empty());
     }
 }

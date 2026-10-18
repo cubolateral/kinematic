@@ -29,6 +29,7 @@ impl Inspection {
         entity: hecs::Entity,
     ) -> Vec<crate::core::TrackTarget> {
         let mut fields = Vec::new();
+
         for component in self.trackables(world, entity) {
             for info in (component.get)() {
                 fields.push(crate::core::TrackTarget::property(
@@ -37,6 +38,7 @@ impl Inspection {
                 ));
             }
         }
+
         if let Ok(properties) = world.get::<&crate::core::Properties>(entity) {
             fields.extend(
                 properties
@@ -45,11 +47,13 @@ impl Inspection {
                     .map(|(schema, _)| crate::core::TrackTarget::Dynamic(schema.clone())),
             );
         }
+
         fields.extend(
             crate::core::objects::shader_uniforms(world, entity)
                 .into_iter()
                 .map(|(name, _)| crate::core::TrackTarget::uniform(name)),
         );
+
         fields
     }
 

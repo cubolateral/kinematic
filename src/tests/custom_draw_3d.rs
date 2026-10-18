@@ -41,6 +41,7 @@ fn draw_custom_mesh(
         unlit: true,
         ..Default::default()
     };
+
     context.render_material(
         GeometryKey::new::<CustomShape>(0),
         three_d::CpuMesh::cube,
@@ -62,6 +63,7 @@ fn custom_3d_object_uses_the_public_draw_contract() {
         .mesh_shader(&shader)
         .mesh_uniform("amount", 1.0)
         .build(&mut scene);
+
     scene.world_3d().add(&custom);
 
     assert_eq!(custom.get_position_z(), 3.0);

@@ -15,10 +15,13 @@ fn track_args(field: &syn::Field) -> syn::Result<Option<TrackArgs>> {
     else {
         return Ok(None);
     };
+
     let mut args = TrackArgs::default();
+
     if matches!(attribute.meta, syn::Meta::Path(_)) {
         return Ok(Some(args));
     }
+
     attribute.parse_nested_meta(|meta| {
         let target = if meta.path.is_ident("min") {
             &mut args.min
@@ -27,12 +30,16 @@ fn track_args(field: &syn::Field) -> syn::Result<Option<TrackArgs>> {
         } else {
             return Err(meta.error("Expected `min` or `max`."));
         };
+
         if target.is_some() {
             return Err(meta.error("Duplicate track limit."));
         }
+
         *target = Some(meta.value()?.parse()?);
+
         Ok(())
     })?;
+
     Ok(Some(args))
 }
 
@@ -46,6 +53,7 @@ fn numeric_literal(expr: &Expr, integer: bool, unsigned: bool) -> syn::Result<f6
                     "Track limits must be numeric literals.",
                 ));
             };
+
             (true, &operand.lit)
         }
         _ => {
@@ -80,6 +88,7 @@ fn numeric_literal(expr: &Expr, integer: bool, unsigned: bool) -> syn::Result<f6
 
 fn limits_tokens(field: &syn::Field, args: &TrackArgs) -> syn::Result<proc_macro2::TokenStream> {
     let field_type = type_name(&field.ty);
+
     let Some(kind @ ("f32" | "i32" | "u32")) = field_type.as_deref() else {
         if args.min.is_some() || args.max.is_some() {
             return Err(syn::Error::new(
@@ -87,6 +96,7 @@ fn limits_tokens(field: &syn::Field, args: &TrackArgs) -> syn::Result<proc_macro
                 "Track limits are only supported for `f32`, `i32`, and `u32`.",
             ));
         }
+
         return Ok(quote!(crate::core::TrackLimits::None));
     };
 
@@ -115,6 +125,7 @@ fn limits_tokens(field: &syn::Field, args: &TrackArgs) -> syn::Result<proc_macro
             "Track `min` cannot be greater than `max`.",
         ));
     }
+
     if integer {
         let max = if unsigned {
             u32::MAX as f64
@@ -122,6 +133,7 @@ fn limits_tokens(field: &syn::Field, args: &TrackArgs) -> syn::Result<proc_macro
             i32::MAX as f64
         };
         let min = if unsigned { 0.0 } else { i32::MIN as f64 };
+
         for (expr, value) in [
             args.min.as_ref().zip(min_value),
             args.max.as_ref().zip(max_value),
@@ -147,6 +159,7 @@ fn limits_tokens(field: &syn::Field, args: &TrackArgs) -> syn::Result<proc_macro
         .as_ref()
         .map_or_else(|| quote!(None), |value| quote!(Some(#value)));
     let variant = format_ident!("{}", kind.to_uppercase());
+
     Ok(quote! {
         crate::core::TrackLimits::#variant {
             min: #min,
@@ -268,6 +281,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 },
                 |id| {
                     let id = id as u32;
+
                     quote! {
                         let value = #setter_value;
                         let value = <#struct_name as #trackable_trait>::track(#id).clamp(
@@ -280,6 +294,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     }
                 },
             );
+
         builder_setters.push(quote! {
             #[doc(hidden)]
             #field_visibility trait #setter_trait: Sized {
@@ -467,8 +482,10 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 )
             } else {
                 let input = quote!(<#field_ty as #track_value_type_trait>::Input);
+
                 (quote!(), input.clone(), quote!(), input.clone(), input)
             };
+
         tween_fns.push(quote! {
             pub fn #field_ident #value_generic (
                 &self,
@@ -485,6 +502,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 self.#field_ident.from_for::< <Next as #handler_context_trait>::Object >(from.into(), to.into())
             }
         });
+
         tween_trait_fns.push(quote! {
             fn #field_ident #value_generic (
                 self,
@@ -497,6 +515,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 to: #to_type,
             ) -> Self;
         });
+
         tween_impl_fns.push(quote! {
             fn #field_ident #value_generic (
                 self,
@@ -561,9 +580,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     ).relative(u8::MAX)
                 }
             });
+
             tween_trait_fns.push(quote! {
                 fn #by_method_name(self, delta: #field_ty) -> Self;
             });
+
             tween_impl_fns.push(quote! {
                 fn #by_method_name(self, delta: #field_ty) -> Self {
                     self.update_track(
@@ -586,6 +607,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     "Quad" => &["a", "b", "c", "d"],
                     _ => &["x", "y"],
                 };
+
                 for (channel, suffix) in axes.iter().enumerate() {
                     let channel = channel as u8;
                     let method_name = format_ident!("{}_{}", field_ident, suffix);
@@ -619,9 +641,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             ).component(#channel)
                         }
                     });
+
                     tween_trait_fns.push(quote! {
                         fn #method_name(self, value: f32) -> Self;
                     });
+
                     tween_impl_fns.push(quote! {
                         fn #method_name(self, value: f32) -> Self {
                             self.update_component(
@@ -637,6 +661,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                     });
 
                     let by_method_name = format_ident!("{}_by", method_name);
+
                     tween_fns.push(quote! {
                         pub fn #by_method_name(
                             &self,
@@ -650,9 +675,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             ).component(#channel).relative(1 << #channel)
                         }
                     });
+
                     tween_trait_fns.push(quote! {
                         fn #by_method_name(self, delta: f32) -> Self;
                     });
+
                     tween_impl_fns.push(quote! {
                         fn #by_method_name(self, delta: f32) -> Self {
                             self.update_component(
@@ -706,9 +733,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             ).component(#channel)
                         }
                     });
+
                     tween_trait_fns.push(quote! {
                         fn #method_name(self, value: f32) -> Self;
                     });
+
                     tween_impl_fns.push(quote! {
                         fn #method_name(self, value: f32) -> Self {
                             self.update_component(
@@ -754,10 +783,12 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                             )
                         }
                     });
+
                     tween_trait_fns.push(quote! {
                         fn #method_name(self, angle: f32) -> Self;
                         fn #by_method_name(self, angle: f32) -> Self;
                     });
+
                     tween_impl_fns.push(quote! {
                         fn #method_name(self, angle: f32) -> Self {
                             self.set_euler_track(#struct_name::#property_name(), #axis, angle)
@@ -770,6 +801,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 }
 
                 let method_name = format_ident!("{}_axis", field_ident);
+
                 tween_fns.push(quote! {
                     pub fn #method_name(
                         &self,
@@ -782,9 +814,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                         )
                     }
                 });
+
                 tween_trait_fns.push(quote! {
                     fn #method_name(self, axis: #vector3_type, angle: f32) -> Self;
                 });
+
                 tween_impl_fns.push(quote! {
                     fn #method_name(self, axis: #vector3_type, angle: f32) -> Self {
                         self.set_axis_track(#struct_name::#property_name(), axis, angle)
@@ -792,6 +826,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                 });
 
                 let method_name = format_ident!("{}_axis_by", field_ident);
+
                 tween_fns.push(quote! {
                     pub fn #method_name(
                         &self,
@@ -804,9 +839,11 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
                         )
                     }
                 });
+
                 tween_trait_fns.push(quote! {
                     fn #method_name(self, axis: #vector3_type, angle: f32) -> Self;
                 });
+
                 tween_impl_fns.push(quote! {
                     fn #method_name(self, axis: #vector3_type, angle: f32) -> Self {
                         self.rotate_track(#struct_name::#property_name(), axis, angle)

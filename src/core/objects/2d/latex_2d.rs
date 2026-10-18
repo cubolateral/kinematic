@@ -63,18 +63,26 @@ pub fn draw_latex_2d(
 ) {
     let geometry = geometry(&shape.text);
     let size = shape.size.max(0.0);
+
     if size <= 0.0 {
         return;
     }
+
     canvas.save();
     canvas.scale((size, size));
+
     let mut part_style = style.clone();
+
     part_style.stroke_width /= size;
+
     for part in &geometry.parts {
         part_style.fill = part.color.unwrap_or(style.fill);
+
         let path = weighted_path(&part.path, shape.thickness / size);
+
         draw_complete_styled_path(&path, &part_style, scale, opacity, canvas);
     }
+
     canvas.restore();
 }
 
@@ -87,6 +95,7 @@ fn draw_latex_object(
     let shape = world.get::<&Latex2DShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
+
     draw_latex_2d(&shape, &style, transform.scale, opacity, canvas);
 }
 
@@ -104,6 +113,7 @@ impl Default for Latex2D {
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
                     let size = latex_box(&shape);
+
                     crate::core::components::styled_bounds(
                         skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y),
                         &style,
@@ -124,10 +134,13 @@ mod tests {
 
     fn pixels(scene: &Scene) -> Vec<skia_safe::Color> {
         let mut surface = skia_safe::surfaces::raster_n32_premul((640, 320)).unwrap();
+
         surface.canvas().clear(skia_safe::colors::TRANSPARENT);
         surface.canvas().translate((320.0, 160.0));
         scene.draw(surface.canvas());
+
         let pixels = surface.peek_pixels().unwrap();
+
         (0..320)
             .flat_map(|y| (0..640).map(move |x| (x, y)))
             .map(|point| pixels.get_color(point))
@@ -142,20 +155,25 @@ mod tests {
             .size(48.0)
             .fill(Color::BLUE)
             .build(&mut scene);
+
         assert!(pixels(&scene).iter().all(|color| color.a() == 0));
         scene.world_2d().add(&formula);
+
         let bounds = formula.box_size();
         let rendered = pixels(&scene);
+
         assert!(
             rendered
                 .iter()
                 .any(|color| color.r() > 200 && color.b() < 20)
         );
+
         assert!(
             rendered
                 .iter()
                 .any(|color| color.b() > 200 && color.r() < 20)
         );
+
         for (index, color) in rendered
             .iter()
             .enumerate()
@@ -163,13 +181,17 @@ mod tests {
         {
             let x = (index % 640) as f32 - 320.0;
             let y = (index / 640) as f32 - 160.0;
+
             assert!(
                 x.abs() <= bounds.x * 0.5 + 1.0 && y.abs() <= bounds.y * 0.5 + 1.0,
                 "Formula ink exceeds its bounds: {color:?}."
             );
         }
+
         formula.size(96.0).play();
+
         let doubled = formula.box_size();
+
         assert!((doubled.x - bounds.x * 2.0).abs() < 0.001);
         assert!((doubled.y - bounds.y * 2.0).abs() < 0.001);
     }

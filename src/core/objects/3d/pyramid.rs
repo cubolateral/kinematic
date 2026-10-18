@@ -63,6 +63,7 @@ fn validate_sides(sides: u32) -> Result<(), String> {
     if !(3..=256).contains(&sides) {
         return Err("Pyramid sides must be between 3 and 256.".into());
     }
+
     Ok(())
 }
 
@@ -84,6 +85,7 @@ fn pyramid_mesh(sides: u32, bottom_cap: bool) -> three_d::CpuMesh {
             positions.extend_from_slice(&[base[0], base[index], base[index + 1]]);
         }
     }
+
     for index in 0..base.len() {
         positions.extend_from_slice(&[base[index], apex, base[(index + 1) % base.len()]]);
     }
@@ -92,7 +94,9 @@ fn pyramid_mesh(sides: u32, bottom_cap: bool) -> three_d::CpuMesh {
         positions: three_d::Positions::F32(positions),
         ..Default::default()
     };
+
     mesh.compute_normals();
+
     mesh
 }
 
@@ -102,10 +106,13 @@ fn draw_pyramid(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     let shape = world.get::<&PyramidShape>(entity).unwrap();
+
     validate_sides(shape.sides)?;
     validate_dimensions(shape.size)?;
+
     let transformation = global_matrix3d(world, entity) * glam::Mat4::from_scale(shape.size);
     let material = world.get::<&Material>(entity).unwrap();
+
     context.render_material(
         GeometryKey::new::<PyramidShape>(geometry_variant(shape.sides, shape.cap)),
         || pyramid_mesh(shape.sides, shape.cap),
@@ -139,6 +146,7 @@ mod tests {
         assert_eq!(pyramid.box_size(), vec3(2.0, 3.0, 4.0));
         assert_eq!(pyramid.get(PyramidShape::sides_property()), 3);
         assert!(pyramid.get(PyramidShape::cap_property()));
+
         assert_eq!(
             scene
                 .world()
@@ -147,6 +155,7 @@ mod tests {
                 .sides,
             3
         );
+
         assert_eq!(pyramid_mesh(3, true).triangle_count(), 4);
     }
 

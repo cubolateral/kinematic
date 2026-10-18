@@ -7,6 +7,7 @@ use kinematic_macros::{Node, Object, TrackEnum, Trackable};
 pub enum LayoutDirection2D {
     #[default]
     Horizontal,
+
     HorizontalReverse,
     Vertical,
     VerticalReverse,

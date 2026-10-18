@@ -128,16 +128,19 @@ impl Binding {
     fn modifiers(mut self, required: KeyMods, allowed: KeyMods) -> Self {
         self.required_modifiers = required;
         self.allowed_modifiers = allowed;
+
         self
     }
 
     fn trigger(mut self, trigger: Trigger) -> Self {
         self.trigger = trigger;
+
         self
     }
 
     fn mouse(mut self, mouse: MouseButton) -> Self {
         self.mouse = Some(mouse);
+
         self
     }
 }
@@ -424,6 +427,7 @@ impl Default for InputMap {
                 .trigger(Repeat),
             ],
         };
+
         for (action, name, display, key, modifiers) in [
             (
                 Cut,
@@ -602,17 +606,20 @@ impl Default for InputMap {
             } else {
                 Repeat
             };
+
             map.bindings.push(
                 Binding::new(action, CodeEditor, name, display, &[key])
                     .modifiers(modifiers, modifiers)
                     .trigger(trigger),
             );
         }
+
         for binding in &mut map.bindings {
             if matches!(binding.action, InsertAbove | InsertBelow | SoftNewline) {
                 binding.keys.push(Key::KeypadEnter);
             }
         }
+
         for (action, name, display, key, modifiers) in [
             (
                 ChordPrefix,
@@ -655,6 +662,7 @@ impl Default for InputMap {
                     .modifiers(modifiers, modifiers),
             );
         }
+
         // CTE handles these bindings directly; list them alongside application commands.
         for (name, display, key, modifiers) in [
             ("Undo", "Ctrl + Z", Key::Z, KeyMods::CTRL),
@@ -767,6 +775,7 @@ impl Default for InputMap {
                     .modifiers(modifiers, modifiers),
             );
         }
+
         map
     }
 }
@@ -790,6 +799,7 @@ impl InputMap {
             } else {
                 dear_imgui_rs::ShortcutFlags::NONE
             });
+
         binding.keys.iter().fold(false, |pressed, &key| {
             ui.shortcut_with_flags(
                 KeyChord::new(key).with_mods(binding.required_modifiers),
@@ -800,12 +810,14 @@ impl InputMap {
 
     pub fn chord(&self, action: Action) -> KeyChord {
         let binding = self.binding(action);
+
         KeyChord::new(binding.keys[0]).with_mods(binding.required_modifiers)
     }
 
     pub fn active(&self, ui: &Ui, action: Action) -> bool {
         let io = ui.io();
         let mut modifiers = KeyMods::empty();
+
         for (held, modifier) in [
             (io.key_ctrl(), KeyMods::CTRL),
             (io.key_shift(), KeyMods::SHIFT),
@@ -814,6 +826,7 @@ impl InputMap {
         ] {
             modifiers.set(modifier, held);
         }
+
         self.bindings
             .iter()
             .filter(|binding| binding.action == action)
@@ -823,6 +836,7 @@ impl InputMap {
                 {
                     return false;
                 }
+
                 binding.keys.iter().any(|&key| match binding.trigger {
                     Trigger::Once => ui.is_key_pressed_with_repeat(key, false),
                     Trigger::Repeat => ui.is_key_pressed_with_repeat(key, true),
@@ -836,6 +850,7 @@ impl InputMap {
 
 pub(super) fn map() -> &'static InputMap {
     static INPUTS: std::sync::OnceLock<InputMap> = std::sync::OnceLock::new();
+
     INPUTS.get_or_init(InputMap::default)
 }
 
@@ -854,6 +869,7 @@ mod tests {
     #[test]
     fn bindings_match_modifiers_alternatives_and_runtime_remapping() {
         let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
+
         for (action, key, modifiers, expected) in [
             (Action::ToggleCamera, Key::Keypad0, KeyMods::empty(), true),
             (Action::ToggleCamera, Key::Keypad0, KeyMods::CTRL, false),
@@ -871,17 +887,23 @@ mod tests {
                 .iter_mut()
                 .find(|binding| binding.action == Action::ToggleMargin)
                 .unwrap();
+
             binding.keys = vec![Key::N];
             binding.display = "N".into();
+
             let mut context = dear_imgui_rs::Context::create();
+
             context.set_ini_filename(None::<&str>).unwrap();
+
             context
                 .font_atlas()
                 .try_claim_legacy_renderer()
                 .unwrap()
                 .build();
+
             context.io_mut().set_display_size([640.0, 480.0]);
             context.io_mut().set_delta_time(1.0 / 60.0);
+
             for (modifier, key) in [
                 (KeyMods::CTRL, Key::ModCtrl),
                 (KeyMods::SHIFT, Key::ModShift),
@@ -890,12 +912,15 @@ mod tests {
                     .io_mut()
                     .add_key_event(key, modifiers.contains(modifier));
             }
+
             context.io_mut().add_key_event(key, true);
+
             assert_eq!(
                 inputs.active(context.frame(), action),
                 expected,
                 "{action:?}"
             );
+
             context.end_frame();
         }
     }
@@ -904,28 +929,38 @@ mod tests {
     fn held_and_repeated_actions_keep_their_trigger_behavior() {
         let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
+
         context
             .font_atlas()
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
+
         context.io_mut().set_display_size([640.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         for key in [Key::F, Key::D, Key::LeftArrow] {
             context.io_mut().add_key_event(key, true);
         }
+
         let inputs = InputMap::default();
         let mut repeated = false;
+
         for frame in 0..60 {
             let ui = context.frame();
+
             assert_eq!(inputs.active(ui, Action::ToggleFullscreen), frame == 0);
             assert!(inputs.active(ui, Action::MoveRight));
+
             if frame > 0 && inputs.active(ui, Action::PreviousFrame) {
                 repeated = true;
             }
+
             context.end_frame();
         }
+
         assert!(repeated);
     }
 }

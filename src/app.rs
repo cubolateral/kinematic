@@ -29,23 +29,28 @@ impl App {
         let video_subsystem = sdl.video().unwrap();
 
         let gl_attributes = video_subsystem.gl_attr();
+
         gl_attributes.set_context_version(3, 3);
         gl_attributes.set_context_profile(sdl3::video::GLProfile::Core);
 
         let window_cache = WindowCache::load();
         let mut window_builder =
             video_subsystem.window("Kinematic", window_cache.size.0, window_cache.size.1);
+
         if let Some((x, y)) = window_cache.position {
             window_builder.position(x, y);
         } else {
             window_builder.position_centered();
         }
+
         if window_cache.maximized {
             window_builder.maximized();
         }
+
         let window = window_builder.resizable().opengl().build().unwrap();
 
         let gl_context = window.gl_create_context().unwrap();
+
         window.gl_make_current(&gl_context).unwrap();
 
         // Initialize glow.
@@ -60,9 +65,11 @@ impl App {
 
         // Initialize imgui.
         let mut imgui = dear_imgui_rs::Context::create();
+
         imgui.set_ini_filename(None::<std::path::PathBuf>).unwrap();
 
         let ui = Ui::new(&mut imgui);
+
         if let Ok(path) = crate::storage::global_path("cache/layout.ini") {
             if let Ok(text) = std::fs::read_to_string(path) {
                 imgui.load_ini_settings(&text);
@@ -124,6 +131,7 @@ impl App {
     /// Opens a Lua project when the editor starts.
     pub fn open_project(mut self, root: impl Into<std::path::PathBuf>) -> Self {
         self.lua_project = Some(crate::scripting::LuaProject::open(root.into()));
+
         self
     }
 
@@ -139,7 +147,9 @@ impl App {
 
     fn save_layout(&mut self) {
         let mut text = String::new();
+
         self.imgui.save_ini_settings(&mut text);
+
         if let Ok(path) = crate::storage::global_path("cache/layout.ini") {
             let expected = std::fs::read(&path).ok();
             let _ = crate::core::atomic_write(&path, text.as_bytes(), expected.as_deref());
@@ -150,30 +160,38 @@ impl App {
         if let Err(error) = crate::storage::migrate_globals(context) {
             eprintln!("Could not migrate global settings: {error}.");
         }
+
         self.ui.reload_appearance();
+
         if let Ok(path) = crate::storage::global_path("cache/layout.ini") {
             if let Ok(text) = std::fs::read_to_string(path) {
                 self.imgui.load_ini_settings(&text);
             }
         }
+
         let cache = WindowCache::load();
         let _ = self.window.set_size(cache.size.0, cache.size.1);
+
         if let Some((x, y)) = cache.position {
             self.window.set_position(
                 sdl3::video::WindowPos::Positioned(x),
                 sdl3::video::WindowPos::Positioned(y),
             );
         }
+
         if cache.maximized {
             self.window.maximize();
         }
+
         self.window_cache = cache;
     }
 
     /// Exports the selected project through the existing application renderer and exits.
     pub fn run_export(&mut self) -> Result<(), String> {
         self.export_only = true;
+
         self.run();
+
         self.export_result
             .take()
             .unwrap_or_else(|| Err("Project could not be exported.".into()))
@@ -190,6 +208,7 @@ impl App {
                     .unwrap_or(std::ptr::null())
             })
         };
+
         three_d::Context::from_gl_context(std::sync::Arc::new(three_gl))
             .expect("Three-d must initialize against the SDL context.")
     }
@@ -198,6 +217,7 @@ impl App {
     pub fn run(&mut self) {
         let three_context = self.three_context();
         let mut editor = None;
+
         if let Some(project) = self.lua_project.take() {
             match project.and_then(|project| {
                 Editor::new_lua(
@@ -216,10 +236,12 @@ impl App {
         if editor.is_some() {
             self.remember_project(editor.as_ref());
         }
+
         if let Some(editor) = &editor {
             self.ui.restore_project_view(editor);
             self.restore_window(editor.context());
         }
+
         if self.export_only {
             if let Some(editor) = &mut editor {
                 editor.toggle_export(true);
@@ -227,11 +249,13 @@ impl App {
                 self.export_result = Some(Err("Project could not be opened for export.".into()));
             }
         }
+
         let mut events = self.sdl.event_pump().unwrap();
 
         'running: loop {
             for mut event in events.poll_iter() {
                 normalize_key_event(&mut event);
+
                 self.imgui_sdl
                     .process_event(&mut self.imgui, &event)
                     .unwrap();
@@ -247,6 +271,7 @@ impl App {
                 if let Some(settings) = editor.take_pending_project_settings() {
                     editor.apply_project_settings(settings);
                 }
+
                 if let Some(size) = editor.take_pending_editor_3d_size() {
                     editor.resize_editor_3d(
                         size,
@@ -257,6 +282,7 @@ impl App {
                 }
 
                 editor.update();
+
                 editor.apply_pending_lua(
                     &mut self.imgui_renderer,
                     &mut self.skia_context,
@@ -275,6 +301,7 @@ impl App {
                     self.ui.render_mode(),
                 );
             }
+
             if self.export_only && editor.as_ref().is_none_or(|editor| !editor.is_exporting()) {
                 self.export_result = Some(
                     if editor
@@ -290,15 +317,19 @@ impl App {
                             .to_owned())
                     },
                 );
+
                 break 'running;
             }
+
             self.ui.prepare_documents(&self.imgui, editor.as_ref());
             self.ui.apply_scale(&mut self.imgui);
             self.imgui_sdl.new_frame(&mut self.imgui).unwrap();
 
             let ui = self.imgui.frame();
+
             if let Some(editor) = &mut editor {
                 self.ui.draw(editor, ui);
+
                 if let Some([x, y]) = editor.take_pending_mouse_warp() {
                     self.sdl.mouse().warp_mouse_in_window(&self.window, x, y);
                 }
@@ -307,11 +338,13 @@ impl App {
                     .build()
                     .expect("Welcome workspace must be valid.");
             }
+
             self.ui.draw_projects(editor.as_mut(), ui);
 
             let frame = self
                 .imgui
                 .render(self.imgui_renderer.renderer_consumer().unwrap());
+
             self.imgui_renderer.render(frame).unwrap();
             self.window.gl_swap_window();
             self.window_cache.update(&self.window);
@@ -340,45 +373,57 @@ impl App {
                         })
                         .transpose()
                 });
+
                 match result {
                     Ok(next) => {
                         if let Some(mut previous) = editor.take() {
                             self.window_cache.save();
                             self.save_layout();
+
                             previous.shutdown(
                                 &self.gl,
                                 self.ui.editor_mode(),
                                 self.ui.is_fullscreen(),
                             );
+
                             previous.preview_mut().unregister(&mut self.imgui_renderer);
+
                             previous
                                 .editor_2d_mut()
                                 .unregister(&mut self.imgui_renderer);
+
                             previous
                                 .editor_3d_mut()
                                 .unregister(&mut self.imgui_renderer);
                         }
+
                         crate::scripting::release_unused();
                         self.ui.reset_project();
+
                         editor = next;
+
                         self.remember_project(editor.as_ref());
+
                         if let Some(editor) = &editor {
                             self.ui.restore_project_view(editor);
                             self.restore_window(editor.context());
                         }
                     }
+
                     Err(error) => self.ui.project_error(error),
                 }
             }
         }
 
         self.ui.reset_project();
+
         if let Some(mut editor) = editor {
             editor.shutdown(&self.gl, self.ui.editor_mode(), self.ui.is_fullscreen());
             editor.preview_mut().unregister(&mut self.imgui_renderer);
             editor.editor_2d_mut().unregister(&mut self.imgui_renderer);
             editor.editor_3d_mut().unregister(&mut self.imgui_renderer);
         }
+
         crate::scripting::release_unused();
         self.window_cache.update(&self.window);
         self.window_cache.save();
@@ -397,6 +442,7 @@ fn normalize_key_event(event: &mut sdl3::event::Event) {
         event::Event,
         keyboard::{Keycode, Scancode},
     };
+
     let (Event::KeyDown {
         keycode: Some(key),
         scancode,
@@ -410,6 +456,7 @@ fn normalize_key_event(event: &mut sdl3::event::Event) {
     else {
         return;
     };
+
     // ImGui uses US scancodes for punctuation, including the unrecognized ABNT2 slash key.
     let mapped = match key {
         Keycode::Slash => Scancode::Slash,
@@ -422,6 +469,7 @@ fn normalize_key_event(event: &mut sdl3::event::Event) {
         Keycode::Grave => Scancode::Grave,
         _ => return,
     };
+
     *scancode = Some(mapped);
 }
 
@@ -474,11 +522,15 @@ mod keyboard_tests {
                 which: 0,
                 raw: 0,
             };
+
             normalize_key_event(&mut down);
+
             normalize_key_event(&mut up);
+
             assert!(
                 matches!(down, Event::KeyDown { scancode: Some(code), keymod: Mod::LCTRLMOD, .. } if code == expected)
             );
+
             assert!(
                 matches!(up, Event::KeyUp { scancode: Some(code), keymod: Mod::NOMOD, .. } if code == expected)
             );

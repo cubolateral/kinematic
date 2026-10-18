@@ -55,20 +55,28 @@ impl State {
             history_index: 0,
             error: None,
         };
+
         state.refresh();
+
         Ok(state)
     }
 
     fn refresh(&mut self) {
         self.loading = None;
+
         self.cancelled.store(true, Ordering::Relaxed);
+
         self.cancelled = Arc::new(AtomicBool::new(false));
+
         let cancelled = self.cancelled.clone();
         let path = self.cwd.clone();
         let (send, receive) = mpsc::channel();
+
         self.entries.clear();
+
         self.selected = None;
         self.error = None;
+
         match thread::Builder::new()
             .name("File browser".into())
             .spawn(move || {
@@ -91,15 +99,21 @@ impl State {
                 if remember && path != self.cwd {
                     self.history.truncate(self.history_index + 1);
                     self.history.push(path.clone());
+
                     self.history_index = self.history.len() - 1;
                 }
+
                 self.path = path.to_string_lossy().into_owned();
                 self.cwd = path;
+
                 self.refresh();
+
                 true
             }
+
             Err(error) => {
                 self.error = Some(format!("Could not open directory: {error}."));
+
                 false
             }
         }
@@ -110,6 +124,7 @@ impl State {
             match receive.try_recv() {
                 Ok(result) => {
                     self.loading = None;
+
                     match result {
                         Ok(entries) => self.entries = entries,
                         Err(error) => {
@@ -117,59 +132,78 @@ impl State {
                         }
                     }
                 }
+
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.loading = None;
                     self.error = Some("Directory reader stopped.".into());
                 }
+
                 Err(mpsc::TryRecvError::Empty) => {}
             }
         }
+
         const TITLE: &str = "Select Project Folder";
+
         if !ui.is_popup_open(TITLE) {
             ui.open_popup(TITLE);
         }
+
         let _frames = ui.push_style_var(StyleVar::FrameBorderSize(0.0));
         let _children = ui.push_style_var(StyleVar::ChildBorderSize(0.0));
         let _windows = ui.push_style_var(StyleVar::WindowBorderSize(0.0));
         let _popup_border = ui.push_style_var(StyleVar::PopupBorderSize(0.0));
         let mut open = true;
+
         {
             let popup = super::windows::sized_modal(ui, TITLE, &mut open, [760.0, 520.0]);
+
             if let Some(_popup) = popup {
                 for (label, step, enabled) in [
                     ("Back", -1, self.history_index > 0),
                     ("Forward", 1, self.history_index + 1 < self.history.len()),
                 ] {
                     let _disabled = ui.begin_disabled_with_cond(!enabled);
+
                     if button(ui, label) {
                         let index = (self.history_index as isize + step) as usize;
                         let path = self.history[index].clone();
+
                         if self.navigate(&path, false) {
                             self.history_index = index;
                         }
                     }
+
                     ui.same_line();
                 }
+
                 {
                     let _disabled = ui.begin_disabled_with_cond(self.cwd.parent().is_none());
+
                     if button(ui, "Up") {
                         if let Some(parent) = self.cwd.parent().map(Path::to_path_buf) {
                             self.navigate(&parent, true);
                         }
                     }
                 }
+
                 ui.same_line();
+
                 if button(ui, "Refresh") {
                     self.refresh();
                 }
+
                 ui.same_line();
+
                 let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" });
+
                 if let Some(home) = home {
                     if button(ui, "Home") {
                         self.navigate(Path::new(&home), true);
                     }
                 }
+
                 ui.set_next_item_width(-1.0);
+
                 if ui
                     .input_text("##BrowserPath", &mut self.path)
                     .enter_returns_true(true)
@@ -177,10 +211,12 @@ impl State {
                 {
                     self.navigate(&PathBuf::from(&self.path), true);
                 }
+
                 ui.set_next_item_width((ui.content_region_avail_width() - 170.0).max(1.0));
                 ui.input_text("Search", &mut self.search).build();
                 ui.same_line();
                 ui.checkbox("Hidden files", &mut self.hidden);
+
                 let query = self.search.to_lowercase();
                 let entries: Vec<_> = self
                     .entries
@@ -191,6 +227,7 @@ impl State {
                     })
                     .collect();
                 let mut navigate = None;
+
                 ui.table("BrowserFiles")
                     .flags(
                         TableFlags::SCROLL_Y | TableFlags::ROW_BG | TableFlags::NO_SAVED_SETTINGS,
@@ -210,15 +247,19 @@ impl State {
                         for index in ListClipper::new(entries.len()).begin(ui).iter() {
                             let entry = entries[index];
                             let _id = ui.push_id(index);
+
                             ui.table_next_row();
                             ui.table_next_column();
+
                             let (icon, color) = if entry.directory {
                                 (icons::FOLDER, [0.95, 0.72, 0.3, 1.0])
                             } else {
                                 (icons::FILE, [0.4, 0.7, 0.95, 1.0])
                             };
+
                             ui.text_colored(color, icon);
                             ui.same_line();
+
                             let position = ui.cursor_screen_pos();
                             let clicked = ui
                                 .selectable_config("##Entry")
@@ -229,14 +270,17 @@ impl State {
                                 )
                                 .selected(self.selected.as_ref() == Some(&entry.path))
                                 .build();
+
                             ui.get_window_draw_list().add_text(
                                 position,
                                 ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
                                 &entry.name,
                             );
+
                             if clicked {
                                 self.selected = Some(entry.path.clone());
                             }
+
                             if entry.directory
                                 && ((clicked && ui.is_mouse_double_clicked(MouseButton::Left))
                                     || (ui.is_item_focused()
@@ -244,7 +288,9 @@ impl State {
                             {
                                 navigate = Some(entry.path.clone());
                             }
+
                             ui.table_next_column();
+
                             if !entry.directory {
                                 ui.text(
                                     entry.path.extension().unwrap_or_default().to_string_lossy(),
@@ -252,41 +298,54 @@ impl State {
                             }
                         }
                     });
+
                 if let Some(path) = navigate {
                     self.navigate(&path, true);
                 }
+
                 if self.loading.is_some() {
                     ui.text("Loading...");
                 }
+
                 if let Some(error) = &self.error {
                     ui.text_wrapped(error);
                 }
+
                 let target = self.selected.as_ref().unwrap_or(&self.cwd);
+
                 {
                     let _disabled = ui.begin_disabled_with_cond(
                         self.loading.is_some() || self.error.is_some() || !target.is_dir(),
                     );
+
                     if button(ui, "Select Folder") {
                         ui.close_current_popup();
+
                         return Some(Some(target.clone()));
                     }
                 }
+
                 ui.same_line();
+
                 if button(ui, "Cancel") || inputs::active(ui, InputAction::Cancel) {
                     ui.close_current_popup();
+
                     return Some(None);
                 }
             }
         }
+
         if !open {
             return Some(None);
         }
+
         None
     }
 }
 
 fn button(ui: &Ui, label: &str) -> bool {
     let _border = ui.push_style_var(StyleVar::FrameBorderSize(1.0));
+
     ui.button(label)
 }
 
@@ -303,6 +362,7 @@ fn read_directory(path: &Path, cancelled: &AtomicBool) -> io::Result<Vec<Entry>>
             let entry = entry?;
             let kind = entry.file_type()?;
             let path = entry.path();
+
             Ok(Entry {
                 directory: kind.is_dir() || (kind.is_symlink() && path.is_dir()),
                 name: entry.file_name().to_string_lossy().into_owned(),
@@ -310,7 +370,9 @@ fn read_directory(path: &Path, cancelled: &AtomicBool) -> io::Result<Vec<Entry>>
             })
         })
         .collect::<io::Result<Vec<_>>>()?;
+
     entries.sort_by_cached_key(|entry| (!entry.directory, entry.name.to_lowercase()));
+
     Ok(entries)
 }
 
@@ -322,28 +384,38 @@ mod tests {
     fn browser_draws_and_restores_the_editors_border_style() {
         let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
+
         let font = crate::ui::theme::initialize(&mut context);
+
         context
             .font_atlas()
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
+
         context.io_mut().set_display_size([1280.0, 720.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         let mut state = State::new(std::env::temp_dir().to_str().unwrap()).unwrap();
+
         state.entries = vec![Entry {
             path: state.cwd.join("scene##.lua"),
             name: "scene##.lua".into(),
             directory: false,
         }];
+
         state.loading = None;
+
         for _ in 0..2 {
             let ui = context.frame();
             let _font = ui.push_font(font);
+
             assert!(state.draw(ui).is_none());
             assert_eq!(ui.clone_style().frame_border_size(), 1.0);
             assert_eq!(ui.clone_style().child_border_size(), 1.0);
+
             drop(_font);
             context.end_frame();
         }
@@ -352,19 +424,26 @@ mod tests {
     #[test]
     fn listing_keeps_extensions_and_real_brackets_and_navigation_rejects_files() {
         let root = std::env::temp_dir().join(format!("kinematic-browser-{}", std::process::id()));
+
         fs::create_dir_all(root.join("Folder [real]")).unwrap();
+
         fs::write(root.join("scene.lua"), "").unwrap();
+
         let entries = read_directory(&root, &AtomicBool::new(false)).unwrap();
+
         assert_eq!(entries[0].name, "Folder [real]");
         assert!(entries[0].directory);
         assert_eq!(entries[1].name, "scene.lua");
         assert_eq!(entries[1].path.extension().unwrap(), "lua");
+
         let mut state = State::new(root.to_str().unwrap()).unwrap();
         let cwd = state.cwd.clone();
+
         assert!(!state.navigate(&root.join("scene.lua"), true));
         assert_eq!(state.cwd, cwd);
         assert!(state.navigate(&root.join("Folder [real]"), true));
         assert_eq!(state.history.len(), 2);
+
         fs::remove_dir_all(root).unwrap();
     }
 }

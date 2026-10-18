@@ -24,6 +24,7 @@ pub enum Task {
         relative: u8,
         implicit: bool,
     },
+
     /// Interpolates one tracked component field over a duration.
     Tween {
         entity: hecs::Entity,
@@ -34,6 +35,7 @@ pub enum Task {
         duration: f32,
         easing: Easing,
     },
+
     #[doc(hidden)]
     PropertyTween {
         entity: hecs::Entity,
@@ -47,6 +49,7 @@ pub enum Task {
         relative: u8,
         implicit: bool,
     },
+
     /// Interpolates one builder-defined shader uniform.
     #[doc(hidden)]
     UniformTween {
@@ -57,6 +60,7 @@ pub enum Task {
         duration: f32,
         easing: Easing,
     },
+
     #[doc(hidden)]
     UniformPropertyTween {
         entity: hecs::Entity,
@@ -67,6 +71,7 @@ pub enum Task {
         easing: Easing,
         implicit: bool,
     },
+
     /// Rotates a quaternion through an axis-angle path without losing full turns.
     #[doc(hidden)]
     RotationTween {
@@ -79,6 +84,7 @@ pub enum Task {
         duration: f32,
         easing: Easing,
     },
+
     #[doc(hidden)]
     RotationPropertyTween {
         entity: hecs::Entity,
@@ -90,12 +96,16 @@ pub enum Task {
         duration: f32,
         easing: Easing,
     },
+
     /// Advances the timeline without changing scene state.
     Wait(f32),
+
     /// Runs child tasks sequentially from the same group.
     Chain(Vec<Task>),
+
     /// Runs all child tasks from the same timeline position.
     All(Vec<Task>),
+
     /// Loops a finite, positive-duration sequence without advancing the timeline.
     /// Nested repeats and concurrent writes to the same property are rejected.
     Repeat(Vec<Task>),

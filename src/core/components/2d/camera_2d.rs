@@ -43,6 +43,7 @@ impl Camera2D {
         {
             return Err("Canvas2D camera requires finite values and positive zoom.".into());
         }
+
         Ok(())
     }
 }

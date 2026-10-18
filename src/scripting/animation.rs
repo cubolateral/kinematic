@@ -35,6 +35,7 @@ pub(super) fn channel(value: &TrackValue, name: &str) -> Result<u8> {
         TrackValue::Quad(_) => &["a", "b", "c", "d"],
         _ => &[],
     };
+
     names
         .iter()
         .position(|v| *v == name)
@@ -51,18 +52,24 @@ fn properties(
     uniforms: bool,
 ) -> Result<Vec<(PropertyHandle, Value)>> {
     let mut result = Vec::new();
+
     for pair in table.pairs::<String, Value>() {
         let (name, value) = pair?;
+
         if !uniforms && name == "uniforms" {
             let Value::Table(table) = value else {
                 return Err(mlua::Error::runtime("Uniforms must be a table."));
             };
+
             result.extend(properties(object, table, true)?);
+
             continue;
         }
+
         let property = if uniforms {
             let runtime = object.runtime()?;
             let target = crate::core::TrackTarget::uniform(name.clone());
+
             if !crate::core::objects::shader_uniforms(
                 &runtime.world.borrow().borrow(),
                 object.entity,
@@ -72,6 +79,7 @@ fn properties(
             {
                 return Err(mlua::Error::runtime(format!("Unknown uniform '{name}'.")));
             }
+
             PropertyHandle {
                 object: object.clone(),
                 target,
@@ -80,6 +88,7 @@ fn properties(
         } else {
             object.property(&name)?
         };
+
         if let Value::Table(table) = &value
             && property.channel.is_none()
             && table
@@ -90,6 +99,7 @@ fn properties(
             for pair in table.clone().pairs::<String, Value>() {
                 let (name, value) = pair?;
                 let channel = channel(&property.value()?, &name)?;
+
                 result.push((
                     PropertyHandle {
                         channel: Some(channel),
@@ -102,11 +112,14 @@ fn properties(
             result.push((property, value));
         }
     }
+
     let mut masks: Vec<(crate::core::TrackTarget, u8)> = Vec::new();
+
     for (property, _) in &result {
         let mask = property
             .channel
             .map_or((1 << property.value()?.channels()) - 1, |c| 1 << c);
+
         if masks
             .iter()
             .any(|(target, previous)| target.same_field(&property.target) && previous & mask != 0)
@@ -115,29 +128,38 @@ fn properties(
                 "Overlapping property or channel declarations.",
             ));
         }
+
         masks.push((property.target.clone(), mask));
     }
+
     Ok(result)
 }
 
 pub(super) fn configure(lua: &Lua, object: &ObjectHandle, options: &Table) -> Result<()> {
     let fields = lua.create_table()?;
+
     for pair in options.clone().pairs::<String, Value>() {
         let (name, value) = pair?;
+
         if name != "id" && name != "name" && !super::resources::reserved(&name) {
             fields.set(name, value)?;
         }
     }
+
     let resolved = properties(object, fields, false)?;
+
     for (property, value) in resolved {
         property.set(lua, value)?;
     }
+
     let runtime = object.runtime()?;
     let world = runtime.world.borrow();
     let world = world.borrow();
+
     if let Ok(camera) = world.get::<&crate::core::components::Camera3D>(object.entity) {
         camera.validate().map_err(mlua::Error::runtime)?;
     }
+
     Ok(())
 }
 
@@ -147,10 +169,12 @@ fn pair(value: Value) -> Result<(Value, Value)> {
             "From requires a pair {start, finish}.",
         ));
     };
+
     let entries = table
         .clone()
         .pairs::<Value, Value>()
         .collect::<Result<Vec<_>>>()?;
+
     if entries.len() != 2
         || entries
             .iter()
@@ -160,11 +184,14 @@ fn pair(value: Value) -> Result<(Value, Value)> {
             "From requires exactly two indexed values.",
         ));
     }
+
     let start = table.raw_get::<Value>(1)?;
     let finish = table.raw_get::<Value>(2)?;
+
     if start.is_nil() || finish.is_nil() {
         return Err(mlua::Error::runtime("From pairs cannot omit an endpoint."));
     }
+
     Ok((start, finish))
 }
 
@@ -178,11 +205,14 @@ impl AnimationDefinition {
 
     pub(super) fn append(&self, lua: &Lua, table: Table, operation: Operation) -> Result<Self> {
         self.object.runtime()?.construction()?;
+
         let mut result = self.clone();
+
         for (property, value) in properties(&self.object, table, false)? {
             let mask = property
                 .channel
                 .map_or((1 << property.value()?.channels()) - 1, |c| 1 << c);
+
             if result
                 .destinations
                 .iter()
@@ -192,8 +222,10 @@ impl AnimationDefinition {
                     "Overlapping destinations in the same tween.",
                 ));
             }
+
             let (start, mut finish) = if operation == Operation::From {
                 let (start, finish) = pair(value)?;
+
                 (
                     Some(property.parse_value(lua, start, true)?),
                     property.parse_value(lua, finish, true)?,
@@ -204,6 +236,7 @@ impl AnimationDefinition {
                     property.parse_value(lua, value, operation != Operation::By)?,
                 )
             };
+
             if operation == Operation::By
                 && !matches!(
                     finish,
@@ -220,6 +253,7 @@ impl AnimationDefinition {
                     "By requires a numeric property or channel.",
                 ));
             }
+
             if operation == Operation::By && property.channel.is_some() {
                 let selected = property.channel.unwrap();
                 let zero = match &finish {
@@ -231,8 +265,10 @@ impl AnimationDefinition {
                     }
                     _ => return Err(mlua::Error::runtime("Unsupported relative channel.")),
                 };
+
                 finish = zero.with_channel(&finish, selected);
             }
+
             result.destinations.push(Destination {
                 property,
                 start,
@@ -243,6 +279,7 @@ impl AnimationDefinition {
                 rotation: None,
             });
         }
+
         Ok(result)
     }
 
@@ -253,8 +290,10 @@ impl AnimationDefinition {
         operation: Operation,
     ) -> Result<Self> {
         property.object.runtime()?.construction()?;
+
         let (start, finish) = if operation == Operation::From {
             let (start, finish) = pair(value)?;
+
             (
                 Some(property.parse_value(lua, start, true)?),
                 property.parse_value(lua, finish, true)?,
@@ -265,6 +304,7 @@ impl AnimationDefinition {
                 property.parse_value(lua, value, operation != Operation::By)?,
             )
         };
+
         if operation == Operation::By
             && !matches!(
                 finish,
@@ -275,9 +315,11 @@ impl AnimationDefinition {
                 "Property increments require numbers or vectors.",
             ));
         }
+
         let mask = property
             .channel
             .map_or((1 << finish.channels()) - 1, |c| 1 << c);
+
         Ok(Self {
             object: property.object.clone(),
             destinations: vec![Destination {
@@ -294,7 +336,9 @@ impl AnimationDefinition {
 
     pub(super) fn play(&self, seconds: Option<f32>, ease: Option<String>) -> Result<()> {
         let runtime = self.object.runtime()?;
+
         runtime.construction()?;
+
         let seconds = duration(seconds.unwrap_or(0.0))?;
         let easing = parse_easing(ease)?;
         let tasks = self
@@ -310,21 +354,27 @@ impl AnimationDefinition {
                 })?;
                 let from = d.start.clone().unwrap_or(current);
                 let mut to = d.finish.clone();
+
                 if d.operation == Operation::By {
                     let sum = add(&from, &d.finish)?;
+
                     to = if from.channels() == 1 {
                         sum
                     } else {
                         let mut value = from.clone();
+
                         for channel in 0..from.channels() {
                             if d.mask & (1 << channel) != 0 {
                                 value = value.with_channel(&sum, channel);
                             }
                         }
+
                         value
                     };
+
                     d.property.validate(&to)?;
                 }
+
                 Ok(Task::RuntimeTween {
                     entity: self.object.entity,
                     target: d.property.target.clone(),
@@ -350,6 +400,7 @@ impl AnimationDefinition {
             .get::<&crate::core::components::Camera3D>(self.object.entity)
             .map(|camera| (*camera).clone())
             .ok();
+
         if let Some(mut camera) = camera {
             for name in [
                 "camera_mode",
@@ -367,21 +418,27 @@ impl AnimationDefinition {
                         &property.target,
                     )
                 })?;
+
                 camera_value(&mut camera, name, &value);
             }
+
             let mut initial = camera.clone();
+
             for task in &tasks {
                 if let Task::RuntimeTween {
                     target, from, to, ..
                 } = task
                 {
                     camera_value(&mut initial, target.name(), from);
+
                     camera_value(&mut camera, target.name(), to);
                 }
             }
+
             initial.validate().map_err(mlua::Error::runtime)?;
             camera.validate().map_err(mlua::Error::runtime)?;
         }
+
         engine(|| {
             runtime
                 .scene
@@ -398,6 +455,7 @@ impl AnimationDefinition {
         finish: TrackValue,
     ) -> Self {
         let mask = (1 << finish.channels()) - 1;
+
         Self {
             object: object.clone(),
             destinations: vec![Destination {
@@ -418,6 +476,7 @@ impl AnimationDefinition {
 
     pub(super) fn from_task(object: ObjectHandle, task: Task) -> Result<Self> {
         let mut result = Self::new(object.clone());
+
         match task {
             Task::All(tasks) => {
                 for task in tasks {
@@ -456,6 +515,7 @@ impl AnimationDefinition {
                 ));
             }
         }
+
         Ok(result)
     }
 
@@ -464,11 +524,13 @@ impl AnimationDefinition {
         values: Vec<(crate::core::TrackTarget, TrackValue)>,
     ) -> Self {
         let mut result = Self::new(object.clone());
+
         for (target, finish) in values {
             result
                 .destinations
                 .extend(Self::target(object.clone(), target, finish).destinations);
         }
+
         result
     }
 }
@@ -484,11 +546,14 @@ impl UserData for AnimationDefinition {
                 name,
                 move |lua, (this, table): (mlua::AnyUserData, Table)| {
                     let appended = this.borrow::<Self>()?.append(lua, table, op)?;
+
                     *this.borrow_mut::<Self>()? = appended;
+
                     Ok(this)
                 },
             );
         }
+
         methods.add_method(
             "play",
             |_, this, (seconds, ease): (Option<f32>, Option<String>)| this.play(seconds, ease),
@@ -521,6 +586,7 @@ fn add(from: &TrackValue, delta: &TrackValue) -> Result<TrackValue> {
 
 fn camera_value(camera: &mut crate::core::components::Camera3D, name: &str, value: &TrackValue) {
     use crate::core::components::Camera3DMode;
+
     match (name, value) {
         ("camera_mode", TrackValue::Enum("Perspective")) => {
             camera.camera_mode = Camera3DMode::Perspective

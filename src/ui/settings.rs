@@ -26,6 +26,7 @@ pub(super) fn load() -> Appearance {
     let Ok(path) = crate::storage::global_path(SETTINGS_PATH) else {
         return Appearance::default();
     };
+
     fs::read_to_string(path)
         .ok()
         .and_then(|text| ron::from_str(&text).ok())
@@ -36,6 +37,7 @@ pub(super) fn save(appearance: &Appearance) {
     let Ok(path) = crate::storage::global_path(SETTINGS_PATH) else {
         return;
     };
+
     if path.exists()
         && fs::read_to_string(&path)
             .ok()
@@ -44,6 +46,7 @@ pub(super) fn save(appearance: &Appearance) {
     {
         return;
     }
+
     if let Err(error) = write(appearance, &path) {
         eprintln!("Could not save appearance: {error}.");
     }
@@ -56,11 +59,13 @@ fn write(appearance: &Appearance, path: &Path) -> Result<(), Box<dyn std::error:
 
     let contents = ron::ser::to_string_pretty(appearance, ron::ser::PrettyConfig::default())?;
     let expected = fs::read(path).ok();
+
     crate::core::atomic_write(
         path,
         format!("{contents}\n").as_bytes(),
         expected.as_deref(),
     )?;
+
     Ok(())
 }
 
@@ -74,14 +79,17 @@ pub(super) fn draw(
 
     if state.project_open {
         let mut open = true;
+
         super::windows::window(ui, PROJECT_WINDOW, [520.0, 220.0])
             .opened(&mut open)
             .build(|| {
                 if let Some(editor) = editor {
                     if !state.initialized {
                         let (_, settings) = editor.project_info();
+
                         state.resolution =
                             [settings.resolution.0 as i32, settings.resolution.1 as i32];
+
                         state.fps = settings.fps as i32;
                         state.margin = [settings.margin.0 as i32, settings.margin.1 as i32];
                         state.initialized = true;
@@ -102,6 +110,7 @@ pub(super) fn draw(
                             &mut state.margin,
                             ["Width", "Height"],
                         );
+
                         resolution_changed || fps_changed || margin_changed
                     };
                     let valid_resolution = state
@@ -119,36 +128,45 @@ pub(super) fn draw(
                             "Resolution dimensions must be even numbers from 2 to 8192.",
                         );
                     }
+
                     if !valid_fps {
                         ui.text_wrapped("FPS must be between 1 and 1000.");
                     }
+
                     if !valid_margin {
                         ui.text_wrapped("Margin must fit inside the resolution.");
                     }
+
                     if project_changed && valid_resolution && valid_fps && valid_margin {
                         let settings = ProjectSettings {
                             resolution: (state.resolution[0] as u32, state.resolution[1] as u32),
                             fps: state.fps as u32,
                             margin: (state.margin[0] as u32, state.margin[1] as u32),
                         };
+
                         if editor.project_info().1 != settings {
                             editor.request_project_settings(settings);
                         }
                     }
                 }
             });
+
         state.project_open = open;
     }
+
     if !state.editor_open {
         return false;
     }
+
     let mut open = true;
+
     super::windows::window(ui, EDITOR_WINDOW, [520.0, 420.0])
         .opened(&mut open)
         .build(|| {
             if let Some(_tabs) = ui.tab_bar("Editor settings sections") {
                 if let Some(_editor) = ui.tab_item("Code Editor") {
                     let settings = &mut appearance.editor;
+
                     changed |= ui.slider_f32("Font size", &mut settings.font_size, 10.0, 28.0);
                     changed |= ui.slider("Tab size", 1usize, 8usize, &mut settings.tab_size);
                     changed |= ui.checkbox("Insert spaces", &mut settings.insert_spaces);
@@ -156,29 +174,36 @@ pub(super) fn draw(
                     changed |= ui.checkbox("Line numbers", &mut settings.line_numbers);
                     changed |= ui.checkbox("Automatic suggestions", &mut settings.autocomplete);
                     changed |= ui.checkbox("Show whitespace", &mut settings.show_spaces);
+
                     changed |= ui.slider(
                         "Hover delay (ms)",
                         200usize,
                         2000usize,
                         &mut settings.hover_delay_ms,
                     );
+
                     ui.separator_with_text("Formatting");
                     changed |= ui.checkbox("Format on save", &mut settings.format_on_save);
                     ui.text_disabled("Uses the tab size and indentation settings above.");
+
                     changed |= ui.checkbox(
                         "Trim trailing whitespace",
                         &mut settings.trim_trailing_whitespace,
                     );
+
                     changed |=
                         ui.checkbox("Insert final newline", &mut settings.insert_final_newline);
+
                     if ui.button("Reset editor") {
                         *settings = super::code::Settings::default();
                         changed = true;
                     }
                 }
+
                 if let Some(_shortcuts) = ui.tab_item("Shortcuts") {
                     draw_shortcuts(ui);
                 }
+
                 if let Some(_appearance) = ui.tab_item("Appearance") {
                     changed |= ui.color_edit4("Background", &mut appearance.background);
                     changed |= ui.color_edit4("Accent", &mut appearance.accent);
@@ -194,6 +219,7 @@ pub(super) fn draw(
                         [ui.content_region_avail_width(), 0.0],
                     ) {
                         let defaults = Appearance::default();
+
                         appearance.background = defaults.background;
                         appearance.accent = defaults.accent;
                         appearance.contrast = defaults.contrast;
@@ -206,11 +232,13 @@ pub(super) fn draw(
         });
 
     state.editor_open = open;
+
     changed
 }
 
 fn draw_shortcuts(ui: &dear_imgui_rs::Ui) {
     let flags = dear_imgui_rs::TableFlags::SCROLL_Y;
+
     let Some(_table) = ui.begin_table_with_sizing(
         "Shortcut list",
         2,
@@ -220,6 +248,7 @@ fn draw_shortcuts(ui: &dear_imgui_rs::Ui) {
     ) else {
         return;
     };
+
     ui.table_setup_scroll_freeze(0, 1);
     ui.table_setup_column("Action", dear_imgui_rs::TableColumnFlags::empty(), None);
     ui.table_setup_column("Binding", dear_imgui_rs::TableColumnFlags::empty(), None);
@@ -231,6 +260,7 @@ fn draw_shortcuts(ui: &dear_imgui_rs::Ui) {
     ] {
         ui.table_next_row();
         ui.table_next_column();
+
         let group = ui
             .tree_node_config(title)
             .default_open(true)
@@ -238,7 +268,9 @@ fn draw_shortcuts(ui: &dear_imgui_rs::Ui) {
             .open_on_double_click(true)
             .no_tree_push_on_open(true)
             .push();
+
         ui.table_next_column();
+
         if group.is_some() {
             for binding in inputs::map()
                 .bindings
@@ -258,7 +290,9 @@ fn draw_shortcuts(ui: &dear_imgui_rs::Ui) {
 
 fn input_int(ui: &dear_imgui_rs::Ui, label: &str, value: &mut i32) -> bool {
     let mut changed = ui.input_scalar(label, value).build();
+
     changed |= numeric_input_arrows(ui, value);
+
     changed
 }
 
@@ -280,12 +314,15 @@ fn input_int_components<const N: usize>(
         }
 
         ui.set_next_item_width(field_width);
+
         let component_label = format!("##{label}:{component_name}");
+
         changed |= input_int(ui, &component_label, value);
     }
 
     ui.same_line_with_spacing(0.0, spacing);
     ui.text(label);
+
     changed
 }
 
@@ -297,22 +334,31 @@ mod tests {
     fn settings_open_independently_and_start_centered() {
         let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
+
         context
             .font_atlas()
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
+
         context.io_mut().set_display_size([1280.0, 720.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         let mut state = State::default();
         let mut appearance = Appearance::default();
+
         assert!(!draw(&mut appearance, &mut state, None, context.frame()));
         context.end_frame();
+
         let mut layout = String::new();
+
         context.save_ini_settings(&mut layout);
         assert!(!layout.contains("[Window][Editor settings]"));
+
         state.editor_open = true;
+
         assert!(!draw(&mut appearance, &mut state, None, context.frame()));
         context.end_frame();
         context.save_ini_settings(&mut layout);
@@ -324,22 +370,26 @@ mod tests {
             assert!(!draw(&mut appearance, &mut state, None, context.frame()));
             context.end_frame();
         }
+
         layout.clear();
         context.save_ini_settings(&mut layout);
         assert!(layout.contains("[Window][Editor settings]\nPos=380,150\nSize=520,420"));
 
         state.editor_open = false;
         state.project_open = true;
+
         for _ in 0..2 {
             assert!(!draw(&mut appearance, &mut state, None, context.frame()));
             context.end_frame();
         }
+
         layout.clear();
         context.save_ini_settings(&mut layout);
         assert!(layout.contains("[Window][Project settings]\nPos=380,250\nSize=520,220"));
         assert!(!state.editor_open);
 
         state.editor_open = true;
+
         assert!(!draw(&mut appearance, &mut state, None, context.frame()));
         context.end_frame();
         assert!(state.project_open && state.editor_open);
@@ -348,6 +398,7 @@ mod tests {
     #[test]
     fn older_settings_receive_editor_defaults() {
         let appearance: Appearance = ron::from_str("(background: (0.0, 0.0, 0.0, 1.0), accent: (0.0, 0.5, 1.0, 1.0), contrast: 1.0, scale: 1.0)").unwrap();
+
         assert_eq!(appearance.editor, super::super::code::Settings::default());
     }
 
@@ -372,6 +423,7 @@ mod tests {
 
         let contents = fs::read_to_string(&path).unwrap();
         let loaded: Appearance = ron::from_str(&contents).unwrap();
+
         assert_eq!(loaded.background, appearance.background);
         assert_eq!(loaded.accent, appearance.accent);
         assert_eq!(loaded.contrast, appearance.contrast);

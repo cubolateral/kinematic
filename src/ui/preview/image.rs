@@ -25,6 +25,7 @@ pub(super) fn editor_3d(editor: &mut Editor) -> PreviewImage {
 
 fn image(canvas: &mut crate::editor::Canvas) -> PreviewImage {
     let (width, height) = canvas.size();
+
     PreviewImage {
         size: [width.max(1) as f32, height.max(1) as f32],
         texture: canvas.imgui_texture_id(),
@@ -38,14 +39,18 @@ pub(super) fn draw(
     margin: Option<(u32, u32)>,
 ) {
     let (_, size, min, max) = placement(ui.cursor_screen_pos(), available, preview.size);
+
     ui.set_cursor_screen_pos(min);
+
     ui.image_config(preview.texture, size)
         .uv0([0.0, 1.0])
         .uv1([1.0, 0.0])
         .build();
+
     if let Some(margin) = margin {
         draw_margin(ui, min, max, preview.size, margin);
     }
+
     ui.get_window_draw_list()
         .add_rect(min, max, CANVAS_OUTLINE)
         .thickness(1.0)
@@ -64,15 +69,19 @@ pub(super) fn draw_editor(
     let min = origin;
     let max = [min[0] + size[0], min[1] + size[1]];
     let center = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+
     editor.set_editor_2d_viewport(size);
+
     let camera_view = editor.editor_2d_camera_view();
     let display_source = if camera_view {
         let (width, height) = editor.editor_2d_canvas_size();
+
         [width.max(1) as f32, height.max(1) as f32]
     } else {
         preview.size
     };
     let display_scale = (size[0] / display_source[0]).min(size[1] / display_source[1]);
+
     ui.invisible_button_options(
         "Editor 2D canvas.",
         size,
@@ -85,36 +94,46 @@ pub(super) fn draw_editor(
     let active = ui.is_item_active();
     let mouse = ui.io().mouse_pos();
     let middle = dear_imgui_rs::MouseButton::Middle;
+
     if active && !camera_view && ui.is_mouse_dragging(middle) {
         let delta = editor.editor_mouse_delta(ui.io().mouse_delta());
+
         editor.pan_editor_2d([delta[0] / display_scale, delta[1] / display_scale]);
+
         wrap_pointer(ui, editor, min, max);
         ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeAll));
     }
+
     if hovered && !camera_view {
         let anchor = [
             (mouse[0] - center[0]) / display_scale,
             (mouse[1] - center[1]) / display_scale,
         ];
+
         editor.zoom_editor_2d_at(ui.io().mouse_wheel(), anchor);
     }
 
     let draw_list = ui.get_window_draw_list();
     let _clip = draw_list.push_clip_rect(min, max, true);
+
     draw_list
         .add_rect(min, max, background)
         .filled(true)
         .build();
+
     let (pan, zoom) = if camera_view {
         ([0.0; 2], 1.0)
     } else {
         editor.editor_2d_view()
     };
+
     draw_list.add_image(preview.texture, min, max, [0.0, 1.0], [1.0, 0.0], [1.0; 4]);
+
     let origin = [
         center[0] + pan[0] * display_scale,
         center[1] + pan[1] * display_scale,
     ];
+
     for (enabled, from, to, color) in [
         (
             editor.editor_2d_axes()[0],
@@ -133,6 +152,7 @@ pub(super) fn draw_editor(
             draw_list.add_line(from, to, color).thickness(1.0).build();
         }
     }
+
     draw_world_outline(
         &draw_list,
         Some(editor.editor_2d_project_outline()),
@@ -143,22 +163,27 @@ pub(super) fn draw_editor(
         CANVAS_OUTLINE,
         1.0,
     );
+
     if editor.margin_visible() {
         let margin = editor.margin_size();
         let mut points = editor.editor_2d_project_outline();
+
         for point in &mut points {
             point.x += if point.x < 0.0 {
                 margin.0 as f32
             } else {
                 -(margin.0 as f32)
             };
+
             point.y += if point.y < 0.0 {
                 margin.1 as f32
             } else {
                 -(margin.1 as f32)
             };
         }
+
         let accent = margin_color(ui);
+
         draw_world_outline(
             &draw_list,
             Some(points),
@@ -169,6 +194,7 @@ pub(super) fn draw_editor(
             [0.0, 0.0, 0.0, 0.7],
             3.0,
         );
+
         draw_world_outline(
             &draw_list,
             Some(points),
@@ -180,6 +206,7 @@ pub(super) fn draw_editor(
             1.0,
         );
     }
+
     if !camera_view {
         draw_world_outline(
             &draw_list,
@@ -192,7 +219,9 @@ pub(super) fn draw_editor(
             1.0,
         );
     }
+
     let selection = editor.editor_2d_selection_outline();
+
     draw_world_outline(
         &draw_list,
         selection,
@@ -203,6 +232,7 @@ pub(super) fn draw_editor(
         [0.0, 0.0, 0.0, 1.0],
         3.0,
     );
+
     draw_world_outline(
         &draw_list,
         selection,
@@ -218,9 +248,11 @@ pub(super) fn draw_editor(
         && mouse[0] <= min[0] + 24.0 + ui.frame_height() * 3.0
         && mouse[1] >= min[1] + 8.0
         && mouse[1] <= min[1] + 8.0 + ui.frame_height();
+
     if !hovered || over_camera || !ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left) {
         return None;
     }
+
     Some(vec2(
         ((mouse[0] - center[0]) / display_scale - pan[0]) / zoom,
         ((mouse[1] - center[1]) / display_scale - pan[1]) / zoom,
@@ -234,7 +266,9 @@ pub(super) fn draw_editor_3d(
     editor: &mut Editor,
 ) -> (bool, Option<Vector2>) {
     let size = [available[0].max(1.0), available[1].max(1.0)];
+
     editor.request_editor_3d_size(size);
+
     ui.invisible_button_options(
         "Editor 3D canvas.",
         size,
@@ -242,10 +276,12 @@ pub(super) fn draw_editor_3d(
             .flags(dear_imgui_rs::ButtonFlags::ALLOW_OVERLAP)
             .mouse_buttons(dear_imgui_rs::InvisibleButtonMouseButtons::RIGHT),
     );
+
     let hovered = ui.is_item_hovered();
     let active = ui.is_item_active();
     let min = ui.item_rect_min();
     let max = ui.item_rect_max();
+
     ui.get_window_draw_list().add_image(
         preview.texture,
         min,
@@ -254,6 +290,7 @@ pub(super) fn draw_editor_3d(
         [1.0, 0.0],
         [1.0; 4],
     );
+
     let mouse = ui.io().mouse_pos();
     let over_camera = mouse[0] >= min[0] + 8.0
         && mouse[0] <= min[0] + 24.0 + ui.frame_height() * 3.0
@@ -273,6 +310,7 @@ pub(super) fn draw_editor_3d(
             mouse[1] - (min[1] + max[1]) * 0.5,
         )
     });
+
     (active, clicked)
 }
 
@@ -283,25 +321,30 @@ pub(super) fn wrap_pointer(
     max: [f32; 2],
 ) {
     const EDGE: f32 = 2.0;
+
     const INSET: f32 = 6.0;
 
     let mouse = ui.io().mouse_pos();
     let mut target = mouse;
+
     if mouse[0] <= min[0] + EDGE {
         target[0] = max[0] - INSET;
     } else if mouse[0] >= max[0] - EDGE {
         target[0] = min[0] + INSET;
     }
+
     if mouse[1] <= min[1] + EDGE {
         target[1] = max[1] - INSET;
     } else if mouse[1] >= max[1] - EDGE {
         target[1] = min[1] + INSET;
     }
+
     if target == mouse {
         return;
     }
 
     let viewport = ui.main_viewport().pos();
+
     editor.request_editor_mouse_warp([target[0] - viewport[0], target[1] - viewport[1]]);
 }
 
@@ -317,6 +360,7 @@ fn placement(
         origin[0] + (available[0] - size[0]) * 0.5,
         origin[1] + (available[1] - size[1]) * 0.5,
     ];
+
     (scale, size, min, [min[0] + size[0], min[1] + size[1]])
 }
 
@@ -334,12 +378,14 @@ fn draw_world_outline(
     let Some(points) = points else {
         return;
     };
+
     let project = |point: skia_safe::Point| {
         [
             center[0] + (pan[0] + point.x * zoom) * display_scale,
             center[1] + (pan[1] + point.y * zoom) * display_scale,
         ]
     };
+
     for index in 0..4 {
         draw_list
             .add_line(
@@ -354,7 +400,9 @@ fn draw_world_outline(
 
 fn margin_color(ui: &dear_imgui_rs::Ui) -> [f32; 4] {
     let mut color = unsafe { ui.style().color(dear_imgui_rs::StyleColor::CheckMark) };
+
     color[3] = 0.7;
+
     color
 }
 
@@ -372,8 +420,10 @@ pub(super) fn draw_margin(
     let a = [min[0] + inset[0], min[1] + inset[1]];
     let b = [max[0] - inset[0], max[1] - inset[1]];
     let draw = ui.get_window_draw_list();
+
     draw.add_rect(a, b, [0.0, 0.0, 0.0, 0.7])
         .thickness(3.0)
         .build();
+
     draw.add_rect(a, b, margin_color(ui)).thickness(1.0).build();
 }

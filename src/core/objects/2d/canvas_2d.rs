@@ -30,6 +30,7 @@ impl Canvas2DBuilder {
     /// Sets the fixed render-target resolution for this canvas.
     pub fn resolution(mut self, resolution: (u32, u32)) -> Self {
         self.object.settings.resolution = resolution;
+
         self
     }
 }

@@ -60,11 +60,13 @@ mod tests {
     #[test]
     fn project_settings_require_exportable_values() {
         assert!(ProjectSettings::is_valid(&ProjectSettings::default()));
+
         assert!(!ProjectSettings::is_valid(&ProjectSettings {
             resolution: (1279, 720),
             fps: 60,
             margin: (64, 64),
         }));
+
         assert!(!ProjectSettings::is_valid(&ProjectSettings {
             resolution: (1280, 720),
             fps: 0,

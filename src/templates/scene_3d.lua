@@ -5,6 +5,7 @@ return function(s)
         id = "cube",
         albedo = k.color("#60A5FA"),
     }
+
     s:world_3d():add(cube)
 
     cube:to { rotation = k.axis_angle(k.vec3(0, 1, 0), math.pi) }:play(1)

@@ -46,10 +46,12 @@ impl Default for Circle {
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
                     let path = skia_safe::Path::circle((0.0, 0.0), shape.radius, None);
+
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
                 box_size: |world, entity| {
                     let radius = world.get::<&CircleShape>(entity).unwrap().radius;
+
                     glam::Vec2::splat(radius * 2.0)
                 },
                 visual_bounds: |world, entity| {
@@ -57,6 +59,7 @@ impl Default for Circle {
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
                     let radius = shape.radius.max(0.0);
+
                     styled_bounds(
                         skia_safe::Rect::new(-radius, -radius, radius, radius),
                         &style,

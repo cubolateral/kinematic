@@ -32,6 +32,7 @@ pub(super) fn draw(
     }
 
     shortcuts(editor.timeline_mut(), ui, !is_exporting && keyboard);
+
     hide_single_window_tab(ui);
 
     ui.window(WINDOW_NAME).build(|| {
@@ -39,14 +40,18 @@ pub(super) fn draw(
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
 
         toggle_fullscreen = controls::draw(editor.timeline_mut(), ui, fps, !is_exporting, false);
+
         ui.spacing();
         ui.separator();
 
         let focused_scene = editor.focused_scene_index();
         let time = {
             let timeline = editor.timeline_mut();
+
             state.sync_focus(focused_scene, timeline.duration());
+
             let (start, end) = state.view_range();
+
             TimeRange {
                 current: timeline.time(),
                 start,
@@ -63,27 +68,36 @@ pub(super) fn draw(
         let mut objects_hovered = false;
 
         ui.set_cursor_screen_pos([content_left, top + SCRUBBER_HEIGHT]);
+
         ui.child_window("Timeline Objects")
             .size([0.0, child_height])
             .flags(dear_imgui_rs::WindowFlags::ALWAYS_VERTICAL_SCROLLBAR)
             .build(ui, || {
                 let layout = Layout::new(ui, top);
                 let mouse = ui.io().mouse_pos();
+
                 objects_hovered = ui.is_window_hovered_with_flags(
                     dear_imgui_rs::WindowHoveredFlags::ALLOW_WHEN_BLOCKED_BY_ACTIVE_ITEM,
                 );
+
                 let draw_list = ui.get_window_draw_list();
                 let playhead_x = time.x(layout, time.current);
 
                 ruler::draw_time_grid_lines(ui, &draw_list, layout, time);
+
                 scene::draw(editor, ui, &draw_list, layout, time, state, !is_exporting);
+
                 objects::draw(editor, ui, &draw_list, layout, time, !is_exporting);
+
                 ruler::draw_mouse_indicator(ui, &draw_list, layout);
+
                 ruler::draw_playhead(ui, &draw_list, layout, playhead_x);
+
                 view = Some((layout, mouse));
             });
 
         let Some((layout, mouse)) = view else { return };
+
         let timeline_hovered = (header_hovered || objects_hovered)
             && layout.contains_timeline_x(mouse[0])
             && (layout.top..=layout.bottom).contains(&mouse[1]);
@@ -91,7 +105,9 @@ pub(super) fn draw(
         let playhead_x = time.x(layout, time.current);
 
         ruler::draw_scrubber(ui, &draw_list, layout, time, playhead_x);
+
         ruler::draw_time_grid_labels(ui, &draw_list, layout, time);
+
         ruler::draw_time_panel(ui, &draw_list, layout, time, playhead_x);
 
         if is_exporting {

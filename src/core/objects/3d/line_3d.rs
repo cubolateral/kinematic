@@ -65,9 +65,11 @@ fn line_geometry(shape: &Line3DShape) -> Result<Option<Line3DGeometry>, String> 
     {
         return Err("Line dimensions must be finite.".into());
     }
+
     if !(3..=256).contains(&shape.line_sides) {
         return Err("Line sides must be between 3 and 256.".into());
     }
+
     if !(3..=256).contains(&shape.arrow_sides) {
         return Err("Arrow sides must be between 3 and 256.".into());
     }
@@ -148,7 +150,9 @@ fn closed_cylinder_mesh(sides: u32) -> three_d::CpuMesh {
         positions: three_d::Positions::F32(positions),
         ..Default::default()
     };
+
     mesh.compute_normals();
+
     mesh
 }
 
@@ -170,7 +174,9 @@ fn closed_cone_mesh(sides: u32) -> three_d::CpuMesh {
         positions: three_d::Positions::F32(positions),
         ..Default::default()
     };
+
     mesh.compute_normals();
+
     mesh
 }
 
@@ -178,6 +184,7 @@ fn line_box(shape: &Line3DShape) -> Vector3 {
     let Ok(Some(geometry)) = line_geometry(shape) else {
         return Vector3::ZERO;
     };
+
     let mut minimum = shape.from
         - Vector3::splat(if geometry.from_length > 0.0 {
             0.0
@@ -246,6 +253,7 @@ fn draw_line_object(
 ) -> Result<(), String> {
     let shape = world.get::<&Line3DShape>(entity).unwrap();
     let material = world.get::<&Material>(entity).unwrap();
+
     draw_line_3d(&shape, &material, global_matrix3d(world, entity), context)
 }
 
@@ -259,6 +267,7 @@ pub fn draw_line_3d(
     let Some(geometry) = line_geometry(&shape)? else {
         return Ok(());
     };
+
     let body_length = (geometry.body_to - geometry.body_from).length();
 
     if body_length > f32::EPSILON {
@@ -275,6 +284,7 @@ pub fn draw_line_3d(
             material,
         )?;
     }
+
     if geometry.from_length > 0.0 {
         context.render_material(
             GeometryKey::new::<Line3DShape>(geometry_variant(shape.arrow_sides, true)),
@@ -289,6 +299,7 @@ pub fn draw_line_3d(
             material,
         )?;
     }
+
     if geometry.to_length > 0.0 {
         context.render_material(
             GeometryKey::new::<Line3DShape>(geometry_variant(shape.arrow_sides, true)),
@@ -364,8 +375,10 @@ mod tests {
 
         assert_eq!(shape.line_sides, 32);
         assert_eq!(shape.arrow_sides, 32);
+
         let mut scene = Scene::new();
         let line = line_3d().build(&mut scene);
+
         assert_eq!(line.get(Line3DShape::line_sides_property()), 32);
         assert_eq!(line.get(Line3DShape::arrow_sides_property()), 32);
     }

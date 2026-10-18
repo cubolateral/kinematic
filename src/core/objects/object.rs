@@ -57,6 +57,7 @@ pub(crate) fn snapshot_destinations(
             .pop()
             .expect("Cannot restore without a saved snapshot.")
     };
+
     values
         .into_iter()
         .map(|saved| (saved.target, saved.value))
@@ -112,7 +113,9 @@ pub trait Object: hecs::DynamicBundle + Sized + 'static {
         entity: Option<hecs::Entity>,
     ) -> Self::Handler {
         animator.assert_finite_scope();
+
         let mut builder = hecs::EntityBuilder::new();
+
         builder
             .add_bundle(object)
             .add(Animation::default())
@@ -121,13 +124,16 @@ pub trait Object: hecs::DynamicBundle + Sized + 'static {
             .add(Snapshots::default())
             .add(name)
             .add(Self::inspection());
+
         let entity = if let Some(entity) = entity {
             world.borrow_mut().spawn_at(entity, builder.build());
+
             entity
         } else {
             world.borrow_mut().spawn(builder.build())
         };
         let initial = snapshot_values(&world, entity);
+
         world
             .borrow()
             .get::<&mut Snapshots>(entity)
@@ -174,7 +180,9 @@ pub trait ObjectHandler: Clone {
     /// Ends this object's lifetime at the current scheduling time.
     fn remove(&self) {
         let animator = self.object_animator();
+
         animator.assert_finite_scope();
+
         remove_object(&self.object_world(), self.entity(), animator.time());
     }
 
@@ -218,6 +226,7 @@ pub trait ObjectHandler: Clone {
                 index < len,
                 "Sibling index {index} is out of bounds for {len} siblings."
             );
+
             index
         });
     }
@@ -226,6 +235,7 @@ pub trait ObjectHandler: Clone {
     fn ancestor<T: Object + 'static>(&self) -> Option<T::Handler> {
         let world = self.object_world();
         let entity = ancestor_entity::<T>(&world.borrow(), self.entity())?;
+
         Some(T::handler(world, entity, self.object_animator()))
     }
 
@@ -239,6 +249,7 @@ pub trait ObjectHandler: Clone {
     {
         let handler = self.clone();
         let mut callback = callback;
+
         self.object_animator()
             .signal(self.entity(), move |frame| callback(handler.clone(), frame))
     }
@@ -277,6 +288,7 @@ pub trait ObjectHandler: Clone {
             name,
         )
         .unwrap_or_else(|error| panic!("{error}"));
+
         T::from_track_value(value)
             .unwrap_or_else(|| panic!("Shader uniform `{name}` has a different type."))
     }
@@ -284,13 +296,17 @@ pub trait ObjectHandler: Clone {
     /// Writes a builder-defined shader uniform without creating a timeline task.
     fn set_uniform<T: TrackValueType>(&self, name: &str, value: T) {
         let value = value.into_track_value();
+
         crate::core::objects::validate_shader_track_value(&value)
             .unwrap_or_else(|error| panic!("{error}"));
+
         let world = self.object_world();
         let previous = crate::core::objects::shader_uniform(&world.borrow(), self.entity(), name)
             .unwrap_or_else(|error| panic!("{error}"));
+
         crate::core::objects::set_shader_uniform(&world.borrow(), self.entity(), name, value)
             .unwrap_or_else(|error| panic!("{error}"));
+
         self.object_animator()
             .record_signal_uniform_override(self.entity(), name, previous);
     }
@@ -299,18 +315,25 @@ pub trait ObjectHandler: Clone {
     fn uniform<T: TrackValueType>(&self, name: &str, to: T) -> Tween<Self::Object> {
         let world = self.object_world();
         let animator = self.object_animator();
+
         animator.assert_timeline_mutation();
+
         let from = crate::core::objects::shader_uniform(&world.borrow(), self.entity(), name)
             .unwrap_or_else(|error| panic!("{error}"));
         let to = to.into_track_value();
+
         crate::core::objects::validate_shader_track_value(&to)
             .unwrap_or_else(|error| panic!("{error}"));
+
         let target = TrackTarget::uniform(name);
+
         assert!(
             std::mem::discriminant(&from) == std::mem::discriminant(&to),
             "Shader uniform `{name}` must keep its builder-defined type."
         );
+
         target.set(&world.borrow(), self.entity(), to.clone());
+
         Tween::from_targets(world, self.entity(), vec![(target, from, to)], animator)
     }
 
@@ -318,22 +341,30 @@ pub trait ObjectHandler: Clone {
     fn uniform_from<T: TrackValueType>(&self, name: &str, from: T, to: T) -> Tween<Self::Object> {
         let world = self.object_world();
         let animator = self.object_animator();
+
         animator.assert_timeline_mutation();
+
         let current = crate::core::objects::shader_uniform(&world.borrow(), self.entity(), name)
             .unwrap_or_else(|error| panic!("{error}"));
         let from = from.into_track_value();
         let to = to.into_track_value();
+
         crate::core::objects::validate_shader_track_value(&from)
             .unwrap_or_else(|error| panic!("{error}"));
+
         crate::core::objects::validate_shader_track_value(&to)
             .unwrap_or_else(|error| panic!("{error}"));
+
         assert!(
             std::mem::discriminant(&current) == std::mem::discriminant(&from)
                 && std::mem::discriminant(&from) == std::mem::discriminant(&to),
             "Shader uniform `{name}` must keep its builder-defined type."
         );
+
         let target = TrackTarget::uniform(name);
+
         target.set(&world.borrow(), self.entity(), to.clone());
+
         Tween::from_targets(world, self.entity(), vec![(target, from, to)], animator)
     }
 
@@ -355,7 +386,9 @@ pub trait ObjectHandler: Clone {
     {
         let world = self.object_world();
         let animator = self.object_animator();
+
         animator.assert_timeline_mutation();
+
         tween_to_values(&world, self.entity(), state.values.clone(), animator)
     }
 
@@ -367,14 +400,18 @@ pub trait ObjectHandler: Clone {
     /// Pops the latest snapshot and creates a tween back to its values.
     fn restore(&self) -> Tween<Self::Object> {
         let animator = self.object_animator();
+
         animator.assert_timeline_mutation();
+
         restore_object(&self.object_world(), self.entity(), animator)
     }
 
     /// Creates a tween back to the tracked values configured by the builder.
     fn reset(&self) -> Tween<Self::Object> {
         let animator = self.object_animator();
+
         animator.assert_timeline_mutation();
+
         reset_object(&self.object_world(), self.entity(), animator)
     }
 }
@@ -418,34 +455,42 @@ pub trait Object2DHandler: ObjectHandler {
     fn middle(&self) -> Vector2 {
         self.box_point(0.0, 0.0)
     }
+
     /// Returns the center of the left edge.
     fn left(&self) -> Vector2 {
         self.box_point(-1.0, 0.0)
     }
+
     /// Returns the center of the right edge.
     fn right(&self) -> Vector2 {
         self.box_point(1.0, 0.0)
     }
+
     /// Returns the center of the top edge.
     fn top(&self) -> Vector2 {
         self.box_point(0.0, -1.0)
     }
+
     /// Returns the center of the bottom edge.
     fn bottom(&self) -> Vector2 {
         self.box_point(0.0, 1.0)
     }
+
     /// Returns the top-left corner.
     fn top_left(&self) -> Vector2 {
         self.box_point(-1.0, -1.0)
     }
+
     /// Returns the top-right corner.
     fn top_right(&self) -> Vector2 {
         self.box_point(1.0, -1.0)
     }
+
     /// Returns the bottom-left corner.
     fn bottom_left(&self) -> Vector2 {
         self.box_point(-1.0, 1.0)
     }
+
     /// Returns the bottom-right corner.
     fn bottom_right(&self) -> Vector2 {
         self.box_point(1.0, 1.0)
@@ -455,34 +500,42 @@ pub trait Object2DHandler: ObjectHandler {
     fn middle_to(&self, position: Vector2) -> Vector2 {
         self.box_point_to(position, 0.0, 0.0)
     }
+
     /// Returns the local position that places the left edge at `position`.
     fn left_to(&self, position: Vector2) -> Vector2 {
         self.box_point_to(position, -1.0, 0.0)
     }
+
     /// Returns the local position that places the right edge at `position`.
     fn right_to(&self, position: Vector2) -> Vector2 {
         self.box_point_to(position, 1.0, 0.0)
     }
+
     /// Returns the local position that places the top edge at `position`.
     fn top_to(&self, position: Vector2) -> Vector2 {
         self.box_point_to(position, 0.0, -1.0)
     }
+
     /// Returns the local position that places the bottom edge at `position`.
     fn bottom_to(&self, position: Vector2) -> Vector2 {
         self.box_point_to(position, 0.0, 1.0)
     }
+
     /// Returns the local position that places the top-left corner at `position`.
     fn top_left_to(&self, position: Vector2) -> Vector2 {
         self.box_point_to(position, -1.0, -1.0)
     }
+
     /// Returns the local position that places the top-right corner at `position`.
     fn top_right_to(&self, position: Vector2) -> Vector2 {
         self.box_point_to(position, 1.0, -1.0)
     }
+
     /// Returns the local position that places the bottom-left corner at `position`.
     fn bottom_left_to(&self, position: Vector2) -> Vector2 {
         self.box_point_to(position, -1.0, 1.0)
     }
+
     /// Returns the local position that places the bottom-right corner at `position`.
     fn bottom_right_to(&self, position: Vector2) -> Vector2 {
         self.box_point_to(position, 1.0, 1.0)
@@ -585,6 +638,7 @@ fn tween_to_values<Object>(
             .into_iter()
             .map(|saved| {
                 let from = saved.target.get(&world_ref, entity);
+
                 saved.target.set(&world_ref, entity, saved.value.clone());
 
                 (saved.target, from, saved.value)
@@ -599,6 +653,7 @@ fn tween_to_values<Object>(
 #[doc(hidden)]
 pub fn initialize_object_snapshots(world: &SceneWorld, entity: hecs::Entity) {
     let initial = snapshot_values(world, entity);
+
     world
         .borrow()
         .get::<&mut Snapshots>(entity)
@@ -615,6 +670,7 @@ pub fn remove_object(world: &SceneWorld, entity: hecs::Entity, time: f32) {
         .expect("Removed object must contain a Node component.");
 
     assert!(!node.is_root, "The scene root must not be removed.");
+
     drop(node);
 
     assert!(
@@ -669,6 +725,7 @@ pub(crate) fn local_transform(world: &hecs::World, entity: hecs::Entity) -> Glob
             origin.x * cos - origin.y * sin,
             origin.x * sin + origin.y * cos,
         );
+
         return GlobalTransform {
             position: layout + transform.position - origin,
             rotation: transform.rotation,
@@ -689,6 +746,7 @@ pub(crate) fn global_transform(world: &hecs::World, entity: hecs::Entity) -> Glo
         .parent
     {
         lineage.push(parent);
+
         current = parent;
     }
 
@@ -789,6 +847,7 @@ pub trait Object3DHandler: ObjectHandler {
     fn box_size(&self) -> crate::core::types::Vector3 {
         object_box3d(&self.object_world().borrow(), self.entity())
     }
+
     /// Returns a point on the local bounding box relative to the object's position.
     #[doc(hidden)]
     fn box_offset(&self, x: f32, y: f32, z: f32) -> Vector3 {
@@ -850,23 +909,28 @@ pub trait Object3DHandler: ObjectHandler {
         global_matrix3d(&self.object_world().borrow(), self.entity())
             .transform_point3(glam::Vec3::ZERO)
     }
+
     fn global_rotation(&self) -> crate::core::types::Quaternion {
         global_rotation3d(&self.object_world().borrow(), self.entity())
     }
+
     fn global_scale(&self) -> crate::core::types::Vector3 {
         let world = self.object_world();
         let world = world.borrow();
         let mut scale = glam::Vec3::ONE;
         let mut current = Some(self.entity());
+
         while let Some(entity) = current {
             if let Ok(transform) = world.get::<&crate::core::components::Transform3D>(entity) {
                 scale *= transform.scale;
             }
+
             current = world
                 .get::<&TreeNode>(entity)
                 .ok()
                 .and_then(|node| node.parent);
         }
+
         scale
     }
 }
@@ -875,6 +939,7 @@ pub trait Object3DHandler: ObjectHandler {
 #[doc(hidden)]
 pub fn global_matrix3d(world: &hecs::World, entity: hecs::Entity) -> glam::Mat4 {
     let local = local_matrix3d(world, entity);
+
     match world
         .get::<&TreeNode>(entity)
         .ok()
@@ -900,6 +965,7 @@ pub(crate) fn global_rotation3d(world: &hecs::World, entity: hecs::Entity) -> gl
         .map_or(glam::Quat::IDENTITY, |transform| {
             crate::core::normalized_quaternion(transform.rotation)
         });
+
     match world
         .get::<&TreeNode>(entity)
         .ok()
@@ -946,6 +1012,7 @@ fn bounds3d_inner(
         draw.logical_bounds.map_or_else(
             || {
                 let size = (draw.box_size)(world, entity);
+
                 (-size * 0.5, size * 0.5)
             },
             |bounds| bounds(world, entity),
@@ -966,12 +1033,14 @@ fn bounds3d_inner(
         ),
         |(min, max)| {
             let padding = if min == max { 0.0 } else { padding };
+
             (
                 min - glam::Vec3::splat(padding),
                 max + glam::Vec3::splat(padding),
             )
         },
     );
+
     for child in crate::core::objects::child_iter(world, entity) {
         if !world.get::<&TreeNode>(child).is_ok_and(|node| {
             time.map_or(node.is_activated, |time| {
@@ -980,20 +1049,25 @@ fn bounds3d_inner(
         }) {
             continue;
         }
+
         let Some((child_min, child_max)) = bounds3d_inner(world, child, shader_padding, time)
         else {
             continue;
         };
+
         let matrix = local_matrix3d(world, child);
+
         for x in [child_min.x, child_max.x] {
             for y in [child_min.y, child_max.y] {
                 for z in [child_min.z, child_max.z] {
                     let p = matrix.transform_point3(glam::vec3(x, y, z));
+
                     min = min.min(p);
                     max = max.max(p);
                 }
             }
         }
     }
+
     min.is_finite().then_some((min, max))
 }

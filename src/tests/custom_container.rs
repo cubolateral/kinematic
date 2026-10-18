@@ -24,6 +24,7 @@ fn custom_container_returns_typed_direct_children() {
     let container = custom_container().build(&mut scene);
     let rectangle = rect().build(&mut scene);
     let circle = circle().build(&mut scene);
+
     container.add(&rectangle);
     container.add(&circle);
 
@@ -31,7 +32,9 @@ fn custom_container_returns_typed_direct_children() {
         container.children(),
         vec![rectangle.entity(), circle.entity()]
     );
+
     assert_eq!(container.get_child_entity(0), Ok(rectangle.entity()));
+
     assert_eq!(
         container.get_child_entity(2),
         Err(ChildError::NotFound { index: 2, len: 2 })
@@ -41,6 +44,7 @@ fn custom_container_returns_typed_direct_children() {
         container.get_child::<Rect>(0).unwrap().entity(),
         rectangle.entity()
     );
+
     assert_eq!(
         container.get_child::<Circle>(1).unwrap().entity(),
         circle.entity()
@@ -54,6 +58,7 @@ fn custom_container_returns_typed_direct_children() {
             actual: "Rect",
         })
     ));
+
     assert!(matches!(
         container.get_child::<Rect>(2),
         Err(ChildError::NotFound { index: 2, len: 2 })
@@ -85,11 +90,14 @@ fn custom_container_manages_children_and_sibling_order() {
             nested.entity()
         ]
     );
+
     assert_eq!(
         parent.first_child::<Rect>().unwrap().entity(),
         first.entity()
     );
+
     assert_eq!(parent.last_child::<Rect>().unwrap().entity(), last.entity());
+
     assert_eq!(
         parent
             .all_children::<Rect>()
@@ -98,20 +106,26 @@ fn custom_container_manages_children_and_sibling_order() {
             .collect::<Vec<_>>(),
         vec![first.entity(), last.entity()]
     );
+
     assert!(parent.first_child::<Line2D>().is_none());
+
     assert_eq!(
         nested.ancestor::<CustomContainer>().unwrap().entity(),
         parent.entity()
     );
+
     assert_eq!(nested.parent(), Some(parent.entity()));
+
     assert_eq!(
         parent.first_child_recursively::<Rect>().unwrap().entity(),
         first.entity()
     );
+
     assert_eq!(
         parent.last_child_recursively::<Rect>().unwrap().entity(),
         nested_child.entity()
     );
+
     assert_eq!(
         parent
             .all_children_recursively::<Rect>()

@@ -33,6 +33,7 @@ mod tests {
         assert_eq!(regular_polygon_vertices(3).unwrap().len(), 3);
 
         let square = regular_polygon_vertices(4).unwrap();
+
         for vertex in square {
             assert!((vertex.x.abs() - 0.5).abs() <= f32::EPSILON);
             assert!((vertex.y.abs() - 0.5).abs() <= f32::EPSILON);

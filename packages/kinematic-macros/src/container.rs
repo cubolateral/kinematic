@@ -104,6 +104,7 @@ pub fn derive_node(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
             fn container_time(&self) -> f32 {
                 self.animator.assert_finite_scope();
+
                 self.animator.time()
             }
 

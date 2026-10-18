@@ -51,6 +51,7 @@ impl Default for Ellipse {
                     let radius = shape.radius.abs();
                     let bounds = skia_safe::Rect::new(-radius.x, -radius.y, radius.x, radius.y);
                     let path = skia_safe::Path::oval(bounds, None);
+
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
                 box_size: |world, entity| {
@@ -60,6 +61,7 @@ impl Default for Ellipse {
                     let radius = world.get::<&EllipseShape>(entity).unwrap().radius.abs();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
+
                     styled_bounds(
                         skia_safe::Rect::new(-radius.x, -radius.y, radius.x, radius.y),
                         &style,
@@ -83,6 +85,7 @@ mod tests {
         let ellipse = ellipse().radius(vec2(160.0, 80.0)).build(&mut scene);
 
         assert_eq!(ellipse.box_size(), vec2(320.0, 160.0));
+
         assert_eq!(
             ellipse.get(EllipseShape::radius_property()),
             vec2(160.0, 80.0)

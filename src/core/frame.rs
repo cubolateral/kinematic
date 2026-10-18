@@ -1,5 +1,6 @@
 pub(crate) fn frame_index(time: f32, fps: u32) -> u64 {
     let frames = time.max(0.0) * fps.max(1) as f32;
+
     (frames + f32::EPSILON * frames.abs() * 4.0).floor() as u64
 }
 

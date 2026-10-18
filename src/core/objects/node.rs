@@ -13,6 +13,7 @@ pub trait Node: Object {}
 pub enum ChildError {
     /// The container has no child at the requested index.
     NotFound { index: usize, len: usize },
+
     /// The child exists, but has a different concrete object type.
     TypeMismatch {
         index: usize,
@@ -64,6 +65,7 @@ pub trait NodeHandler {
             std::rc::Rc::ptr_eq(&self.container_world(), &handler.object_world()),
             "Added object must belong to this scene."
         );
+
         attach_child(
             &self.container_world(),
             self.container_entity(),
@@ -76,11 +78,14 @@ pub trait NodeHandler {
     fn insert(&self, handler: &impl ObjectHandler, index: usize) {
         let scene_world = self.container_world();
         let len = children(&scene_world.borrow(), self.container_entity()).len();
+
         assert!(
             index <= len,
             "Child index {index} is out of bounds for {len} children."
         );
+
         self.add(handler);
+
         if index < len {
             move_child_to(&scene_world.borrow(), handler.entity(), index);
         }
@@ -90,6 +95,7 @@ pub trait NodeHandler {
     fn remove_children(&self) {
         let scene_world = self.container_world();
         let time = self.container_time();
+
         for child in children(&scene_world.borrow(), self.container_entity()) {
             deactivate_subtree(&scene_world.borrow(), child, time);
         }
@@ -157,6 +163,7 @@ pub trait NodeHandler {
         let scene_world = self.container_world();
         let entities = {
             let world = scene_world.borrow();
+
             children(&world, self.container_entity())
                 .into_iter()
                 .filter(|entity| {
@@ -167,6 +174,7 @@ pub trait NodeHandler {
                 .collect::<Vec<_>>()
         };
         let animator = self.container_animator();
+
         entities
             .into_iter()
             .map(|entity| T::handler(std::rc::Rc::clone(&scene_world), entity, animator.clone()))
@@ -189,7 +197,9 @@ pub trait NodeHandler {
         let entities = {
             let world = scene_world.borrow();
             let mut entities = Vec::new();
+
             collect_descendants(&world, self.container_entity(), &mut entities);
+
             entities
                 .into_iter()
                 .filter(|entity| {
@@ -200,6 +210,7 @@ pub trait NodeHandler {
                 .collect::<Vec<_>>()
         };
         let animator = self.container_animator();
+
         entities
             .into_iter()
             .map(|entity| T::handler(std::rc::Rc::clone(&scene_world), entity, animator.clone()))
@@ -274,10 +285,12 @@ impl RootHandler {
     /// Adds a canvas to the internal root at the current scheduling time.
     pub(crate) fn add(&self, handler: &impl ObjectHandler) {
         self.animator.assert_finite_scope();
+
         assert!(
             std::rc::Rc::ptr_eq(&self.world, &handler.object_world()),
             "Added canvas must belong to this scene."
         );
+
         attach_child(
             &self.world,
             self.entity,
@@ -299,7 +312,9 @@ pub(crate) fn attach_child(
         world.contains(child),
         "Added object must belong to this scene."
     );
+
     assert_ne!(parent, child, "A container must not be added to itself.");
+
     assert!(
         !world
             .get::<&TreeNode>(child)
@@ -307,6 +322,7 @@ pub(crate) fn attach_child(
             .is_root,
         "The scene root must not be added as a child."
     );
+
     assert!(
         !contains_entity(&world, child, parent),
         "Adding this object would create a container cycle."
@@ -316,17 +332,21 @@ pub(crate) fn attach_child(
         components::Transform3D,
         objects::{CanvasDimension, CanvasSettings},
     };
+
     let parent_is_root = world.get::<&TreeNode>(parent).unwrap().is_root;
+
     if !parent_is_root {
         assert!(
             world.get::<&CanvasSettings>(child).is_err(),
             "Canvases must be attached to the scene root."
         );
+
         let parent_3d = world.get::<&Transform3D>(parent).is_ok()
             || world
                 .get::<&CanvasSettings>(parent)
                 .is_ok_and(|s| s.dimension == CanvasDimension::Three);
         let child_3d = world.get::<&Transform3D>(child).is_ok();
+
         assert_eq!(
             parent_3d, child_3d,
             "Cannot mix 2D and 3D objects in a spatial container."
@@ -343,6 +363,7 @@ pub(crate) fn attach_child(
             container, parent,
             "An object must not belong to more than one container."
         );
+
         return;
     }
 
@@ -352,11 +373,14 @@ pub(crate) fn attach_child(
         .children
         .get_or_insert_with(Vec::new)
         .push(child);
+
     world
         .get::<&mut TreeNode>(child)
         .expect("Added object must contain a Node component.")
         .parent = Some(parent);
+
     activate_subtree(&world, child, time);
+
     crate::core::invalidate_lifetimes(&world);
 }
 
@@ -391,6 +415,7 @@ pub(crate) fn activate_subtree(world: &hecs::World, entity: hecs::Entity, time: 
 
 pub(crate) fn deactivate_subtree(world: &hecs::World, entity: hecs::Entity, time: f32) {
     crate::core::invalidate_lifetimes(world);
+
     world
         .get::<&mut TreeNode>(entity)
         .expect("Removed object must contain a Node component.")
@@ -409,6 +434,7 @@ pub(crate) fn child_iter(
         .get::<&TreeNode>(entity)
         .expect("Scene object must contain a Node component.");
     let count = node.children.as_ref().map_or(0, Vec::len);
+
     (0..count).map(move |index| node.children.as_ref().unwrap()[index])
 }
 
@@ -428,6 +454,7 @@ fn collect_descendants(
 ) {
     for child in child_iter(world, entity) {
         descendants.push(child);
+
         collect_descendants(world, child, descendants);
     }
 }
@@ -448,11 +475,13 @@ pub(crate) fn move_child(
             .get::<&TreeNode>(parent)
             .expect("Parent must contain a Node component.");
         let children = node.children.as_ref().unwrap();
+
         (
             children.iter().position(|child| *child == entity).unwrap(),
             children.len(),
         )
     };
+
     move_child_to(&world, entity, target(index, len));
 }
 
@@ -462,6 +491,7 @@ fn move_child_to(world: &hecs::World, entity: hecs::Entity, index: usize) {
     let children = node.children.as_mut().unwrap();
     let current = children.iter().position(|child| *child == entity).unwrap();
     let child = children.remove(current);
+
     children.insert(index, child);
 }
 
@@ -470,6 +500,7 @@ pub(crate) fn ancestor_entity<T: Object + 'static>(
     entity: hecs::Entity,
 ) -> Option<hecs::Entity> {
     let mut ancestor = world.get::<&TreeNode>(entity).ok()?.parent;
+
     while let Some(entity) = ancestor {
         if world
             .get::<&ObjectType>(entity)
@@ -477,8 +508,10 @@ pub(crate) fn ancestor_entity<T: Object + 'static>(
         {
             return Some(entity);
         }
+
         ancestor = world.get::<&TreeNode>(entity).ok()?.parent;
     }
+
     None
 }
 
@@ -490,9 +523,11 @@ pub(crate) fn layout_offset_2d(world: &hecs::World, entity: hecs::Entity) -> Vec
     else {
         return Vector2::ZERO;
     };
+
     let Ok(layout) = world.get::<&crate::core::objects::Layout2D>(parent) else {
         return Vector2::ZERO;
     };
+
     // ponytail: This is O(children) per child; cache only if large layouts become measurable.
     let children: Vec<_> = child_iter(world, parent)
         .filter(|child| {
@@ -501,19 +536,23 @@ pub(crate) fn layout_offset_2d(world: &hecs::World, entity: hecs::Entity) -> Vec
                 .is_ok_and(|node| node.is_activated)
         })
         .collect();
+
     let Some(index) = children.iter().position(|child| *child == entity) else {
         return Vector2::ZERO;
     };
+
     let sizes: Vec<_> = children
         .iter()
         .map(|child| crate::core::objects::object_box(world, *child))
         .collect();
+
     match layout.direction {
         crate::core::objects::LayoutDirection2D::Horizontal
         | crate::core::objects::LayoutDirection2D::HorizontalReverse => {
             let reverse =
                 layout.direction == crate::core::objects::LayoutDirection2D::HorizontalReverse;
             let (x, _) = axis_position(&sizes, index, layout.gap.x, reverse, |size| size.x);
+
             Vector2::new(x, 0.0)
         }
         crate::core::objects::LayoutDirection2D::Vertical
@@ -521,6 +560,7 @@ pub(crate) fn layout_offset_2d(world: &hecs::World, entity: hecs::Entity) -> Vec
             let reverse =
                 layout.direction == crate::core::objects::LayoutDirection2D::VerticalReverse;
             let (y, _) = axis_position(&sizes, index, layout.gap.y, reverse, |size| size.y);
+
             Vector2::new(0.0, y)
         }
     }
@@ -534,9 +574,11 @@ pub(crate) fn layout_offset_3d(world: &hecs::World, entity: hecs::Entity) -> Vec
     else {
         return Vector3::ZERO;
     };
+
     let Ok(layout) = world.get::<&crate::core::objects::Layout3D>(parent) else {
         return Vector3::ZERO;
     };
+
     // ponytail: This is O(children) per child; cache only if large layouts become measurable.
     let children: Vec<_> = child_iter(world, parent)
         .filter(|child| {
@@ -545,19 +587,23 @@ pub(crate) fn layout_offset_3d(world: &hecs::World, entity: hecs::Entity) -> Vec
                 .is_ok_and(|node| node.is_activated)
         })
         .collect();
+
     let Some(index) = children.iter().position(|child| *child == entity) else {
         return Vector3::ZERO;
     };
+
     let sizes: Vec<_> = children
         .iter()
         .map(|child| crate::core::objects::object_box3d(world, *child))
         .collect();
+
     match layout.direction {
         crate::core::objects::LayoutDirection3D::Horizontal
         | crate::core::objects::LayoutDirection3D::HorizontalReverse => {
             let reverse =
                 layout.direction == crate::core::objects::LayoutDirection3D::HorizontalReverse;
             let (x, _) = axis_position(&sizes, index, layout.gap.x, reverse, |size| size.x);
+
             Vector3::new(x, 0.0, 0.0)
         }
         crate::core::objects::LayoutDirection3D::Vertical
@@ -565,12 +611,14 @@ pub(crate) fn layout_offset_3d(world: &hecs::World, entity: hecs::Entity) -> Vec
             let reverse =
                 layout.direction == crate::core::objects::LayoutDirection3D::VerticalReverse;
             let (y, _) = axis_position(&sizes, index, layout.gap.y, reverse, |size| size.y);
+
             Vector3::new(0.0, y, 0.0)
         }
         crate::core::objects::LayoutDirection3D::Depth
         | crate::core::objects::LayoutDirection3D::DepthReverse => {
             let reverse = layout.direction == crate::core::objects::LayoutDirection3D::DepthReverse;
             let (z, _) = axis_position(&sizes, index, layout.gap.z, reverse, |size| size.z);
+
             Vector3::new(0.0, 0.0, z)
         }
     }
@@ -585,6 +633,7 @@ fn axis_position<T>(
 ) -> (f32, f32) {
     let total = sizes.iter().map(&extent).sum::<f32>() + gap * sizes.len().saturating_sub(1) as f32;
     let mut cursor = -total * 0.5;
+
     for order in 0..sizes.len() {
         let index = if reverse {
             sizes.len() - order - 1
@@ -592,11 +641,14 @@ fn axis_position<T>(
             order
         };
         let size = extent(&sizes[index]);
+
         if index == target {
             return (cursor + size * 0.5, total);
         }
+
         cursor += size + gap;
     }
+
     (0.0, total)
 }
 
@@ -666,6 +718,7 @@ mod tests {
             .position(vec2(3.0, 0.0))
             .build(&mut scene);
         let second = rect().size(vec2(20.0, 8.0)).build(&mut scene);
+
         container.add(&first);
         container.add(&second);
         scene.world_2d().add(&container);
@@ -688,6 +741,7 @@ mod tests {
             .build(&mut scene);
         let first = prism().size(vec3(1.0, 1.0, 2.0)).build(&mut scene);
         let second = prism().size(vec3(1.0, 1.0, 4.0)).build(&mut scene);
+
         container.add(&first);
         container.add(&second);
         scene.world_3d().add(&container);
@@ -716,12 +770,14 @@ mod tests {
         );
         let mut surface = skia_safe::surfaces::raster(&image_info, None, None).unwrap();
         let canvas = surface.canvas();
+
         canvas.clear(skia_safe::colors::TRANSPARENT);
         canvas.translate((8.0, 8.0));
 
         scene.draw(canvas);
 
         let pixels = surface.peek_pixels().unwrap();
+
         assert_eq!(pixels.get_color((12, 8)).r(), 255);
         assert_eq!(pixels.get_color((8, 8)).a(), 0);
     }
@@ -737,10 +793,12 @@ mod tests {
         second.add(&child);
 
         let cycle = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| second.add(&first)));
+
         assert!(cycle.is_err());
 
         let duplicate =
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| first.add(&child)));
+
         assert!(duplicate.is_err());
     }
 
@@ -756,10 +814,12 @@ mod tests {
         container.remove();
 
         let world = scene.world();
+
         assert_eq!(
             world.get::<&TreeNode>(container.entity()).unwrap().lifetime,
             [0.0, 2.0]
         );
+
         assert_eq!(
             world.get::<&TreeNode>(child.entity()).unwrap().lifetime,
             [0.0, 2.0]
@@ -780,6 +840,7 @@ mod tests {
         container.add(&child);
 
         let size = container.box_size();
+
         assert!((size.x - 20.0).abs() < 0.001);
         assert!((size.y - 20.0).abs() < 0.001);
     }
@@ -793,7 +854,9 @@ mod tests {
                 .size(vec2(4.0, 4.0))
                 .position(vec2(x, 0.0))
                 .build(&mut scene);
+
             group.add(&child);
+
             child
         });
 
@@ -826,12 +889,14 @@ mod tests {
         );
         let mut surface = skia_safe::surfaces::raster(&image_info, None, None).unwrap();
         let canvas = surface.canvas();
+
         canvas.clear(skia_safe::colors::TRANSPARENT);
         canvas.translate((8.0, 8.0));
 
         scene.draw(canvas);
 
         let center = surface.peek_pixels().unwrap().get_color((8, 8));
+
         assert_eq!(center.r(), 255);
         assert!((127..=128).contains(&center.a()));
     }
@@ -860,11 +925,13 @@ mod tests {
             None,
         );
         let mut surface = skia_safe::surfaces::raster(&image_info, None, None).unwrap();
+
         surface.canvas().translate((8.0, 8.0));
 
         scene.draw(surface.canvas());
 
         let center = surface.peek_pixels().unwrap().get_color((8, 8));
+
         assert_eq!(center.r(), 255);
         assert_eq!(center.b(), 0);
         assert_eq!(scene.pick(vec2(0.0, 0.0)), Some(front.entity()));
@@ -911,6 +978,7 @@ mod tests {
                 .global_position()
                 .abs_diff_eq(expected_position, 0.0001)
         );
+
         assert!((child.global_rotation() - (std::f32::consts::FRAC_PI_2 + 0.375)).abs() < 0.0001);
         assert!(child.global_scale().abs_diff_eq(vec2(5.0, 5.25), 0.0001));
         assert!((child.global_opacity() - 0.1).abs() < 0.0001);

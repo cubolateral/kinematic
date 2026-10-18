@@ -35,6 +35,7 @@ impl Canvas3DBuilder {
     /// Sets the fixed render-target resolution for this canvas.
     pub fn resolution(mut self, resolution: (u32, u32)) -> Self {
         self.object.settings.resolution = resolution;
+
         self
     }
 }
@@ -44,6 +45,7 @@ impl Canvas3DHandler {
     pub fn focus_camera(&self, position: Vector3, target: Vector3) -> Tween<Canvas3D> {
         let rotation =
             Quaternion::from_rotation_arc(Vector3::NEG_Z, (target - position).normalize_or_zero());
+
         self.camera_position(position).camera_rotation(rotation)
     }
 

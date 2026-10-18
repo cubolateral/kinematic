@@ -39,6 +39,7 @@ impl Timeline {
         // If needs updating.
         if self.previous_time != self.current_time {
             self.previous_time = self.current_time;
+
             return Some(self.current_time);
         }
 
@@ -118,7 +119,9 @@ impl Timeline {
 
     pub(crate) fn set_duration(&mut self, duration: f32) {
         self.max_time = duration.max(0.0);
+
         self.go_to(self.current_time);
+
         self.previous_time = -1.0;
     }
 }
@@ -130,6 +133,7 @@ mod tests {
     #[test]
     fn playback_restarts_or_stops_at_the_end() {
         let mut timeline = Timeline::new(2.0, 60);
+
         timeline.play();
         assert_eq!(timeline.update(2.0), Some(0.0));
         assert!(timeline.is_playing());

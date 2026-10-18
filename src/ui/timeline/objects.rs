@@ -59,6 +59,7 @@ pub(super) fn draw(
     if let Some(entity) = object {
         let min = [layout.content_left, top];
         let max = [layout.timeline_right(), top + panel_height];
+
         draw_panel_rect(
             draw_list,
             min,
@@ -70,11 +71,14 @@ pub(super) fn draw(
 
         if interactive {
             ui.set_cursor_screen_pos(min);
+
             let clicked =
                 ui.invisible_button("##timeline_tracks", [max[0] - min[0], max[1] - min[1]]);
             let drag = ui.mouse_drag_delta(dear_imgui_rs::MouseButton::Left);
+
             toggle = clicked && drag[0].abs().max(drag[1].abs()) < DRAG_DIRECTION_THRESHOLD;
         }
+
         let arrow = if expanded {
             CHEVRON_DOWN
         } else {
@@ -84,6 +88,7 @@ pub(super) fn draw(
             .get::<&Name>(entity)
             .expect("Timeline object must contain a Name component.");
         let _name_clip = draw_list.push_clip_rect(min, max, true);
+
         draw_list.add_text(
             [
                 min[0] + PANEL_TEXT_PADDING,
@@ -92,6 +97,7 @@ pub(super) fn draw(
             ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
             arrow,
         );
+
         draw_list.add_text(
             [
                 min[0] + PANEL_TEXT_PADDING + ARROW_WIDTH,
@@ -104,6 +110,7 @@ pub(super) fn draw(
         if tracks_height > 0.0 {
             let _tracks_clip =
                 draw_list.push_clip_rect([min[0], top + OBJECT_HEIGHT], [max[0], max[1]], true);
+
             tracks::draw(
                 &world,
                 ui,
@@ -121,6 +128,7 @@ pub(super) fn draw(
     } else {
         let min = [layout.content_left, top];
         let max = [layout.timeline_right(), top + OBJECT_HEIGHT];
+
         draw_panel_rect(
             draw_list,
             min,
@@ -129,6 +137,7 @@ pub(super) fn draw(
             ui.get_color_u32(dear_imgui_rs::StyleColor::Border),
             1.0,
         );
+
         draw_list.add_text(
             [min[0] + PANEL_TEXT_PADDING, top + 4.0],
             ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled),
@@ -140,6 +149,7 @@ pub(super) fn draw(
     ui.dummy([layout.timeline_width, panel_height + TRACK_SPACING]);
 
     drop(world);
+
     if toggle {
         editor.toggle_timeline_tracks();
     }

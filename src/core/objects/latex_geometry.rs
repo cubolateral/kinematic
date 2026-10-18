@@ -31,11 +31,14 @@ impl FormulaCache {
             let typeface = skia_safe::FontMgr::new()
                 .new_from_data(&bytes, None)
                 .expect("Math font outlines could not be loaded.");
+
             skia_safe::Font::new(typeface, 1000.0)
         });
         let ch = katex_ttf_glyph_char(id, code);
         let glyph = font.unichar_to_glyph(ch as i32);
+
         assert!(glyph != 0, "Math glyph {ch} is missing.");
+
         font.get_path(glyph)
     }
 }
@@ -50,6 +53,7 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
         if let Some(geometry) = cache.formulas.get(text) {
             return geometry.clone();
         }
+
         let ast = ratex_parser::parser::parse(text)
             .unwrap_or_else(|error| panic!("Invalid LaTeX formula `{text}`: {error}."));
         let options = LayoutOptions::default();
@@ -60,36 +64,49 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
             &ast,
             &options.with_color(ratex_types::color::Color::WHITE),
         ));
+
         assert_eq!(display.items.len(), alternate.items.len());
+
         let mut geometry = FormulaGeometry {
             size: Vector2::new(display.width as f32, display.total_height() as f32),
             parts: Vec::new(),
         };
+
         for (item, alternate) in display.items.iter().zip(&alternate.items) {
             let tint = item_color(item);
             let fill =
                 (tint == item_color(alternate)).then(|| Color::new(tint.r, tint.g, tint.b, tint.a));
+
             emit(item, cache, fill, &mut geometry.parts);
         }
+
         let offset = -geometry.size * 0.5;
+
         for part in &mut geometry.parts {
             part.path = part.path.with_offset((offset.x, offset.y));
+
             // Include glyph overhangs in selection bounds.
             let bounds = part.path.compute_tight_bounds();
+
             geometry.size.x = geometry
                 .size
                 .x
                 .max(bounds.left.abs().max(bounds.right.abs()) * 2.0);
+
             geometry.size.y = geometry
                 .size
                 .y
                 .max(bounds.top.abs().max(bounds.bottom.abs()) * 2.0);
         }
+
         let geometry = Rc::new(geometry);
+
         if cache.formulas.len() >= 128 {
             cache.formulas.clear();
         }
+
         cache.formulas.insert(text.to_owned(), geometry.clone());
+
         geometry
     })
 }
@@ -105,11 +122,15 @@ fn item_color(item: &DisplayItem) -> ratex_types::color::Color {
 
 fn stroked(path: &skia_safe::Path, width: f32) -> skia_safe::Path {
     let mut paint = skia_safe::Paint::default();
+
     paint
         .set_style(skia_safe::PaintStyle::Stroke)
         .set_stroke_width(width);
+
     let mut builder = skia_safe::PathBuilder::new();
+
     skia_safe::path_utils::fill_path_with_paint(path, &paint, &mut builder, None, None);
+
     builder.detach()
 }
 
@@ -131,6 +152,7 @@ fn emit(
         } => {
             if let Some(path) = cache.glyph(font, *char_code) {
                 let scale = *scale as f32 / 1000.0;
+
                 parts.push(FormulaPart {
                     path: path
                         .with_transform(&skia_safe::Matrix::scale((scale, scale)))
@@ -165,8 +187,10 @@ fn emit(
             if *thickness <= 0.0 || *width <= 0.0 {
                 return;
             }
+
             let dash = if *dashed { 4.0 * thickness } else { *width };
             let mut offset = 0.0;
+
             while offset < *width {
                 parts.push(FormulaPart {
                     path: skia_safe::Path::rect(
@@ -180,6 +204,7 @@ fn emit(
                     ),
                     color,
                 });
+
                 offset += dash * 2.0;
             }
         }
@@ -193,14 +218,17 @@ fn emit(
             let mut builder = skia_safe::PathBuilder::new();
             let mut flush = |builder: &mut skia_safe::PathBuilder| {
                 let path = builder.detach();
+
                 if !path.is_empty() {
                     let path = if *fill { path } else { stroked(&path, 0.04) };
+
                     parts.push(FormulaPart {
                         path: path.with_offset((*x as f32, *y as f32)),
                         color,
                     });
                 }
             };
+
             for command in commands {
                 match *command {
                     PathCommand::MoveTo { x, y } => {
@@ -208,6 +236,7 @@ fn emit(
                         if *fill {
                             flush(&mut builder);
                         }
+
                         builder.move_to((x as f32, y as f32));
                     }
                     PathCommand::LineTo { x, y } => {
@@ -235,6 +264,7 @@ fn emit(
                     }
                 }
             }
+
             flush(&mut builder);
         }
     }
@@ -282,10 +312,12 @@ mod tests {
                 .unwrap()
                 .path
                 .compute_tight_bounds();
+
             assert!(
                 numerator.bottom < bar.top,
                 "Numerator crosses the fraction bar: {text}."
             );
+
             assert!(
                 denominator.top > bar.bottom,
                 "Denominator crosses the fraction bar: {text}."
@@ -308,6 +340,7 @@ mod tests {
                 .compute_tight_bounds();
             let upper = colored_bounds(&formula, Color::RED);
             let lower = colored_bounds(&formula, Color::BLUE);
+
             assert!(upper.center_y() < operator.top + operator.height() * 0.3);
             assert!(lower.center_y() > operator.bottom - operator.height() * 0.3);
         }
@@ -321,18 +354,23 @@ mod tests {
             .iter()
             .map(|part| part.path.compute_tight_bounds().height())
             .collect();
+
         assert_eq!(heights.len(), 3);
         assert!(heights[0] > heights[1] && heights[1] > heights[2]);
         assert!(Rc::ptr_eq(&formula, &geometry(r"x^{x^x}")));
         assert!(geometry("").parts.is_empty());
+
         let colors = geometry(r"x+\color{black}{y}+\color{white}{z}");
+
         assert!(colors.parts.iter().any(|part| part.color.is_none()));
+
         assert!(
             colors
                 .parts
                 .iter()
                 .any(|part| part.color == Some(Color::BLACK))
         );
+
         assert!(
             colors
                 .parts
@@ -355,28 +393,37 @@ mod tests {
         ];
         let mut surface = skia_safe::surfaces::raster_n32_premul((1200, 1300)).unwrap();
         let canvas = surface.canvas();
+
         canvas.clear(skia_safe::Color::WHITE);
+
         for (row, text) in expressions.iter().enumerate() {
             let formula = geometry(text);
             let scale = 52.0_f32.min(1080.0 / formula.size.x);
+
             canvas.save();
             canvas.translate((600.0, 90.0 + row as f32 * 180.0));
             canvas.scale((scale, scale));
+
             for part in &formula.parts {
                 let color = part.color.unwrap_or(Color::BLACK);
                 let mut paint = skia_safe::Paint::default();
+
                 paint.set_anti_alias(true).set_color4f(
                     skia_safe::Color4f::new(color.r, color.g, color.b, color.a),
                     None,
                 );
+
                 canvas.draw_path(&part.path, &paint);
             }
+
             canvas.restore();
         }
+
         let image = surface.image_snapshot();
         let data = image
             .encode(None, skia_safe::EncodedImageFormat::PNG, None)
             .unwrap();
+
         std::fs::write("/tmp/kinematic-latex-layout.png", data.as_bytes()).unwrap();
     }
 }

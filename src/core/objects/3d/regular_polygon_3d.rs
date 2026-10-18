@@ -31,6 +31,7 @@ fn validate_sides(sides: u32) -> Result<(), String> {
     if !(3..=256).contains(&sides) {
         return Err("Regular polygon sides must be between 3 and 256.".into());
     }
+
     Ok(())
 }
 
@@ -50,7 +51,9 @@ fn polygon_mesh(sides: u32) -> three_d::CpuMesh {
         positions: three_d::Positions::F32(positions),
         ..Default::default()
     };
+
     mesh.compute_normals();
+
     mesh
 }
 
@@ -96,11 +99,14 @@ fn draw_regular_polygon_3d(
     context: &mut RenderContext3D<'_>,
 ) -> Result<(), String> {
     let shape = world.get::<&RegularPolygon3DShape>(entity).unwrap();
+
     validate_sides(shape.sides)?;
     validate_dimensions(shape.size.extend(0.0))?;
+
     let transformation =
         global_matrix3d(world, entity) * glam::Mat4::from_scale(shape.size.extend(1.0));
     let material = world.get::<&Material>(entity).unwrap();
+
     context.render_material(
         GeometryKey::new::<RegularPolygon3DShape>(u64::from(shape.sides)),
         || polygon_mesh(shape.sides),

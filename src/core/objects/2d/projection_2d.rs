@@ -38,6 +38,7 @@ impl Default for Projection2D {
                     let shape = world.get::<&RectShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
+
                     crate::core::components::styled_bounds(
                         *rect_path(&shape).bounds(),
                         &style,
@@ -57,6 +58,7 @@ impl Projection2DBuilder {
     pub fn source(mut self, canvas: &impl ProjectionCanvas) -> Self {
         self.object.source = ProjectionSource(Some(canvas.texture()));
         self.object.shape.size = canvas.resolution();
+
         self
     }
 }
@@ -70,21 +72,26 @@ pub(crate) fn draw_projection_2d(
 ) {
     let shape = world.get::<&RectShape>(entity).unwrap();
     let size = shape.size;
+
     if !size.is_finite() || size.x <= 0.0 || size.y <= 0.0 {
         return;
     }
+
     let path = rect_path(&shape);
     let destination = skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y);
     let mut paint = skia_safe::Paint::default();
+
     paint.set_alpha_f(opacity);
 
     let save_count = canvas.save();
+
     canvas.clip_path(&path, None, true);
     canvas.draw_image_rect(image, None, destination, &paint);
     canvas.restore_to_count(save_count);
 
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
+
     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
 }
 
@@ -104,9 +111,12 @@ mod tests {
             .stroke_width(4.0)
             .build(&mut scene);
         let mut source = skia_safe::surfaces::raster_n32_premul((40, 40)).unwrap();
+
         source.canvas().clear(skia_safe::colors::BLUE);
+
         let image = source.image_snapshot();
         let mut target = skia_safe::surfaces::raster_n32_premul((64, 64)).unwrap();
+
         target.canvas().translate((32.0, 32.0));
 
         draw_projection_2d(
@@ -118,12 +128,17 @@ mod tests {
         );
 
         let pixels = target.peek_pixels().unwrap();
+
         assert_eq!(pixels.get_color((12, 12)).a(), 0);
+
         let center = pixels.get_color((32, 32));
+
         assert!(center.r().abs_diff(128) <= 1);
         assert_eq!(center.g(), 0);
         assert!(center.b().abs_diff(127) <= 1);
+
         let stroke = pixels.get_color((32, 12));
+
         assert!(
             stroke.r() >= 250 && stroke.g() >= 250 && stroke.b() >= 250,
             "Stroke pixel was {stroke:?}."
