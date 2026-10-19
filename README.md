@@ -23,7 +23,9 @@ project. If the directory becomes unavailable, the editor reports the error
 and lets you open another project. Project files are never deleted by this flow.
 
 Use **Projects → Open / Create Project** to choose a directory. A new project
-contains an editable Lua example, an `assets/` directory and `kinematic.ron`.
+contains an editable Lua example, an `assets/` directory and `kinematic/project.ron`.
+The folder browser enables **Select Folder** only for directories containing a
+valid `kinematic/project.ron`. Older project layouts migrate when opened directly.
 Change the scene in Code; the preview updates after a short pause. Save persists
 the source files. Closing unsaved buffers or exiting offers Save, Discard and
 Cancel.
@@ -78,7 +80,7 @@ including Game of Life.
 
 ## Storage
 
-Project sources, assets, `kinematic.ron`, runtime metadata under `kinematic/`
+Project sources, assets, `kinematic/project.ron`, runtime metadata under `kinematic/`
 and exports under `output/` belong to the project directory. Global settings,
 window layout and the current project path stay under `.kinematic` in the
 platform's user data directory:

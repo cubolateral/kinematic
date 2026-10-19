@@ -8,7 +8,7 @@ pub use runtime::LuaScene;
 mod sources;
 pub use sources::Sources;
 
-pub use project::{LuaProject, Manifest};
+pub use project::{LuaProject, MANIFEST, Manifest};
 
 mod definitions;
 pub use definitions::definitions;

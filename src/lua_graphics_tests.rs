@@ -378,10 +378,10 @@ fn lua_editor_reload_switch_and_frozen_export() {
 
         let docs = editor.documents.as_mut().unwrap();
 
-        docs.open(Path::new("kinematic.ron")).unwrap();
+        docs.open(Path::new("kinematic/project.ron")).unwrap();
 
         docs.edit(
-            Path::new("kinematic.ron"),
+            Path::new("kinematic/project.ron"),
             ron::to_string(&manifest).unwrap(),
         );
 

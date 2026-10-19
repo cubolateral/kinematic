@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const MANIFEST: &str = "kinematic.ron";
+pub const MANIFEST: &str = "kinematic/project.ron";
 
 /// The single authoritative configuration for a Lua project.
 #[derive(Clone, Debug, Serialize, Deserialize)]

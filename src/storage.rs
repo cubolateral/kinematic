@@ -69,6 +69,13 @@ pub(crate) fn migrate_project(context: &ProjectContext) -> io::Result<()> {
         )?;
     }
 
+    for (source, destination) in [
+        ("kinematic.ron", crate::scripting::MANIFEST),
+        ("kinematic/events", "kinematic/scenes"),
+    ] {
+        migrate(&context.resolve(source)?, &context.resolve(destination)?)?;
+    }
+
     Ok(())
 }
 
@@ -157,6 +164,42 @@ fn migrate(source: &Path, destination: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_layout_migrates_without_losing_scene_metadata() {
+        let root =
+            std::env::temp_dir().join(format!("kinematic-project-layout-{}", std::process::id()));
+        let project = crate::scripting::LuaProject::create(&root, "Migration", false).unwrap();
+        let manifest = root.join(crate::scripting::MANIFEST);
+        let events = "(events: [(name: \"Hold\", duration: 2.5)])";
+
+        fs::write(
+            root.join("scenes/intro.lua"),
+            "return function(s) s:event('Hold') end",
+        )
+        .unwrap();
+        fs::rename(&manifest, root.join("kinematic.ron")).unwrap();
+        fs::create_dir_all(root.join("kinematic/events/scenes")).unwrap();
+        fs::write(root.join("kinematic/events/scenes/intro.ron"), events).unwrap();
+
+        let reopened = crate::scripting::LuaProject::open(&root).unwrap();
+
+        assert_eq!(reopened.manifest.name, project.manifest.name);
+        assert!(manifest.is_file());
+        assert!(!root.join("kinematic.ron").exists());
+        assert!(!root.join("kinematic/events").exists());
+        assert_eq!(
+            fs::read_to_string(root.join("kinematic/scenes/scenes/intro.ron")).unwrap(),
+            events
+        );
+        let scenes = reopened
+            .load_scenes(&crate::scripting::Sources::default())
+            .unwrap();
+
+        assert_eq!(scenes[0].duration(), 2.5);
+
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn current_project_round_trips_and_close_clears_it() {

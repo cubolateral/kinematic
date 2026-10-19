@@ -7,4 +7,5 @@
 *.log
 
 # Ignore generated project metadata.
-**/kinematic
+**/kinematic/*
+!/examples/lua/*/kinematic/project.ron

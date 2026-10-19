@@ -875,7 +875,9 @@ mod integration_tests {
         )
         .unwrap();
 
-        std::fs::write(root.join("kinematic.ron"), "(version:1,name:\"Test\",scenes:[\"intro.lua\"],resolution:(640,480),fps:60,margin:(0,0))").unwrap();
+        std::fs::create_dir_all(root.join("kinematic")).unwrap();
+
+        std::fs::write(root.join("kinematic/project.ron"), "(version:1,name:\"Test\",scenes:[\"intro.lua\"],resolution:(640,480),fps:60,margin:(0,0))").unwrap();
 
         let mut client = Client::start(
             ProjectContext::new(&root).unwrap(),
@@ -1278,7 +1280,9 @@ end
 
         std::fs::create_dir_all(&root).unwrap();
 
-        std::fs::write(root.join("kinematic.ron"), "(version:1,name:\"Test\",scenes:[\"intro.lua\"],resolution:(640,480),fps:60,margin:(0,0))").unwrap();
+        std::fs::create_dir_all(root.join("kinematic")).unwrap();
+
+        std::fs::write(root.join("kinematic/project.ron"), "(version:1,name:\"Test\",scenes:[\"intro.lua\"],resolution:(640,480),fps:60,margin:(0,0))").unwrap();
 
         std::fs::write(
             root.join("custom.lua"),

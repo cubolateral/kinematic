@@ -20,7 +20,7 @@ Existing exports are preserved by adding a numeric suffix to the new filename.
 
 ## Files and editing
 
-`kinematic.ron` is the authoritative configuration:
+`kinematic/project.ron` is the authoritative configuration:
 
 ```ron
 (
@@ -33,8 +33,8 @@ Existing exports are preserved by adding a numeric suffix to the new filename.
 )
 ```
 
-Paths are relative to this directory, including module imports, fonts, images,
-shader files, caches and output. Absolute paths, parent traversal and symlinks
+Paths are relative to the project root (the parent of `kinematic/`), including
+module imports, fonts, images, shader files, caches and output. Absolute paths, parent traversal and symlinks
 that leave the project are rejected. `require("folder.module")` resolves
 `folder/module.lua` or `folder/module/init.lua`. Imports are cached per revision;
 cyclic imports are rejected. The global `k` is available in scenes and modules
@@ -360,7 +360,8 @@ Restore removes the saved entry. Incompatible/orphaned entries remain in the fil
 with diagnostics. Objects without IDs have explicitly temporary edits. Resolve
 pending source edits before changing saved bases or event durations, so those
 operations cannot silently discard a newer buffer. Event durations are stored in
-`kinematic/events`, separate from sources and the manifest.
+`kinematic/scenes`, which holds scene metadata separately from Lua sources.
+For example, `scenes/intro.lua` uses `kinematic/scenes/scenes/intro.ron`.
 
 Export uses the last successfully applied preview revision, including applied
 unsaved buffers. New edits remain pending until export finishes/cancels. Buffers

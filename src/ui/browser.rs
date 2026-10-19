@@ -32,6 +32,7 @@ pub(super) struct State {
     history: Vec<PathBuf>,
     history_index: usize,
     error: Option<String>,
+    project: Option<(PathBuf, bool)>,
 }
 
 impl State {
@@ -54,6 +55,7 @@ impl State {
             hidden: false,
             history_index: 0,
             error: None,
+            project: None,
         };
 
         state.refresh();
@@ -76,6 +78,7 @@ impl State {
 
         self.selected = None;
         self.error = None;
+        self.project = None;
 
         match thread::Builder::new()
             .name("File browser".into())
@@ -312,10 +315,16 @@ impl State {
                 }
 
                 let target = self.selected.as_ref().unwrap_or(&self.cwd);
+                if self.project.as_ref().is_none_or(|(path, _)| path != target) {
+                    let valid = valid_project(target);
+
+                    self.project = Some((target.clone(), valid));
+                }
+                let valid = self.project.as_ref().is_some_and(|(_, valid)| *valid);
 
                 {
                     let _disabled = ui.begin_disabled_with_cond(
-                        self.loading.is_some() || self.error.is_some() || !target.is_dir(),
+                        self.loading.is_some() || self.error.is_some() || !valid,
                     );
 
                     if button(ui, "Select Folder") {
@@ -349,6 +358,11 @@ fn button(ui: &Ui, label: &str) -> bool {
     ui.button(label)
 }
 
+fn valid_project(path: &Path) -> bool {
+    path.join(crate::scripting::MANIFEST).is_file()
+        && crate::scripting::LuaProject::open(path).is_ok()
+}
+
 impl Drop for State {
     fn drop(&mut self) {
         self.cancelled.store(true, Ordering::Relaxed);
@@ -379,6 +393,34 @@ fn read_directory(path: &Path, cancelled: &AtomicBool) -> io::Result<Vec<Entry>>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selection_requires_a_valid_manifest_in_the_project_folder() {
+        let root =
+            std::env::temp_dir().join(format!("kinematic-browser-project-{}", std::process::id()));
+
+        fs::create_dir_all(&root).unwrap();
+        assert!(!valid_project(&root));
+
+        let project =
+            crate::scripting::LuaProject::create(root.join("valid"), "Test", false).unwrap();
+
+        assert!(valid_project(project.context.root()));
+        assert!(!valid_project(&project.context.root().join("kinematic")));
+
+        let manifest = project.context.root().join(crate::scripting::MANIFEST);
+
+        fs::write(&manifest, "Invalid").unwrap();
+        assert!(!valid_project(project.context.root()));
+
+        let mut invalid = project.manifest;
+
+        invalid.fps = 0;
+        fs::write(&manifest, ron::to_string(&invalid).unwrap()).unwrap();
+        assert!(!valid_project(project.context.root()));
+
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn browser_draws_and_restores_the_editors_border_style() {

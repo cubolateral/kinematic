@@ -2424,7 +2424,7 @@ end
 }
 
 fn event_path(path: &Path) -> PathBuf {
-    Path::new("kinematic/events")
+    Path::new("kinematic/scenes")
         .join(path)
         .with_extension("ron")
 }

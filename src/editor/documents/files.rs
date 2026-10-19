@@ -1,9 +1,7 @@
 use super::Documents;
 use crate::core::atomic_write;
-use crate::scripting::Manifest;
+use crate::scripting::{MANIFEST, Manifest};
 use std::path::{Component, Path, PathBuf};
-
-const MANIFEST: &str = "kinematic.ron";
 
 pub(super) fn renamed_path(path: &Path, from: &Path, to: &Path) -> Option<PathBuf> {
     let suffix = path.strip_prefix(from).ok()?;
@@ -41,7 +39,7 @@ impl Documents {
                 .components()
                 .any(|part| !matches!(part, Component::Normal(_)))
             || !super::watched(path)
-            || path == Path::new(MANIFEST)
+            || Path::new(MANIFEST).starts_with(path)
         {
             return Err(
                 "Choose a regular project file or folder. The manifest is protected.".into(),
@@ -241,6 +239,13 @@ mod tests {
 
         docs.lsp = None;
 
+        assert!(
+            docs.files()
+                .unwrap()
+                .iter()
+                .all(|file| !file.path.starts_with("kinematic"))
+        );
+        assert!(docs.delete(Path::new("kinematic")).is_err());
         docs.open(Path::new(MANIFEST)).unwrap();
         docs.create(Path::new("scenes/nested"), true).unwrap();
 

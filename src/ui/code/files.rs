@@ -125,8 +125,9 @@ impl State {
                 }
 
                 if !target.as_os_str().is_empty() {
-                    let _disabled =
-                        ui.begin_disabled_with_cond(target == Path::new("kinematic.ron"));
+                    let _disabled = ui.begin_disabled_with_cond(
+                        Path::new(crate::scripting::MANIFEST).starts_with(target),
+                    );
 
                     if ui.menu_item("Rename...") {
                         action = Some(Action::Rename);

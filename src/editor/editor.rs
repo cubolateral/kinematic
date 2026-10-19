@@ -511,14 +511,16 @@ impl Editor {
             let project = self.lua_project.as_ref().unwrap();
             let manifest_changed = documents
                 .changed
-                .contains(std::path::Path::new("kinematic.ron"));
+                .contains(std::path::Path::new(crate::scripting::MANIFEST));
             let manifest = if manifest_changed {
                 let text = sources
-                    .get(std::path::Path::new("kinematic.ron"))
+                    .get(std::path::Path::new(crate::scripting::MANIFEST))
                     .cloned()
                     .map(Ok)
                     .unwrap_or_else(|| {
-                        std::fs::read_to_string(project.context.root().join("kinematic.ron"))
+                        std::fs::read_to_string(
+                            project.context.root().join(crate::scripting::MANIFEST),
+                        )
                     })
                     .map_err(|e| e.to_string())?;
                 let manifest: crate::scripting::Manifest =
