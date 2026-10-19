@@ -157,6 +157,21 @@ fn load_font(context: &mut Context) -> FontId {
         )])
 }
 
+pub(super) fn load_bold_font(context: &mut Context) -> FontId {
+    const FONT: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf"
+    ));
+
+    context
+        .font_atlas()
+        .add_font(&[dear_imgui_rs::FontSource::stb_truetype_with_size(
+            dear_imgui_rs::StbTrueTypeFontData::from_slice(FONT)
+                .expect("Embedded font must be valid."),
+            16.0,
+        )])
+}
+
 fn apply_geometry(context: &mut Context) {
     let style = context.style_mut();
 

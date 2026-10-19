@@ -34,6 +34,7 @@ enum Pending {
 #[serde(default)]
 pub(super) struct Settings {
     pub font_size: f32,
+    pub line_height: f32,
     pub tab_size: usize,
     pub insert_spaces: bool,
     pub word_wrap: bool,
@@ -45,11 +46,14 @@ pub(super) struct Settings {
     pub format_on_save: bool,
     pub trim_trailing_whitespace: bool,
     pub insert_final_newline: bool,
+    pub auto_save: bool,
+    pub auto_save_delay_ms: usize,
 }
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            font_size: 16.0,
+            font_size: 14.0,
+            line_height: 1.5,
             tab_size: 4,
             insert_spaces: true,
             word_wrap: false,
@@ -57,10 +61,12 @@ impl Default for Settings {
             line_numbers: true,
             autocomplete: true,
             show_spaces: false,
-            hover_delay_ms: 600,
+            hover_delay_ms: 500,
             format_on_save: true,
             trim_trailing_whitespace: true,
             insert_final_newline: true,
+            auto_save: true,
+            auto_save_delay_ms: 1000,
         }
     }
 }
@@ -116,6 +122,12 @@ impl Tab {
         self.assistance.borrow_mut().completion_position = None;
 
         self.editor.set_tab_size(settings.tab_size.clamp(1, 8))?;
+        self.editor
+            .set_line_spacing(if settings.line_height.is_finite() {
+                settings.line_height.clamp(1.0, 2.0)
+            } else {
+                1.5
+            })?;
 
         self.editor
             .set_insert_spaces_on_tabs(settings.insert_spaces);
@@ -230,6 +242,7 @@ impl Tab {
         path: &std::path::Path,
         settings: &Settings,
         font_size: f32,
+        bold_font: Option<dear_imgui_rs::FontId>,
         focused: bool,
         ui: &dear_imgui_rs::Ui,
         footer_height: f32,
@@ -250,7 +263,7 @@ impl Tab {
             }
         }
 
-        let _font = ui.push_font_with_size(None, font_size);
+        let _font = ui.push_font_with_size(bold_font, font_size);
         let available = ui.content_region_avail();
         let height = (available[1] - footer_height).max(1.0);
         let origin = ui.cursor_screen_pos();
@@ -705,6 +718,7 @@ impl Tab {
 #[derive(Default)]
 pub(super) struct State {
     tabs: BTreeMap<PathBuf, Tab>,
+    pub(super) bold_font: Option<dear_imgui_rs::FontId>,
     zoom: f32,
     pub(super) projects_open: bool,
     root: String,
@@ -1307,6 +1321,7 @@ impl State {
                                 &path,
                                 settings,
                                 base_size + self.zoom,
+                                self.bold_font,
                                 self.focused,
                                 ui,
                                 footer_height,
@@ -1384,6 +1399,21 @@ impl State {
         });
 
         self.displayed_active = documents.active.clone();
+
+        if settings.auto_save && !documents.replaying {
+            for path in documents.auto_save_paths(std::time::Duration::from_millis(
+                settings.auto_save_delay_ms.clamp(100, 60_000) as u64,
+            )) {
+                let result = if let Some(tab) = self.tabs.get_mut(&path) {
+                    tab.save(documents, &path)
+                } else {
+                    documents.save(&path)
+                };
+                if let Err(error) = result {
+                    self.error = Some(error);
+                }
+            }
+        }
 
         ui.window(CONSOLE_WINDOW).build(|| {
             for line in &documents.console {

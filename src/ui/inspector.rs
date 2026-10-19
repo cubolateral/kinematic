@@ -511,7 +511,7 @@ fn edit_value_input(
     }
 }
 
-fn edit_float_components<const N: usize>(
+pub(super) fn edit_float_components<const N: usize>(
     ui: &dear_imgui_rs::Ui,
     state: &mut State,
     name: &str,
@@ -549,7 +549,7 @@ fn quaternion_from_degrees(angles: [f32; 3]) -> glam::Quat {
     normalized_quaternion(glam::Quat::from_euler(glam::EulerRot::XYZ, x, y, z))
 }
 
-fn numeric_drag<T>(
+pub(super) fn numeric_drag<T>(
     ui: &dear_imgui_rs::Ui,
     state: &mut State,
     label: &str,
@@ -629,7 +629,7 @@ where
     changed
 }
 
-fn float_format(value: f32) -> String {
+pub(super) fn float_format(value: f32) -> String {
     let text = value.to_string();
 
     if text.contains(['e', 'E']) {

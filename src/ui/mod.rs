@@ -95,11 +95,13 @@ impl Ui {
         let mut code = code::State::default();
 
         code.projects_open = true;
+        let font = theme::initialize(context);
+        code.bold_font = Some(theme::load_bold_font(context));
 
         Self {
             needs_initial_layout: true,
             code,
-            font: theme::initialize(context),
+            font,
             appearance: settings::load(),
             is_fullscreen: false,
             preview: preview::State::new(crate::editor::EditorMode::default()),

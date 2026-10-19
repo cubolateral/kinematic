@@ -240,6 +240,16 @@ impl Documents {
         self.open.values().any(Document::dirty)
     }
 
+    pub fn auto_save_paths(&self, delay: Duration) -> Vec<PathBuf> {
+        self.open
+            .iter()
+            .filter(|(_, document)| {
+                document.dirty() && !document.conflict && document.edited_at.elapsed() >= delay
+            })
+            .map(|(path, _)| path.clone())
+            .collect()
+    }
+
     pub fn clear_formatting_previews(&mut self) {
         self.formatting_previews.clear();
         self.formatting_saves.clear();
@@ -638,6 +648,30 @@ fn watched(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auto_save_waits_for_idle_edits_and_skips_conflicts() {
+        let root = std::env::temp_dir().join(format!("kinematic-auto-save-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("test.lua"), "Old").unwrap();
+        let mut docs = Documents::new(
+            ProjectContext::new(&root).unwrap(),
+            &crate::scripting::definitions(),
+        )
+        .unwrap();
+        let path = Path::new("test.lua");
+        docs.open(path).unwrap();
+        docs.edit(path, "New".into());
+
+        assert!(docs.auto_save_paths(Duration::from_secs(1)).is_empty());
+        docs.open.get_mut(path).unwrap().edited_at -= Duration::from_secs(1);
+        assert_eq!(docs.auto_save_paths(Duration::from_secs(1)), vec![path]);
+        docs.open.get_mut(path).unwrap().conflict = true;
+        assert!(docs.auto_save_paths(Duration::from_secs(1)).is_empty());
+
+        drop(docs);
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn unsaved_buffers_win_and_external_conflicts_keep_both_versions() {
         let root = std::env::temp_dir().join(format!("kinematic-documents-{}", std::process::id()));

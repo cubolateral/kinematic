@@ -3,7 +3,7 @@ use std::{fs, path::Path};
 use crate::ui::inputs::{self, Category};
 use crate::{core::ProjectSettings, editor::Editor};
 
-use super::{properties::field, theme::Appearance, widgets::numeric_input_arrows};
+use super::{inspector, properties::field, theme::Appearance};
 
 const PROJECT_WINDOW: &str = "Project settings";
 const EDITOR_WINDOW: &str = "Editor settings";
@@ -17,6 +17,7 @@ pub(super) struct State {
     resolution: [i32; 2],
     fps: i32,
     margin: [i32; 2],
+    numeric: inspector::State,
 }
 
 pub(super) fn load() -> Appearance {
@@ -100,18 +101,18 @@ pub(super) fn draw(
                             "Resolution",
                             &mut state.resolution,
                             [defaults.resolution.0 as i32, defaults.resolution.1 as i32],
-                            |value| input_int_components(ui, value, ["Width", "Height"]),
+                            |value| input_int_components(ui, &mut state.numeric, value),
                         );
                         let fps_changed =
                             field(ui, "FPS", &mut state.fps, defaults.fps as i32, |value| {
-                                input_int(ui, "##value", value)
+                                input_int(ui, &mut state.numeric, "##value", value)
                             });
                         let margin_changed = field(
                             ui,
                             "Margin (px)",
                             &mut state.margin,
                             [defaults.margin.0 as i32, defaults.margin.1 as i32],
-                            |value| input_int_components(ui, value, ["Width", "Height"]),
+                            |value| input_int_components(ui, &mut state.numeric, value),
                         );
 
                         resolution_changed || fps_changed || margin_changed
@@ -176,14 +177,21 @@ pub(super) fn draw(
                         "Font size",
                         &mut settings.font_size,
                         defaults.font_size,
-                        |value| ui.slider_f32("##value", value, 10.0, 28.0),
+                        |value| input_float(ui, &mut state.numeric, value, 10.0, 28.0),
+                    );
+                    changed |= field(
+                        ui,
+                        "Line height",
+                        &mut settings.line_height,
+                        defaults.line_height,
+                        |value| input_float(ui, &mut state.numeric, value, 1.0, 2.0),
                     );
                     changed |= field(
                         ui,
                         "Tab size",
                         &mut settings.tab_size,
                         defaults.tab_size,
-                        |value| ui.slider("##value", 1usize, 8usize, value),
+                        |value| input_usize(ui, &mut state.numeric, value, 1, 8),
                     );
                     changed |= field(
                         ui,
@@ -233,7 +241,23 @@ pub(super) fn draw(
                         "Hover delay (ms)",
                         &mut settings.hover_delay_ms,
                         defaults.hover_delay_ms,
-                        |value| ui.slider("##value", 200usize, 2000usize, value),
+                        |value| input_usize(ui, &mut state.numeric, value, 200, 2000),
+                    );
+
+                    ui.separator_with_text("Files");
+                    changed |= field(
+                        ui,
+                        "Auto save",
+                        &mut settings.auto_save,
+                        defaults.auto_save,
+                        |value| ui.checkbox("##value", value),
+                    );
+                    changed |= field(
+                        ui,
+                        "Auto save delay (ms)",
+                        &mut settings.auto_save_delay_ms,
+                        defaults.auto_save_delay_ms,
+                        |value| input_usize(ui, &mut state.numeric, value, 100, 60_000),
                     );
 
                     ui.separator_with_text("Formatting");
@@ -287,14 +311,14 @@ pub(super) fn draw(
                         "Contrast",
                         &mut appearance.contrast,
                         defaults.contrast,
-                        |value| ui.slider_f32("##value", value, 0.25, 1.0),
+                        |value| input_float(ui, &mut state.numeric, value, 0.25, 1.0),
                     );
                     changed |= field(
                         ui,
                         "UI Scale",
                         &mut appearance.scale,
                         defaults.scale,
-                        |value| ui.slider_f32("##value", value, 0.75, 1.25),
+                        |value| input_float(ui, &mut state.numeric, value, 0.75, 1.25),
                     );
                 }
             }
@@ -357,22 +381,86 @@ fn draw_shortcuts(ui: &dear_imgui_rs::Ui) {
     }
 }
 
-fn input_int(ui: &dear_imgui_rs::Ui, label: &str, value: &mut i32) -> bool {
-    let mut changed = ui.input_scalar(label, value).build();
+fn input_int(
+    ui: &dear_imgui_rs::Ui,
+    state: &mut inspector::State,
+    label: &str,
+    value: &mut i32,
+) -> bool {
+    inspector::numeric_drag(
+        ui,
+        state,
+        label,
+        value,
+        1.0,
+        "%d",
+        dear_imgui_rs::sys::ImGuiDataType_S32,
+        None,
+        None,
+    )
+}
 
-    changed |= numeric_input_arrows(ui, value);
+fn input_int_components(
+    ui: &dear_imgui_rs::Ui,
+    state: &mut inspector::State,
+    values: &mut [i32; 2],
+) -> bool {
+    super::properties::components(ui, values, ["x", "y"], |_, value| {
+        input_int(ui, state, "##value", value)
+    })
+}
 
+fn input_usize(
+    ui: &dear_imgui_rs::Ui,
+    state: &mut inspector::State,
+    value: &mut usize,
+    min: i32,
+    max: i32,
+) -> bool {
+    let mut number = (*value).min(i32::MAX as usize) as i32;
+    let changed = inspector::numeric_drag(
+        ui,
+        state,
+        "##value",
+        &mut number,
+        1.0,
+        "%d",
+        dear_imgui_rs::sys::ImGuiDataType_S32,
+        Some(&min),
+        Some(&max),
+    );
+    if changed {
+        *value = number.clamp(min, max) as usize;
+    }
     changed
 }
 
-fn input_int_components<const N: usize>(
+fn input_float(
     ui: &dear_imgui_rs::Ui,
-    values: &mut [i32; N],
-    component_names: [&str; N],
+    state: &mut inspector::State,
+    value: &mut f32,
+    min: f32,
+    max: f32,
 ) -> bool {
-    super::properties::components(ui, values, component_names, |_, value| {
-        input_int(ui, "##value", value)
-    })
+    let changed = inspector::numeric_drag(
+        ui,
+        state,
+        "##value",
+        value,
+        0.01,
+        &inspector::float_format(*value),
+        dear_imgui_rs::sys::ImGuiDataType_Float,
+        Some(&min),
+        Some(&max),
+    );
+    if changed {
+        *value = if value.is_finite() {
+            value.clamp(min, max)
+        } else {
+            min
+        };
+    }
+    changed
 }
 
 #[cfg(test)]
@@ -449,6 +537,9 @@ mod tests {
         let appearance: Appearance = ron::from_str("(background: (0.0, 0.0, 0.0, 1.0), accent: (0.0, 0.5, 1.0, 1.0), contrast: 1.0, scale: 1.0)").unwrap();
 
         assert_eq!(appearance.editor, super::super::code::Settings::default());
+        assert_eq!(appearance.editor.line_height, 1.5);
+        assert!(!appearance.editor.auto_save);
+        assert_eq!(appearance.editor.auto_save_delay_ms, 100);
     }
 
     #[test]
