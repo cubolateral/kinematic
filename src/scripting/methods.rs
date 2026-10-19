@@ -81,5 +81,12 @@ fn text_fade<T: Trackable + 'static>(entity: hecs::Entity, text: String) -> Task
             1.0,
             false,
         ),
+        tween(
+            TrackTarget::property(std::any::TypeId::of::<TextFade>(), TextFade::track(2)),
+            TrackValue::Bool(true),
+            TrackValue::Bool(false),
+            1.0,
+            false,
+        ),
     ])
 }

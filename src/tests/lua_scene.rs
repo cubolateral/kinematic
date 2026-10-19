@@ -492,11 +492,25 @@ fn text_and_latex_fade_crossfade_both_strings_and_support_seeking() {
         ("text_2d", "I        ", "        I"),
         ("latex_2d", r"x\qquad\qquad", r"\qquad\qquad x"),
     ] {
-        check_text_fade(constructor, old, new);
+        for (name, easing) in [
+            ("linear", crate::core::Easing::Linear),
+            ("cubic_in_out", crate::core::Easing::InOutCubic),
+            ("quint_out", crate::core::Easing::OutQuint),
+            ("back_out", crate::core::Easing::OutBack),
+            ("elastic_out", crate::core::Easing::OutElastic),
+        ] {
+            check_text_fade(constructor, old, new, name, easing);
+        }
     }
 }
 
-fn check_text_fade(constructor: &str, old: &str, new: &str) {
+fn check_text_fade(
+    constructor: &str,
+    old: &str,
+    new: &str,
+    easing_name: &str,
+    easing: crate::core::Easing,
+) {
     use crate::core::{
         components::Draw2D,
         objects::{Latex2DShape, TextShape},
@@ -508,28 +522,35 @@ return function(s)
     s:world_2d():add(label)
     local back=label:fade(OLD)
     s:wait(1)
-    label:fade(NEW):play(2,k.ease.linear)
+    label:fade(NEW):play(2,k.ease.EASING)
     assert(label:get('text')==NEW)
     s:wait(1)
-    back:play(2,k.ease.linear)
+    back:play(2,k.ease.EASING)
 end
 "#
     .replace("CONSTRUCTOR", constructor)
+    .replace("EASING", easing_name)
     .replace("OLD", &serde_json::to_string(old).unwrap())
     .replace("NEW", &serde_json::to_string(new).unwrap());
     let scene = load(&source);
     let label = scene.entity("label").unwrap();
 
-    for (time, left_alpha, right_alpha, text) in [
-        (0.0, 204, 0, old),
-        (1.0, 204, 0, old),
-        (1.5, 153, 51, old),
-        (2.0, 102, 102, old),
-        (3.0, 0, 204, new),
-        (4.5, 51, 153, new),
-        (6.0, 204, 0, old),
-        (1.5, 153, 51, old),
+    let progress = |time| easing.evaluate(time).clamp(0.0, 1.0);
+
+    for (time, left_opacity, text) in [
+        (0.0, 1.0, old),
+        (1.0, 1.0, old),
+        (1.5, 1.0 - progress(0.25), old),
+        (2.0, 1.0 - progress(0.5), old),
+        (2.5, 1.0 - progress(0.75), old),
+        (2.9999, 1.0 - progress((2.9999 - 1.0) / 2.0), old),
+        (3.0, 0.0, new),
+        (4.5, progress(0.25), new),
+        (6.0, 1.0, old),
+        (1.5, 1.0 - progress(0.25), old),
     ] {
+        let left_alpha = (204.0 * left_opacity).round() as i32;
+        let right_alpha = (204.0 * (1.0 - left_opacity)).round() as i32;
         scene.update(time).unwrap();
 
         let world = scene.scene().world();
@@ -550,10 +571,13 @@ end
                 .unwrap()
         };
 
-        assert!((max_alpha(0, 320) - left_alpha).abs() <= 1, "Time: {time}");
+        assert!(
+            (max_alpha(0, 320) - left_alpha).abs() <= 1,
+            "Object: {constructor}, easing: {easing_name}, time: {time}."
+        );
         assert!(
             (max_alpha(320, 640) - right_alpha).abs() <= 1,
-            "Time: {time}"
+            "Object: {constructor}, easing: {easing_name}, time: {time}."
         );
         let current = if constructor == "text_2d" {
             world.get::<&TextShape>(label).unwrap().text.clone()
@@ -579,7 +603,7 @@ return function(s)
     local formula=s:latex_3d{id='formula',text='x',opacity=0.8,depth=0.25}
     local target=s:latex_3d{id='target',text='x+x+x',depth=0.25}
     s:world_3d():add(formula)
-    formula:fade('x+x+x'):play(2,k.ease.linear)
+    formula:fade('x+x+x'):play(2,k.ease.back_out)
     assert(formula:get('text')=='x+x+x')
     s:wait(1)
     formula:fade('z'):play(0)
@@ -591,10 +615,12 @@ end
 
     for (time, text, progress) in [
         (0.0, "x", 0.0),
-        (1.0, "x", 0.5),
+        (0.8, "x", 1.0),
+        (1.0, "x", 1.0),
         (2.0, "x+x+x", 1.0),
         (3.0, "z", 1.0),
-        (1.0, "x", 0.5),
+        (0.8, "x", 1.0),
+        (1.0, "x", 1.0),
     ] {
         scene.update(time).unwrap();
 
@@ -603,6 +629,8 @@ end
 
         assert_eq!(world.get::<&Latex3DShape>(formula).unwrap().text, text);
         assert!((fade.progress - progress).abs() < 0.001);
+        assert_eq!(fade.active, time < 2.0);
+        assert_eq!(fade.incoming_text(text), (time < 2.0).then_some("x+x+x"));
         assert!((world.get::<&Material>(formula).unwrap().opacity - 0.8).abs() < 0.001);
 
         if time < 3.0 {
