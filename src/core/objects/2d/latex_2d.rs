@@ -1,6 +1,6 @@
 use crate::core::{
     components::{Draw2D, Filter, Style, Transform2D, draw_complete_styled_path},
-    objects::{latex_geometry::geometry, text_2d::weighted_path},
+    objects::{TextFade, latex_geometry::geometry, text_2d::weighted_path},
     types::Vector2,
 };
 use kinematic_macros::{Object, Trackable};
@@ -47,10 +47,27 @@ pub struct Latex2D {
     pub draw: Draw2D,
     #[trackable]
     pub filter: Filter,
+
+    pub(crate) fade: TextFade,
 }
 
 fn latex_box(shape: &Latex2DShape) -> Vector2 {
     geometry(&shape.text).size * shape.size.max(0.0) + Vector2::splat(shape.thickness.max(0.0))
+}
+
+fn latex_object_box(world: &hecs::World, entity: hecs::Entity) -> Vector2 {
+    let shape = world.get::<&Latex2DShape>(entity).unwrap();
+    let fade = world.get::<&TextFade>(entity).unwrap();
+    let size = latex_box(&shape);
+
+    fade.incoming_text(&shape.text).map_or(size, |text| {
+        let incoming = latex_box(&Latex2DShape {
+            text: text.to_owned(),
+            ..(*shape).clone()
+        });
+
+        Vector2::new(size.x.max(incoming.x), size.y.max(incoming.y))
+    })
 }
 
 /// Draws a LaTeX formula in local 2D coordinates from reusable rendering data.
@@ -96,7 +113,31 @@ fn draw_latex_object(
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
 
-    draw_latex_2d(&shape, &style, transform.scale, opacity, canvas);
+    let fade = world.get::<&TextFade>(entity).unwrap();
+
+    if let Some(text) = fade.incoming_text(&shape.text) {
+        let incoming = Latex2DShape {
+            text: text.to_owned(),
+            ..(*shape).clone()
+        };
+
+        draw_latex_2d(
+            &shape,
+            &style,
+            transform.scale,
+            opacity * (1.0 - fade.progress),
+            canvas,
+        );
+        draw_latex_2d(
+            &incoming,
+            &style,
+            transform.scale,
+            opacity * fade.progress,
+            canvas,
+        );
+    } else {
+        draw_latex_2d(&shape, &style, transform.scale, opacity, canvas);
+    }
 }
 
 impl Default for Latex2D {
@@ -107,12 +148,11 @@ impl Default for Latex2D {
             transform: Default::default(),
             draw: Draw2D {
                 on_draw: draw_latex_object,
-                box_size: |world, entity| latex_box(&world.get::<&Latex2DShape>(entity).unwrap()),
+                box_size: latex_object_box,
                 visual_bounds: |world, entity| {
-                    let shape = world.get::<&Latex2DShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
-                    let size = latex_box(&shape);
+                    let size = latex_object_box(world, entity);
 
                     crate::core::components::styled_bounds(
                         skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y),
@@ -123,6 +163,7 @@ impl Default for Latex2D {
                 ..Default::default()
             },
             filter: Default::default(),
+            fade: Default::default(),
         }
     }
 }

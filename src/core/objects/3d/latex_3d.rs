@@ -4,7 +4,7 @@ use kinematic_macros::{Object, Trackable};
 
 use crate::core::{
     components::{Draw3D, GeometryKey, Material, RenderContext3D, Transform3D},
-    objects::{global_matrix3d, latex_geometry::geometry},
+    objects::{TextFade, global_matrix3d, latex_geometry::geometry},
     types::Vector3,
 };
 
@@ -68,6 +68,8 @@ pub struct Latex3D {
     pub transform: Transform3D,
     #[trackable]
     pub draw: Draw3D,
+
+    pub(crate) fade: TextFade,
 }
 
 impl Default for Latex3D {
@@ -81,14 +83,23 @@ impl Default for Latex3D {
                 box_size: latex_3d_box,
                 ..Default::default()
             },
+            fade: Default::default(),
         }
     }
 }
 
 fn latex_3d_box(world: &hecs::World, entity: hecs::Entity) -> Vector3 {
     let shape = world.get::<&Latex3DShape>(entity).unwrap();
+    let fade = world.get::<&TextFade>(entity).unwrap();
+    let mut size = geometry(&shape.text).size;
 
-    (geometry(&shape.text).size * shape.size.max(0.0) + glam::Vec2::splat(shape.thickness.max(0.0)))
+    if let Some(text) = fade.incoming_text(&shape.text) {
+        let incoming = geometry(text).size;
+
+        size = size.max(incoming);
+    }
+
+    (size * shape.size.max(0.0) + glam::Vec2::splat(shape.thickness.max(0.0)))
         .extend(shape.depth.abs())
 }
 
@@ -118,7 +129,24 @@ fn draw_latex_object(
     let material = world.get::<&Material>(entity).unwrap();
     let transform = global_matrix3d(world, entity);
 
-    draw_latex_3d(&shape, &material, transform, context)?;
+    let fade = world.get::<&TextFade>(entity).unwrap();
+
+    if let Some(text) = fade.incoming_text(&shape.text) {
+        let incoming = Latex3DShape {
+            text: text.to_owned(),
+            ..(*shape).clone()
+        };
+        let mut outgoing_material = (*material).clone();
+        let mut incoming_material = (*material).clone();
+
+        outgoing_material.opacity *= 1.0 - fade.progress;
+        incoming_material.opacity *= fade.progress;
+
+        draw_latex_3d(&shape, &outgoing_material, transform, context)?;
+        draw_latex_3d(&incoming, &incoming_material, transform, context)?;
+    } else {
+        draw_latex_3d(&shape, &material, transform, context)?;
+    }
 
     Ok(())
 }

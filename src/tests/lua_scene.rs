@@ -487,34 +487,48 @@ fn malformed_pairs_channels_overlaps_and_limits_are_rejected() {
 }
 
 #[test]
-fn text_fade_crossfades_both_strings_and_supports_seeking() {
-    use crate::core::{components::Draw2D, objects::TextShape};
+fn text_and_latex_fade_crossfade_both_strings_and_support_seeking() {
+    for (constructor, old, new) in [
+        ("text_2d", "I        ", "        I"),
+        ("latex_2d", r"x\qquad\qquad", r"\qquad\qquad x"),
+    ] {
+        check_text_fade(constructor, old, new);
+    }
+}
 
-    let scene = load(
-        r#"
+fn check_text_fade(constructor: &str, old: &str, new: &str) {
+    use crate::core::{
+        components::Draw2D,
+        objects::{Latex2DShape, TextShape},
+    };
+
+    let source = r#"
 return function(s)
-    local label=s:text_2d{id='label',text='I        ',size=32,opacity=0.8}
+    local label=s:CONSTRUCTOR{id='label',text=OLD,size=32,opacity=0.8}
     s:world_2d():add(label)
-    local back=label:fade('I        ')
+    local back=label:fade(OLD)
     s:wait(1)
-    label:fade('        I'):play(2,k.ease.linear)
-    assert(label:get('text')=='        I')
+    label:fade(NEW):play(2,k.ease.linear)
+    assert(label:get('text')==NEW)
     s:wait(1)
     back:play(2,k.ease.linear)
 end
-"#,
-    );
+"#
+    .replace("CONSTRUCTOR", constructor)
+    .replace("OLD", &serde_json::to_string(old).unwrap())
+    .replace("NEW", &serde_json::to_string(new).unwrap());
+    let scene = load(&source);
     let label = scene.entity("label").unwrap();
 
     for (time, left_alpha, right_alpha, text) in [
-        (0.0, 204, 0, "I        "),
-        (1.0, 204, 0, "I        "),
-        (1.5, 153, 51, "I        "),
-        (2.0, 102, 102, "I        "),
-        (3.0, 0, 204, "        I"),
-        (4.5, 51, 153, "        I"),
-        (6.0, 204, 0, "I        "),
-        (1.5, 153, 51, "I        "),
+        (0.0, 204, 0, old),
+        (1.0, 204, 0, old),
+        (1.5, 153, 51, old),
+        (2.0, 102, 102, old),
+        (3.0, 0, 204, new),
+        (4.5, 51, 153, new),
+        (6.0, 204, 0, old),
+        (1.5, 153, 51, old),
     ] {
         scene.update(time).unwrap();
 
@@ -541,9 +555,69 @@ end
             (max_alpha(320, 640) - right_alpha).abs() <= 1,
             "Time: {time}"
         );
-        assert_eq!(world.get::<&TextShape>(label).unwrap().text, text);
+        let current = if constructor == "text_2d" {
+            world.get::<&TextShape>(label).unwrap().text.clone()
+        } else {
+            world.get::<&Latex2DShape>(label).unwrap().text.clone()
+        };
+
+        assert_eq!(current, text);
         assert!((draw.opacity - 0.8).abs() < 0.001);
     }
+}
+
+#[test]
+fn latex_3d_fade_tracks_formulas_progress_and_bounds() {
+    use crate::core::{
+        components::{Draw3D, Material},
+        objects::{Latex3DShape, TextFade},
+    };
+
+    let scene = load(
+        r#"
+return function(s)
+    local formula=s:latex_3d{id='formula',text='x',opacity=0.8,depth=0.25}
+    local target=s:latex_3d{id='target',text='x+x+x',depth=0.25}
+    s:world_3d():add(formula)
+    formula:fade('x+x+x'):play(2,k.ease.linear)
+    assert(formula:get('text')=='x+x+x')
+    s:wait(1)
+    formula:fade('z'):play(0)
+end
+"#,
+    );
+    let formula = scene.entity("formula").unwrap();
+    let target = scene.entity("target").unwrap();
+
+    for (time, text, progress) in [
+        (0.0, "x", 0.0),
+        (1.0, "x", 0.5),
+        (2.0, "x+x+x", 1.0),
+        (3.0, "z", 1.0),
+        (1.0, "x", 0.5),
+    ] {
+        scene.update(time).unwrap();
+
+        let world = scene.scene().world();
+        let fade = world.get::<&TextFade>(formula).unwrap();
+
+        assert_eq!(world.get::<&Latex3DShape>(formula).unwrap().text, text);
+        assert!((fade.progress - progress).abs() < 0.001);
+        assert!((world.get::<&Material>(formula).unwrap().opacity - 0.8).abs() < 0.001);
+
+        if time < 3.0 {
+            let draw = world.get::<&Draw3D>(formula).unwrap();
+            let target_draw = world.get::<&Draw3D>(target).unwrap();
+
+            assert_eq!(
+                (draw.box_size)(&world, formula),
+                (target_draw.box_size)(&world, target)
+            );
+        }
+    }
+
+    assert!(try_load("return function(s) s:latex_2d{}:fade(123) end").is_err());
+    assert!(try_load("return function(s) s:latex_3d{}:fade(123) end").is_err());
 }
 
 #[test]

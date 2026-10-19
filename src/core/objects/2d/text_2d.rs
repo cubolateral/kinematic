@@ -187,9 +187,13 @@ impl Default for TextFade {
 }
 
 impl TextFade {
+    pub(crate) fn incoming_text(&self, current: &str) -> Option<&str> {
+        (self.progress < 1.0 && self.text != current).then_some(&self.text)
+    }
+
     fn incoming_shape(&self, shape: &TextShape) -> Option<TextShape> {
-        (self.progress < 1.0 && self.text != shape.text).then(|| TextShape {
-            text: self.text.clone(),
+        self.incoming_text(&shape.text).map(|text| TextShape {
+            text: text.to_owned(),
             ..shape.clone()
         })
     }

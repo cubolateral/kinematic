@@ -39,7 +39,10 @@ pub(crate) fn objects() -> Vec<NativeObject> {
             methods: Text2DHandler::lua_methods(),
             ..native::<Text2D>()
         },
-        native::<Latex2D>(),
+        NativeObject {
+            methods: Latex2DHandler::lua_methods(),
+            ..native::<Latex2D>()
+        },
         native::<Group2D>(),
         native::<Container2D>(),
         native::<Canvas2D>(),
@@ -53,7 +56,10 @@ pub(crate) fn objects() -> Vec<NativeObject> {
         native::<Line3D>(),
         native::<Image3D>(),
         native::<Text3D>(),
-        native::<Latex3D>(),
+        NativeObject {
+            methods: Latex3DHandler::lua_methods(),
+            ..native::<Latex3D>()
+        },
         native::<Group3D>(),
         native::<Container3D>(),
         native::<Canvas3D>(),
