@@ -831,7 +831,11 @@ impl Editor {
             .drain(..documents.console.len().saturating_sub(500));
 
         documents.status = if documents.changed.is_empty() {
-            "Preview is current."
+            if documents.dirty() {
+                "Preview uses saved files. Unsaved edits pending."
+            } else {
+                "Preview is current."
+            }
         } else {
             "Showing the active revision; source edits remain pending."
         }

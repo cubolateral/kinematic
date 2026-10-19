@@ -1047,13 +1047,17 @@ impl State {
     pub fn draw(&mut self, documents: &mut Documents, settings: &Settings, ui: &dear_imgui_rs::Ui) {
         self.focused = false;
 
-        documents.formatting = settings.format_on_save.then(|| {
+        let formatting = settings.format_on_save.then(|| {
             serde_json::json!({
                 "tabSize": settings.tab_size.clamp(1, 8), "insertSpaces": settings.insert_spaces,
                 "trimTrailingWhitespace": settings.trim_trailing_whitespace,
                 "insertFinalNewline": settings.insert_final_newline,
             })
         });
+        if documents.formatting != formatting {
+            documents.clear_formatting_previews();
+        }
+        documents.formatting = formatting;
 
         for reply in std::mem::take(&mut documents.replies) {
             let document = documents.open.get(&reply.path);

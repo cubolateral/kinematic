@@ -22,6 +22,7 @@ pub(crate) struct Document {
     pub version: u64,
     pub disk: Option<Vec<u8>>,
     pub conflict: bool,
+    edited_at: Instant,
 }
 impl Document {
     pub fn dirty(&self) -> bool {
@@ -44,6 +45,9 @@ pub(crate) struct Documents {
     pub lsp: Option<super::lsp::Client>,
     pub replies: Vec<super::lsp::Reply>,
     pub formatting: Option<serde_json::Value>,
+    formatting_saves: BTreeMap<PathBuf, u64>,
+    // None means LuaLS has not returned the preview yet.
+    formatting_previews: BTreeMap<PathBuf, (u64, Option<String>)>,
     last_edit: Instant,
     file_paths: Option<Vec<FileEntry>>,
     _watcher: notify::RecommendedWatcher,
@@ -71,6 +75,8 @@ impl Documents {
             lsp,
             replies: Vec::new(),
             formatting: None,
+            formatting_saves: BTreeMap::new(),
+            formatting_previews: BTreeMap::new(),
             context,
             open: BTreeMap::new(),
             active: None,
@@ -107,6 +113,7 @@ impl Documents {
                     version: 1,
                     disk: Some(bytes),
                     conflict: false,
+                    edited_at: Instant::now(),
                 },
             );
         }
@@ -122,7 +129,10 @@ impl Documents {
                 document.text = text;
 
                 document.version += 1;
-                self.request(path.to_owned());
+                document.edited_at = Instant::now();
+                self.formatting_saves.remove(path);
+                self.formatting_previews.remove(path);
+                self.status = "Unsaved edits; preview uses saved files.".into();
             }
         }
     }
@@ -140,7 +150,7 @@ impl Documents {
 
         self.applied = self.revision;
         self.replaying = false;
-        self.status = "Replay cancelled. Edit or save to retry.".into();
+        self.status = "Replay cancelled. Save to retry.".into();
     }
 
     pub fn save(&mut self, path: &Path) -> Result<(), String> {
@@ -150,24 +160,24 @@ impl Documents {
             return Err("Resolve the external file conflict before saving.".into());
         }
 
-        let mut text = document.text.clone();
+        self.formatting_saves.remove(path);
 
-        if path.extension().is_some_and(|extension| extension == "lua") {
-            if let (Some(options), Some(lsp)) = (&self.formatting, &mut self.lsp) {
-                match lsp.format(
-                    path,
-                    &document.text,
-                    document.version,
-                    options,
-                    &mut self.replies,
-                ) {
-                    Ok(formatted) => text = formatted,
-                    Err(error) => self
-                        .diagnostics
-                        .push(format!("Formatting skipped: {error}")),
-                }
-            }
-        }
+        let version = document.version;
+        let preview = self
+            .formatting_previews
+            .remove(path)
+            .filter(|(preview_version, _)| *preview_version == version);
+        let format = self.formatting.is_some()
+            && path.extension().is_some_and(|extension| extension == "lua");
+        let pending = format && preview.as_ref().is_some_and(|(_, text)| text.is_none());
+        let ready = format && preview.as_ref().is_some_and(|(_, text)| text.is_some());
+        let text = if format {
+            preview
+                .and_then(|(_, text)| text)
+                .unwrap_or_else(|| document.text.clone())
+        } else {
+            document.text.clone()
+        };
 
         let document = self.open.get_mut(path).unwrap();
 
@@ -182,16 +192,31 @@ impl Documents {
         }
 
         if document.text != text {
-            document.text = text;
-
+            document.text = text.clone();
             document.version += 1;
         }
 
-        document.disk = Some(document.text.as_bytes().to_vec());
+        document.disk = Some(text.as_bytes().to_vec());
+        let saved_version = document.version;
 
         self.request(path.to_owned());
 
         self.last_edit = Instant::now() - Duration::from_secs(1);
+
+        if pending {
+            self.formatting_saves.insert(path.to_owned(), version);
+        } else if format && !ready && saved_version == version {
+            if let (Some(options), Some(lsp)) = (&self.formatting, &mut self.lsp) {
+                match lsp.request_format(path, &text, version, options) {
+                    Ok(_) => {
+                        self.formatting_saves.insert(path.to_owned(), version);
+                    }
+                    Err(error) => self
+                        .diagnostics
+                        .push(format!("Formatting skipped: {error}")),
+                }
+            }
+        }
 
         Ok(())
     }
@@ -215,10 +240,24 @@ impl Documents {
         self.open.values().any(Document::dirty)
     }
 
+    pub fn clear_formatting_previews(&mut self) {
+        self.formatting_previews.clear();
+        self.formatting_saves.clear();
+        if let Some(lsp) = &mut self.lsp {
+            lsp.cancel_format_requests();
+        }
+    }
+
     pub fn sources(&self) -> Sources {
         self.open
             .iter()
-            .map(|(path, document)| (path.clone(), document.text.clone()))
+            .filter_map(|(path, document)| {
+                document.disk.as_ref().and_then(|bytes| {
+                    String::from_utf8(bytes.clone())
+                        .ok()
+                        .map(|text| (path.clone(), text))
+                })
+            })
             .collect()
     }
 
@@ -395,14 +434,108 @@ impl Documents {
         messages
     }
 
+    fn apply_saved_format(&mut self, reply: super::lsp::Reply, utf8: bool) {
+        if self.formatting_saves.get(&reply.path) != Some(&reply.version) {
+            return;
+        }
+
+        self.formatting_saves.remove(&reply.path);
+
+        let Some(document) = self.open.get_mut(&reply.path) else {
+            return;
+        };
+
+        if document.version != reply.version || document.conflict || document.dirty() {
+            return;
+        }
+
+        let formatted = match super::lsp::apply_text_edits(&document.text, &reply.value, utf8) {
+            Ok(text) if text != document.text => text,
+            Ok(_) => return,
+            Err(error) => {
+                self.diagnostics
+                    .push(format!("Formatting skipped: {error}"));
+                return;
+            }
+        };
+
+        let result = self
+            .context
+            .resolve(&reply.path)
+            .map_err(|error| error.to_string())
+            .and_then(|path| {
+                atomic_write(&path, formatted.as_bytes(), document.disk.as_deref())
+                    .map_err(|error| error.to_string())
+            });
+
+        if let Err(error) = result {
+            document.conflict = true;
+            self.diagnostics
+                .push(format!("Formatting skipped: {error}"));
+            return;
+        }
+
+        document.text = formatted;
+        document.disk = Some(document.text.as_bytes().to_vec());
+        document.version += 1;
+    }
+
     pub fn poll(&mut self) -> bool {
         if let Some(lsp) = &mut self.lsp {
             for (path, document) in &self.open {
                 lsp.sync(path, &document.text, document.version);
             }
 
-            self.replies.extend(lsp.poll());
+            if let (Some(path), Some(options)) = (&self.active, &self.formatting) {
+                if let Some(document) = self.open.get(path) {
+                    if self
+                        .formatting_previews
+                        .get(path)
+                        .is_some_and(|(version, _)| *version != document.version)
+                    {
+                        self.formatting_previews.remove(path);
+                    }
+
+                    if document.dirty()
+                        && path.extension().is_some_and(|extension| extension == "lua")
+                        && document.edited_at.elapsed() >= Duration::from_millis(150)
+                        && !self.formatting_previews.contains_key(path)
+                        && lsp
+                            .request_format(path, &document.text, document.version, options)
+                            .is_ok()
+                    {
+                        self.formatting_previews
+                            .insert(path.clone(), (document.version, None));
+                    }
+                }
+            }
+
+            let utf8 = lsp.utf8;
+            let replies = lsp.poll();
             self.diagnostics.append(&mut lsp.messages);
+            for reply in replies {
+                if reply.method == "textDocument/formatting" {
+                    if self.formatting_saves.get(&reply.path) == Some(&reply.version) {
+                        self.apply_saved_format(reply, utf8);
+                    } else if let Some((version, preview)) =
+                        self.formatting_previews.get_mut(&reply.path)
+                    {
+                        if *version == reply.version {
+                            if let Some(document) = self.open.get(&reply.path) {
+                                if let Ok(text) =
+                                    super::lsp::apply_text_edits(&document.text, &reply.value, utf8)
+                                {
+                                    *preview = Some(text);
+                                } else {
+                                    self.formatting_previews.remove(&reply.path);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    self.replies.push(reply);
+                }
+            }
         }
 
         for event in self.events.try_iter() {
@@ -419,7 +552,9 @@ impl Documents {
 
                                 self.external.insert(path.to_owned());
 
-                                self.last_edit = Instant::now();
+                                if !self.changed.contains(path) {
+                                    self.last_edit = Instant::now();
+                                }
                             }
                         }
                     }
@@ -517,7 +652,8 @@ mod tests {
 
         docs.open(path).unwrap();
         docs.edit(path, "Local".into());
-        assert_eq!(docs.sources()[path], "Local");
+        assert_eq!(docs.sources()[path], "Old");
+        assert_eq!(docs.revision, 0);
         assert_eq!(std::fs::read_to_string(root.join(path)).unwrap(), "Old");
 
         std::fs::write(root.join(path), "External").unwrap();
@@ -525,10 +661,90 @@ mod tests {
         assert_eq!(docs.open[path].text, "Local");
         docs.resolve_conflict(path, true).unwrap();
         docs.save(path).unwrap();
+        assert_eq!(docs.sources()[path], "Local");
         assert_eq!(std::fs::read_to_string(root.join(path)).unwrap(), "Local");
 
         drop(docs);
 
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn delayed_format_only_changes_the_saved_revision() {
+        let root =
+            std::env::temp_dir().join(format!("kinematic-format-save-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("test.lua"), "local x=1").unwrap();
+
+        let mut docs = Documents::new(
+            ProjectContext::new(&root).unwrap(),
+            &crate::scripting::definitions(),
+        )
+        .unwrap();
+        let path = Path::new("test.lua");
+        docs.open(path).unwrap();
+        docs.formatting_saves.insert(path.into(), 1);
+
+        let reply = || super::super::lsp::Reply {
+            method: "textDocument/formatting".into(),
+            path: path.into(),
+            version: 1,
+            value: serde_json::json!([{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":9}},"newText":"local x = 2"}]),
+            position: None,
+        };
+
+        docs.edit(path, "local x=2".into());
+        docs.apply_saved_format(reply(), true);
+        assert_eq!(docs.open[path].text, "local x=2");
+        assert_eq!(docs.sources()[path], "local x=1");
+
+        docs.save(path).unwrap();
+        assert!(docs.poll());
+        docs.formatting_saves.insert(path.into(), 2);
+        docs.apply_saved_format(
+            super::super::lsp::Reply {
+                version: 2,
+                ..reply()
+            },
+            true,
+        );
+        assert_eq!(docs.sources()[path], "local x = 2");
+
+        drop(docs);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ready_format_is_written_with_the_save() {
+        let root =
+            std::env::temp_dir().join(format!("kinematic-ready-format-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("test.lua"), "local x=1").unwrap();
+
+        let mut docs = Documents::new(
+            ProjectContext::new(&root).unwrap(),
+            &crate::scripting::definitions(),
+        )
+        .unwrap();
+        let path = Path::new("test.lua");
+        docs.open(path).unwrap();
+        docs.edit(path, "local x=2".into());
+        docs.formatting = Some(serde_json::json!({"tabSize": 2, "insertSpaces": true}));
+        docs.formatting_previews
+            .insert(path.into(), (2, Some("local x = 2".into())));
+
+        docs.save(path).unwrap();
+
+        assert_eq!(docs.open[path].text, "local x = 2");
+        assert_eq!(docs.sources()[path], "local x = 2");
+        assert_eq!(
+            std::fs::read_to_string(root.join(path)).unwrap(),
+            "local x = 2"
+        );
+        assert_eq!(docs.open[path].version, 3);
+        assert!(docs.formatting_saves.is_empty());
+
+        drop(docs);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

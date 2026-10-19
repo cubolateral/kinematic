@@ -291,33 +291,7 @@ impl Client {
         options: &Value,
         replies: &mut Vec<Reply>,
     ) -> Result<String, String> {
-        if !analyzed_path(&self.root, path) {
-            return Err("Formatting requires a project Lua file.".into());
-        }
-
-        if !self.ready || self.failed {
-            return Err("LuaLS is not ready.".into());
-        }
-
-        self.sync(path, text, version);
-
-        let id = self.next;
-
-        self.next += 1;
-
-        self.requests.insert(
-            id,
-            Request {
-                position: (0, 0),
-                utf8_column: 0,
-                method: "textDocument/formatting".into(),
-                path: path.to_owned(),
-                version,
-            },
-        );
-
-        self.send(json!({"jsonrpc":"2.0", "id":id, "method":"textDocument/formatting",
-            "params":{"textDocument":{"uri":file_uri(&self.root.root().join(path))}, "options":options}}));
+        let id = self.request_format(path, text, version, options)?;
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
 
@@ -349,6 +323,52 @@ impl Client {
         self.requests.remove(&id);
 
         Err("LuaLS formatting timed out.".into())
+    }
+
+    pub fn request_format(
+        &mut self,
+        path: &Path,
+        text: &str,
+        version: u64,
+        options: &Value,
+    ) -> Result<u64, String> {
+        if !analyzed_path(&self.root, path) {
+            return Err("Formatting requires a project Lua file.".into());
+        }
+
+        if !self.ready || self.failed {
+            return Err("LuaLS is not ready.".into());
+        }
+
+        self.requests.retain(|_, request| {
+            request.method != "textDocument/formatting" || request.path != path
+        });
+        self.sync(path, text, version);
+
+        let id = self.next;
+
+        self.next += 1;
+
+        self.requests.insert(
+            id,
+            Request {
+                position: (0, 0),
+                utf8_column: 0,
+                method: "textDocument/formatting".into(),
+                path: path.to_owned(),
+                version,
+            },
+        );
+
+        self.send(json!({"jsonrpc":"2.0", "id":id, "method":"textDocument/formatting",
+            "params":{"textDocument":{"uri":file_uri(&self.root.root().join(path))}, "options":options}}));
+
+        Ok(id)
+    }
+
+    pub fn cancel_format_requests(&mut self) {
+        self.requests
+            .retain(|_, request| request.method != "textDocument/formatting");
     }
 
     pub fn poll(&mut self) -> Vec<Reply> {
@@ -671,7 +691,7 @@ fn edit_offset(text: &str, position: &Value, utf8: bool) -> Result<usize, String
 
     Err("Formatting line is outside the document.".into())
 }
-fn apply_text_edits(text: &str, value: &Value, utf8: bool) -> Result<String, String> {
+pub(crate) fn apply_text_edits(text: &str, value: &Value, utf8: bool) -> Result<String, String> {
     if value.is_null() {
         return Ok(text.to_owned());
     }

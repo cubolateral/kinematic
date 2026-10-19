@@ -231,7 +231,7 @@ fn lua_editor_reload_switch_and_frozen_export() {
                 .get::<&CircleShape>(ball)
                 .unwrap()
                 .radius,
-            8.0
+            4.0
         );
 
         assert_eq!(
@@ -239,11 +239,25 @@ fn lua_editor_reload_switch_and_frozen_export() {
             source
         );
 
+        editor.documents.as_mut().unwrap().save(path).unwrap();
+        settle(&mut app, &mut editor);
+
+        assert_eq!(
+            editor
+                .scene(0)
+                .world()
+                .get::<&CircleShape>(ball)
+                .unwrap()
+                .radius,
+            8.0
+        );
+
         editor
             .documents
             .as_mut()
             .unwrap()
             .edit(path, "Invalid Lua ???".into());
+        editor.documents.as_mut().unwrap().save(path).unwrap();
 
         settle(&mut app, &mut editor);
 
@@ -315,12 +329,22 @@ fn lua_editor_reload_switch_and_frozen_export() {
                 .get::<&CircleShape>(ball)
                 .unwrap()
                 .radius,
-            16.0
+            8.0
         );
 
         editor.documents.as_mut().unwrap().save_all().unwrap();
 
         settle(&mut app, &mut editor);
+
+        assert_eq!(
+            editor
+                .scene(0)
+                .world()
+                .get::<&CircleShape>(ball)
+                .unwrap()
+                .radius,
+            16.0
+        );
 
         let mut settings = editor.project_info().1;
 
