@@ -86,6 +86,10 @@ pub(super) fn draw(
                 editor.toggle_margin();
             }
 
+            if let Some(error) = editor.render_error() {
+                ui.text_wrapped(error);
+            }
+
             if !is_exporting
                 && ui.is_window_hovered()
                 && ui.is_mouse_hovering_rect(min, [min[0] + available[0], min[1] + available[1]])

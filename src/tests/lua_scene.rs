@@ -1,5 +1,9 @@
 use crate::{
-    core::{ProjectContext, components::Transform2D, objects::CircleShape},
+    core::{
+        ProjectContext,
+        components::Transform2D,
+        objects::{CircleShape, ObjectHandler},
+    },
     scripting::{LuaScene, Sources},
 };
 use std::path::PathBuf;
@@ -115,6 +119,69 @@ fn signal_errors_do_not_commit_partial_writes() {
             .unwrap()
             .radius,
         24.0
+    );
+}
+
+#[test]
+fn camera_following_shader_rect_updates_without_signal_errors() {
+    let scene = load(
+        r#"
+local shader = k.image_shader {source = [[#version 330 core
+uniform vec2 center;
+uniform float zoom;
+uniform vec2 viewport;
+in vec2 k_uv;
+out vec4 k_color;
+void main() { k_color = vec4(center.x, zoom / viewport.x, k_uv.x, 1.0); }
+]]}
+return function(s)
+    local world = s:world_2d()
+    local fractal = s:rect {
+        id = 'mandelbrot', size = k.vec2(640, 480), shader = shader,
+        uniforms = {center = k.vec2(-0.5, 0), zoom = 1, viewport = k.vec2(640, 480)},
+    }
+    world:add(fractal)
+    fractal:signal(function(obj)
+        local position = world.camera_position:get()
+        local zoom = world.camera_zoom:get()
+        obj.position:set(position)
+        obj.rotation:set(world.camera_rotation:get())
+        obj.scale:set(k.vec2(1 / zoom, 1 / zoom))
+        obj:uniform('center'):set(k.vec2(-0.5 + position.x / 200, -position.y / 200))
+        obj:uniform('zoom'):set(zoom)
+    end)
+    s:all(function()
+        world.camera_position:to(k.vec2(100, 50)):play(1, k.ease.linear)
+        world.camera_zoom:to(2):play(1, k.ease.linear)
+        world.camera_rotation:to(0.4):play(1, k.ease.linear)
+    end)
+end
+"#,
+    );
+
+    scene.update(0.5).unwrap();
+
+    let entity = scene.entity("mandelbrot").unwrap();
+    let world = scene.scene().world();
+    let transform = world.get::<&Transform2D>(entity).unwrap();
+    let camera_zoom = world
+        .get::<&crate::core::components::Camera2D>(scene.scene().world_2d().entity())
+        .unwrap()
+        .camera_zoom;
+
+    assert_eq!(transform.position.x, 50.0);
+    assert!((transform.rotation - 0.2).abs() < 0.0001);
+    assert!(
+        (transform.scale.x - 2.0 / 3.0).abs() < 0.0001,
+        "Scale: {}, camera zoom: {}",
+        transform.scale.x,
+        camera_zoom
+    );
+    assert_eq!(
+        crate::core::objects::shader_uniform(&world, entity, "center"),
+        Ok(crate::core::TrackValue::Vector2(crate::core::types::vec2(
+            -0.25, -0.125
+        )))
     );
 }
 

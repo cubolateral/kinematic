@@ -289,6 +289,8 @@ impl App {
                     &self.gl,
                 );
 
+                crate::renderer::target::reset_gl(&self.gl, self.window.size());
+
                 unsafe {
                     self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
                     self.gl.clear(glow::COLOR_BUFFER_BIT);
@@ -300,6 +302,8 @@ impl App {
                     self.window.size(),
                     self.ui.render_mode(),
                 );
+
+                crate::renderer::target::reset_gl(&self.gl, self.window.size());
             }
 
             if self.export_only && editor.as_ref().is_none_or(|editor| !editor.is_exporting()) {
