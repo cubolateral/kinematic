@@ -10,8 +10,8 @@ use crate::{
 use std::{collections::HashMap, ffi::CString, os::raw::c_void, ptr};
 
 use super::{
-    controls, icons,
-    widgets::{NumericValue, numeric_input_arrows, text_size},
+    icons, properties,
+    widgets::{NumericValue, numeric_input_arrows},
 };
 
 pub(super) const WINDOW_NAME: &str = "Inspector";
@@ -165,17 +165,21 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             if let Ok(mut sphere) = world.get::<&mut SphereShape>(entity) {
                 let mut segments = sphere.segments;
 
-                if numeric_drag(
-                    ui,
-                    state,
-                    "Segments",
-                    &mut segments,
-                    1.0,
-                    "%u",
-                    dear_imgui_rs::sys::ImGuiDataType_U32,
-                    Some(&3),
-                    Some(&256),
-                ) {
+                if properties::row(ui, "Segments", false, || {
+                    numeric_drag(
+                        ui,
+                        state,
+                        "##value",
+                        &mut segments,
+                        1.0,
+                        "%u",
+                        dear_imgui_rs::sys::ImGuiDataType_U32,
+                        Some(&3),
+                        Some(&256),
+                    )
+                })
+                .changed
+                {
                     sphere.segments = segments.clamp(3, 256);
 
                     scene.invalidate();
@@ -301,20 +305,11 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 }
 
 fn property(ui: &dear_imgui_rs::Ui, name: &str, value: &str) {
-    ui.text(name);
-    ui.same_line();
+    properties::row(ui, name, false, || {
+        ui.text_disabled(value);
 
-    let width = text_size(ui, value)[0];
-
-    ui.set_cursor_pos_x(ui.cursor_pos_x() + ui.content_region_avail()[0] - width);
-    ui.text_disabled(value);
-}
-
-#[derive(Default)]
-struct ValueEdit {
-    changed: bool,
-    reset: bool,
-    hovered: bool,
+        false
+    });
 }
 
 fn edit_value(
@@ -324,88 +319,9 @@ fn edit_value(
     value: &mut TrackValue,
     track: Option<&TrackInfo>,
     show_reset: bool,
-) -> ValueEdit {
-    let width = ui.content_region_avail_width().max(1.0);
-
-    ui.group(|| {
-        let Some(_table) = ui.begin_table_with_sizing(
-            "##property",
-            2,
-            dear_imgui_rs::TableOptions::new()
-                .flags(dear_imgui_rs::TableFlags::NO_SAVED_SETTINGS)
-                .sizing_policy(dear_imgui_rs::TableSizingPolicy::StretchProp),
-            [width, 0.0],
-            0.0,
-        ) else {
-            return ValueEdit::default();
-        };
-
-        ui.table_setup_column_stretch_weight("Name", dear_imgui_rs::TableColumnFlags::empty(), 0.4);
-
-        ui.table_setup_column_stretch_weight(
-            "Value",
-            dear_imgui_rs::TableColumnFlags::empty(),
-            0.6,
-        );
-
-        ui.table_next_column();
-
-        let position = ui.cursor_screen_pos();
-        let name_width = ui.content_region_avail_width();
-        let reset_width = if show_reset {
-            ui.frame_height() + 4.0
-        } else {
-            0.0
-        };
-        let text_width = (name_width - reset_width).max(0.0);
-        let draw = ui.get_window_draw_list();
-        let clip = draw.push_clip_rect(
-            position,
-            [position[0] + text_width, position[1] + ui.frame_height()],
-            true,
-        );
-
-        draw.add_text(
-            [
-                position[0],
-                position[1] + (ui.frame_height() - text_size(ui, name)[1]) * 0.5,
-            ],
-            ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
-            name,
-        );
-
-        drop(clip);
-
-        drop(draw);
-        ui.dummy([text_width, ui.frame_height()]);
-
-        let mut reset = false;
-
-        if show_reset {
-            ui.same_line_with_spacing(0.0, 0.0);
-
-            ui.set_cursor_screen_pos([
-                position[0] + (name_width - ui.frame_height()).max(0.0),
-                position[1],
-            ]);
-
-            reset = controls::text_button(ui, icons::RESET, [ui.frame_height(); 2]);
-
-            if ui.is_item_hovered() {
-                ui.tooltip_text("Reset to the scene value.");
-            }
-        }
-
-        ui.table_next_column();
-
-        let _width = ui.push_item_width(-1.0);
-        let changed = ui.group(|| edit_value_input(ui, state, "##value", value, track));
-
-        ValueEdit {
-            changed,
-            reset,
-            hovered: ui.is_item_hovered(),
-        }
+) -> properties::Edit {
+    properties::row(ui, name, show_reset, || {
+        edit_value_input(ui, state, "##value", value, track)
     })
 }
 
@@ -603,18 +519,11 @@ fn edit_float_components<const N: usize>(
     prefixes: [&str; N],
     unit: &str,
 ) -> bool {
-    let mut changed = false;
-
-    for (value, prefix) in values.iter_mut().zip(prefixes) {
-        ui.align_text_to_frame_padding();
-        ui.text_colored(component_color(prefix), prefix);
-        ui.same_line_with_spacing(0.0, 6.0);
-        ui.set_next_item_width(ui.content_region_avail_width().max(1.0));
-
+    properties::components(ui, values, prefixes, |prefix, value| {
         let label = format!("{name}:{prefix}");
         let format = format!("{}{unit}", float_format(*value));
 
-        changed |= numeric_drag(
+        numeric_drag(
             ui,
             state,
             &label,
@@ -624,19 +533,8 @@ fn edit_float_components<const N: usize>(
             dear_imgui_rs::sys::ImGuiDataType_Float,
             None,
             None,
-        );
-    }
-
-    changed
-}
-
-fn component_color(prefix: &str) -> [f32; 4] {
-    match prefix {
-        "x" | "a" => [0.9, 0.45, 0.3, 1.0],
-        "y" | "b" => [0.45, 0.8, 0.4, 1.0],
-        "z" | "c" => [0.4, 0.65, 0.95, 1.0],
-        _ => [0.8, 0.65, 0.9, 1.0],
-    }
+        )
+    })
 }
 
 fn euler_degrees(quaternion: glam::Quat) -> [f32; 3] {

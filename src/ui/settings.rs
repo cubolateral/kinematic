@@ -3,10 +3,7 @@ use std::{fs, path::Path};
 use crate::ui::inputs::{self, Category};
 use crate::{core::ProjectSettings, editor::Editor};
 
-use super::{
-    theme::Appearance,
-    widgets::{numeric_input_arrows, text_size},
-};
+use super::{properties::field, theme::Appearance, widgets::numeric_input_arrows};
 
 const PROJECT_WINDOW: &str = "Project settings";
 const EDITOR_WINDOW: &str = "Editor settings";
@@ -97,18 +94,24 @@ pub(super) fn draw(
 
                     let project_changed = {
                         let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
-                        let resolution_changed = input_int_components(
+                        let defaults = ProjectSettings::default();
+                        let resolution_changed = field(
                             ui,
                             "Resolution",
                             &mut state.resolution,
-                            ["Width", "Height"],
+                            [defaults.resolution.0 as i32, defaults.resolution.1 as i32],
+                            |value| input_int_components(ui, value, ["Width", "Height"]),
                         );
-                        let fps_changed = input_int(ui, "FPS", &mut state.fps);
-                        let margin_changed = input_int_components(
+                        let fps_changed =
+                            field(ui, "FPS", &mut state.fps, defaults.fps as i32, |value| {
+                                input_int(ui, "##value", value)
+                            });
+                        let margin_changed = field(
                             ui,
                             "Margin (px)",
                             &mut state.margin,
-                            ["Width", "Height"],
+                            [defaults.margin.0 as i32, defaults.margin.1 as i32],
+                            |value| input_int_components(ui, value, ["Width", "Height"]),
                         );
 
                         resolution_changed || fps_changed || margin_changed
@@ -166,40 +169,96 @@ pub(super) fn draw(
             if let Some(_tabs) = ui.tab_bar("Editor settings sections") {
                 if let Some(_editor) = ui.tab_item("Code Editor") {
                     let settings = &mut appearance.editor;
+                    let defaults = super::code::Settings::default();
 
-                    changed |= ui.slider_f32("Font size", &mut settings.font_size, 10.0, 28.0);
-                    changed |= ui.slider("Tab size", 1usize, 8usize, &mut settings.tab_size);
-                    changed |= ui.checkbox("Insert spaces", &mut settings.insert_spaces);
-                    changed |= ui.checkbox("Word wrap", &mut settings.word_wrap);
-                    changed |= ui.input_text("Rulers", &mut settings.rulers).build();
+                    changed |= field(
+                        ui,
+                        "Font size",
+                        &mut settings.font_size,
+                        defaults.font_size,
+                        |value| ui.slider_f32("##value", value, 10.0, 28.0),
+                    );
+                    changed |= field(
+                        ui,
+                        "Tab size",
+                        &mut settings.tab_size,
+                        defaults.tab_size,
+                        |value| ui.slider("##value", 1usize, 8usize, value),
+                    );
+                    changed |= field(
+                        ui,
+                        "Insert spaces",
+                        &mut settings.insert_spaces,
+                        defaults.insert_spaces,
+                        |value| ui.checkbox("##value", value),
+                    );
+                    changed |= field(
+                        ui,
+                        "Word wrap",
+                        &mut settings.word_wrap,
+                        defaults.word_wrap,
+                        |value| ui.checkbox("##value", value),
+                    );
+                    changed |= field(
+                        ui,
+                        "Rulers",
+                        &mut settings.rulers,
+                        defaults.rulers,
+                        |value| ui.input_text("##value", value).build(),
+                    );
                     ui.text_disabled("Comma-separated columns, e.g. 80,100.");
-                    changed |= ui.checkbox("Line numbers", &mut settings.line_numbers);
-                    changed |= ui.checkbox("Automatic suggestions", &mut settings.autocomplete);
-                    changed |= ui.checkbox("Show whitespace", &mut settings.show_spaces);
-
-                    changed |= ui.slider(
+                    changed |= field(
+                        ui,
+                        "Line numbers",
+                        &mut settings.line_numbers,
+                        defaults.line_numbers,
+                        |value| ui.checkbox("##value", value),
+                    );
+                    changed |= field(
+                        ui,
+                        "Automatic suggestions",
+                        &mut settings.autocomplete,
+                        defaults.autocomplete,
+                        |value| ui.checkbox("##value", value),
+                    );
+                    changed |= field(
+                        ui,
+                        "Show whitespace",
+                        &mut settings.show_spaces,
+                        defaults.show_spaces,
+                        |value| ui.checkbox("##value", value),
+                    );
+                    changed |= field(
+                        ui,
                         "Hover delay (ms)",
-                        200usize,
-                        2000usize,
                         &mut settings.hover_delay_ms,
+                        defaults.hover_delay_ms,
+                        |value| ui.slider("##value", 200usize, 2000usize, value),
                     );
 
                     ui.separator_with_text("Formatting");
-                    changed |= ui.checkbox("Format on save", &mut settings.format_on_save);
+                    changed |= field(
+                        ui,
+                        "Format on save",
+                        &mut settings.format_on_save,
+                        defaults.format_on_save,
+                        |value| ui.checkbox("##value", value),
+                    );
                     ui.text_disabled("Uses the tab size and indentation settings above.");
-
-                    changed |= ui.checkbox(
+                    changed |= field(
+                        ui,
                         "Trim trailing whitespace",
                         &mut settings.trim_trailing_whitespace,
+                        defaults.trim_trailing_whitespace,
+                        |value| ui.checkbox("##value", value),
                     );
-
-                    changed |=
-                        ui.checkbox("Insert final newline", &mut settings.insert_final_newline);
-
-                    if ui.button("Reset editor") {
-                        *settings = super::code::Settings::default();
-                        changed = true;
-                    }
+                    changed |= field(
+                        ui,
+                        "Insert final newline",
+                        &mut settings.insert_final_newline,
+                        defaults.insert_final_newline,
+                        |value| ui.checkbox("##value", value),
+                    );
                 }
 
                 if let Some(_shortcuts) = ui.tab_item("Shortcuts") {
@@ -207,28 +266,36 @@ pub(super) fn draw(
                 }
 
                 if let Some(_appearance) = ui.tab_item("Appearance") {
-                    changed |= ui.color_edit4("Background", &mut appearance.background);
-                    changed |= ui.color_edit4("Accent", &mut appearance.accent);
-                    changed |= ui.slider_f32("Contrast", &mut appearance.contrast, 0.25, 1.0);
-                    changed |= ui.slider_f32("UI Scale", &mut appearance.scale, 0.75, 1.25);
+                    let defaults = Appearance::default();
 
-                    ui.spacing();
-                    ui.separator();
-                    ui.spacing();
-
-                    if ui.button_with_size(
-                        "Reset Appearance",
-                        [ui.content_region_avail_width(), 0.0],
-                    ) {
-                        let defaults = Appearance::default();
-
-                        appearance.background = defaults.background;
-                        appearance.accent = defaults.accent;
-                        appearance.contrast = defaults.contrast;
-                        appearance.scale = defaults.scale;
-
-                        changed = true;
-                    }
+                    changed |= field(
+                        ui,
+                        "Background",
+                        &mut appearance.background,
+                        defaults.background,
+                        |value| ui.color_edit4("##value", value),
+                    );
+                    changed |= field(
+                        ui,
+                        "Accent",
+                        &mut appearance.accent,
+                        defaults.accent,
+                        |value| ui.color_edit4("##value", value),
+                    );
+                    changed |= field(
+                        ui,
+                        "Contrast",
+                        &mut appearance.contrast,
+                        defaults.contrast,
+                        |value| ui.slider_f32("##value", value, 0.25, 1.0),
+                    );
+                    changed |= field(
+                        ui,
+                        "UI Scale",
+                        &mut appearance.scale,
+                        defaults.scale,
+                        |value| ui.slider_f32("##value", value, 0.75, 1.25),
+                    );
                 }
             }
         });
@@ -300,32 +367,12 @@ fn input_int(ui: &dear_imgui_rs::Ui, label: &str, value: &mut i32) -> bool {
 
 fn input_int_components<const N: usize>(
     ui: &dear_imgui_rs::Ui,
-    label: &str,
     values: &mut [i32; N],
     component_names: [&str; N],
 ) -> bool {
-    let spacing = unsafe { ui.style().item_inner_spacing() }[0];
-    let label_width = text_size(ui, label)[0];
-    let fields_width = (ui.calc_item_width() - label_width - spacing).max(N as f32);
-    let field_width = ((fields_width - spacing * N.saturating_sub(1) as f32) / N as f32).max(1.0);
-    let mut changed = false;
-
-    for (index, (value, component_name)) in values.iter_mut().zip(component_names).enumerate() {
-        if index > 0 {
-            ui.same_line_with_spacing(0.0, spacing);
-        }
-
-        ui.set_next_item_width(field_width);
-
-        let component_label = format!("##{label}:{component_name}");
-
-        changed |= input_int(ui, &component_label, value);
-    }
-
-    ui.same_line_with_spacing(0.0, spacing);
-    ui.text(label);
-
-    changed
+    super::properties::components(ui, values, component_names, |_, value| {
+        input_int(ui, "##value", value)
+    })
 }
 
 #[cfg(test)]

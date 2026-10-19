@@ -11,6 +11,7 @@ mod export;
 mod icons;
 mod inspector;
 mod preview;
+mod properties;
 mod scene_tree;
 mod settings;
 mod theme;
