@@ -37,6 +37,7 @@ pub(super) struct Settings {
     pub tab_size: usize,
     pub insert_spaces: bool,
     pub word_wrap: bool,
+    pub rulers: String,
     pub line_numbers: bool,
     pub autocomplete: bool,
     pub show_spaces: bool,
@@ -52,6 +53,7 @@ impl Default for Settings {
             tab_size: 4,
             insert_spaces: true,
             word_wrap: false,
+            rulers: "80".into(),
             line_numbers: true,
             autocomplete: true,
             show_spaces: false,
@@ -323,6 +325,35 @@ impl Tab {
             .build();
 
         self.editor.set_read_only(false);
+
+        if let Some(glyph_width) = self.editor.glyph_width().filter(|_| rendered.is_ok()) {
+            let gutter = if self.editor.shows_line_numbers() {
+                self.editor.line_number_left_margin()
+                    + (self.editor.line_count() + 1).ilog10() as usize
+                    + 1
+            } else {
+                0
+            } + usize::from(self.editor.is_line_folding_enabled())
+                + self.editor.text_left_margin();
+            let min = ui.item_rect_min();
+            let max = ui.item_rect_max();
+            let padding = ui.clone_style().window_padding();
+            let draw = ui.get_window_draw_list();
+            let _clip = draw.push_clip_rect(min, max, true);
+            let color = ui.get_color_u32(dear_imgui_rs::StyleColor::Header);
+
+            // shortcut: CTE exposes scroll in whole columns, upgrade if it exposes pixel scroll.
+            for column in ruler_columns(&settings.rulers) {
+                let x = min[0] + padding[0] + (gutter + column) as f32 * glyph_width
+                    - self.editor.first_visible_column() as f32 * glyph_width;
+
+                if x >= min[0] && x < max[0] {
+                    draw.add_line([x, min[1]], [x, max[1]], color)
+                        .thickness(1.0)
+                        .build();
+                }
+            }
+        }
 
         let popup_cursor = if completion_popup_position.is_some() || completion_key.is_some() {
             completion_cursor
@@ -1377,6 +1408,13 @@ impl State {
         }
     }
 }
+fn ruler_columns(rulers: &str) -> impl Iterator<Item = usize> + '_ {
+    rulers
+        .split(',')
+        .filter_map(|value| value.trim().parse::<u16>().ok())
+        .filter(|column| *column > 0)
+        .map(usize::from)
+}
 fn indentation_backspace(prefix: &str, tab_size: usize) -> Option<usize> {
     if prefix.is_empty() || !prefix.bytes().all(|byte| byte == b' ') {
         return None;
@@ -1472,7 +1510,13 @@ fn diagnostic_location(error: &str) -> Option<(&str, usize, usize)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Position, Settings, State, diagnostic_location};
+    use super::{Position, Settings, State, diagnostic_location, ruler_columns};
+
+    #[test]
+    fn rulers_accept_comma_separated_positive_columns() {
+        assert_eq!(ruler_columns("80, 100").collect::<Vec<_>>(), [80, 100]);
+        assert_eq!(ruler_columns("0, invalid, 80").collect::<Vec<_>>(), [80]);
+    }
 
     #[test]
     fn typing_and_switching_files_keep_the_requested_editor_focused() {

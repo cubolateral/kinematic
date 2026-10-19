@@ -171,6 +171,8 @@ pub(super) fn draw(
                     changed |= ui.slider("Tab size", 1usize, 8usize, &mut settings.tab_size);
                     changed |= ui.checkbox("Insert spaces", &mut settings.insert_spaces);
                     changed |= ui.checkbox("Word wrap", &mut settings.word_wrap);
+                    changed |= ui.input_text("Rulers", &mut settings.rulers).build();
+                    ui.text_disabled("Comma-separated columns, e.g. 80,100.");
                     changed |= ui.checkbox("Line numbers", &mut settings.line_numbers);
                     changed |= ui.checkbox("Automatic suggestions", &mut settings.autocomplete);
                     changed |= ui.checkbox("Show whitespace", &mut settings.show_spaces);
