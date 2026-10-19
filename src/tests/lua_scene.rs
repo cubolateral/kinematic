@@ -487,6 +487,66 @@ fn malformed_pairs_channels_overlaps_and_limits_are_rejected() {
 }
 
 #[test]
+fn text_fade_crossfades_both_strings_and_supports_seeking() {
+    use crate::core::{components::Draw2D, objects::TextShape};
+
+    let scene = load(
+        r#"
+return function(s)
+    local label=s:text_2d{id='label',text='I        ',size=32,opacity=0.8}
+    s:world_2d():add(label)
+    local back=label:fade('I        ')
+    s:wait(1)
+    label:fade('        I'):play(2,k.ease.linear)
+    assert(label:get('text')=='        I')
+    s:wait(1)
+    back:play(2,k.ease.linear)
+end
+"#,
+    );
+    let label = scene.entity("label").unwrap();
+
+    for (time, left_alpha, right_alpha, text) in [
+        (0.0, 204, 0, "I        "),
+        (1.0, 204, 0, "I        "),
+        (1.5, 153, 51, "I        "),
+        (2.0, 102, 102, "I        "),
+        (3.0, 0, 204, "        I"),
+        (4.5, 51, 153, "        I"),
+        (6.0, 204, 0, "I        "),
+        (1.5, 153, 51, "I        "),
+    ] {
+        scene.update(time).unwrap();
+
+        let world = scene.scene().world();
+        let draw = world.get::<&Draw2D>(label).unwrap();
+        let mut surface = skia_safe::surfaces::raster_n32_premul((640, 160)).unwrap();
+        let canvas = surface.canvas();
+
+        canvas.clear(skia_safe::colors::TRANSPARENT);
+        canvas.translate((320.0, 80.0));
+        (draw.on_draw)(&world, label, canvas, draw.opacity);
+
+        let pixels = surface.peek_pixels().unwrap();
+        let max_alpha = |start, end| {
+            (0..160)
+                .flat_map(|y| (start..end).map(move |x| (x, y)))
+                .map(|point| i32::from(pixels.get_color(point).a()))
+                .max()
+                .unwrap()
+        };
+
+        assert!((max_alpha(0, 320) - left_alpha).abs() <= 1, "Time: {time}");
+        assert!(
+            (max_alpha(320, 640) - right_alpha).abs() <= 1,
+            "Time: {time}"
+        );
+        assert_eq!(world.get::<&TextShape>(label).unwrap().text, text);
+        assert!((draw.opacity - 0.8).abs() < 0.001);
+    }
+}
+
+#[test]
 fn callbacks_snapshot_camera_and_native_methods_return_definitions() {
     let scene = load(
         r#"
@@ -530,7 +590,7 @@ end
             .get::<&crate::core::objects::TextShape>(label)
             .unwrap()
             .text,
-        "New"
+        "Old"
     );
 
     assert!(
@@ -538,7 +598,7 @@ end
             .get::<&crate::core::components::Draw2D>(label)
             .unwrap()
             .opacity
-            - 0.4)
+            - 0.8)
             .abs()
             < 0.001
     );

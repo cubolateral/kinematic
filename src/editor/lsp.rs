@@ -1195,7 +1195,7 @@ end
             (1, "circle", "Built-in circular scene object."),
             (2, "radius", "Radius in local coordinates."),
             (2, "get", "Reads the current value"),
-            (4, "fade", "Replaces the text and fades"),
+            (4, "fade", "Crossfades the current text"),
             (5, "vec2", "Creates a two-dimensional value"),
             (6, "middle", "point of this rectangle"),
         ] {
@@ -1255,7 +1255,7 @@ end
                 .lines()
                 .skip(line.saturating_sub(8))
                 .take(8)
-                .any(|line| line.contains("Replaces the text and fades"))
+                .any(|line| line.contains("Crossfades the current text"))
         );
 
         drop(client);

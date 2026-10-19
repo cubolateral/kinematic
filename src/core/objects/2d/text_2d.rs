@@ -169,6 +169,32 @@ impl Default for TextShape {
     }
 }
 
+#[derive(Clone, Trackable)]
+pub(crate) struct TextFade {
+    #[track]
+    pub text: String,
+    #[track(min = 0.0, max = 1.0)]
+    pub progress: f32,
+}
+
+impl Default for TextFade {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            progress: 1.0,
+        }
+    }
+}
+
+impl TextFade {
+    fn incoming_shape(&self, shape: &TextShape) -> Option<TextShape> {
+        (self.progress < 1.0 && self.text != shape.text).then(|| TextShape {
+            text: self.text.clone(),
+            ..shape.clone()
+        })
+    }
+}
+
 /// Built-in text scene object.
 #[derive(Object)]
 #[object(spatial = "2d", builder = "text_2d")]
@@ -183,6 +209,8 @@ pub struct Text2D {
     pub draw: Draw2D,
     #[trackable]
     pub filter: Filter,
+
+    pub(crate) fade: TextFade,
 }
 
 impl Text2DBuilder {
@@ -321,7 +349,26 @@ fn draw_text_object(
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
 
-    draw_text_2d(&shape, &style, transform.scale, opacity, canvas);
+    let fade = world.get::<&TextFade>(entity).unwrap();
+
+    if let Some(incoming) = fade.incoming_shape(&shape) {
+        draw_text_2d(
+            &shape,
+            &style,
+            transform.scale,
+            opacity * (1.0 - fade.progress),
+            canvas,
+        );
+        draw_text_2d(
+            &incoming,
+            &style,
+            transform.scale,
+            opacity * fade.progress,
+            canvas,
+        );
+    } else {
+        draw_text_2d(&shape, &style, transform.scale, opacity, canvas);
+    }
 }
 
 impl Default for Text2D {
@@ -332,21 +379,35 @@ impl Default for Text2D {
             transform: Default::default(),
             draw: Draw2D {
                 on_draw: draw_text_object,
-                box_size: |world, entity| text_box(&world.get::<&TextShape>(entity).unwrap()),
+                box_size: |world, entity| {
+                    let shape = world.get::<&TextShape>(entity).unwrap();
+                    let fade = world.get::<&TextFade>(entity).unwrap();
+                    let size = text_box(&shape);
+
+                    fade.incoming_shape(&shape).map_or(size, |incoming| {
+                        let incoming = text_box(&incoming);
+
+                        Vector2::new(size.x.max(incoming.x), size.y.max(incoming.y))
+                    })
+                },
                 visual_bounds: |world, entity| {
                     let shape = world.get::<&TextShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
 
-                    crate::core::components::styled_bounds(
-                        *text_path(&shape).bounds(),
-                        &style,
-                        transform.scale,
-                    )
+                    let fade = world.get::<&TextFade>(entity).unwrap();
+                    let mut bounds = *text_path(&shape).bounds();
+
+                    if let Some(incoming) = fade.incoming_shape(&shape) {
+                        bounds.join(text_path(&incoming).bounds());
+                    }
+
+                    crate::core::components::styled_bounds(bounds, &style, transform.scale)
                 },
                 ..Default::default()
             },
             filter: Default::default(),
+            fade: Default::default(),
         }
     }
 }
