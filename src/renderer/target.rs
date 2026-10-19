@@ -1,3 +1,4 @@
+use crate::core::objects::CanvasFilter;
 use glow::HasContext;
 use std::rc::Rc;
 
@@ -5,6 +6,7 @@ use std::rc::Rc;
 pub(crate) struct Target {
     pub size: (u32, u32),
     pub surface: Option<skia_safe::Surface>,
+    filter: CanvasFilter,
     texture: Option<glow::NativeTexture>,
     framebuffer: Option<glow::NativeFramebuffer>,
     depth: Option<glow::NativeRenderbuffer>,
@@ -29,6 +31,7 @@ impl Target {
         let mut target = Self {
             size,
             surface: None,
+            filter: CanvasFilter::Linear,
             texture: None,
             framebuffer: None,
             depth: None,
@@ -135,7 +138,33 @@ impl Target {
     }
 
     pub fn texture(&self) -> glow::NativeTexture {
+        // Skia may change sampling while borrowing the texture.
+        unsafe {
+            self.gl.bind_texture(glow::TEXTURE_2D, self.texture);
+
+            for parameter in [glow::TEXTURE_MIN_FILTER, glow::TEXTURE_MAG_FILTER] {
+                self.gl
+                    .tex_parameter_i32(glow::TEXTURE_2D, parameter, self.gl_filter() as i32);
+            }
+        }
+
         self.texture.unwrap()
+    }
+
+    pub fn filter(&self) -> CanvasFilter {
+        self.filter
+    }
+
+    pub fn set_filter(&mut self, filter: CanvasFilter) {
+        self.filter = filter;
+        self.texture();
+    }
+
+    fn gl_filter(&self) -> u32 {
+        match self.filter {
+            CanvasFilter::Nearest => glow::NEAREST,
+            CanvasFilter::Linear => glow::LINEAR,
+        }
     }
 
     pub fn framebuffer(&self) -> glow::NativeFramebuffer {
@@ -195,7 +224,8 @@ impl Target {
     }
 
     /// Presents premultiplied RGB over the project's opaque black background.
-    pub fn present_to(&self, destination: &Target) {
+    pub fn present_to(&self, destination: &mut Target) {
+        destination.set_filter(self.filter);
         unsafe {
             self.gl.disable(glow::SCISSOR_TEST);
             self.gl.disable(glow::FRAMEBUFFER_SRGB);
@@ -216,7 +246,7 @@ impl Target {
                 destination.size.0 as i32,
                 destination.size.1 as i32,
                 glow::COLOR_BUFFER_BIT,
-                glow::LINEAR,
+                self.gl_filter(),
             );
 
             // RGB already equals the result of compositing premultiplied color over black.

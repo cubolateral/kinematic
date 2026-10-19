@@ -1,6 +1,8 @@
 use crate::core::{
     components::{Draw2D, Filter, Style, Transform2D, draw_styled_path},
-    objects::{ProjectionCanvas, ProjectionSource, RectShape, rect_path},
+    objects::{
+        CanvasFilter, CanvasSettings, ProjectionCanvas, ProjectionSource, RectShape, rect_path,
+    },
     types::Color,
 };
 use kinematic_macros::Object;
@@ -86,7 +88,23 @@ pub(crate) fn draw_projection_2d(
     let save_count = canvas.save();
 
     canvas.clip_path(&path, None, true);
-    canvas.draw_image_rect(image, None, destination, &paint);
+    let filter = world
+        .get::<&ProjectionSource>(entity)
+        .unwrap()
+        .0
+        .and_then(|source| {
+            world
+                .get::<&CanvasSettings>(source.entity)
+                .ok()
+                .map(|settings| settings.filter)
+        })
+        .unwrap_or_default();
+    let sampling = match filter {
+        CanvasFilter::Nearest => skia_safe::FilterMode::Nearest,
+        CanvasFilter::Linear => skia_safe::FilterMode::Linear,
+    };
+
+    canvas.draw_image_rect_with_sampling_options(image, None, destination, sampling, &paint);
     canvas.restore_to_count(save_count);
 
     let style = world.get::<&Style>(entity).unwrap();

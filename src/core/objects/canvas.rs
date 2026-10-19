@@ -4,7 +4,7 @@ use crate::core::{
     objects::{Canvas2DHandler, Canvas3DHandler, ObjectHandler},
     types::Color,
 };
-use kinematic_macros::Trackable;
+use kinematic_macros::{TrackEnum, Trackable};
 
 /// Logical canvas output, independent of graphics resources.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -19,12 +19,23 @@ pub(crate) enum CanvasDimension {
     Three,
 }
 
+/// Sampling used when displaying a canvas texture.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, TrackEnum)]
+pub enum CanvasFilter {
+    #[default]
+    Nearest,
+    Linear,
+}
+
 /// Declarative render target settings with a build-time resolution.
 #[derive(Clone, Trackable)]
 pub struct CanvasSettings {
     /// Color used to clear the canvas before drawing its children.
     #[track]
     pub clear: Color,
+    /// Sampling used by previews and projections of this canvas. Defaults to Nearest.
+    #[track]
+    pub filter: CanvasFilter,
 
     pub(crate) resolution: (u32, u32),
     pub(crate) dimension: CanvasDimension,
@@ -34,6 +45,7 @@ impl CanvasSettings {
     pub(crate) fn new(dimension: CanvasDimension) -> Self {
         Self {
             clear: Color::TRANSPARENT,
+            filter: CanvasFilter::default(),
             resolution: (0, 0),
             dimension,
         }

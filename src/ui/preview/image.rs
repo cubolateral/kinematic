@@ -1,5 +1,8 @@
 use crate::{
-    core::types::{Vector2, vec2},
+    core::{
+        objects::CanvasFilter,
+        types::{Vector2, vec2},
+    },
     editor::Editor,
 };
 
@@ -9,6 +12,7 @@ const CANVAS_OUTLINE: [f32; 4] = [0.7, 0.7, 0.7, 1.0];
 pub(super) struct PreviewImage {
     size: [f32; 2],
     texture: dear_imgui_rs::TextureId,
+    filter: CanvasFilter,
 }
 
 pub(super) fn preview(editor: &mut Editor) -> PreviewImage {
@@ -29,6 +33,7 @@ fn image(canvas: &mut crate::editor::Canvas) -> PreviewImage {
     PreviewImage {
         size: [width.max(1) as f32, height.max(1) as f32],
         texture: canvas.imgui_texture_id(),
+        filter: canvas.target.filter(),
     }
 }
 
@@ -42,10 +47,13 @@ pub(super) fn draw(
 
     ui.set_cursor_screen_pos(min);
 
+    set_sampler(&ui.get_window_draw_list(), preview.filter);
+
     ui.image_config(preview.texture, size)
         .uv0([0.0, 1.0])
         .uv1([1.0, 0.0])
         .build();
+    ui.get_window_draw_list().set_sampler_linear();
 
     if let Some(margin) = margin {
         draw_margin(ui, min, max, preview.size, margin);
@@ -127,7 +135,9 @@ pub(super) fn draw_editor(
         editor.editor_2d_view()
     };
 
+    set_sampler(&draw_list, preview.filter);
     draw_list.add_image(preview.texture, min, max, [0.0, 1.0], [1.0, 0.0], [1.0; 4]);
+    draw_list.set_sampler_linear();
 
     let origin = [
         center[0] + pan[0] * display_scale,
@@ -282,6 +292,7 @@ pub(super) fn draw_editor_3d(
     let min = ui.item_rect_min();
     let max = ui.item_rect_max();
 
+    set_sampler(&ui.get_window_draw_list(), preview.filter);
     ui.get_window_draw_list().add_image(
         preview.texture,
         min,
@@ -290,6 +301,7 @@ pub(super) fn draw_editor_3d(
         [1.0, 0.0],
         [1.0; 4],
     );
+    ui.get_window_draw_list().set_sampler_linear();
 
     let mouse = ui.io().mouse_pos();
     let over_camera = mouse[0] >= min[0] + 8.0
@@ -426,4 +438,11 @@ pub(super) fn draw_margin(
         .build();
 
     draw.add_rect(a, b, margin_color(ui)).thickness(1.0).build();
+}
+
+fn set_sampler(draw_list: &dear_imgui_rs::DrawListMut<'_>, filter: CanvasFilter) {
+    match filter {
+        CanvasFilter::Nearest => draw_list.set_sampler_nearest(),
+        CanvasFilter::Linear => draw_list.set_sampler_linear(),
+    }
 }

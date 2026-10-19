@@ -341,6 +341,76 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     assert_pixel(&read(&gl, &output), 32, 32, [0, 0, 255, 255]);
 
+    let mut filter_scene = Scene::new_with_canvases(
+        canvas_2d().resolution((2, 2)),
+        canvas_3d().resolution((64, 64)),
+    );
+    let source = filter_scene.world_2d();
+    let stripe = rect()
+        .size(vec2(1.0, 2.0))
+        .position(vec2(0.5, 0.0))
+        .fill(Color::WHITE)
+        .build(&mut filter_scene);
+
+    source.add(&stripe);
+    let spatial = filter_scene.world_3d();
+    spatial
+        .camera_position(vec3(0.0, 0.0, 2.0))
+        .camera_fov(std::f32::consts::FRAC_PI_2)
+        .immediate();
+    let projection = projection_3d()
+        .source(&source)
+        .size(vec2(4.0, 4.0))
+        .build(&mut filter_scene);
+    spatial.add(&projection);
+    let flat = canvas_2d().resolution((64, 64)).build(&mut filter_scene);
+    filter_scene.add_canvas_2d(&flat);
+    let projection = projection_2d()
+        .source(&source)
+        .size(vec2(64.0, 64.0))
+        .build(&mut filter_scene);
+    flat.add(&projection);
+
+    for filter in [
+        CanvasFilter::Nearest,
+        CanvasFilter::Linear,
+        CanvasFilter::Nearest,
+    ] {
+        source.filter(filter).immediate();
+
+        for output_canvas in [source.texture(), spatial.texture(), flat.texture()] {
+            filter_scene.update(0.0);
+            let plan = crate::renderer::plan::canvas_plan_for(&filter_scene, output_canvas.entity)
+                .unwrap();
+            renderer
+                .render_targets(&filter_scene, &plan.order, &plan.sources, &mut skia)
+                .unwrap();
+            renderer
+                .rendered_target(output_canvas)
+                .unwrap()
+                .present_to(&mut output);
+
+            let pixels = read(&gl, &output);
+            let red = pixels[(32 * 64 + 31) * 4];
+
+            match filter {
+                CanvasFilter::Nearest => assert_eq!(red, 0),
+                CanvasFilter::Linear => {
+                    assert!((100..155).contains(&red), "Red channel was {red}.")
+                }
+            }
+
+            assert_eq!(
+                output.filter(),
+                if output_canvas == source.texture() {
+                    filter
+                } else {
+                    CanvasFilter::Nearest
+                }
+            );
+        }
+    }
+
     reset_gl(&gl, (64, 64));
     assert_eq!(unsafe { gl.get_error() }, glow::NO_ERROR);
 

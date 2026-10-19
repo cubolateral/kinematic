@@ -2135,6 +2135,49 @@ end
     }
 
     #[test]
+    fn canvas_filters_are_animatable_enums_in_lua() {
+        use crate::core::objects::{CanvasFilter, CanvasSettings};
+
+        let scene = load(
+            r#"
+return function(s)
+    local two = s:canvas_2d {id='two', resolution={2, 2}}
+    local three = s:canvas_3d {id='three', resolution={2, 2}, filter='Linear'}
+    s:root():add(two)
+    s:root():add(three)
+    assert(two.filter:get() == 'Nearest')
+    assert(three.filter:get() == 'Linear')
+    two:to {filter='Linear'}:play(1, k.ease.linear)
+    three:to {filter='Nearest'}:play(1, k.ease.linear)
+end
+"#,
+        );
+
+        for (time, two, three) in [
+            (2.0, CanvasFilter::Linear, CanvasFilter::Nearest),
+            (0.0, CanvasFilter::Nearest, CanvasFilter::Linear),
+        ] {
+            scene.update(time).unwrap();
+            let world = scene.scene.world();
+
+            assert_eq!(
+                world
+                    .get::<&CanvasSettings>(scene.entity("two").unwrap())
+                    .unwrap()
+                    .filter,
+                two
+            );
+            assert_eq!(
+                world
+                    .get::<&CanvasSettings>(scene.entity("three").unwrap())
+                    .unwrap()
+                    .filter,
+                three
+            );
+        }
+    }
+
+    #[test]
     fn simulation_seek_visual_reload_and_logic_replay() {
         let mut scene = load(SOURCE);
 

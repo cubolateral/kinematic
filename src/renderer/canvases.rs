@@ -227,6 +227,7 @@ impl Canvases {
                 camera_view,
             )
         });
+        target.set_filter(settings.filter);
 
         Ok(())
     }
@@ -337,6 +338,8 @@ impl Canvases {
                     .map_err(std::io::Error::other)
             })
             .map_err(|error| error.to_string())?;
+
+        target.set_filter(settings.filter);
 
         Ok(())
     }
@@ -500,7 +503,18 @@ impl Canvases {
                 }
             }
 
+            self.targets
+                .get_mut(&key)
+                .unwrap()
+                .set_filter(settings.filter);
             self.apply_canvas_shader(scene.time(), &world, key, skia)?;
+
+            if self.shader_outputs.contains(&key) {
+                self.shader_targets
+                    .get_mut(&key)
+                    .unwrap()
+                    .set_filter(settings.filter);
+            }
         }
 
         Ok(())
