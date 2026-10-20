@@ -4,7 +4,6 @@ use crate::ui::{controls, icons, widgets::text_size};
 pub(super) struct Edit {
     pub(super) changed: bool,
     pub(super) reset: bool,
-    pub(super) hovered: bool,
 }
 
 pub(super) fn row(
@@ -90,11 +89,7 @@ pub(super) fn row(
         let _width = ui.push_item_width(-1.0);
         let changed = ui.group(input);
 
-        Edit {
-            changed,
-            reset,
-            hovered: ui.is_item_hovered(),
-        }
+        Edit { changed, reset }
     })
 }
 

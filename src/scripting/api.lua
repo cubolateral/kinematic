@@ -330,7 +330,7 @@ function Object:texture() end
 function Object:uniform(name) end
 
 --- Creates a standalone animatable property from an initial value.
---- An optional stable id preserves editor overrides across reloads. Supports get, set, to, by, from, and signal.
+--- An optional stable id preserves object identity across reloads. Supports get, set, to, by, from, and signal.
 ---@overload fun(self:Kinematic.Scene, initial:Kinematic.Vec2, id?:string):Kinematic.Vec2Property
 ---@overload fun(self:Kinematic.Scene, initial:Kinematic.Vec3, id?:string):Kinematic.Vec3Property
 ---@overload fun(self:Kinematic.Scene, initial:Kinematic.Color, id?:string):Kinematic.ColorProperty

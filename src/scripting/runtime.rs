@@ -46,11 +46,7 @@ pub(crate) struct Runtime {
     pub(super) simulation_steps: Cell<u64>,
     pub(super) simulation_modules: RefCell<BTreeMap<String, String>>,
     pub(super) mutations: RefCell<Vec<Function>>,
-    overrides: super::overrides::Overrides,
-    path: PathBuf,
     fps: u32,
-    script_values: RefCell<BTreeMap<hecs::Entity, BTreeMap<String, TrackValue>>>,
-    warnings: RefCell<Vec<String>>,
     pub(super) operation_keys: RefCell<BTreeMap<hecs::Entity, Vec<String>>>,
 }
 
@@ -106,7 +102,6 @@ impl LuaScene {
             BTreeMap::new(),
             Vec::new(),
             None,
-            None,
         )
     }
 
@@ -120,7 +115,6 @@ impl LuaScene {
         previous: BTreeMap<String, Definition>,
         allocated: Vec<hecs::Entity>,
         identity: Option<u64>,
-        overrides: Option<super::overrides::Overrides>,
     ) -> Result<Self> {
         if fps == 0
             || fps > 1000
@@ -179,16 +173,8 @@ impl LuaScene {
             }
         }
 
-        let overrides = overrides
-            .map(Ok)
-            .unwrap_or_else(|| super::overrides::Overrides::read(&context))
-            .map_err(mlua::Error::runtime)?;
         let runtime = Rc::new(Runtime {
-            overrides,
-            path: path.clone(),
             fps,
-            script_values: RefCell::new(BTreeMap::new()),
-            warnings: RefCell::new(Vec::new()),
             id: extension::next_runtime(),
             callbacks: RefCell::new(BTreeMap::new()),
             simulation_steps: Cell::new(0),
@@ -221,11 +207,6 @@ impl LuaScene {
         let events = event_path(&path);
 
         runtime.dependencies.borrow_mut().insert(events.clone());
-
-        runtime
-            .dependencies
-            .borrow_mut()
-            .insert(PathBuf::from("kinematic/overrides.ron"));
 
         let file = if let Some(text) = runtime.sources.get(&events) {
             ron::from_str(text).map_err(mlua::Error::external)?
@@ -306,17 +287,6 @@ impl LuaScene {
                 .get_mut(&entity)
                 .unwrap()
                 .history_key = Some(key);
-        }
-
-        if let Some(overrides) = runtime.overrides.values.get(&path) {
-            for id in overrides.keys() {
-                if !runtime.definitions.borrow().contains_key(id) {
-                    runtime
-                        .warnings
-                        .borrow_mut()
-                        .push(format!("Orphan override: {} / {id}.", path.display()));
-                }
-            }
         }
 
         scene.keep_runtime(runtime.clone());
@@ -477,117 +447,6 @@ impl LuaScene {
         Ok(candidate)
     }
 
-    pub(crate) fn inspector_values(
-        &self,
-        entity: hecs::Entity,
-    ) -> Option<(
-        bool,
-        Vec<(TrackTarget, TrackValue, Option<TrackValue>, TrackValue)>,
-    )> {
-        let id = self
-            .runtime
-            .definitions
-            .borrow()
-            .iter()
-            .find(|(_, d)| d.entity == entity)
-            .map(|(id, _)| id.clone())?;
-        let scripts = self.runtime.script_values.borrow();
-        let scripts = scripts.get(&entity)?;
-        let world = self.scene.world();
-        let targets = native::properties(&world, entity);
-        let fields = targets
-            .iter()
-            .cloned()
-            .filter_map(|target| {
-                let script = scripts.get(&super::overrides::key(&target))?.clone();
-                let saved = self
-                    .runtime
-                    .overrides
-                    .values
-                    .get(&self.path)
-                    .and_then(|s| s.get(&id))
-                    .and_then(|s| super::overrides::lookup(s, &target, &targets))
-                    .and_then(|v| v.restore(&target, &script).ok());
-                let evaluated = target.get(&world, entity);
-
-                Some((target, script, saved, evaluated))
-            })
-            .collect();
-
-        Some((!id.starts_with('@'), fields))
-    }
-
-    pub(crate) fn prepare_override(
-        &self,
-        entity: hecs::Entity,
-        target: &TrackTarget,
-        value: Option<TrackValue>,
-    ) -> Result<Option<Self>> {
-        let id = self
-            .runtime
-            .definitions
-            .borrow()
-            .iter()
-            .find(|(_, d)| d.entity == entity)
-            .map(|(id, _)| id.clone())
-            .ok_or_else(|| mlua::Error::runtime("Object no longer exists."))?;
-
-        if id.starts_with('@') {
-            if let Some(value) = value {
-                target.set(&self.scene.world(), entity, value);
-                self.scene.invalidate();
-            }
-
-            return Ok(None);
-        }
-
-        let mut overrides = super::overrides::Overrides::read(&self.runtime.context)
-            .map_err(mlua::Error::runtime)?;
-        let properties = overrides
-            .values
-            .entry(self.path.clone())
-            .or_default()
-            .entry(id)
-            .or_default();
-        let targets = native::properties(&self.scene.world(), entity);
-
-        if let Some(legacy) = super::overrides::legacy_key(target, &targets) {
-            properties.remove(legacy);
-        }
-
-        if let Some(value) = value {
-            properties.insert(
-                super::overrides::key(target),
-                super::overrides::SavedValue::capture(&value),
-            );
-        } else {
-            properties.remove(&super::overrides::key(target));
-        }
-
-        let mut candidate = self.prepare_configured(
-            self.runtime.sources.clone(),
-            self.resolution,
-            self.fps,
-            self.margin,
-            Some(overrides.clone()),
-        )?;
-        let bytes =
-            ron::ser::to_string_pretty(&overrides.values, ron::ser::PrettyConfig::default())
-                .map_err(mlua::Error::external)?
-                .into_bytes();
-
-        candidate.pending_write = Some((
-            self.runtime
-                .context
-                .resolve(super::overrides::PATH)
-                .map_err(mlua::Error::external)?,
-            bytes,
-            overrides.saved,
-        ));
-
-        Ok(Some(candidate))
-    }
-
     pub(crate) fn persist_prepared(&mut self) -> Result<()> {
         if let Some((path, bytes, expected)) = &self.pending_write {
             crate::core::atomic_write(path, bytes, expected.as_deref())
@@ -597,10 +456,6 @@ impl LuaScene {
         self.pending_write = None;
 
         Ok(())
-    }
-
-    pub(crate) fn warnings(&self) -> Vec<String> {
-        self.runtime.warnings.borrow().clone()
     }
 
     /// Returns the compiled timeline duration.
@@ -642,13 +497,7 @@ impl LuaScene {
             ron::to_string(&self.scene.event_definitions()).map_err(mlua::Error::external)?,
         );
 
-        self.prepare_configured(
-            sources,
-            self.resolution,
-            self.fps,
-            self.margin,
-            Some(self.runtime.overrides.clone()),
-        )
+        self.prepare_configured(sources, self.resolution, self.fps, self.margin)
     }
 
     pub(crate) fn has_simulations(&self) -> bool {
@@ -672,7 +521,7 @@ impl LuaScene {
     }
 
     pub(crate) fn prepare_reload_pending(&self, sources: Sources) -> Result<Self> {
-        self.prepare_configured(sources, self.resolution, self.fps, self.margin, None)
+        self.prepare_configured(sources, self.resolution, self.fps, self.margin)
     }
 
     pub(crate) fn prepare_settings_pending(
@@ -682,7 +531,7 @@ impl LuaScene {
         fps: u32,
         margin: (u32, u32),
     ) -> Result<Self> {
-        self.prepare_configured(sources, resolution, fps, margin, None)
+        self.prepare_configured(sources, resolution, fps, margin)
     }
 
     fn prepare_configured(
@@ -691,7 +540,6 @@ impl LuaScene {
         resolution: (u32, u32),
         fps: u32,
         margin: (u32, u32),
-        overrides: Option<super::overrides::Overrides>,
     ) -> Result<Self> {
         let previous = self.runtime.definitions.borrow().clone();
         let allocated = self.scene.world().iter().map(|e| e.entity()).collect();
@@ -705,7 +553,6 @@ impl LuaScene {
             previous,
             allocated,
             Some(self.scene.render_key().0),
-            overrides,
         )?;
 
         {
@@ -850,7 +697,6 @@ impl Runtime {
         }
 
         super::animation::configure(lua, &handle, &options)?;
-        self.apply_base(&key, entity)?;
         crate::core::objects::initialize_object_snapshots(&self.world.borrow(), entity);
 
         self.definitions.borrow_mut().insert(
@@ -1161,7 +1007,6 @@ impl UserData for SceneHandle {
                 }
             }
 
-            runtime.apply_base(&key, entity)?;
             crate::core::objects::initialize_object_snapshots(&world, entity);
             runtime.definitions.borrow_mut().insert(key, Definition { kind: kind.into(), entity, fingerprint: String::new() });
 
@@ -1919,48 +1764,6 @@ impl Drop for Runtime {
     }
 }
 impl Runtime {
-    fn apply_base(&self, id: &str, entity: hecs::Entity) -> Result<()> {
-        let world = self.world.borrow();
-        let world = world.borrow();
-        let targets = native::properties(&world, entity);
-
-        self.script_values.borrow_mut().insert(
-            entity,
-            targets
-                .iter()
-                .map(|target| (super::overrides::key(target), target.get(&world, entity)))
-                .collect(),
-        );
-
-        if let Some(overrides) = self
-            .overrides
-            .values
-            .get(&self.path)
-            .and_then(|s| s.get(id))
-        {
-            for (name, saved) in overrides {
-                if let Some(target) = targets
-                    .iter()
-                    .find(|target| super::overrides::matches(name, target, &targets))
-                {
-                    match saved.restore(target, &target.get(&world, entity)) {
-                        Ok(value) => target.set(&world, entity, value),
-                        Err(error) => self
-                            .warnings
-                            .borrow_mut()
-                            .push(format!("Override {id}.{name}: {error}")),
-                    }
-                } else {
-                    self.warnings
-                        .borrow_mut()
-                        .push(format!("Orphan override: {id}.{name}."));
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     fn allocate(&self, options: &Table, kind: &str) -> Result<(String, hecs::Entity)> {
         let id = options.get::<Option<String>>("id")?;
         let key = if let Some(id) = &id {
@@ -2365,79 +2168,34 @@ end
     }
 
     #[test]
-    fn saved_bases_precede_tweens_and_conflicts_leave_the_active_revision_untouched() {
-        let root = std::env::temp_dir().join(format!("kinematic-override-{}", std::process::id()));
-
-        std::fs::create_dir_all(&root).unwrap();
-
-        let context = ProjectContext::new(&root).unwrap();
-        let source = r#"return function(s)
-            local a=s:circle{id='ball',radius=4}; s:world_2d():add(a)
-            a:to {radius = a.radius:get()*2}:play(1, k.ease.linear)
-        end"#;
+    fn legacy_inspector_overrides_are_ignored() {
+        let root =
+            std::env::temp_dir().join(format!("kinematic-no-overrides-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("kinematic")).unwrap();
+        let legacy = root.join("kinematic/overrides.ron");
+        std::fs::write(&legacy, "Obsolete contents.").unwrap();
         let mut scene = LuaScene::load(
-            context.clone(),
-            "counter.lua",
-            sources(source),
-            (100, 100),
-            60,
-            (0, 0),
-        )
-        .unwrap();
-        let ball = scene.entity("ball").unwrap();
-        let target = scene
-            .inspector_values(ball)
-            .unwrap()
-            .1
-            .into_iter()
-            .find(|(target, _, _, _)| target.name() == "radius")
-            .unwrap()
-            .0;
-        let mut candidate = scene
-            .prepare_override(ball, &target, Some(TrackValue::F32(10.0)))
-            .unwrap()
-            .unwrap();
-
-        candidate.update(1.0).unwrap();
-        assert!(!root.join(super::super::overrides::PATH).exists());
-        candidate.persist_prepared().unwrap();
-        scene.apply_reload(candidate);
-
+            ProjectContext::new(&root).unwrap(), "counter.lua",
+            sources("return function(s) local a=s:circle{id='ball',radius=4}; s:world_2d():add(a); a:to{radius=8}:play(1,k.ease.linear) end"),
+            (100, 100), 60, (0, 0),
+        ).unwrap();
+        scene.update(1.0).unwrap();
+        let entity = scene.entity("ball").unwrap();
+        let target = native::property(&scene.scene.world(), entity, "radius").unwrap();
         assert_eq!(
-            target.get(&scene.scene.world(), ball),
-            TrackValue::F32(20.0)
+            target.get(&scene.scene.world(), entity),
+            TrackValue::F32(8.0)
         );
-
-        let reopened = LuaScene::load(
-            context,
-            "counter.lua",
-            sources(source),
-            (100, 100),
-            60,
-            (0, 0),
-        )
-        .unwrap();
-
-        reopened.update(1.0).unwrap();
-
+        assert!(
+            !scene
+                .dependencies()
+                .contains(Path::new("kinematic/overrides.ron"))
+        );
+        scene.persist_prepared().unwrap();
         assert_eq!(
-            target.get(&reopened.scene.world(), reopened.entity("ball").unwrap()),
-            TrackValue::F32(20.0)
+            std::fs::read_to_string(legacy).unwrap(),
+            "Obsolete contents."
         );
-
-        let mut restore = scene
-            .prepare_override(ball, &target, None)
-            .unwrap()
-            .unwrap();
-
-        std::fs::write(root.join(super::super::overrides::PATH), "External change.").unwrap();
-        assert!(restore.persist_prepared().is_err());
-
-        assert_eq!(
-            target.get(&scene.scene.world(), ball),
-            TrackValue::F32(20.0)
-        );
-
         std::fs::remove_dir_all(root).unwrap();
     }
 

@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        Project, ProjectSettings, Scene, TrackInfo, TrackValue, objects::ObjectHandler,
+        Project, ProjectSettings, Scene, TrackTarget, TrackValue, objects::ObjectHandler,
         types::Vector2,
     },
     editor::{
@@ -60,158 +60,66 @@ impl SceneInstance {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub(crate) struct InspectorTrack {
-    entity: hecs::Entity,
-    target: InspectorTarget,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-enum InspectorTarget {
-    Property {
-        component: std::any::TypeId,
-        track_id: crate::core::TrackId,
-    },
-
-    Uniform(String),
-}
-
-impl InspectorTrack {
-    pub(crate) fn new(
-        entity: hecs::Entity,
-        component: std::any::TypeId,
-        track: &'static TrackInfo,
-    ) -> Self {
-        Self {
-            entity,
-            target: InspectorTarget::Property {
-                component,
-                track_id: track.id,
-            },
-        }
-    }
-
-    pub(crate) fn uniform(entity: hecs::Entity, name: impl Into<String>) -> Self {
-        Self {
-            entity,
-            target: InspectorTarget::Uniform(name.into()),
-        }
-    }
-}
-
 struct InspectorEdit {
-    key: InspectorTrack,
-    track: Option<&'static TrackInfo>,
+    entity: hecs::Entity,
+    target: TrackTarget,
     original: TrackValue,
-    current: TrackValue,
-    animated: bool,
 }
 
 #[derive(Default)]
 pub(crate) struct InspectorEdits(Vec<InspectorEdit>);
 
 impl InspectorEdits {
-    pub(crate) fn contains(&self, key: &InspectorTrack) -> bool {
-        self.0.iter().any(|edit| edit.key == *key)
+    pub(crate) fn contains(&self, entity: hecs::Entity, target: &TrackTarget) -> bool {
+        self.0
+            .iter()
+            .any(|edit| edit.entity == entity && edit.target.same(target))
     }
 
     pub(crate) fn record(
         &mut self,
-        key: InspectorTrack,
-        track: &'static TrackInfo,
-        before: TrackValue,
-        value: TrackValue,
-        animated: bool,
+        entity: hecs::Entity,
+        target: TrackTarget,
+        original: TrackValue,
     ) {
-        if let Some(edit) = self.0.iter_mut().find(|edit| edit.key == key) {
-            edit.current = value;
-
-            if edit.current == edit.original {
-                self.0.retain(|edit| edit.key != key);
-            }
-        } else if before != value {
+        if !self.contains(entity, &target) {
             self.0.push(InspectorEdit {
-                key,
-                track: Some(track),
-                original: before,
-                current: value,
-                animated,
+                entity,
+                target,
+                original,
             });
         }
     }
 
-    pub(crate) fn record_uniform(
+    pub(crate) fn reset(
         &mut self,
-        key: InspectorTrack,
-        before: TrackValue,
-        value: TrackValue,
-        animated: bool,
-    ) {
-        if let Some(edit) = self.0.iter_mut().find(|edit| edit.key == key) {
-            edit.current = value;
-
-            if edit.current == edit.original {
-                self.0.retain(|edit| edit.key != key);
-            }
-        } else if before != value {
-            self.0.push(InspectorEdit {
-                key,
-                track: None,
-                original: before,
-                current: value,
-                animated,
-            });
-        }
-    }
-
-    pub(crate) fn reset(&mut self, scene: &Scene, key: InspectorTrack) -> bool {
-        let Some(index) = self.0.iter().position(|edit| edit.key == key) else {
+        scene: &Scene,
+        entity: hecs::Entity,
+        target: &TrackTarget,
+    ) -> bool {
+        let Some(index) = self
+            .0
+            .iter()
+            .position(|edit| edit.entity == entity && edit.target.same(target))
+        else {
             return false;
         };
-
         let edit = self.0.remove(index);
-
-        Self::restore(scene, std::slice::from_ref(&edit));
+        edit.target.set(&scene.world(), edit.entity, edit.original);
         scene.invalidate();
-
         true
     }
 
-    fn reset_animated(&mut self, scene: &Scene) {
-        let (animated, remaining) = std::mem::take(&mut self.0)
-            .into_iter()
-            .partition(|edit| edit.animated);
-
-        self.0 = remaining;
-
-        Self::restore(scene, &animated);
-    }
-
-    fn restore(scene: &Scene, saved: &[InspectorEdit]) {
-        if saved.is_empty() {
+    fn reset_all(&mut self, scene: &Scene) {
+        if self.0.is_empty() {
             return;
         }
-
         let world = scene.world();
-
-        for saved in saved {
-            match (&saved.key.target, saved.track) {
-                (InspectorTarget::Property { .. }, Some(track)) => {
-                    (track.set)(&world, saved.key.entity, saved.original.clone());
-                }
-                (InspectorTarget::Uniform(name), None) => {
-                    crate::core::objects::set_shader_uniform(
-                        &world,
-                        saved.key.entity,
-                        name,
-                        saved.original.clone(),
-                    )
-                    .unwrap_or_else(|error| panic!("{error}"));
-                }
-                _ => unreachable!(),
+        for edit in self.0.drain(..) {
+            if world.contains(edit.entity) {
+                edit.target.set(&world, edit.entity, edit.original);
             }
         }
-
         scene.invalidate();
     }
 }
@@ -619,6 +527,10 @@ impl Editor {
         self.poll_scripts();
         self.window_timer.tick();
 
+        if self.timeline.is_playing() {
+            self.reset_inspector_edits();
+        }
+
         if self.pending_lua.is_some() && !self.is_exporting {
             self.accumulator = 0.0;
 
@@ -652,7 +564,7 @@ impl Editor {
 
         while self.accumulator >= delta {
             if let Some(time) = self.timeline.update(delta) {
-                self.reset_animated_inspector_edits();
+                self.reset_inspector_edits();
                 self.update_active_scene(time);
             }
 
@@ -806,6 +718,9 @@ impl Editor {
         }
 
         for (index, candidate) in pending.candidates {
+            if let Some(scene) = self.scenes.get_mut(index) {
+                scene.inspector_edits.reset_all(&scene.scene);
+            }
             if index >= self.scenes.len() {
                 self.scenes.push(EditorScene {
                     scene: SceneInstance::Lua(candidate),
@@ -816,13 +731,6 @@ impl Editor {
             } else if let SceneInstance::Lua(scene) = &mut self.scenes[index].scene {
                 scene.apply_reload(candidate);
                 documents.console.extend(scene.console());
-
-                documents.diagnostics.extend(
-                    scene
-                        .warnings()
-                        .into_iter()
-                        .map(|warning| format!("Warning: {warning}")),
-                );
             } else {
                 self.scenes[index].scene = SceneInstance::Lua(candidate);
             }
@@ -1055,7 +963,7 @@ impl Editor {
 
         self.timeline.pause();
         self.timeline.go_to_start();
-        self.reset_animated_inspector_edits();
+        self.reset_inspector_edits();
 
         self.evaluated = None;
         self.is_exporting = true;
@@ -1424,67 +1332,6 @@ impl Editor {
         self.selection.get()
     }
 
-    pub(crate) fn lua_inspector_values(
-        &self,
-        index: usize,
-        entity: hecs::Entity,
-    ) -> Option<(
-        bool,
-        Vec<(
-            crate::core::TrackTarget,
-            TrackValue,
-            Option<TrackValue>,
-            TrackValue,
-        )>,
-    )> {
-        match &self.scenes[index].scene {
-            SceneInstance::Lua(scene) => scene.inspector_values(entity),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn set_lua_override(
-        &mut self,
-        index: usize,
-        entity: hecs::Entity,
-        target: &crate::core::TrackTarget,
-        value: Option<TrackValue>,
-    ) {
-        if self.is_exporting {
-            return;
-        }
-
-        if self.pending_lua.is_some()
-            || self
-                .documents
-                .as_ref()
-                .is_some_and(|docs| !docs.changed.is_empty())
-        {
-            self.documents.as_mut().unwrap().status =
-                "Apply or resolve source edits before changing base values.".into();
-
-            return;
-        }
-
-        if let SceneInstance::Lua(scene) = &self.scenes[index].scene {
-            match scene.prepare_override(entity, target, value) {
-                Ok(Some(candidate)) => self.queue_lua_change(index, candidate),
-                Ok(None) => {
-                    self.rendered = None;
-                    self.editor_rendered = None;
-                    self.editor_3d_rendered = None;
-                }
-
-                Err(error) => self
-                    .documents
-                    .as_mut()
-                    .unwrap()
-                    .diagnostics
-                    .push(error.to_string()),
-            }
-        }
-    }
-
     fn queue_lua_change(&mut self, index: usize, candidate: crate::scripting::LuaScene) {
         let documents = self.documents.as_mut().unwrap();
 
@@ -1492,7 +1339,7 @@ impl Editor {
 
         documents.applied = documents.revision;
         documents.replaying = true;
-        documents.status = "Validating the edited base and drawing before saving.".into();
+        documents.status = "Validating the edited timeline and drawing before saving.".into();
 
         self.pending_lua = Some(PendingLua {
             save_manifest: false,
@@ -2139,9 +1986,9 @@ impl Editor {
         }
     }
 
-    fn reset_animated_inspector_edits(&mut self) {
+    fn reset_inspector_edits(&mut self) {
         for scene in &mut self.scenes {
-            scene.inspector_edits.reset_animated(&scene.scene);
+            scene.inspector_edits.reset_all(&scene.scene);
         }
     }
 }
@@ -2222,129 +2069,82 @@ mod tests {
     }
 
     #[test]
-    fn timeline_updates_reset_only_animated_inspector_edits() {
-        use crate::core::{TrackChoices, TrackLimits};
-
-        struct Values([f32; 2]);
-
-        fn get<const INDEX: usize>(world: &hecs::World, entity: hecs::Entity) -> TrackValue {
-            TrackValue::F32(world.get::<&Values>(entity).unwrap().0[INDEX])
-        }
-
-        fn set<const INDEX: usize>(world: &hecs::World, entity: hecs::Entity, value: TrackValue) {
-            let TrackValue::F32(value) = value else {
-                panic!("Test track requires an f32 value.");
-            };
-
-            world.get::<&mut Values>(entity).unwrap().0[INDEX] = value;
-        }
-
-        static TRACKS: [TrackInfo; 2] = [
-            TrackInfo {
-                id: 0,
-                name: "animated",
-                documentation: "Tracked value.",
-                limits: TrackLimits::None,
-                choices: TrackChoices::None,
-                get: get::<0>,
-                set: set::<0>,
-            },
-            TrackInfo {
-                id: 1,
-                name: "static",
-                documentation: "Tracked value.",
-                limits: TrackLimits::None,
-                choices: TrackChoices::None,
-                get: get::<1>,
-                set: set::<1>,
-            },
-        ];
-
-        let scene = Scene::new();
-        let entity = scene.world_mut().spawn((Values([10.0, 20.0]),));
-        let component = std::any::TypeId::of::<Values>();
-        let animated = InspectorTrack::new(entity, component, &TRACKS[0]);
-        let static_track = InspectorTrack::new(entity, component, &TRACKS[1]);
+    fn inspector_edits_restore_all_values_and_keep_the_first_original() {
+        use crate::core::{Trackable, components::Style};
+        let mut scene = Scene::new();
+        let object = rect().build(&mut scene);
+        let entity = object.entity();
+        let target = TrackTarget::property(std::any::TypeId::of::<Style>(), Style::track(0));
+        let original = target.get(&scene.world(), entity);
         let mut edits = InspectorEdits::default();
 
-        edits.record(
-            animated.clone(),
-            &TRACKS[0],
-            TrackValue::F32(1.0),
-            TrackValue::F32(10.0),
-            true,
+        edits.record(entity, target.clone(), original.clone());
+        target.set(
+            &scene.world(),
+            entity,
+            TrackValue::Color(crate::core::types::Color::RED),
         );
+        edits.record(entity, target.clone(), target.get(&scene.world(), entity));
+        let schema = std::sync::Arc::new(crate::core::PropertySchema {
+            name: "amount".into(),
+            default: TrackValue::F32(1.0),
+            limits: crate::core::TrackLimits::None,
+            choices: Vec::new(),
+        });
+        scene
+            .world_mut()
+            .insert_one(
+                entity,
+                crate::core::Properties(
+                    [(schema.name.clone(), (schema.clone(), TrackValue::F32(1.0)))].into(),
+                ),
+            )
+            .unwrap();
+        let dynamic = TrackTarget::Dynamic(schema);
+        edits.record(entity, dynamic.clone(), TrackValue::F32(1.0));
+        dynamic.set(&scene.world(), entity, TrackValue::F32(5.0));
 
-        edits.record(
-            static_track.clone(),
-            &TRACKS[1],
-            TrackValue::F32(2.0),
-            TrackValue::F32(20.0),
-            false,
-        );
+        let render_key = scene.render_key();
+        edits.reset_all(&scene);
 
-        edits.reset_animated(&scene);
-
-        assert_eq!(
-            (TRACKS[0].get)(&scene.world(), entity),
-            TrackValue::F32(1.0)
-        );
-
-        assert_eq!(
-            (TRACKS[1].get)(&scene.world(), entity),
-            TrackValue::F32(20.0)
-        );
-
-        assert!(!edits.contains(&animated));
-        assert!(edits.contains(&static_track));
+        assert_eq!(dynamic.get(&scene.world(), entity), TrackValue::F32(1.0));
+        assert_eq!(target.get(&scene.world(), entity), original);
+        assert!(!edits.contains(entity, &target));
+        assert_ne!(scene.render_key(), render_key);
     }
 
     #[test]
-    fn timeline_updates_restore_animated_uniform_inspector_edits() {
+    fn inspector_edits_restore_uniforms() {
         let shader = ImageShader::new("#version 330 core\nvoid main() {}");
         let mut scene = Scene::new();
         let object = rect()
             .shader(&shader)
             .uniform("amount", 0.25_f32)
             .build(&mut scene);
-
-        object.set_uniform("amount", 0.75_f32);
-
-        let key = InspectorTrack::uniform(object.entity(), "amount");
+        let entity = object.entity();
+        let target = TrackTarget::uniform("amount");
         let mut edits = InspectorEdits::default();
-
-        edits.record_uniform(
-            key.clone(),
-            TrackValue::F32(0.25),
-            TrackValue::F32(0.75),
-            true,
-        );
-
-        edits.reset_animated(&scene);
-
+        edits.record(entity, target.clone(), TrackValue::F32(0.25));
+        object.set_uniform("amount", 0.75_f32);
+        edits.reset_all(&scene);
         assert_eq!(object.get_uniform::<f32>("amount"), 0.25);
-        assert!(!edits.contains(&key));
+        assert!(!edits.contains(entity, &target));
     }
 
     #[test]
     fn inspector_reset_invalidates_the_rendered_scene() {
         use crate::core::components::Camera3D;
-
         let scene = Scene::new();
         let entity = scene.world_3d().entity();
         let track = <Camera3D as crate::core::Trackable>::track(0);
-        let key = InspectorTrack::new(entity, std::any::TypeId::of::<Camera3D>(), track);
+        let target = TrackTarget::property(std::any::TypeId::of::<Camera3D>(), track);
         let mut edits = InspectorEdits::default();
         let original = TrackValue::Enum("Perspective");
-        let current = TrackValue::Enum("Orthogonal");
-
-        (track.set)(&scene.world(), entity, current.clone());
-        edits.record(key.clone(), track, original.clone(), current, false);
-
+        target.set(&scene.world(), entity, TrackValue::Enum("Orthogonal"));
+        edits.record(entity, target.clone(), original.clone());
         let render_key = scene.render_key();
-
-        assert!(edits.reset(&scene, key));
+        assert!(edits.reset(&scene, entity, &target));
         assert_ne!(scene.render_key(), render_key);
-        assert_eq!((track.get)(&scene.world(), entity), original);
+        assert_eq!(target.get(&scene.world(), entity), original);
     }
 }

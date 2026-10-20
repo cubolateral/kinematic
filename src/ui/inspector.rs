@@ -1,16 +1,16 @@
 use crate::{
     core::{
-        TrackChoices, TrackInfo, TrackLimits, TrackValue,
-        components::{Animation, Inspection, Name, TreeNode},
+        TrackChoices, TrackInfo, TrackLimits, TrackTarget, TrackValue,
+        components::{Inspection, Name, TreeNode},
         normalized_quaternion,
-        objects::{CanvasSettings, ProjectionSource, SphereShape},
+        objects::{CanvasSettings, ProjectionSource},
     },
-    editor::{Editor, InspectorTrack},
+    editor::Editor,
 };
 use std::{collections::HashMap, ffi::CString, os::raw::c_void, ptr};
 
 use super::{
-    icons, properties,
+    properties,
     widgets::{NumericValue, numeric_input_arrows},
 };
 
@@ -66,62 +66,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
         let _object_id = ui.push_id(&format!("{scene_index}:{}", entity.to_bits()));
 
-        if let Some((persistent, fields)) = editor.lua_inspector_values(scene_index, entity) {
-            ui.text_disabled(if persistent {
-                "Base values apply before animation."
-            } else {
-                "Temporary edits. Add an explicit ID to persist."
-            });
-
-            let _disabled = ui.begin_disabled_with_cond(is_exporting);
-
-            for (target, script, override_value, evaluated) in fields {
-                let _id = ui.push_id(target.name());
-                let mut value = override_value.clone().unwrap_or_else(|| script.clone());
-                let track = match &target {
-                    crate::core::TrackTarget::Property { info, .. } => Some(*info),
-                    _ => None,
-                };
-                let edit = edit_value(
-                    ui,
-                    state,
-                    target.name(),
-                    &mut value,
-                    track,
-                    override_value.is_some(),
-                );
-
-                if edit.changed {
-                    value = target.clamp(value);
-
-                    let valid = match &target {
-                        crate::core::TrackTarget::Dynamic(schema) => {
-                            schema.validate(&value).is_ok()
-                        }
-                        _ => value.validate().is_ok(),
-                    };
-
-                    if valid {
-                        editor.set_lua_override(scene_index, entity, &target, Some(value));
-                    }
-                }
-
-                if edit.reset {
-                    editor.set_lua_override(scene_index, entity, &target, None);
-                }
-
-                if override_value.is_some() {
-                    ui.text_disabled(format!("Script: {script}. Override saved."));
-                }
-
-                if evaluated != override_value.unwrap_or(script) {
-                    ui.text_disabled(format!("Evaluated: {evaluated}."));
-                }
-            }
-
-            return;
-        }
-
         let (scene, inspector_edits) = editor.inspector_scene_mut(scene_index);
         let world = scene.world();
 
@@ -151,155 +95,63 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         ui.text_disabled(format!("Object type: {}.", inspection.object_name));
         ui.separator();
 
+        if let Ok(settings) = world.get::<&CanvasSettings>(entity) {
+            property(
+                ui,
+                "Resolution",
+                &format!("{} x {}.", settings.resolution.0, settings.resolution.1),
+            );
+        }
+        if let Ok(source) = world.get::<&ProjectionSource>(entity) {
+            property(
+                ui,
+                "Source canvas",
+                &source.0.map_or_else(
+                    || "Unassigned.".into(),
+                    |texture| format!("{}.", texture.entity.to_bits()),
+                ),
+            );
+        }
+
+        ui.text_disabled("Temporary edits. Reset when playback resumes.");
+        let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing);
+
+        for (index, target) in inspection
+            .properties(&world, entity)
+            .into_iter()
+            .enumerate()
         {
-            let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing);
+            let _id = ui.push_id(index);
+            let mut value = target.get(&world, entity);
+            let before = value.clone();
+            let track = match &target {
+                TrackTarget::Property { info, .. } => Some(*info),
+                _ => None,
+            };
+            let edit = edit_value(
+                ui,
+                state,
+                target.name(),
+                &mut value,
+                track,
+                inspector_edits.contains(entity, &target),
+            );
 
-            if let Ok(settings) = world.get::<&CanvasSettings>(entity) {
-                property(
-                    ui,
-                    "Resolution",
-                    &format!("{} x {}.", settings.resolution.0, settings.resolution.1),
-                );
-            }
-
-            if let Ok(mut sphere) = world.get::<&mut SphereShape>(entity) {
-                let mut segments = sphere.segments;
-
-                if properties::row(ui, "Segments", false, || {
-                    numeric_drag(
-                        ui,
-                        state,
-                        "##value",
-                        &mut segments,
-                        1.0,
-                        "%u",
-                        dear_imgui_rs::sys::ImGuiDataType_U32,
-                        Some(&3),
-                        Some(&256),
-                    )
-                })
-                .changed
-                {
-                    sphere.segments = segments.clamp(3, 256);
-
+            if edit.changed {
+                value = target.clamp(value);
+                let valid = match &target {
+                    TrackTarget::Dynamic(schema) => schema.validate(&value).is_ok(),
+                    _ => value.validate().is_ok(),
+                };
+                if valid && value != before {
+                    inspector_edits.record(entity, target.clone(), before);
+                    target.set(&world, entity, value);
                     scene.invalidate();
                 }
             }
-
-            if let Ok(source) = world.get::<&ProjectionSource>(entity) {
-                property(
-                    ui,
-                    "Source canvas",
-                    &source.0.map_or_else(
-                        || "Unassigned.".into(),
-                        |texture| format!("{}.", texture.entity.to_bits()),
-                    ),
-                );
-            }
-        }
-
-        let mut changed = false;
-
-        for trackable in inspection.trackables(&world, entity) {
-            ui.separator_with_text(trackable.name);
-
-            for track in (trackable.get)() {
-                let _id = ui.push_id(&format!("{}:{}", trackable.name, track.id));
-                let component = (trackable.type_id)();
-                let animated = world
-                    .get::<&Animation>(entity)
-                    .is_ok_and(|animation| animation.animates(component, track));
-                let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing && animated);
-                let key = InspectorTrack::new(entity, component, track);
-                let show_reset = inspector_edits.contains(&key);
-                let mut value = (track.get)(&world, entity);
-                let before = value.clone();
-                let label = if animated {
-                    format!("{} {}", icons::DIAMOND, track.name)
-                } else {
-                    track.name.to_owned()
-                };
-                let edit = edit_value(ui, state, &label, &mut value, Some(track), show_reset);
-
-                if edit.changed {
-                    value = track.clamp(value);
-
-                    (track.set)(&world, entity, value.clone());
-
-                    inspector_edits.record(
-                        key.clone(),
-                        track,
-                        before.clone(),
-                        value.clone(),
-                        animated,
-                    );
-
-                    changed = true;
-                }
-
-                if edit.reset {
-                    inspector_edits.reset(scene, key.clone());
-                }
-
-                if animated && edit.hovered {
-                    ui.tooltip_text(if is_playing {
-                        "Animated track. Pause playback to edit it."
-                    } else {
-                        "Animated track."
-                    });
-                }
-            }
-
-            ui.spacing();
-        }
-
-        let mut uniform_changed = false;
-        let uniforms = crate::core::objects::shader_uniforms(&world, entity);
-
-        if !uniforms.is_empty() {
-            ui.separator_with_text("Shader uniforms");
-        }
-
-        for (name, mut value) in uniforms {
-            let _id = ui.push_id(&format!("uniform:{name}"));
-            let animated = world
-                .get::<&Animation>(entity)
-                .is_ok_and(|animation| animation.animates_uniform(&name));
-            let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing && animated);
-            let key = InspectorTrack::uniform(entity, &name);
-            let show_reset = inspector_edits.contains(&key);
-            let before = value.clone();
-            let label = if animated {
-                format!("{} {name}", icons::DIAMOND)
-            } else {
-                name.clone()
-            };
-            let edit = edit_value(ui, state, &label, &mut value, None, show_reset);
-
-            if edit.changed {
-                crate::core::objects::set_shader_uniform(&world, entity, &name, value.clone())
-                    .unwrap_or_else(|error| panic!("{error}"));
-
-                inspector_edits.record_uniform(key.clone(), before, value, animated);
-
-                uniform_changed = true;
-            }
-
             if edit.reset {
-                inspector_edits.reset(scene, key.clone());
+                inspector_edits.reset(scene, entity, &target);
             }
-
-            if animated && edit.hovered {
-                ui.tooltip_text(if is_playing {
-                    "Animated uniform. Pause playback to edit it."
-                } else {
-                    "Animated uniform."
-                });
-            }
-        }
-
-        if changed || uniform_changed {
-            scene.invalidate();
         }
     });
 }
@@ -307,7 +159,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 fn property(ui: &dear_imgui_rs::Ui, name: &str, value: &str) {
     properties::row(ui, name, false, || {
         ui.text_disabled(value);
-
         false
     });
 }

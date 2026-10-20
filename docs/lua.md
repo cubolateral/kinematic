@@ -332,7 +332,7 @@ Declare uniform bindings in object options before animating them. Uniforms
 support booleans, numbers, vectors, quaternions, quads and colors; strings and
 enums have no GLSL representation. Canvas textures remain fixed per revision.
 
-## Identity, reload and overrides
+## Identity, reload and inspector edits
 
 An explicit scene-local `id` preserves an entity across declaration insertion,
 reordering and compatible edits. Unnamed objects use positional identities and
@@ -352,15 +352,12 @@ tracks invalidate the affected simulation and its dependents. Invalidation
 currently replays that affected instance from its start; unrelated history is
 preserved. Cancelled or failed candidates never replace active callbacks/state.
 
-Inspector shows the script base, saved override and evaluated value separately.
-For explicit IDs, editing a base persists to `kinematic/overrides.ron`, keyed by
-scene path, object ID and property name. Overrides enter before animations are
-constructed; they do not overwrite keyframes or freeze evaluated tracks.
-Restore removes the saved entry. Incompatible/orphaned entries remain in the file
-with diagnostics. Objects without IDs have explicitly temporary edits. Resolve
-pending source edits before changing saved bases or event durations, so those
-operations cannot silently discard a newer buffer. Event durations are stored in
-`kinematic/scenes`, which holds scene metadata separately from Lua sources.
+Inspector edits the current values while playback is paused. Edits are temporary,
+are never saved, and reset when playback resumes, the timeline advances, or the
+scene reloads. Explicit IDs do not change this behavior. Export discards inspector
+edits and uses the compiled scene values.
+Resolve pending source edits before changing event durations. Event durations are
+stored in `kinematic/scenes`, separately from Lua sources.
 For example, `scenes/intro.lua` uses `kinematic/scenes/scenes/intro.ron`.
 
 Export uses the last successfully applied preview revision, including applied

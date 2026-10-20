@@ -88,7 +88,7 @@ pub fn definitions() -> String {
         };
 
         output.push_str(&format!(
-            "--- Initial properties and resources for {}.\n---@class Kinematic.{options_class}: Kinematic.ResourceOptions\n---@field id? string Stable identifier used to preserve editor overrides across reloads.\n---@field name? string Display name in the scene tree.\n", object.name
+            "--- Initial properties and resources for {}.\n---@class Kinematic.{options_class}: Kinematic.ResourceOptions\n---@field id? string Stable identifier used to preserve object identity across reloads.\n---@field name? string Display name in the scene tree.\n", object.name
         ));
 
         for field in &fields {

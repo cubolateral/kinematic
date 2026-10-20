@@ -626,10 +626,7 @@ impl Documents {
     }
 }
 fn watched(path: &Path) -> bool {
-    if path == Path::new(crate::scripting::MANIFEST)
-        || path == Path::new("kinematic/overrides.ron")
-        || path.starts_with("kinematic/scenes")
-    {
+    if path == Path::new(crate::scripting::MANIFEST) || path.starts_with("kinematic/scenes") {
         return true;
     }
 

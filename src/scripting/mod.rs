@@ -18,7 +18,6 @@ mod snapshot;
 mod adapters;
 mod drawing;
 mod extension;
-mod overrides;
 mod resources;
 
 mod callback;

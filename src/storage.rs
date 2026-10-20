@@ -59,7 +59,6 @@ pub(crate) fn migrate_project(context: &ProjectContext) -> io::Result<()> {
         "project.ron",
         "scenes",
         "events",
-        "overrides.ron",
         "cache/editor.ron",
         "cache/luals",
     ] {
