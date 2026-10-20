@@ -13,6 +13,7 @@ mod documentation;
 mod files;
 mod popup;
 mod shortcuts;
+mod text;
 
 pub(super) const WINDOW_NAME: &str = "Code";
 pub(super) const FILES_WINDOW: &str = "Files";
@@ -65,7 +66,7 @@ impl Default for Settings {
             format_on_save: true,
             trim_trailing_whitespace: true,
             insert_final_newline: true,
-            auto_save: true,
+            auto_save: false,
             auto_save_delay_ms: 1000,
         }
     }
@@ -97,6 +98,7 @@ impl DocumentationPopup {
 
 struct Tab {
     editor: TextEditor,
+    selecting: bool,
     chord_started: Option<f64>,
     version: u64,
     completions: completion::Completion,
@@ -338,33 +340,49 @@ impl Tab {
             .build();
 
         self.editor.set_read_only(false);
+        let mut editor_hovered = false;
+        let mut mouse_word = None;
 
-        if let Some(glyph_width) = self.editor.glyph_width().filter(|_| rendered.is_ok()) {
-            let gutter = if self.editor.shows_line_numbers() {
-                self.editor.line_number_left_margin()
-                    + (self.editor.line_count() + 1).ilog10() as usize
-                    + 1
-            } else {
-                0
-            } + usize::from(self.editor.is_line_folding_enabled())
-                + self.editor.text_left_margin();
-            let min = ui.item_rect_min();
-            let max = ui.item_rect_max();
-            let padding = ui.clone_style().window_padding();
-            let draw = ui.get_window_draw_list();
-            let _clip = draw.push_clip_rect(min, max, true);
-            let color = ui.get_color_u32(dear_imgui_rs::StyleColor::Header);
+        if rendered.is_ok() {
+            let next = ui.cursor_screen_pos();
+            let mut layout = None;
+            ui.set_cursor_screen_pos(origin);
+            ui.child_window("Source")
+                .size([available[0], height])
+                .build(ui, || {
+                    layout = text::Layout::capture(&self.editor, ui);
+                    editor_hovered = layout.as_ref().is_some_and(|layout| {
+                        ui.is_window_hovered_with_flags(
+                            dear_imgui_rs::WindowHoveredFlags::ALLOW_WHEN_BLOCKED_BY_ACTIVE_ITEM,
+                        ) && layout.contains(ui.io().mouse_pos())
+                    });
+                });
+            ui.set_cursor_screen_pos(next);
 
-            // shortcut: CTE exposes scroll in whole columns, upgrade if it exposes pixel scroll.
-            for column in ruler_columns(&settings.rulers) {
-                let x = min[0] + padding[0] + (gutter + column) as f32 * glyph_width
-                    - self.editor.first_visible_column() as f32 * glyph_width;
+            self.selecting = (self.selecting
+                || (editor_hovered && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)))
+                && ui.is_mouse_down(dear_imgui_rs::MouseButton::Left);
 
-                if x >= min[0] && x < max[0] {
-                    draw.add_line([x, min[1]], [x, max[1]], color)
-                        .thickness(1.0)
-                        .build();
-                }
+            if editor_hovered || self.selecting {
+                ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::TextInput));
+            }
+            if editor_hovered {
+                mouse_word = text::word_at_mouse(&self.editor, ui.io().mouse_pos());
+            }
+
+            if editor_hovered
+                && ui.is_mouse_double_clicked(dear_imgui_rs::MouseButton::Left)
+                && !ui.io().key_ctrl()
+                && !ui.io().key_shift()
+                && !ui.io().key_alt()
+                && let Some(range) = mouse_word
+                && let Err(error) = self.editor.select_region(range)
+            {
+                *output_error = Some(error.to_string());
+            }
+
+            if let Some(layout) = layout {
+                text::draw(&self.editor, ui, &layout, &settings.rulers);
             }
         }
 
@@ -448,29 +466,16 @@ impl Tab {
                 }
 
                 let definition = focused && inputs::active(ui, InputAction::Definition);
-                let click_definition = inputs::active(ui, InputAction::ClickDefinition)
-                    && self
-                        .editor
-                        .is_mouse_over_glyph(ui.io().mouse_pos())
-                        .unwrap_or(false);
-                let clicked = self
-                    .editor
-                    .position_at_mouse(ui.io().mouse_pos())
-                    .unwrap_or(cursor);
-                let hovered = if ui.is_item_hovered()
-                    && !ui.is_mouse_down(dear_imgui_rs::MouseButton::Left)
-                    && self
-                        .editor
-                        .is_mouse_over_glyph(ui.io().mouse_pos())
-                        .unwrap_or(false)
-                {
-                    self.editor
-                        .position_at_mouse(ui.io().mouse_pos())
-                        .ok()
-                        .and_then(|position| self.editor.word_start(position).ok())
-                } else {
-                    None
-                };
+                let click_definition = editor_hovered
+                    && inputs::active(ui, InputAction::ClickDefinition)
+                    && mouse_word.is_some();
+                let clicked = mouse_word.map(|range| range.start).unwrap_or(cursor);
+                let hovered =
+                    if editor_hovered && !ui.is_mouse_down(dear_imgui_rs::MouseButton::Left) {
+                        mouse_word.map(|range| range.start)
+                    } else {
+                        None
+                    };
                 let mut assistance = self.assistance.borrow_mut();
 
                 if let Some(popup) = &mut self.documentation_popup {
@@ -478,7 +483,7 @@ impl Tab {
 
                     if over_popup || hovered == self.hover_candidate.map(|(position, _)| position) {
                         popup.last_hover = ui.time();
-                    } else if ui.time() - popup.last_hover > 0.25 {
+                    } else if hovered.is_some() || ui.time() - popup.last_hover > 0.25 {
                         if popup.focused {
                             ui.set_window_focus(Some(WINDOW_NAME));
                             self.editor.focus();
@@ -489,7 +494,9 @@ impl Tab {
                         assistance.hover_position = None;
                         self.documentation_has_content = false;
                     }
-                } else {
+                }
+
+                if self.documentation_popup.is_none() {
                     if self.hover_candidate.map(|(position, _)| position) != hovered {
                         self.hover_candidate = hovered.map(|position| (position, ui.time()));
                         assistance.hover_position = None;
@@ -777,7 +784,7 @@ impl State {
                         (PaletteColor::Comment, 0xff55996a),
                         (PaletteColor::Background, 0x00000000),
                         (PaletteColor::LineNumber, 0xff858585),
-                        (PaletteColor::Selection, 0xff784f26),
+                        (PaletteColor::Selection, text::SELECTION_COLOR),
                     ] {
                         palette.set(slot, color);
                     }
@@ -801,10 +808,15 @@ impl State {
                     let documentation = popup::editor(context, &editor.palette())?;
                     let popup_content = popup::Content::new(context, &editor.palette())?;
 
+                    // Draw selection backgrounds in the parent, behind CTE's text.
+                    palette.set(PaletteColor::Selection, 0);
+                    editor.set_palette(&palette)?;
+
                     self.tabs.insert(
                         path.clone(),
                         Tab {
                             editor,
+                            selecting: false,
                             chord_started: None,
                             version: doc.version,
                             completions: completion::Completion::default(),
@@ -1899,8 +1911,9 @@ mod tests {
             .find(|point| {
                 state.tabs[b]
                     .editor
-                    .is_mouse_over_glyph(*point)
+                    .is_mouse_over_text_area(*point)
                     .unwrap_or(false)
+                    && super::text::word_at_mouse(&state.tabs[b].editor, *point).is_some()
                     && state.tabs[b]
                         .editor
                         .position_at_mouse(*point)
@@ -1919,6 +1932,21 @@ mod tests {
 
         assert!(state.tabs[b].hover_candidate.is_some());
         assert!(state.tabs[b].assistance.borrow().hover_position.is_none());
+
+        for (mouse, down) in [(point, true), ([1200.0, 700.0], true), (point, false)] {
+            context.io_mut().add_mouse_pos_event(mouse);
+            context
+                .io_mut()
+                .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, down);
+            let ui = context.frame();
+            state.draw(&mut documents, &settings, ui);
+            assert_eq!(
+                ui.mouse_cursor(),
+                Some(dear_imgui_rs::MouseCursor::TextInput)
+            );
+            context.end_frame();
+        }
+
         context.io_mut().set_delta_time(0.7);
         state.draw(&mut documents, &settings, context.frame());
         context.end_frame();
@@ -1952,7 +1980,7 @@ mod tests {
 
         context
             .io_mut()
-            .add_mouse_pos_event([popup_position[0] + 30.0, popup_position[1] + 65.0]);
+            .add_mouse_pos_event([popup_position[0] + 30.0, popup_position[1] + 30.0]);
 
         for _ in 0..3 {
             state.draw(&mut documents, &settings, context.frame());

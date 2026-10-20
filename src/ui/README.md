@@ -15,6 +15,7 @@ interaction details belong in the panel modules, not in `ui/mod.rs`.
 - `code.rs`: Lua buffers, file tabs, focus, and inline LuaLS assistance.
 - `code/diagnostics.rs`: Compact diagnostic footer with severity filters and counts.
 - `code/shortcuts.rs`: VS Code Linux editing overrides, command chords, and keyboard navigation.
+- `code/text.rs`: Word hit testing, occurrence highlights, and selected newline overlays.
 - `code/files.rs`: Project file tree, context menu, and file operation dialogs.
 - `widgets.rs`: Small drawing and measurement helpers shared by panels.
 - `windows.rs`: Shared templates for centered floating windows, modals, and popups.
@@ -82,6 +83,14 @@ CTE owns basic editing, undo, comments, indentation, moving lines, and growing
 selections. Register overrides before rendering CTE, through ImGui routing, so
 its conflicting defaults do not execute as well. Keep text-field and
 documentation focus separate from source editing.
+
+The word at the caret and its whole-word matches receive a subtle highlight.
+Selected newlines remain visible across empty lines. Backgrounds use geometry
+captured from CTE's child window and render in its transparent parent, behind
+the text, with balanced line spacing. Mouse documentation uses the glyph under
+the pointer and the child viewport bounds, including after scrolling. Caret
+word navigation may look to the left. Drag selection keeps the text cursor
+until the mouse button is released, even outside the editor.
 
 The current CTE API cannot create arbitrary additional carets. Multi-cursor
 selection uses `Ctrl+D` and `Ctrl+Shift+L`; custom range edits (word deletion,
