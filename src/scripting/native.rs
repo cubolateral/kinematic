@@ -55,7 +55,10 @@ pub(crate) fn objects() -> Vec<NativeObject> {
         native::<RegularPolygon3D>(),
         native::<Line3D>(),
         native::<Image3D>(),
-        native::<Text3D>(),
+        NativeObject {
+            methods: Text3DHandler::lua_methods(),
+            ..native::<Text3D>()
+        },
         NativeObject {
             methods: Latex3DHandler::lua_methods(),
             ..native::<Latex3D>()

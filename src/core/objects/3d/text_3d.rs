@@ -13,11 +13,13 @@ use lyon_tessellation::{
 
 use crate::core::{
     components::{Draw3D, GeometryKey, Material, RenderContext3D, Transform3D},
-    objects::{Font, TextShape, global_matrix3d},
+    objects::{Font, TextFade, TextShape, global_matrix3d},
     types::Vector3,
 };
 
 use super::super::two_d::text_2d::{text_box, text_path};
+
+struct TextMorphMesh;
 
 const TEXT_GEOMETRY_SCALE: f32 = 64.0;
 const TEXT_TESSELLATION_TOLERANCE: f32 = 0.005;
@@ -96,11 +98,14 @@ pub struct Text3D {
     pub transform: Transform3D,
     #[trackable]
     pub draw: Draw3D,
+
+    pub(crate) fade: TextFade,
 }
 
 impl Default for Text3D {
     fn default() -> Self {
         Self {
+            fade: Default::default(),
             shape: Text3DShape::default(),
             material: Material::default(),
             transform: Transform3D::default(),
@@ -125,7 +130,12 @@ impl Text3DBuilder {
 fn text_3d_box(world: &hecs::World, entity: hecs::Entity) -> Vector3 {
     let shape = world.get::<&Text3DShape>(entity).unwrap();
 
-    (text_box(&shape.text_shape(&shape.text)) / TEXT_GEOMETRY_SCALE).extend(shape.depth.abs())
+    let fade = world.get::<&TextFade>(entity).unwrap();
+    let mut size = text_box(&shape.text_shape(&shape.text));
+    if let Some(text) = fade.incoming_text(&shape.text) {
+        size = size.max(text_box(&shape.text_shape(text)));
+    }
+    (size / TEXT_GEOMETRY_SCALE).extend(shape.depth.abs())
 }
 
 fn validate_text_shape(shape: &Text3DShape) -> Result<(), String> {
@@ -155,7 +165,37 @@ fn draw_text_object(
     let material = world.get::<&Material>(entity).unwrap();
     let transform = global_matrix3d(world, entity);
 
-    draw_text_3d(&shape, &material, transform, context)?;
+    let fade = world.get::<&TextFade>(entity).unwrap();
+    if let Some(text) = fade.incoming_text(&shape.text) {
+        use crate::core::objects::{text_2d::text_parts, text_morph::morph_parts};
+        let from = text_parts(&shape.text_shape(&shape.text));
+        let to = text_parts(&shape.text_shape(text));
+        let mut part_material = (*material).clone();
+        for part in morph_parts(&from, &to, fade.progress) {
+            if part.opacity <= 0.0 {
+                continue;
+            }
+            let mut hash = DefaultHasher::new();
+            shape
+                .geometry_key(if part.incoming { text } else { &shape.text })
+                .hash(&mut hash);
+            part.index.hash(&mut hash);
+            part_material.opacity = material.opacity * part.opacity;
+            context.render_material(
+                GeometryKey::new::<TextMorphMesh>(hash.finish()),
+                || {
+                    extruded_path_mesh(
+                        &part.part.path,
+                        (shape.size * TEXT_GEOMETRY_SCALE * TEXT_TESSELLATION_TOLERANCE).max(0.05),
+                    )
+                },
+                text_transform(&shape, transform) * part.transform(),
+                &part_material,
+            )?;
+        }
+    } else {
+        draw_text_3d(&shape, &material, transform, context)?;
+    }
 
     Ok(())
 }

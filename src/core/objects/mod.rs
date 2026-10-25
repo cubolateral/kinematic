@@ -9,6 +9,7 @@ mod regular_polygon;
 mod render;
 #[cfg(test)]
 mod simulation;
+mod text_morph;
 #[path = "3d/mod.rs"]
 mod three_d;
 #[path = "2d/mod.rs"]

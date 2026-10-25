@@ -9,6 +9,7 @@ use crate::core::types::{Color, Vector2};
 pub(super) struct FormulaPart {
     pub path: skia_safe::Path,
     pub color: Option<Color>,
+    pub key: String,
 }
 
 pub(super) struct FormulaGeometry {
@@ -57,7 +58,11 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
         let ast = ratex_parser::parser::parse(text)
             .unwrap_or_else(|error| panic!("Invalid LaTeX formula `{text}`: {error}."));
         let options = LayoutOptions::default();
-        let display = to_display_list(&layout(&ast, &options));
+        let mut boxes = layout(&ast, &options);
+        let display = to_display_list(&boxes);
+        let mut groups = Vec::new();
+        tag_groups(&mut boxes, "", &mut groups);
+        let tagged = to_display_list(&boxes);
         // Resolve inherited fill separately from explicit colors, including black and white.
         // Both layout passes run only when a formula first enters the cache.
         let alternate = to_display_list(&layout(
@@ -72,12 +77,31 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
             parts: Vec::new(),
         };
 
-        for (item, alternate) in display.items.iter().zip(&alternate.items) {
+        assert_eq!(display.items.len(), tagged.items.len());
+        for ((item, alternate), tagged) in display
+            .items
+            .iter()
+            .zip(&alternate.items)
+            .zip(&tagged.items)
+        {
             let tint = item_color(item);
             let fill =
                 (tint == item_color(alternate)).then(|| Color::new(tint.r, tint.g, tint.b, tint.a));
 
+            let start = geometry.parts.len();
             emit(item, cache, fill, &mut geometry.parts);
+            let group = &groups[item_color(tagged).r as usize];
+            let identity = match item {
+                DisplayItem::GlyphPath {
+                    font, char_code, ..
+                } => format!("{font}:{char_code}"),
+                DisplayItem::Line { .. } => "Line".to_owned(),
+                DisplayItem::Rect { .. } => "Rect".to_owned(),
+                DisplayItem::Path { .. } => "Path".to_owned(),
+            };
+            for (index, part) in geometry.parts[start..].iter_mut().enumerate() {
+                part.key = format!("{group}/{identity}/{index}");
+            }
         }
 
         let offset = -geometry.size * 0.5;
@@ -109,6 +133,150 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
 
         geometry
     })
+}
+
+// A separate display pass carries group labels through RaTeX's own placement logic.
+fn tag_groups(node: &mut ratex_layout::LayoutBox, group: &str, groups: &mut Vec<String>) {
+    use ratex_layout::layout_box::{BoxContent, VBoxChildKind};
+    let color = ratex_types::color::Color::new(groups.len() as f32, 0.0, 0.0, 1.0);
+    groups.push(group.to_owned());
+    node.color = color;
+    let mut child = |node: &mut ratex_layout::LayoutBox, role: &str| {
+        tag_groups(node, &format!("{group}/{role}"), groups);
+    };
+    match &mut node.content {
+        BoxContent::HBox(children) => {
+            let mut counts = HashMap::new();
+            for node in children {
+                match &node.content {
+                    BoxContent::Glyph { .. }
+                    | BoxContent::GlyphRun { .. }
+                    | BoxContent::SupSub { .. }
+                    | BoxContent::OpLimits { .. }
+                    | BoxContent::Kern
+                    | BoxContent::Empty => {
+                        tag_groups(node, group, groups);
+                    }
+                    BoxContent::HBox(children)
+                        if children
+                            .iter()
+                            .filter(|child| {
+                                !matches!(child.content, BoxContent::Kern | BoxContent::Empty)
+                            })
+                            .count()
+                            <= 1 =>
+                    {
+                        tag_groups(node, group, groups);
+                    }
+                    _ => {
+                        let kind = std::mem::discriminant(&node.content);
+                        let index = counts.entry(kind).or_insert(0);
+                        tag_groups(node, &format!("{group}/{kind:?}:{index}"), groups);
+                        *index += 1;
+                    }
+                }
+            }
+        }
+        BoxContent::VBox(children) => {
+            for (index, node) in children.iter_mut().enumerate() {
+                if let VBoxChildKind::Box(node) = &mut node.kind {
+                    child(node, &format!("Row{index}"));
+                }
+            }
+        }
+        BoxContent::Fraction { numer, denom, .. } => {
+            child(numer, "Numerator");
+            child(denom, "Denominator");
+        }
+        BoxContent::SupSub { base, sup, sub, .. } | BoxContent::OpLimits { base, sup, sub, .. } => {
+            let identity: Vec<_> = to_display_list(base)
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    DisplayItem::GlyphPath {
+                        font, char_code, ..
+                    } => Some(format!("{font}:{char_code}")),
+                    _ => None,
+                })
+                .collect();
+            if let Some(node) = sup {
+                child(node, &format!("{identity:?}/Superscript"));
+            }
+            if let Some(node) = sub {
+                child(node, &format!("{identity:?}/Subscript"));
+            }
+            tag_groups(base, group, groups);
+        }
+        BoxContent::Radical { body, index, .. } => {
+            child(body, "Radicand");
+            if let Some(node) = index {
+                child(node, "RootIndex");
+            }
+        }
+        BoxContent::Accent { base, accent, .. } => {
+            child(base, "Base");
+            child(accent, "Accent");
+        }
+        BoxContent::LeftRight { left, inner, right } => {
+            child(left, "Left");
+            child(inner, "Inner");
+            child(right, "Right");
+        }
+        BoxContent::Array {
+            cells, row_tags, ..
+        } => {
+            for (row, cells) in cells.iter_mut().enumerate() {
+                for (column, node) in cells.iter_mut().enumerate() {
+                    child(node, &format!("Cell{row}:{column}"));
+                }
+            }
+            for (row, node) in row_tags.iter_mut().enumerate() {
+                if let Some(node) = node {
+                    child(node, &format!("Tag{row}"));
+                }
+            }
+        }
+        BoxContent::Framed {
+            body,
+            bg_color,
+            border_color,
+            ..
+        } => {
+            if bg_color.is_some() {
+                *bg_color = Some(color);
+            }
+            *border_color = color;
+            child(body, "Body");
+        }
+        BoxContent::RaiseBox { body, .. }
+        | BoxContent::Scaled { body, .. }
+        | BoxContent::Angl { body, .. }
+        | BoxContent::Overline { body, .. }
+        | BoxContent::Underline { body, .. } => child(body, "Body"),
+        BoxContent::ProofTree { children, .. } => {
+            for (index, node) in children.iter_mut().enumerate() {
+                child(&mut node.box_, &format!("Proof{index}"));
+            }
+        }
+        BoxContent::Glyph { .. }
+        | BoxContent::GlyphRun { .. }
+        | BoxContent::Rule { .. }
+        | BoxContent::Kern
+        | BoxContent::SvgPath { .. }
+        | BoxContent::Empty => {}
+    }
+}
+
+pub(super) fn morph_geometry(text: &str, thickness: f32) -> Vec<super::text_morph::MorphPart> {
+    geometry(text)
+        .parts
+        .iter()
+        .map(|part| super::text_morph::MorphPart {
+            key: part.key.clone(),
+            path: super::text_2d::weighted_path(&part.path, thickness),
+            color: part.color,
+        })
+        .collect()
 }
 
 fn item_color(item: &DisplayItem) -> ratex_types::color::Color {
@@ -158,6 +326,7 @@ fn emit(
                         .with_transform(&skia_safe::Matrix::scale((scale, scale)))
                         .with_offset((*x as f32, *y as f32)),
                     color,
+                    key: String::new(),
                 });
             }
         }
@@ -174,6 +343,7 @@ fn emit(
                     None,
                 ),
                 color,
+                key: String::new(),
             });
         }
         DisplayItem::Line {
@@ -203,6 +373,7 @@ fn emit(
                         None,
                     ),
                     color,
+                    key: String::new(),
                 });
 
                 offset += dash * 2.0;
@@ -225,6 +396,7 @@ fn emit(
                     parts.push(FormulaPart {
                         path: path.with_offset((*x as f32, *y as f32)),
                         color,
+                        key: String::new(),
                     });
                 }
             };
@@ -273,6 +445,57 @@ fn emit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn morph_preserves_fraction_script_and_matrix_groups() {
+        use crate::core::objects::text_morph::morph_parts;
+        for (from, to, fading) in [
+            (r"\frac{x}{y}", r"\frac{y}{x}", 4),
+            (r"x^{a}_{b}", r"x^{b}_{a}", 4),
+            (
+                r"\begin{matrix} x & y \\ z & w \end{matrix}",
+                r"\begin{matrix} y & x \\ w & z \end{matrix}",
+                8,
+            ),
+            (r"\frac{\sqrt{x}}{x}", r"\frac{\sqrt{y}}{x}", 2),
+        ] {
+            let from = morph_geometry(from, 0.0);
+            let to = morph_geometry(to, 0.0);
+            let draws = morph_parts(&from, &to, 0.5);
+            assert_eq!(
+                draws.iter().filter(|draw| draw.opacity == 0.5).count(),
+                fading
+            );
+        }
+        let from = morph_geometry(r"\frac{x+x}{x}", 0.0);
+        let to = morph_geometry(r"\frac{x+x+1}{x}", 0.0);
+        let draws = morph_parts(&from, &to, 0.5);
+        assert_eq!(
+            draws.iter().filter(|draw| draw.opacity == 1.0).count(),
+            from.len()
+        );
+        assert_eq!(draws.iter().filter(|draw| draw.opacity == 0.5).count(), 2);
+    }
+
+    #[test]
+    fn adding_scripts_keeps_the_base_and_interpolates_explicit_colors() {
+        use crate::core::objects::text_morph::morph_parts;
+        let from = morph_geometry(r"\color{red}{x}", 0.0);
+        let to = morph_geometry(r"\color{blue}{x}^2", 0.0);
+        let draws = morph_parts(&from, &to, 0.5);
+        let base = draws
+            .iter()
+            .find(|draw| draw.opacity == 1.0)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Matching base is missing: {:?} -> {:?}.",
+                    from.iter().map(|part| &part.key).collect::<Vec<_>>(),
+                    to.iter().map(|part| &part.key).collect::<Vec<_>>()
+                )
+            });
+        assert_eq!(base.color(Color::WHITE), Color::new(0.5, 0.0, 0.5, 1.0));
+        assert_eq!(draws.iter().filter(|draw| draw.opacity == 0.5).count(), 1);
+    }
 
     fn colored_bounds(formula: &FormulaGeometry, color: Color) -> skia_safe::Rect {
         formula

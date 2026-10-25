@@ -3,7 +3,7 @@ use crate::core::{
     Task, TrackTarget, TrackValue, Trackable,
     objects::{
         Latex2DHandler, Latex2DShape, Latex3DHandler, Latex3DShape, ObjectHandler, Text2DHandler,
-        TextFade, TextShape,
+        Text3DHandler, Text3DShape, TextFade, TextShape,
     },
 };
 use mlua::{Lua, MultiValue, Result, Value};
@@ -17,35 +17,70 @@ pub(crate) struct LuaMethod {
 
 #[kinematic_macros::lua_methods]
 impl Text2DHandler {
+    /// Moves matching glyphs and fades added or removed glyphs.
+    /// Returns an animation; call `:play(duration, easing)` to schedule it.
+    #[lua]
+    pub(crate) fn morph(&self, text: String) -> Task {
+        text_transition::<TextShape>(self.entity(), text, true)
+    }
+
     /// Crossfades the current text into the new text.
     /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
     pub(crate) fn fade(&self, text: String) -> Task {
-        text_fade::<TextShape>(self.entity(), text)
+        text_transition::<TextShape>(self.entity(), text, false)
     }
 }
 
 #[kinematic_macros::lua_methods]
 impl Latex2DHandler {
+    /// Moves matching glyphs and fades added or removed glyphs.
+    /// Returns an animation; call `:play(duration, easing)` to schedule it.
+    #[lua]
+    pub(crate) fn morph(&self, text: String) -> Task {
+        text_transition::<Latex2DShape>(self.entity(), text, true)
+    }
+
     /// Crossfades the current formula into the new formula.
     /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
     pub(crate) fn fade(&self, text: String) -> Task {
-        text_fade::<Latex2DShape>(self.entity(), text)
+        text_transition::<Latex2DShape>(self.entity(), text, false)
     }
 }
 
 #[kinematic_macros::lua_methods]
 impl Latex3DHandler {
+    /// Moves matching glyphs and fades added or removed glyphs.
+    /// Returns an animation; call `:play(duration, easing)` to schedule it.
+    #[lua]
+    pub(crate) fn morph(&self, text: String) -> Task {
+        text_transition::<Latex3DShape>(self.entity(), text, true)
+    }
+
     /// Crossfades the current formula into the new formula.
     /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
     pub(crate) fn fade(&self, text: String) -> Task {
-        text_fade::<Latex3DShape>(self.entity(), text)
+        text_transition::<Latex3DShape>(self.entity(), text, false)
     }
 }
 
-fn text_fade<T: Trackable + 'static>(entity: hecs::Entity, text: String) -> Task {
+#[kinematic_macros::lua_methods]
+impl Text3DHandler {
+    /// Moves matching glyphs and fades added or removed glyphs.
+    /// Returns an animation; call `:play(duration, easing)` to schedule it.
+    #[lua]
+    pub(crate) fn morph(&self, text: String) -> Task {
+        text_transition::<Text3DShape>(self.entity(), text, true)
+    }
+}
+
+fn text_transition<T: Trackable + 'static>(
+    entity: hecs::Entity,
+    text: String,
+    morph: bool,
+) -> Task {
     let tween = |target, from, to, duration, implicit| Task::RuntimeTween {
         entity,
         target,
@@ -60,6 +95,13 @@ fn text_fade<T: Trackable + 'static>(entity: hecs::Entity, text: String) -> Task
     };
 
     Task::All(vec![
+        tween(
+            TrackTarget::property(std::any::TypeId::of::<TextFade>(), TextFade::track(3)),
+            TrackValue::Bool(morph),
+            TrackValue::Bool(morph),
+            0.0,
+            false,
+        ),
         tween(
             TrackTarget::property(std::any::TypeId::of::<T>(), T::track(0)),
             TrackValue::String(text.clone()),

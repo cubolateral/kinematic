@@ -178,6 +178,8 @@ pub(crate) struct TextFade {
     /// Keeps the transition active even when easing reaches full opacity early.
     #[track]
     pub active: bool,
+    #[track]
+    pub morph: bool,
 }
 
 impl Default for TextFade {
@@ -186,6 +188,7 @@ impl Default for TextFade {
             text: String::new(),
             progress: 1.0,
             active: false,
+            morph: false,
         }
     }
 }
@@ -195,7 +198,7 @@ impl TextFade {
         (self.active && self.text != current).then_some(&self.text)
     }
 
-    fn incoming_shape(&self, shape: &TextShape) -> Option<TextShape> {
+    pub(crate) fn incoming_shape(&self, shape: &TextShape) -> Option<TextShape> {
         self.incoming_text(&shape.text).map(|text| TextShape {
             text: text.to_owned(),
             ..shape.clone()
@@ -319,6 +322,36 @@ pub(crate) fn text_path(shape: &TextShape) -> skia_safe::Path {
     weighted_path(&builder.detach(), shape.thickness)
 }
 
+pub(in crate::core::objects) fn text_parts(
+    shape: &TextShape,
+) -> Vec<crate::core::objects::text_morph::MorphPart> {
+    use crate::core::objects::text_morph::MorphPart;
+    let font = shape.font.skia_font(shape.size);
+    let mut parts = Vec::new();
+    for line in text_lines(shape, &font) {
+        let glyphs = font.text_to_glyphs_vec(line.text);
+        let mut positions = vec![skia_safe::Point::default(); glyphs.len()];
+        font.get_pos(
+            &glyphs,
+            &mut positions,
+            Some(skia_safe::Point::new(line.origin.0, line.origin.1)),
+        );
+        for (glyph, position) in glyphs.into_iter().zip(positions) {
+            if let Some(path) = font.get_path(glyph) {
+                parts.push(MorphPart {
+                    key: glyph.to_string(),
+                    path: weighted_path(
+                        &path.with_offset((position.x, position.y)),
+                        shape.thickness,
+                    ),
+                    color: None,
+                });
+            }
+        }
+    }
+    parts
+}
+
 pub(crate) fn weighted_path(path: &skia_safe::Path, thickness: f32) -> skia_safe::Path {
     if thickness <= 0.0 {
         return path.clone();
@@ -360,6 +393,22 @@ fn draw_text_object(
     let fade = world.get::<&TextFade>(entity).unwrap();
 
     if let Some(incoming) = fade.incoming_shape(&shape) {
+        if fade.morph {
+            for part in crate::core::objects::text_morph::morph_parts(
+                &text_parts(&shape),
+                &text_parts(&incoming),
+                fade.progress,
+            ) {
+                draw_complete_styled_path(
+                    &part.path(),
+                    &style,
+                    transform.scale,
+                    opacity * part.opacity,
+                    canvas,
+                );
+            }
+            return;
+        }
         draw_text_2d(
             &shape,
             &style,

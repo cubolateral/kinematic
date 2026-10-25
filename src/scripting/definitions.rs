@@ -373,6 +373,9 @@ mod tests {
 
         assert!(definitions.contains("Radius in local coordinates. Default: 128. Minimum: 0."));
         assert!(definitions.contains("Position of the entity."));
+        for name in ["Text2D", "Text3D", "Latex2D", "Latex3D"] {
+            assert!(definitions.contains(&format!("function {name}:morph(text) end\n\n")));
+        }
         for name in ["Text2D", "Latex2D", "Latex3D"] {
             assert!(definitions.contains(&format!("function {name}:fade(text) end\n\n")));
         }

@@ -116,6 +116,31 @@ fn draw_latex_object(
     let fade = world.get::<&TextFade>(entity).unwrap();
 
     if let Some(text) = fade.incoming_text(&shape.text) {
+        if fade.morph {
+            use crate::core::objects::{latex_geometry::morph_geometry, text_morph::morph_parts};
+            let size = shape.size.max(0.0);
+            if size <= 0.0 {
+                return;
+            }
+            let from = morph_geometry(&shape.text, shape.thickness / size);
+            let to = morph_geometry(text, shape.thickness / size);
+            canvas.save();
+            canvas.scale((size, size));
+            let mut part_style = (*style).clone();
+            part_style.stroke_width /= size;
+            for part in morph_parts(&from, &to, fade.progress) {
+                part_style.fill = part.color(style.fill);
+                draw_complete_styled_path(
+                    &part.path(),
+                    &part_style,
+                    transform.scale,
+                    opacity * part.opacity,
+                    canvas,
+                );
+            }
+            canvas.restore();
+            return;
+        }
         let incoming = Latex2DShape {
             text: text.to_owned(),
             ..(*shape).clone()

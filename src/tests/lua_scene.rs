@@ -980,3 +980,114 @@ end
         10.0
     );
 }
+
+#[test]
+fn text_and_latex_morph_schedule_reusable_tasks_and_seek_in_both_dimensions() {
+    use crate::core::objects::{Latex2DShape, Latex3DShape, Text3DShape, TextFade, TextShape};
+    for (constructor, dimension) in [
+        ("text_2d", "2d"),
+        ("text_3d", "3d"),
+        ("latex_2d", "2d"),
+        ("latex_3d", "3d"),
+    ] {
+        let source = format!(
+            r#"
+return function(s)
+    local label=s:{constructor}{{id='label',text='aba'}}
+    s:world_{dimension}():add(label)
+    local back=label:morph('aba')
+    s:wait(1)
+    label:morph('aac'):play(2,k.ease.linear)
+    assert(label:get('text')=='aac')
+    s:wait(1)
+    back:play(2,k.ease.linear)
+end
+"#
+        );
+        let scene = load(&source);
+        let label = scene.entity("label").unwrap();
+        for (time, text, active, progress) in [
+            (0.0, "aba", true, 0.0),
+            (1.5, "aba", true, 0.25),
+            (3.0, "aac", false, 1.0),
+            (4.5, "aac", true, 0.25),
+            (6.0, "aba", false, 1.0),
+            (2.0, "aba", true, 0.5),
+        ] {
+            scene.update(time).unwrap();
+            let world = scene.scene().world();
+            let fade = world.get::<&TextFade>(label).unwrap();
+            assert_eq!(fade.active, active, "{constructor} at {time}.");
+            assert!((fade.progress - progress).abs() < 0.001);
+            if active {
+                assert!(fade.morph);
+            }
+            let current = match constructor {
+                "text_2d" => world.get::<&TextShape>(label).unwrap().text.clone(),
+                "text_3d" => world.get::<&Text3DShape>(label).unwrap().text.clone(),
+                "latex_2d" => world.get::<&Latex2DShape>(label).unwrap().text.clone(),
+                _ => world.get::<&Latex3DShape>(label).unwrap().text.clone(),
+            };
+            assert_eq!(current, text);
+        }
+        assert!(
+            try_load(&format!(
+                "return function(s) s:{constructor}{{}}:morph(123) end"
+            ))
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn morph_moves_shared_glyphs_without_crossfading_them() {
+    use crate::core::components::Draw2D;
+    for (constructor, old, new) in [
+        ("text_2d", "I        ", "        I"),
+        ("latex_2d", r"x\qquad\qquad", r"\qquad\qquad x"),
+    ] {
+        let source = format!(
+            "return function(s) local t=s:{constructor}{{id='label',text={},size=32,opacity=0.8}} s:world_2d():add(t) t:morph({}):play(2,k.ease.linear) end",
+            serde_json::to_string(old).unwrap(),
+            serde_json::to_string(new).unwrap(),
+        );
+        let scene = load(&source);
+        let label = scene.entity("label").unwrap();
+        let render = |time| {
+            scene.update(time).unwrap();
+            let world = scene.scene().world();
+            let draw = world.get::<&Draw2D>(label).unwrap();
+            let mut surface = skia_safe::surfaces::raster_n32_premul((640, 160)).unwrap();
+            let canvas = surface.canvas();
+            canvas.clear(skia_safe::colors::TRANSPARENT);
+            canvas.translate((320.0, 80.0));
+            (draw.on_draw)(&world, label, canvas, draw.opacity);
+            let pixels = surface.peek_pixels().unwrap();
+            let mut left = 640;
+            let mut right = 0;
+            let mut alpha = 0;
+            for y in 0..160 {
+                for x in 0..640 {
+                    let value = pixels.get_color((x, y)).a();
+                    if value > 0 {
+                        left = left.min(x);
+                        right = right.max(x);
+                    }
+                    alpha = alpha.max(value);
+                }
+            }
+            ((left + right) as f32 * 0.5, alpha)
+        };
+        let start = render(0.0);
+        let end = render(2.0);
+        let middle = render(1.0);
+        assert!(
+            (middle.0 - (start.0 + end.0) * 0.5).abs() <= 1.0,
+            "{constructor}."
+        );
+        assert!((i32::from(middle.1) - 204).abs() <= 1, "{constructor}.");
+        assert!((start.0 - end.0).abs() > 20.0);
+        assert_eq!(middle, render(1.0));
+        assert_eq!(start, render(0.0));
+    }
+}

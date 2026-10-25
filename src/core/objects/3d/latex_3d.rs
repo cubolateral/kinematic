@@ -47,7 +47,12 @@ impl Latex3DShape {
 
         text.hash(&mut hash);
         part.hash(&mut hash);
-        self.thickness.to_bits().hash(&mut hash);
+        let thickness = if self.size > f32::EPSILON {
+            self.thickness / self.size
+        } else {
+            0.0
+        };
+        thickness.to_bits().hash(&mut hash);
 
         GeometryKey::new::<Latex3DShape>(hash.finish())
     }
@@ -132,6 +137,31 @@ fn draw_latex_object(
     let fade = world.get::<&TextFade>(entity).unwrap();
 
     if let Some(text) = fade.incoming_text(&shape.text) {
+        if fade.morph {
+            use crate::core::objects::{latex_geometry::morph_geometry, text_morph::morph_parts};
+            let thickness = if shape.size > f32::EPSILON {
+                shape.thickness / shape.size
+            } else {
+                0.0
+            };
+            let from = morph_geometry(&shape.text, thickness);
+            let to = morph_geometry(text, thickness);
+            let mut part_material = (*material).clone();
+            for part in morph_parts(&from, &to, fade.progress) {
+                if part.opacity <= 0.0 {
+                    continue;
+                }
+                part_material.opacity = material.opacity * part.opacity;
+                part_material.albedo = part.color(material.albedo);
+                context.render_material(
+                    shape.geometry_key(if part.incoming { text } else { &shape.text }, part.index),
+                    || extruded_path_mesh(&part.part.path, LATEX_TESSELLATION_TOLERANCE),
+                    latex_transform(&shape, transform) * part.transform(),
+                    &part_material,
+                )?;
+            }
+            return Ok(());
+        }
         let incoming = Latex3DShape {
             text: text.to_owned(),
             ..(*shape).clone()
