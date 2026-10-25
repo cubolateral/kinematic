@@ -95,7 +95,7 @@ impl State {
 
         if ui.is_window_hovered()
             && !ui.is_any_item_hovered()
-            && ui.is_mouse_released(MouseButton::Right)
+            && ui.is_mouse_clicked(MouseButton::Right)
         {
             self.context = Some((PathBuf::new(), true));
             context_clicked = true;
@@ -194,7 +194,7 @@ impl State {
         let clicked = ui.is_item_clicked()
             || (ui.is_item_focused() && inputs::active(ui, InputAction::Confirm));
 
-        if ui.is_item_hovered() && ui.is_mouse_released(MouseButton::Right) {
+        if ui.is_item_hovered() && ui.is_mouse_clicked(MouseButton::Right) {
             self.selected = Some(path.clone());
             self.context = Some((path.clone(), entry.directory));
             *context_clicked = true;
@@ -525,6 +525,7 @@ mod tests {
 
             ui.window("Files").build(|| {
                 state.draw(&mut documents, ui, &mut error);
+                assert!(ui.is_popup_open("File context"));
             });
 
             drop(_font);

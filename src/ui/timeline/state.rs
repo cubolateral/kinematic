@@ -142,7 +142,7 @@ impl State {
     }
 
     pub(super) fn press_scene(&mut self, scene: usize) {
-        self.pressed_scene = Some(scene);
+        self.pressed_scene = (self.view_focus != Some(scene)).then_some(scene);
     }
 
     pub(super) fn release_scene(
@@ -309,6 +309,11 @@ mod tests {
 
         state.press_scene(2);
         assert_eq!(state.release_scene(Some(2), [0.0, 0.0]), Some(2));
+
+        state.sync_focus(Some(2), 5.0);
+        state.press_scene(2);
+        assert_eq!(state.release_scene(Some(2), [0.0, 0.0]), None);
+        state.sync_focus(None, 10.0);
 
         state.press_scene(2);
         assert_eq!(state.release_scene(Some(2), [10.0, 0.0]), None);

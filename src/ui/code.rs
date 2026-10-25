@@ -245,11 +245,62 @@ impl Tab {
         settings: &Settings,
         font_size: f32,
         bold_font: Option<dear_imgui_rs::FontId>,
-        focused: bool,
+        mut focused: bool,
         ui: &dear_imgui_rs::Ui,
         footer_height: f32,
         output_error: &mut Option<String>,
-    ) {
+    ) -> bool {
+        let available = ui.content_region_avail();
+        let height = (available[1] - footer_height).max(1.0);
+        let origin = ui.cursor_screen_pos();
+        let mouse = ui.io().mouse_pos();
+        let mouse_on_source = ui.is_window_hovered_with_flags(
+            dear_imgui_rs::WindowHoveredFlags::ROOT_AND_CHILD_WINDOWS,
+        ) && (0..2).all(|axis| {
+            mouse[axis] >= origin[axis]
+                && mouse[axis] <= origin[axis] + [available[0], height][axis]
+        });
+        let mouse_on_assistance = self
+            .completions
+            .position
+            .filter(|_| !self.completions.items.is_empty())
+            .is_some_and(|cursor| {
+                self.completions
+                    .contains_mouse(ui, self.cursor_popup_position(origin, cursor))
+            })
+            || self
+                .documentation_popup
+                .as_ref()
+                .is_some_and(|popup| popup.contains(mouse));
+
+        if !ui.is_any_item_active()
+            && ![
+                dear_imgui_rs::MouseButton::Left,
+                dear_imgui_rs::MouseButton::Right,
+                dear_imgui_rs::MouseButton::Middle,
+            ]
+            .into_iter()
+            .any(|button| ui.is_mouse_down(button))
+            && !ui.is_popup_open_with_flags("", dear_imgui_rs::PopupQueryFlags::ANY_POPUP)
+        {
+            if mouse_on_source {
+                self.editor.focus();
+                focused = true;
+            } else if focused
+                && !mouse_on_assistance
+                && ui.is_window_hovered_with_flags(dear_imgui_rs::WindowHoveredFlags::ANY_WINDOW)
+            {
+                // ImGui exposes the hovered window only through its internal API.
+                unsafe {
+                    let hovered = (*dear_imgui_rs::sys::igGetCurrentContext()).HoveredWindow;
+                    if !hovered.is_null() {
+                        dear_imgui_rs::sys::igSetWindowFocus_Str((*hovered).Name);
+                    }
+                }
+                focused = false;
+            }
+        }
+
         if focused && inputs::active(ui, InputAction::Find) {
             self.editor.open_find_replace();
         }
@@ -266,9 +317,6 @@ impl Tab {
         }
 
         let _font = ui.push_font_with_size(bold_font, font_size);
-        let available = ui.content_region_avail();
-        let height = (available[1] - footer_height).max(1.0);
-        let origin = ui.cursor_screen_pos();
         let signature_active = self.signature_position.is_some();
         let before = self.editor.main_cursor_position();
         let selection = self.editor.main_cursor_selection();
@@ -394,7 +442,8 @@ impl Tab {
         let popup_position = completion_popup_position
             .unwrap_or_else(|| self.cursor_popup_position(origin, popup_cursor));
 
-        if (completion_key.is_some() || mouse_on_completion)
+        if (completion_key.is_some()
+            || (mouse_on_completion && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)))
             && self.editor.main_cursor_position() != completion_cursor
         {
             let _ = self.editor.set_cursor(completion_cursor);
@@ -484,7 +533,7 @@ impl Tab {
                     if over_popup || hovered == self.hover_candidate.map(|(position, _)| position) {
                         popup.last_hover = ui.time();
                     } else if hovered.is_some() || ui.time() - popup.last_hover > 0.25 {
-                        if popup.focused {
+                        if popup.focused && editor_hovered {
                             ui.set_window_focus(Some(WINDOW_NAME));
                             self.editor.focus();
                         }
@@ -720,6 +769,8 @@ impl Tab {
 
             Err(error) => *output_error = Some(error.to_string()),
         }
+
+        ui.is_window_focused_with_flags(dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS)
     }
 }
 #[derive(Default)]
@@ -1328,7 +1379,7 @@ impl State {
                                 self.focused = true;
                             }
 
-                            tab.draw(
+                            self.focused = tab.draw(
                                 documents,
                                 &path,
                                 settings,
@@ -1683,6 +1734,27 @@ mod tests {
 
         assert!(documents.open[a].text.contains("xy"));
         assert_eq!(documents.open[b].text, "local b = 2");
+
+        let edited = documents.open[a].text.clone();
+        context.io_mut().add_mouse_pos_event([100.0, 500.0]);
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        assert!(!state.focused);
+        context.io_mut().add_input_character('!');
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        assert_eq!(documents.open[a].text, edited);
+
+        context.io_mut().add_mouse_pos_event([600.0, 300.0]);
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        assert!(state.focused);
+        context.io_mut().add_input_character('w');
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        assert_eq!(documents.open[a].text, edited.replacen("xy", "xyw", 1));
+        context.io_mut().add_mouse_pos_event([-100.0, -100.0]);
+
         documents.open(b).unwrap();
 
         state.focus_requested = true;
@@ -2234,6 +2306,46 @@ mod tests {
             }
 
             assert_eq!(documents.open[b].text, expected);
+        }
+
+        documents.edit(b, "ball.".into());
+        state.prepare(&context, Some(&documents), &settings);
+        state
+            .tabs
+            .get_mut(b)
+            .unwrap()
+            .editor
+            .set_cursor(Position::new(0, 5))
+            .unwrap();
+        state.focus_requested = true;
+        context.io_mut().add_mouse_pos_event([-100.0, -100.0]);
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        state.tabs.get_mut(b).unwrap().completions.receive(
+            &serde_json::json!([{"label":"radius"}]),
+            Position::new(0, 5),
+        );
+        for _ in 0..3 {
+            let ui = context.frame();
+            state.draw(&mut documents, &settings, ui);
+            ui.window("Suggestions##Code")
+                .build(|| suggestion_position = ui.window_pos());
+            context.end_frame();
+        }
+        context
+            .io_mut()
+            .add_mouse_pos_event([suggestion_position[0] + 30.0, suggestion_position[1] + 38.0]);
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        for (character, expected) in [('r', "ball.r"), ('a', "ball.ra"), ('ç', "ball.raç")] {
+            context.io_mut().add_input_character(character);
+            state.draw(&mut documents, &settings, context.frame());
+            context.end_frame();
+            assert_eq!(documents.open[b].text, expected);
+            assert_eq!(
+                state.tabs[b].editor.main_cursor_position().column,
+                expected.chars().count()
+            );
         }
 
         drop(state);

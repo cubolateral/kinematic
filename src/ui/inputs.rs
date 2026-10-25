@@ -55,6 +55,8 @@ pub(super) enum Action {
     SelectLine,
     NextOccurrence,
     AllOccurrences,
+    MoveLineUp,
+    MoveLineDown,
     DuplicateUp,
     DuplicateDown,
     DeleteWordLeft,
@@ -436,6 +438,20 @@ impl Default for InputMap {
                 Key::X,
                 KeyMods::CTRL,
             ),
+            (
+                MoveLineUp,
+                "Move lines up",
+                "Alt + Up",
+                Key::UpArrow,
+                KeyMods::ALT,
+            ),
+            (
+                MoveLineDown,
+                "Move lines down",
+                "Alt + Down",
+                Key::DownArrow,
+                KeyMods::ALT,
+            ),
             (Replace, "Replace", "Ctrl + H", Key::H, KeyMods::CTRL),
             (SelectLine, "Select line", "Ctrl + L", Key::L, KeyMods::CTRL),
             (
@@ -670,13 +686,6 @@ impl Default for InputMap {
             ("Copy selection / line", "Ctrl + C", Key::C, KeyMods::CTRL),
             ("Paste", "Ctrl + V", Key::V, KeyMods::CTRL),
             ("Select all code", "Ctrl + A", Key::A, KeyMods::CTRL),
-            ("Move lines up", "Alt + Up", Key::UpArrow, KeyMods::ALT),
-            (
-                "Move lines down",
-                "Alt + Down",
-                Key::DownArrow,
-                KeyMods::ALT,
-            ),
             (
                 "Delete lines",
                 "Ctrl + Shift + K",

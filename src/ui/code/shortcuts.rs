@@ -50,6 +50,8 @@ impl Tab {
             Cut,
             NextOccurrence,
             AllOccurrences,
+            MoveLineUp,
+            MoveLineDown,
             DuplicateUp,
             DuplicateDown,
             DeleteWordLeft,
@@ -112,6 +114,7 @@ impl Tab {
                         }
                     }
                 }
+                MoveLineUp | MoveLineDown => move_lines(&mut self.editor, action == MoveLineDown)?,
                 DuplicateUp | DuplicateDown => {
                     duplicate_lines(&mut self.editor, action == DuplicateDown)?
                 }
@@ -333,6 +336,65 @@ fn line_end(editor: &TextEditor, line: usize) -> CteResult<Position> {
     } else {
         Position::new(line, editor.line_text(line)?.chars().count())
     })
+}
+
+fn move_lines(editor: &mut TextEditor, down: bool) -> CteResult<()> {
+    if editor.cursor_count() > 1 {
+        // shortcut: Multiple cursors use CTE until its cursor API supports restoring selections.
+        if down {
+            editor.move_lines_down();
+        } else {
+            editor.move_lines_up();
+        }
+        return Ok(());
+    }
+
+    let selection = editor.main_cursor_selection();
+    let first = selection.start.line;
+    let last = if selection.end.column == 0 && selection.end.line > first {
+        selection.end.line - 1
+    } else {
+        selection.end.line
+    };
+
+    if (!down && first == 0) || (down && last + 1 == editor.line_count()) {
+        return Ok(());
+    }
+
+    let start = if down { first } else { first - 1 };
+    let end = if down { last + 1 } else { last };
+    let mut lines = (start..=end)
+        .map(|line| editor.line_text(line))
+        .collect::<CteResult<Vec<_>>>()?;
+    let range = Selection::new(
+        Position::new(start, 0),
+        Position::new(end, lines.last().unwrap().chars().count()),
+    );
+
+    if down {
+        lines.rotate_right(1);
+    } else {
+        lines.rotate_left(1);
+    }
+
+    editor.replace_section(range, &lines.join("\n"))?;
+
+    let shifted = |position: Position| {
+        Position::new(
+            if down {
+                position.line + 1
+            } else {
+                position.line - 1
+            },
+            position.column,
+        )
+    };
+    let last_line = editor.line_count() - 1;
+    let end = Position::new(last_line, editor.line_text(last_line)?.chars().count());
+    editor.select_region(Selection::new(
+        shifted(selection.start).min(end),
+        shifted(selection.end).min(end),
+    ))
 }
 
 fn duplicate_lines(editor: &mut TextEditor, down: bool) -> CteResult<()> {
@@ -745,6 +807,56 @@ mod tests {
     use crate::ui::code::{Documents, Position, Settings, State};
     use dear_imgui_cte::Selection;
     use dear_imgui_rs::Key;
+
+    #[test]
+    fn moving_lines_preserves_zero_columns_blank_lines_selections_and_undo() {
+        let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
+        let context = dear_imgui_rs::Context::create();
+        let mut editor = dear_imgui_cte::TextEditor::create(&context);
+
+        for (text, start, end, down, expected, target) in [
+            ("alpha\nbeta", (0, 0), (0, 0), true, "beta\nalpha", (1, 0)),
+            ("alpha\nbeta", (1, 0), (1, 0), false, "beta\nalpha", (0, 0)),
+            ("alpha\nbeta", (1, 2), (1, 2), false, "beta\nalpha", (0, 2)),
+            (
+                "alpha\n\nbeta",
+                (1, 0),
+                (1, 0),
+                true,
+                "alpha\nbeta\n",
+                (2, 0),
+            ),
+            ("alpha\nbeta", (0, 0), (1, 0), true, "beta\nalpha", (1, 0)),
+            ("a\nb\nc", (0, 0), (1, 1), true, "c\na\nb", (1, 0)),
+            ("a\nb\nc", (1, 0), (2, 1), false, "b\nc\na", (0, 0)),
+            ("ação\nbeta\n", (0, 4), (0, 4), true, "beta\nação\n", (1, 4)),
+        ] {
+            editor.set_text(text).unwrap();
+            editor
+                .select_region(Selection::new(
+                    Position::new(start.0, start.1),
+                    Position::new(end.0, end.1),
+                ))
+                .unwrap();
+            super::move_lines(&mut editor, down).unwrap();
+            assert_eq!(editor.text().unwrap(), expected);
+            assert_eq!(
+                editor.main_cursor_selection().start,
+                Position::new(target.0, target.1)
+            );
+            editor.undo();
+            assert_eq!(editor.text().unwrap(), text);
+            editor.redo();
+            assert_eq!(editor.text().unwrap(), expected);
+        }
+        for (line, down) in [(0, false), (1, true)] {
+            editor.set_text("alpha\nbeta").unwrap();
+            editor.set_cursor(Position::new(line, 0)).unwrap();
+            super::move_lines(&mut editor, down).unwrap();
+            assert_eq!(editor.text().unwrap(), "alpha\nbeta");
+            assert!(!editor.can_undo());
+        }
+    }
 
     #[test]
     fn vscode_overrides_edit_once_and_preserve_undo_and_focus() {
