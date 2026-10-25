@@ -380,6 +380,9 @@ mod tests {
             assert!(definitions.contains(&format!("function {name}:fade(text) end\n\n")));
         }
         assert!(!definitions.contains("Scene:native"));
+        for name in ["to", "by", "from"] {
+            assert!(!definitions.contains(&format!("function Animation:{name}(")));
+        }
 
         for name in super::super::runtime::OBJECT_METHODS {
             assert!(

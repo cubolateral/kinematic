@@ -9,7 +9,6 @@ pub(super) enum Operation {
     From,
 }
 
-#[derive(Clone)]
 struct Destination {
     property: PropertyHandle,
     start: Option<TrackValue>,
@@ -20,7 +19,6 @@ struct Destination {
     rotation: Option<(glam::Vec3, f32)>,
 }
 
-#[derive(Clone)]
 pub(crate) struct AnimationDefinition {
     pub(super) object: ObjectHandle,
     destinations: Vec<Destination>,
@@ -196,32 +194,27 @@ fn pair(value: Value) -> Result<(Value, Value)> {
 }
 
 impl AnimationDefinition {
-    pub(super) fn new(object: ObjectHandle) -> Self {
+    fn new(object: ObjectHandle) -> Self {
         Self {
             object,
             destinations: Vec::new(),
         }
     }
 
-    pub(super) fn append(&self, lua: &Lua, table: Table, operation: Operation) -> Result<Self> {
-        self.object.runtime()?.construction()?;
+    pub(super) fn fields(
+        lua: &Lua,
+        object: ObjectHandle,
+        table: Table,
+        operation: Operation,
+    ) -> Result<Self> {
+        object.runtime()?.construction()?;
 
-        let mut result = self.clone();
+        let mut result = Self::new(object);
 
-        for (property, value) in properties(&self.object, table, false)? {
+        for (property, value) in properties(&result.object, table, false)? {
             let mask = property
                 .channel
                 .map_or((1 << property.value()?.channels()) - 1, |c| 1 << c);
-
-            if result
-                .destinations
-                .iter()
-                .any(|d| d.property.target.same_field(&property.target) && d.mask & mask != 0)
-            {
-                return Err(mlua::Error::runtime(
-                    "Overlapping destinations in the same tween.",
-                ));
-            }
 
             let (start, mut finish) = if operation == Operation::From {
                 let (start, finish) = pair(value)?;
@@ -537,23 +530,6 @@ impl AnimationDefinition {
 
 impl UserData for AnimationDefinition {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        for (name, op) in [
-            ("to", Operation::To),
-            ("by", Operation::By),
-            ("from", Operation::From),
-        ] {
-            methods.add_function(
-                name,
-                move |lua, (this, table): (mlua::AnyUserData, Table)| {
-                    let appended = this.borrow::<Self>()?.append(lua, table, op)?;
-
-                    *this.borrow_mut::<Self>()? = appended;
-
-                    Ok(this)
-                },
-            );
-        }
-
         methods.add_method(
             "play",
             |_, this, (seconds, ease): (Option<f32>, Option<String>)| this.play(seconds, ease),

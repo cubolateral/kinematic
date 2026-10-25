@@ -3,27 +3,9 @@
 --- Vector, color, quaternion, or quad value.
 ---@alias Kinematic.Value Kinematic.Vec2|Kinematic.Vec3|Kinematic.Color|Kinematic.Quaternion|Kinematic.Quad
 
---- Reusable property destinations. Preparing a definition does not execute it; use :play.
+--- Reusable animation exposing only :play. Preparing it leaves the timeline unchanged.
 ---@class Kinematic.Animation
 local Animation = {}
-
---- Adds absolute destinations to this animation definition.
---- Accepts complete values or partial channels; overlapping destinations are errors. Call :play to schedule all destinations together.
----@param fields table
----@return Kinematic.Animation
-function Animation:to(fields) end
-
---- Adds relative increments to this animation definition.
---- Each :play applies the increments again from the values at its own scheduled start.
----@param fields table
----@return Kinematic.Animation
-function Animation:by(fields) end
-
---- Adds explicit start and finish pairs to this animation definition.
---- Each property or channel must contain exactly two compatible endpoints.
----@param fields table
----@return Kinematic.Animation
-function Animation:from(fields) end
 
 --- Schedules an independent execution at the current scene time.
 --- Duration is in seconds and defaults to zero for an instantaneous change. Easing defaults to cubic_in_out; use k.ease for named curves.

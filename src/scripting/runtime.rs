@@ -1055,9 +1055,13 @@ impl UserData for SceneHandle {
 
             table.set("view_2d", view == "2d")?;
 
-            super::animation::AnimationDefinition::new(root)
-                .append(lua, table, super::animation::Operation::To)?
-                .play(None, None)
+            super::animation::AnimationDefinition::fields(
+                lua,
+                root,
+                table,
+                super::animation::Operation::To,
+            )?
+            .play(None, None)
         });
 
         methods.add_method("wait", |_, this, seconds: f32| {
@@ -1263,7 +1267,7 @@ impl UserData for ObjectHandle {
             ("from", super::animation::Operation::From),
         ] {
             methods.add_method(name, move |lua, this, table: Table| {
-                super::animation::AnimationDefinition::new(this.clone()).append(lua, table, op)
+                super::animation::AnimationDefinition::fields(lua, this.clone(), table, op)
             });
         }
 

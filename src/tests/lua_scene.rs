@@ -404,8 +404,10 @@ return function(s)
     assert(ball:get('position.x') == -200)
     movement:play(1,k.ease.linear)
     movement:play(1,k.ease.linear)
-    ball:from {position={x={0,200}},radius={16,39},opacity={0,1}}
-        :to {position={y=50}}:play(2,k.ease.linear)
+    s:all(function()
+        ball:from {position={x={0,200}},radius={16,39},opacity={0,1}}:play(2,k.ease.linear)
+        ball:to {position={y=50}}:play(2,k.ease.linear)
+    end)
 end
 "#,
     );
@@ -467,9 +469,7 @@ fn omitted_channels_do_not_create_tracks_and_to_keeps_its_absolute_destination()
 return function(s)
     local ball=s:circle{id='ball',position={y=12}}
     s:world_2d():add(ball)
-    local destination=ball:to{position={x=10}}
-    local same=destination:to{radius=24}
-    assert(rawequal(same,destination))
+    local destination=ball:to{position={x=10},radius=24}
     destination:play(1,k.ease.linear)
     ball:by{position={x=20}}:play(1)
     destination:play(1,k.ease.linear)
@@ -515,6 +515,30 @@ end
 }
 
 #[test]
+fn animation_definitions_only_expose_play() {
+    load(
+        r#"
+return function(s)
+    local ball=s:circle{}
+    local label=s:text_2d{}
+    local phase=s:track(0)
+    local animations={
+        ball:to{radius=24}, ball:by{radius=2}, ball:from{radius={16,24}},
+        ball.radius:to(24), ball.radius:by(2), ball.radius:from({16,24}),
+        phase:to(1), label:morph('New'), label:fade('New'), ball:reset(),
+    }
+    for _,animation in ipairs(animations) do
+        assert(type(animation.play)=='function')
+        for _,name in ipairs({'to','by','from','morph','fade'}) do
+            assert(not pcall(function() animation[name](animation,{}) end))
+        end
+    end
+end
+"#,
+    );
+}
+
+#[test]
 fn malformed_pairs_channels_overlaps_and_limits_are_rejected() {
     for declaration in [
         "ball:from{radius={1}}",
@@ -528,8 +552,6 @@ fn malformed_pairs_channels_overlaps_and_limits_are_rejected() {
         "ball:to{radius=-1}",
         "ball:to{opacity=2}",
         "ball:to{position=k.vec2(1,2),['position.x']=3}",
-        "ball:from{position={x={0,10}}}:to{position={x=20}}",
-        "ball:to{position={x=20}}:by{position=k.vec2(1,2)}",
         "ball:by{rotation=k.quat(0,0,0,1)}",
     ] {
         let source = format!("return function(s) local ball=s:circle{{}}; {declaration} end");
@@ -915,7 +937,10 @@ return function(s)
         id='mesh',shader=k.mesh_shader{fragment='uniform float pulse;out vec4 outColor;void main(){outColor=vec4(pulse);}'},uniforms={pulse=0},
     })
     s:world_3d():add(mesh)
-    mesh:from{uniforms={pulse={0,6}}}:to{pulse=10,position={x=2}}:play(3,k.ease.linear)
+    s:all(function()
+        mesh:from{uniforms={pulse={0,6}}}:play(3,k.ease.linear)
+        mesh:to{pulse=10,position={x=2}}:play(3,k.ease.linear)
+    end)
     local bounds=mesh:bounds()
     assert(bounds.width==0)
 end

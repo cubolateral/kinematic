@@ -129,22 +129,26 @@ colors use `r/g/b/a`, and quads use `a/b/c/d`.
 local movement = ball:by {position={x=100}}
 movement:play(1)
 movement:play(1)
-ball:from {opacity={0,1},position={x={-200,200}}}
-    :to {position={y=50}}:by {radius=10}:play(2,k.ease.cubic_out)
+s:all(function()
+    ball:from {opacity={0,1},position={x={-200,200}}}:play(2,k.ease.cubic_out)
+    ball:to {position={y=50}}:play(2,k.ease.cubic_out)
+    ball:by {radius=10}:play(2,k.ease.cubic_out)
+end)
 ```
 
 `to` declares absolute destinations; `by` declares numeric increments; `from`
 uses exactly two endpoints for each property or channel. Complete pairs such as
 `position={k.vec2(0,0),k.vec2(100,50)}` are supported. Omitted channels are not
-animated. Overlapping declarations within a table or between chained calls are
-errors. Property names, types and limits are validated.
+animated. Overlapping declarations within a table are errors. Property names,
+types and limits are validated.
 
 Preparing a definition leaves the object and timeline unchanged. Each `play`
 schedules an independent execution; implicit starts are resolved at its timeline
 position. Reusing `to` repeats its absolute destination, while reusing `by`
 applies the increment again. `play()` and `play(0)` are instantaneous;
 `play(seconds,easing)` uses the given duration and optional native easing.
-All chained destinations share that execution's duration and easing.
+Animation definitions expose only `play`. To combine operations, schedule their
+executions inside `s:all(...)`. Each execution has its own duration and easing.
 
 Use `object:get("position")` for reading and `object:prop("position.x")` for a
 property handle, including names that collide with methods. Handles expose

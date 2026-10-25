@@ -562,6 +562,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             ))),
         )?;
 
-        AnimationDefinition::new(this.clone()).append(lua, fields, super::animation::Operation::To)
+        AnimationDefinition::fields(lua, this.clone(), fields, super::animation::Operation::To)
     });
 }
