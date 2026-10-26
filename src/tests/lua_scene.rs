@@ -1163,3 +1163,195 @@ end
         .unwrap();
     assert_eq!(inactive.lifetime, [3.0, f32::INFINITY]);
 }
+
+#[test]
+fn sound_resources_schedule_without_advancing_or_mutating_defaults() {
+    let scene = load(
+        r#"
+return function(s)
+    local unused=s:sound{preset='whoosh'}
+    local boink=s:sound{preset='boink',gain=0.2}
+    boink:play()
+    boink:play{frequency=600,gain=0.15}
+    s:wait(0.5)
+    boink:play()
+    s:all(function(s) s:wait(1); boink:play() end)
+    s:wait(0.5)
+end
+"#,
+    );
+    assert_eq!(scene.duration(), 2.0);
+    let audio = scene.scene().audio.borrow();
+    assert_eq!(
+        audio
+            .scheduled
+            .iter()
+            .map(|event| event.time)
+            .collect::<Vec<_>>(),
+        [0.0, 0.0, 0.5, 0.5]
+    );
+    assert_eq!(audio.scheduled[0].samples, audio.scheduled[2].samples);
+    assert_ne!(audio.scheduled[0].samples, audio.scheduled[1].samples);
+}
+
+#[test]
+fn simulation_sounds_survive_seek_checkpoints_and_reload_without_duplicates() {
+    let script = r#"
+return function(s)
+    local hit=s:sound{preset='click'}
+    local simulation=k.object{state={n=0},inputs={},update=function(state,frame,inputs)
+        state.n=state.n+1
+        if frame.index%30==0 then
+            inputs.hit:play()
+            inputs.hit:play{pan=0.5}
+        end
+    end}
+    local object=s:object(simulation,{id='simulation'})
+    object:inputs{hit=hit}
+    s:world_2d():add(object)
+    s:wait(5)
+end
+"#;
+    let mut scene = load(script);
+    scene.update(4.5).unwrap();
+    let mix = |scene: &LuaScene| {
+        let mut output = vec![[0.0; 2]; 240_000];
+        scene.scene().audio.borrow().mix(0.0, 0, &mut output);
+        output
+    };
+    let expected = mix(&scene);
+    let event_count = |scene: &LuaScene| {
+        scene
+            .scene()
+            .audio
+            .borrow()
+            .steps
+            .values()
+            .map(Vec::len)
+            .sum::<usize>()
+    };
+    assert_eq!(event_count(&scene), 20);
+    scene.update(0.1).unwrap();
+    scene.update(4.5).unwrap();
+    assert_eq!(event_count(&scene), 20);
+    assert_eq!(mix(&scene), expected);
+    scene
+        .reload(sources(&format!("-- Layout change.\n{script}")))
+        .unwrap();
+    assert_eq!(event_count(&scene), 20);
+    assert_eq!(mix(&scene), expected);
+    let candidate = scene.prepare_seek().unwrap();
+    candidate.update(4.5).unwrap();
+    assert_eq!(event_count(&candidate), 20);
+    assert_eq!(mix(&candidate), expected);
+    scene
+        .reload(sources(
+            &script.replace("preset='click'", "preset='impact'"),
+        ))
+        .unwrap();
+    scene.update(4.5).unwrap();
+    assert_eq!(event_count(&scene), 20);
+    assert_ne!(mix(&scene), expected);
+}
+
+#[test]
+fn explicit_simulation_updates_at_the_same_step_keep_each_sound() {
+    let scene = load(
+        r#"
+return function(s)
+    local sound=s:sound{preset='click'}
+    local object=s:object(k.object{inputs={},update=function(state,frame,inputs) inputs.sound:play() end},{auto_update=false})
+    object:inputs{sound=sound}
+    s:world_2d():add(object)
+    object:update(); object:update(); object:checkpoint()
+    s:wait(1)
+end
+"#,
+    );
+    scene.update(0.0).unwrap();
+    assert_eq!(
+        scene
+            .scene()
+            .audio
+            .borrow()
+            .steps
+            .values()
+            .map(Vec::len)
+            .sum::<usize>(),
+        2
+    );
+    scene.update(0.5).unwrap();
+    scene.update(0.0).unwrap();
+    assert_eq!(
+        scene
+            .scene()
+            .audio
+            .borrow()
+            .steps
+            .values()
+            .map(Vec::len)
+            .sum::<usize>(),
+        2
+    );
+}
+
+#[test]
+fn sound_validation_and_failed_simulation_leave_no_partial_events() {
+    for options in [
+        "{preset='missing'}",
+        "{gain=0/0}",
+        "{pan=2}",
+        "{frequency=-1}",
+        "{waveform='square'}",
+        "{attack=10,release=10}",
+        "{typo=1}",
+    ] {
+        assert!(
+            LuaScene::load(
+                ProjectContext::new(".").unwrap(),
+                "intro.lua",
+                sources(&format!("return function(s) s:sound{options} end")),
+                (640, 480),
+                60,
+                (0, 0)
+            )
+            .is_err()
+        );
+    }
+    assert!(LuaScene::load(
+        ProjectContext::new(".").unwrap(), "intro.lua",
+        sources("return function(s) local sound=s:sound{attack=1,decay=1,hold=7,release=1}; for i=1,20 do sound:play() end end"),
+        (640,480),60,(0,0)
+    ).err().unwrap().to_string().contains("sample budget"));
+    let scene = load(
+        r#"
+return function(s)
+    local sound=s:sound{preset='click'}
+    local object=s:object(k.object{inputs={},update=function(state,frame,inputs)
+        inputs.sound:play()
+        if frame.index==10 then error('Failed step.') end
+    end},{})
+    object:inputs{sound=sound}
+    s:world_2d():add(object)
+    s:wait(1)
+end
+"#,
+    );
+    scene.update(0.0).unwrap();
+    let count = scene.scene().audio.borrow().steps.len();
+    assert!(scene.update(0.5).is_err());
+    assert_eq!(scene.scene().audio.borrow().steps.len(), count);
+}
+
+#[test]
+fn sound_tails_extend_the_scene_without_advancing_the_animator() {
+    assert_eq!(load("return function(s) s:sound{} end").duration(), 0.0);
+    let scene = load(
+        "return function(s) local tone=s:sound{waveform='triangle',frequency=220,attack=0.01,decay=0.02,hold=0.03,release=0.04}; tone:play(); tone:play(); s:wait(0.01); tone:play() end",
+    );
+    let audio = scene.scene().audio.borrow();
+    assert_eq!(audio.scheduled[0].time, 0.0);
+    assert_eq!(audio.scheduled[1].time, 0.0);
+    assert!((audio.scheduled[2].time - 0.01).abs() < 1e-6);
+    assert!((scene.duration() - 0.11).abs() < 0.0001);
+}

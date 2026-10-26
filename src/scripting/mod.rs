@@ -32,3 +32,5 @@ mod animation;
 mod methods;
 
 mod code;
+
+mod audio;

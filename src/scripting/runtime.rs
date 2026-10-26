@@ -23,6 +23,8 @@ struct Definition {
 }
 
 pub(crate) struct Runtime {
+    pub(super) audio: crate::core::audio::SceneAudio,
+    pub(super) audio_step: RefCell<Option<super::audio::AudioStep>>,
     pub(super) lua: Lua,
     pub(super) context: ProjectContext,
     pub(super) sources: Sources,
@@ -174,6 +176,8 @@ impl LuaScene {
         }
 
         let runtime = Rc::new(Runtime {
+            audio: scene.audio.clone(),
+            audio_step: RefCell::new(None),
             fps,
             id: extension::next_runtime(),
             callbacks: RefCell::new(BTreeMap::new()),
@@ -335,6 +339,7 @@ impl LuaScene {
             .iter()
             .map(|(entity, state)| (entity, state.clone()))
             .collect::<Vec<_>>();
+        let saved_audio = self.runtime.audio.borrow().clone();
         let previous_time = self.scene.time();
         let signals = self.scene.animator_handle().signals();
         let overrides = signals.checkpoint();
@@ -366,6 +371,7 @@ impl LuaScene {
             });
 
         if let Err(error) = result {
+            *self.runtime.audio.borrow_mut() = saved_audio;
             let mut world = self.scene.world_mut();
 
             signals.restore_overrides(&world);
@@ -596,6 +602,12 @@ impl LuaScene {
                         .map_err(mlua::Error::external)?;
 
                     next.copy_history(&simulation);
+                    candidate
+                        .runtime
+                        .audio
+                        .borrow_mut()
+                        .copy_steps(&self.runtime.audio.borrow(), *entity)
+                        .map_err(mlua::Error::runtime)?;
 
                     next.map_states::<extension::ScriptState>(|state| {
                         state.runtime = candidate.runtime.id
@@ -920,6 +932,9 @@ impl SceneHandle {
 
 impl UserData for SceneHandle {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("sound", |_, this, options: Table| {
+            super::audio::create(this.runtime()?, options)
+        });
         methods.add_method(
             "track",
             |lua, this, (initial, id): (Value, Option<String>)| {
@@ -1897,11 +1912,16 @@ impl Runtime {
             .collect::<Vec<_>>();
 
         Some(format!(
-            "{}|{}|{inputs:?}|{states:?}|{:?}|{:?}",
+            "{}|{}|{inputs:?}|{states:?}|{:?}|{:?}|{:?}",
             self.fps,
             callback.simulation_key,
             node.as_ref().map(|n| n.lifetime),
-            self.operation_keys.borrow().get(&entity)
+            self.operation_keys.borrow().get(&entity),
+            callback
+                .sounds
+                .iter()
+                .map(|(name, sound)| (name, &sound.sound))
+                .collect::<Vec<_>>()
         ))
     }
 }

@@ -1686,6 +1686,73 @@ impl Editor {
             .map_or(Color::TRANSPARENT.rgba(), |settings| settings.clear.rgba())
     }
 
+    pub(crate) fn audio_transport(&self) -> (bool, u64, u64) {
+        (
+            self.timeline.is_playing()
+                && !self.is_exporting
+                && self.pending_lua.is_none()
+                && self.render_error.is_none(),
+            self.timeline.transport_revision,
+            (self.timeline.time() as f64 * crate::core::audio::SAMPLE_RATE as f64).round() as u64,
+        )
+    }
+
+    pub(crate) fn mix_audio(&self, start: u64, end: u64) -> Vec<f32> {
+        let mut samples = vec![[0.0; 2]; end.saturating_sub(start) as usize];
+        for (index, scene) in self.scenes.iter().enumerate() {
+            if self.focused_scene.is_some_and(|focused| focused != index) {
+                continue;
+            }
+            let offset = if self.focused_scene.is_some() {
+                0.0
+            } else {
+                scene.start as f64
+            };
+            let scene_start = (offset * crate::core::audio::SAMPLE_RATE as f64).round() as u64;
+            let scene_end = ((offset + (scene.end - scene.start) as f64)
+                * crate::core::audio::SAMPLE_RATE as f64)
+                .round() as u64;
+            let from = start.max(scene_start);
+            let to = end.min(scene_end);
+            if from < to {
+                scene.scene.audio.borrow().mix(
+                    offset,
+                    from,
+                    &mut samples[(from - start) as usize..(to - start) as usize],
+                );
+            }
+        }
+        crate::core::audio::limit(samples)
+    }
+
+    fn export_audio(&mut self) -> Result<(), String> {
+        let Some((start, end)) = self.renderer.audio_range() else {
+            return Ok(());
+        };
+        for (index, scene) in self.scenes.iter().enumerate() {
+            if self.focused_scene.is_some_and(|focused| focused != index) {
+                continue;
+            }
+            let offset = if self.focused_scene.is_some() {
+                0.0
+            } else {
+                scene.start as f64
+            };
+            let local_start = start as f64 / crate::core::audio::SAMPLE_RATE as f64 - offset;
+            let local_end = end as f64 / crate::core::audio::SAMPLE_RATE as f64 - offset;
+            let duration = scene.end - scene.start;
+            if local_end > 0.0 && local_start < duration as f64 {
+                scene
+                    .scene
+                    .evaluate(local_end.min(duration as f64) as f32)?;
+            }
+        }
+        self.evaluated = None;
+        self.renderer
+            .write_audio(&self.mix_audio(start, end))
+            .map_err(|e| e.to_string())
+    }
+
     pub fn timeline_mut(&mut self) -> &mut Timeline {
         &mut self.timeline
     }
@@ -1758,6 +1825,13 @@ impl Editor {
     }
 
     fn process_export_frame(&mut self, gl: &glow::Context) {
+        if let Err(error) = self.export_audio() {
+            self.renderer
+                .fail(&crate::renderer::RenderError::InvalidProject(error));
+            self.pending_export_time = None;
+            self.is_exporting = false;
+            return;
+        }
         let result = self.renderer.process_frame(
             gl,
             self.preview.framebuffer(),

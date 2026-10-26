@@ -68,15 +68,16 @@ the project settings. The existing project format remains unchanged.
 
 Lua supports 2D and 3D objects, hierarchical canvases and projections, property
 tweens, sequential/parallel scheduling, loops, snapshots, reactive signals,
-deterministic random values, custom drawing, shaders and seekable simulations.
+deterministic random values, custom drawing, shaders, seekable simulations and
+procedural sound effects shared by SDL preview and MP4 export.
 Scene Tree, Timeline and Preview share selection. Inspector edits for explicit
 object IDs persist separately from scripts. Code diagnostics and failed reloads
 preserve the last valid preview. Export excludes editor overlays.
 
 See [Lua projects and API](docs/lua.md) for the full workflow, scene API,
 custom objects, shader contracts, persistence and optional Lua Language Server.
-Runnable projects are in [examples/lua](examples/lua): 2D, 3D and simulation,
-including Game of Life.
+Runnable projects are in [examples/lua](examples/lua): 2D, 3D, simulation
+(including Game of Life), and [procedural audio](examples/lua/audio).
 
 ## Storage
 

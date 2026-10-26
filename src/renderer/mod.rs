@@ -108,6 +108,23 @@ impl Renderer {
         }
     }
 
+    pub(crate) fn audio_range(&self) -> Option<(u64, u64)> {
+        self.export.as_ref().map(|export| {
+            let rate = u64::from(crate::core::audio::SAMPLE_RATE);
+            let fps = u64::from(export.fps);
+            let sample = |frame| (frame * rate + fps / 2) / fps;
+            (sample(export.frame_index), sample(export.frame_index + 1))
+        })
+    }
+
+    pub(crate) fn write_audio(&mut self, samples: &[f32]) -> Result<(), RenderError> {
+        self.export
+            .as_mut()
+            .expect("Export must be active.")
+            .encoder
+            .write_audio(samples)
+    }
+
     pub fn process_frame(
         &mut self,
         gl: &glow::Context,

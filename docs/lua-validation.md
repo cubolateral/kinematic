@@ -1,5 +1,33 @@
 # Lua validation
 
+## Procedural audio validation
+
+Validated on October 26, 2026:
+
+- `cargo fmt --check` and `cargo check --workspace` passed.
+- The procedural audio regressions passed: silent resources, per-occurrence
+  overrides, scheduling without animator advancement, sound tails, deterministic
+  chunked mixing, multiple updates per step, checkpoints, reload and failure
+  rollback. Invalid parameters and the sample budget are checked.
+- `cargo test --workspace` reported 370 passing binary tests, five failures and
+  six ignored tests. An isolated checkout of the original revision reproduced
+  the same five failures: two syntax-coloring tests, a settings default assertion,
+  and two LuaLS initialization timeouts. All four macro tests passed separately.
+- The optional SDL audio test passed with `SDL_AUDIODRIVER=dummy`. The FFmpeg
+  test passed, checking AAC timing against the shared PCM synthesis and temporary
+  file cleanup. The native graphics/export regression passed with
+  `SDL_VIDEODRIVER=offscreen`.
+- `--check examples/lua/audio` passed. A temporary copy exported through the
+  actual application at 160 × 90, 60 FPS: 456 video frames and 7.6 seconds of
+  stereo 48 kHz AAC, matching the video duration. Decoding confirmed audio for
+  all presets, the custom sweep and simulated bounces, separated by silence.
+- A second temporary project exported two consecutive scenes. Both tracks lasted
+  1.25 seconds, with sound at 0, 0.5, 0.75 and 1 second and silence between events.
+
+Physical audio-device latency and listening quality were not tested. Preview
+latency includes an editor frame and the SDL device buffer. Windows and macOS
+were not tested. Temporary exports and caches were kept outside the repository.
+
 ## Executable migration validation
 
 Validated on October 12, 2026:

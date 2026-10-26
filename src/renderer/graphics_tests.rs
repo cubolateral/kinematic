@@ -480,6 +480,7 @@ fn verify_export(gl: &glow::Context, target: &Target, preview: &[u8]) {
         fps: 30,
     });
 
+    exporter.write_audio(&vec![0.0; 3200]).unwrap();
     assert!(matches!(
         exporter
             .process_frame(gl, target.framebuffer(), target.size)

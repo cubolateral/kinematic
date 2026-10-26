@@ -1,6 +1,7 @@
 pub(crate) struct Timeline {
     pub is_controlling: bool,
     is_playing: bool,
+    pub(crate) transport_revision: u64,
     loop_enabled: bool,
     previous_time: f32,
     current_time: f32,
@@ -13,6 +14,7 @@ impl Timeline {
         Self {
             is_controlling: false,
             is_playing: false,
+            transport_revision: 0,
             loop_enabled: true,
             previous_time: -1.0, // Start by updating.
             current_time: 0.0,
@@ -25,7 +27,7 @@ impl Timeline {
     /// otherwise, it returns None.
     pub fn update(&mut self, dt: f32) -> Option<f32> {
         if self.is_playing() {
-            self.go_to(self.current_time + dt);
+            self.current_time = (self.current_time + dt).clamp(0.0, self.max_time);
 
             if self.current_time == self.max_time {
                 if self.loop_enabled && self.max_time > 0.0 {
@@ -83,6 +85,7 @@ impl Timeline {
     }
 
     pub fn go_to(&mut self, time: f32) {
+        self.transport_revision = self.transport_revision.wrapping_add(1);
         self.current_time = time.clamp(0.0, self.max_time);
     }
 

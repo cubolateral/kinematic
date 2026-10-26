@@ -54,6 +54,7 @@ pub(super) struct Callbacks {
     pub inputs: Vec<(String, hecs::Entity, TrackTarget, Option<u8>)>,
     pub methods: Option<Table>,
     pub states: Vec<(String, hecs::Entity)>,
+    pub sounds: Vec<(String, super::audio::SoundHandle)>,
     pub simulation_key: String,
     pub visual_key: String,
     pub history_key: Option<String>,
@@ -114,9 +115,21 @@ impl SimulationState for ScriptState {
                 inputs.set(name.as_str(), state.data.value(lua)?)?;
             }
 
+            for (name, sound) in &callbacks.sounds {
+                inputs.set(name.as_str(), sound.clone())?;
+            }
             let state = self.data.value(lua)?;
-            let returned = update.call::<Value>((state.clone(), frame, inputs))?;
-            let next = Snapshot::read(if returned.is_nil() { state } else { returned })?;
+            let next = super::audio::step(
+                &runtime,
+                self.entity,
+                context.frame,
+                context.update_index,
+                context.time,
+                || {
+                    let returned = update.call::<Value>((state.clone(), frame, inputs))?;
+                    Snapshot::read(if returned.is_nil() { state } else { returned })
+                },
+            )?;
 
             self.data = next;
 
@@ -351,6 +364,7 @@ pub(super) fn configure(
         inputs: Vec::new(),
         methods: definition.table.get("methods")?,
         states: Vec::new(),
+        sounds: Vec::new(),
         simulation_key,
         visual_key,
         history_key: None,
@@ -459,11 +473,21 @@ pub(super) fn configure_inputs(handle: &ObjectHandle, inputs: Table) -> Result<(
 
     let mut properties = Vec::new();
     let mut states = Vec::new();
+    let mut sounds = Vec::new();
 
     for pair in inputs.pairs::<String, Value>() {
         let (name, input) = pair?;
 
         if let Value::UserData(value) = &input {
+            if let Ok(sound) = value.borrow::<super::audio::SoundHandle>() {
+                if !Weak::ptr_eq(&handle.runtime, &sound.runtime) {
+                    return Err(mlua::Error::runtime(
+                        "Sounds must belong to the same scene.",
+                    ));
+                }
+                sounds.push((name, sound.clone()));
+                continue;
+            }
             if let Ok(object) = value.borrow::<ObjectHandle>() {
                 object.runtime()?;
 
@@ -486,7 +510,7 @@ pub(super) fn configure_inputs(handle: &ObjectHandle, inputs: Table) -> Result<(
             Value::UserData(v) => v.borrow::<PropertyHandle>()?.clone(),
             _ => {
                 return Err(mlua::Error::runtime(
-                    "Inputs require properties or simulation objects.",
+                    "Inputs require properties, simulation objects, or sounds.",
                 ));
             }
         };
@@ -523,6 +547,8 @@ pub(super) fn configure_inputs(handle: &ObjectHandle, inputs: Table) -> Result<(
 
     callback.inputs = properties;
     callback.states = states;
+    sounds.sort_by(|a, b| a.0.cmp(&b.0));
+    callback.sounds = sounds;
 
     Ok(())
 }

@@ -93,6 +93,39 @@ function Object:signal(callback) end
 ---@class Kinematic.Scene
 local Scene = {}
 
+--- Parameters for the shared procedural synthesizer; times are in seconds and frequencies in Hz.
+---@class Kinematic.SoundOptions
+---@field preset? "boink"|"pluck"|"click"|"impact"|"whoosh" Overridable starting parameters.
+---@field waveform? "sine"|"triangle"|"noise" Default sine.
+---@field frequency? number Initial frequency, 1–20000; default 440.
+---@field end_frequency? number Final frequency of a linear sweep, 1–20000.
+---@field gain? number Volume, 0–1; default 0.2.
+---@field pan? number Stereo pan, -1–1; default 0.
+---@field attack? number Attack time, 0–10; default 0.004.
+---@field decay? number Decay time, 0–10; default 0.08.
+---@field sustain? number Sustain level, 0–1; default 0.3.
+---@field hold? number Time at sustain level, 0–10; default 0.03.
+---@field release? number Release time, 0–10; default 0.15.
+---@field noise? number White noise blend, 0–1; default 0.
+---@field overtone? number Second sine harmonic gain, 0–1; default 0.
+---@field cutoff? number Low-pass cutoff, 20–20000; default 12000.
+---@field seed? integer Deterministic noise seed, 0–4294967295; default 0.
+
+--- Immutable scene-local sound resource.
+---@class Kinematic.Sound
+local Sound = {}
+
+--- Schedules one occurrence without advancing the animator; overrides affect only this occurrence.
+--- In simulation updates, use a declared sound input; the occurrence uses the step time.
+---@param options? Kinematic.SoundOptions
+function Sound:play(options) end
+
+--- Creates a silent resource. The total envelope duration must be 0.001–10 seconds.
+--- Scheduled tails contribute to scene duration without advancing the animator; repeat scopes are rejected.
+---@param options Kinematic.SoundOptions
+---@return Kinematic.Sound
+function Scene:sound(options) end
+
 --- Schedules an instantaneous switch between the built-in 2D and 3D world canvases.
 --- The dimension must be "2d" or "3d".
 ---@param dimension "2d"|"3d"
@@ -304,7 +337,7 @@ function Object:focus_camera(options) end
 
 --- Sets simulation dependencies from own property names, property handles, or other simulation objects.
 --- Dependencies are sampled at each fixed step. Cyclic dependencies are rejected.
----@param inputs table<string,Kinematic.Property|Kinematic.Object|string>
+---@param inputs table<string,Kinematic.Property|Kinematic.Object|Kinematic.Sound|string>
 function Object:inputs(inputs) end
 
 --- Returns an independent copy of the simulation state for inspection.
@@ -378,7 +411,7 @@ function k.component(fields) end
 ---@field dimension? 2|3 Spatial dimension, 2 or 3; defaults to 2.
 ---@field components? Kinematic.Component[] Custom tracked field declarations.
 ---@field state? table Initial state copied independently for each instance.
----@field inputs? table<string,Kinematic.Property|Kinematic.Object|string> Declared simulation dependencies. Omitted inputs use own properties; an empty table declares none.
+---@field inputs? table<string,Kinematic.Property|Kinematic.Object|Kinematic.Sound|string> Declared simulation dependencies. Omitted inputs use own properties; an empty table declares none.
 ---@field update? fun(state:table, frame:Kinematic.Frame, inputs:table) Fixed-step state update callback; external mutable upvalues are rejected.
 ---@field draw? fun(context:Kinematic.Draw2D|Kinematic.Draw3D, properties:table, state:table) Local drawing callback; reads evaluated properties and state.
 ---@field bounds? fun(properties:table, state:table):{x:number,y:number,z?:number,width:number,height:number,depth?:number} Returns local coordinates and dimensions for selection and layout.

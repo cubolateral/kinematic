@@ -371,6 +371,70 @@ advance by exactly `1/fps`; UI/selection overlays never enter output. Runtime or
 drawing errors cancel export and remove the incomplete output through the native
 exporter's failure path.
 
+## Procedural sound
+
+Create a scene-local resource with `s:sound { ... }`. Creation is silent;
+`:play()` schedules an occurrence at the current animator time without advancing
+it. Overrides belong to that occurrence. Scheduled sound tails contribute to the
+scene duration, so a scene containing only sound can play and export.
+
+```lua
+local boink = s:sound { preset = "boink", gain = 0.2 }
+boink:play()
+boink:play { frequency = 600, gain = 0.15 }
+s:wait(0.5)
+boink:play()
+```
+
+`boink`, `pluck`, `click`, `impact`, and `whoosh` select parameters of the same
+synthesizer. Every parameter can be overridden; the preset is optional.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `waveform` | `"sine"` | `"sine"`, `"triangle"`, or deterministic `"noise"`. |
+| `frequency`, `end_frequency` | 440 Hz | Linear frequency sweep over the envelope; 1–20000 Hz. |
+| `gain`, `pan` | 0.2, 0 | Volume 0–1 and constant-power stereo pan -1–1. |
+| `attack`, `decay` | 0.004, 0.08 s | Time to rise to full level and fall to sustain. |
+| `sustain`, `hold`, `release` | 0.3, 0.03 s, 0.15 s | Sustain level 0–1, time held, and fade to zero. |
+| `noise`, `overtone` | 0, 0 | Noise blend 0–1 and second sine harmonic gain 0–1. |
+| `cutoff`, `seed` | 12000 Hz, 0 | One-pole low-pass cutoff 20–20000 Hz and unsigned 32-bit noise seed. |
+
+Scenes allow up to eight million stereo sample frames across occurrences (64 MB
+of PCM, counting shared occurrences separately). Each envelope stage is nonnegative and at most ten seconds; the sum must be
+0.001–10 seconds. Non-finite values and unknown options are rejected. Without a
+sweep, changing `frequency` also changes its endpoint. A preset with a sweep
+retains its endpoint unless `end_frequency` is supplied.
+
+Use sounds as declared simulation inputs, preserving the isolated update
+callback rules:
+
+```lua
+object:inputs { hit = boink }
+-- In the object's update(state, frame, inputs) callback:
+-- inputs.hit:play { gain = 0.15 }
+```
+
+Simulation occurrences use `frame.time`, including multiple explicit updates at
+the same step. Replay replaces occurrences by object, step, and update order;
+checkpoints retain the sound history. Reload preserves history only when its
+simulation dependencies, including sound parameters, still match. Evaluation
+and drawing never start playback. Drawing, signals, and repeat scopes cannot
+schedule sounds. Simulation sounds stay within the declared scene duration;
+use a final wait if their release tails need room.
+
+Preview and export use the same deterministic 48 kHz stereo synthesis, envelope
+edge fades, and soft saturation after mixing. Preview follows playback and clears
+queued audio on pause, seek, loop, or reconstruction. Its latency includes the
+editor frame and the SDL device buffer. Export uses integer sample boundaries,
+writes temporary PCM alongside the existing streamed video, then muxes AAC audio
+with the encoded video without re-encoding it. Temporary files are removed on
+completion or cancellation; export requires space for the temporary video and
+stereo PCM (384 kB/s). Sound tails stop at scene boundaries.
+
+See [`examples/lua/audio`](../examples/lua/audio) for presets, a custom sweep,
+and a simulated bounce. Audio files, continuous voices, reverb, node editing,
+and spatial audio are outside this API.
+
 ## Execution limits
 
 Each scene VM has a 64 MiB memory limit and instruction-hook deadlines. Build/

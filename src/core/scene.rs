@@ -35,6 +35,7 @@ pub(crate) trait SceneRuntime {
 }
 
 pub struct Scene {
+    pub(crate) audio: crate::core::audio::SceneAudio,
     name: String,
     runtime_owner: Option<std::rc::Rc<dyn SceneRuntime>>,
     world: SceneWorld,
@@ -115,6 +116,7 @@ impl Scene {
         }
 
         let mut scene = Self {
+            audio: Default::default(),
             name: name.to_owned(),
             runtime_owner: None,
             world,
@@ -240,6 +242,7 @@ impl Scene {
             invalidate_lifetimes(&active);
         }
 
+        std::mem::swap(&mut self.audio, &mut candidate.audio);
         std::mem::swap(&mut self.animator, &mut candidate.animator);
         std::mem::swap(&mut self.animator_time, &mut candidate.animator_time);
         std::mem::swap(&mut self.scheduled_events, &mut candidate.scheduled_events);
@@ -680,7 +683,17 @@ impl Scene {
     }
 
     pub(crate) fn duration(&self) -> f32 {
-        self.animator.duration()
+        self.audio
+            .borrow()
+            .scheduled
+            .iter()
+            .fold(self.animator.duration(), |duration, event| {
+                duration.max(
+                    (event.time
+                        + event.samples.len() as f64 / crate::core::audio::SAMPLE_RATE as f64)
+                        as f32,
+                )
+            })
     }
 
     pub(crate) fn time(&self) -> f32 {

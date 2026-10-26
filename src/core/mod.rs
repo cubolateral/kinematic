@@ -3,6 +3,7 @@ pub mod objects;
 pub mod types;
 
 mod animator;
+pub(crate) mod audio;
 mod easing;
 mod frame;
 mod project;

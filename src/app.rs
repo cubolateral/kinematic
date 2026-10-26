@@ -250,6 +250,17 @@ impl App {
             }
         }
 
+        let mut audio = if self.export_only {
+            None
+        } else {
+            match crate::audio::AudioPreview::new(&self.sdl) {
+                Ok(audio) => Some(audio),
+                Err(error) => {
+                    eprintln!("Audio preview unavailable: {error}");
+                    None
+                }
+            }
+        };
         let mut events = self.sdl.event_pump().unwrap();
 
         'running: loop {
@@ -267,6 +278,12 @@ impl App {
                 }
             }
 
+            if let Some(preview) = &mut audio {
+                if let Err(error) = preview.update(editor.as_ref()) {
+                    eprintln!("Audio preview failed: {error}");
+                    audio = None;
+                }
+            }
             if let Some(editor) = &mut editor {
                 if let Some(settings) = editor.take_pending_project_settings() {
                     editor.apply_project_settings(settings);
@@ -282,6 +299,12 @@ impl App {
                 }
 
                 editor.update();
+                if let Some(preview) = &mut audio {
+                    if let Err(error) = preview.update(Some(editor)) {
+                        eprintln!("Audio preview failed: {error}");
+                        audio = None;
+                    }
+                }
 
                 editor.apply_pending_lua(
                     &mut self.imgui_renderer,

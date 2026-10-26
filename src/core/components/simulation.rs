@@ -33,6 +33,7 @@ pub trait SimulationState: Clone + Send + Sync + 'static {
 
 /// Values available while advancing one fixed simulation frame.
 pub struct SimulationContext<'a> {
+    pub(crate) update_index: usize,
     world: &'a hecs::World,
     entity: hecs::Entity,
     /// Absolute project time of this simulation step.
@@ -579,6 +580,7 @@ impl Simulation {
                     entity,
                     time: start_time,
                     frame: 0,
+                    update_index: 0,
                     dt,
                 },
             )?;
@@ -607,6 +609,7 @@ impl Simulation {
                     entity,
                     time,
                     frame: self.current_frame,
+                    update_index: 0,
                     dt,
                 },
             )?;
@@ -729,7 +732,7 @@ impl Simulation {
         &mut self,
         operations: Vec<SimulationOperation>,
         auto_update: bool,
-        context: SimulationContext<'_>,
+        mut context: SimulationContext<'_>,
     ) -> Result<(), String> {
         let has_update = operations
             .iter()
@@ -740,7 +743,10 @@ impl Simulation {
 
         for operation in operations {
             match operation {
-                SimulationOperation::Update { .. } => self.current.on_update(&context)?,
+                SimulationOperation::Update { .. } => {
+                    self.current.on_update(&context)?;
+                    context.update_index += 1;
+                }
                 SimulationOperation::Checkpoint { .. } => {}
                 SimulationOperation::Mutation { apply, .. } => {
                     apply(self.current.state_mut())?;
