@@ -32,6 +32,8 @@ ratex-parser = "0.1.14"
 ratex-types = "0.1.14"
 ratex-font = "0.1.14"
 ratex-katex-fonts = "0.1.14"
+syntect = { version = "5.3", default-features = false, features = ["parsing", "yaml-load", "dump-load", "regex-onig"] }
+two-face = "0.5.2"
 
 [workspace]
 members = ["packages/*"]

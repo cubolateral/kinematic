@@ -1,1 +1,1 @@
-(version: 1, name: "Lua 2d", scenes: ["scenes/intro.lua", "scenes/custom.lua", "scenes/composition.lua"], resolution: (1280, 720), fps: 60, margin: (0, 0))
+(version: 1, name: "Lua 2d", scenes: ["scenes/intro.lua", "scenes/custom.lua", "scenes/composition.lua", "scenes/code.lua", "scenes/code_languages.lua"], resolution: (1280, 720), fps: 60, margin: (0, 0))

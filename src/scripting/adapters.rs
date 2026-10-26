@@ -422,43 +422,55 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
         Ok(None)
     });
 
-    m.add_method(
-        "insert",
-        |_, this, (child, index): (mlua::UserDataRef<ObjectHandle>, usize)| {
-            let runtime = this.runtime()?;
+    m.add_method("insert", |lua, this, args: mlua::MultiValue| {
+        let runtime = this.runtime()?;
 
-            runtime.construction()?;
-            child.runtime()?;
+        runtime.construction()?;
 
-            if !Weak::ptr_eq(&this.runtime, &child.runtime) {
-                return Err(mlua::Error::runtime("Objects belong to different scenes."));
+        if runtime
+            .world
+            .borrow()
+            .borrow()
+            .get::<&CodeShape>(this.entity)
+            .is_ok()
+        {
+            return super::code::insert(lua, this, args);
+        }
+
+        let (child, index): (mlua::UserDataRef<ObjectHandle>, usize) =
+            mlua::FromLuaMulti::from_lua_multi(args, lua)?;
+        child.runtime()?;
+
+        if !Weak::ptr_eq(&this.runtime, &child.runtime) {
+            return Err(mlua::Error::runtime("Objects belong to different scenes."));
+        }
+
+        let world = runtime.world.borrow();
+        let len = children(&world.borrow(), this.entity).len();
+
+        if index == 0 || index > len + 1 {
+            return Err(mlua::Error::runtime(
+                "Child index is out of range; positions are one-based.",
+            ));
+        }
+
+        engine(|| {
+            runtime.animator.borrow().assert_finite_scope();
+
+            attach_child(
+                &world,
+                this.entity,
+                child.entity,
+                runtime.animator.borrow().time(),
+            );
+
+            if index <= len {
+                move_child(&world, child.entity, |_, _| index - 1);
             }
+        })?;
 
-            let world = runtime.world.borrow();
-            let len = children(&world.borrow(), this.entity).len();
-
-            if index == 0 || index > len + 1 {
-                return Err(mlua::Error::runtime(
-                    "Child index is out of range; positions are one-based.",
-                ));
-            }
-
-            engine(|| {
-                runtime.animator.borrow().assert_finite_scope();
-
-                attach_child(
-                    &world,
-                    this.entity,
-                    child.entity,
-                    runtime.animator.borrow().time(),
-                );
-
-                if index <= len {
-                    move_child(&world, child.entity, |_, _| index - 1);
-                }
-            })
-        },
-    );
+        Ok(mlua::Value::Nil)
+    });
 
     m.add_method("remove_children", |_, this, ()| {
         let runtime = this.runtime()?;

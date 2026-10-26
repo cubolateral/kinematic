@@ -108,7 +108,9 @@ impl ImageShaders {
                     TrackValue::I32(_) => glow::INT,
                     TrackValue::U32(_) => glow::UNSIGNED_INT,
                     TrackValue::Bool(_) => glow::BOOL,
-                    TrackValue::Enum(_) | TrackValue::String(_) => unreachable!(),
+                    TrackValue::Enum(_) | TrackValue::String(_) | TrackValue::CodeRanges(_) => {
+                        unreachable!()
+                    }
                 };
 
                 validate_uniform_type(&self.gl, program, name, expected)?;
@@ -141,7 +143,9 @@ impl ImageShaders {
                     TrackValue::Bool(value) => {
                         self.gl.uniform_1_i32(Some(&location), i32::from(*value))
                     }
-                    TrackValue::Enum(_) | TrackValue::String(_) => unreachable!(),
+                    TrackValue::Enum(_) | TrackValue::String(_) | TrackValue::CodeRanges(_) => {
+                        unreachable!()
+                    }
                 }
             }
 

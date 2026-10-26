@@ -1435,6 +1435,71 @@ return k.object {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn code_range_annotations_accept_optional_searches_and_nested_lists() {
+        if !executable().is_file()
+            && Command::new(executable())
+                .arg("--version")
+                .output()
+                .is_err()
+        {
+            eprintln!("LuaLS integration unavailable: executable not installed.");
+            return;
+        }
+        let root =
+            std::env::temp_dir().join(format!("kinematic-code-ranges-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("api.lua"), crate::scripting::definitions()).unwrap();
+        let path = root.join("ranges.lua");
+        std::fs::write(
+            &path,
+            r#"---@type Kinematic.Code
+local code
+code:replace(code:find('value'), 'answer'):play(1)
+code:erase(code:find('debug')):play(1)
+code:select({code:find('1'), code:find_all('oi'), code:lines(1)}):play(1)
+code:highlight({code:find('missing'), {code:find_all('oi')}}):play(1)
+code:select(code:word(1, 3, 3)):play(1)
+code:highlight(nil):play(1)
+code:select({}):play(1)
+code:insert({1, 1}, 'local '):play(1)
+code:replace({{1, 1}, {1, 6}}, 'value'):play(1)
+code:select(42)
+"#,
+        )
+        .unwrap();
+        let logs = root.join("logs");
+        let meta = root.with_extension("meta");
+        let result = Command::new(executable())
+            .arg(format!("--check={}", root.display()))
+            .args(["--checklevel=Warning", "--check_format=json"])
+            .arg(format!("--logpath={}", logs.display()))
+            .arg(format!("--metapath={}", meta.display()))
+            .output()
+            .unwrap();
+        let report: Value =
+            serde_json::from_slice(&std::fs::read(logs.join("check.json")).unwrap_or_else(
+                |error| panic!("{error}: {}", String::from_utf8_lossy(&result.stdout)),
+            ))
+            .unwrap();
+        let diagnostics = report[&file_uri(&path)]
+            .as_array()
+            .unwrap_or_else(|| panic!("{report}"));
+        assert_eq!(diagnostics.len(), 1, "{report}");
+        assert_eq!(diagnostics[0]["code"], "param-type-mismatch", "{report}");
+        assert_eq!(diagnostics[0]["range"]["start"]["line"], 11, "{report}");
+        assert!(
+            diagnostics[0]["message"]
+                .as_str()
+                .unwrap()
+                .contains("Kinematic.CodeRange")
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+        if meta.exists() {
+            std::fs::remove_dir_all(meta).unwrap();
+        }
+    }
+
     fn wait_diagnostics(client: &mut Client, path: &Path, version: u64) -> Value {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
 

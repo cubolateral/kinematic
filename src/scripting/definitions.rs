@@ -275,6 +275,7 @@ fn value_type(value: &TrackValue) -> &'static str {
         TrackValue::U32(_) | TrackValue::I32(_) => "integer",
         TrackValue::F32(_) => "number",
         TrackValue::String(_) | TrackValue::Enum(_) => "string",
+        TrackValue::CodeRanges(_) => "Kinematic.CodeRange[]",
         TrackValue::Vector2(_) => "Kinematic.Vec2",
         TrackValue::Vector3(_) => "Kinematic.Vec3",
         TrackValue::Color(_) => "Kinematic.Color",

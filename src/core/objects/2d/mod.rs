@@ -1,5 +1,7 @@
 mod canvas_2d;
 mod circle;
+pub(crate) mod code;
+mod code_syntax;
 mod container_2d;
 mod ellipse;
 mod group_2d;
@@ -13,6 +15,7 @@ pub(crate) mod text_2d;
 
 pub use canvas_2d::*;
 pub use circle::*;
+pub use code::*;
 pub use container_2d::*;
 pub use ellipse::*;
 pub use group_2d::*;

@@ -119,6 +119,10 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         for (index, target) in inspection
             .properties(&world, entity)
             .into_iter()
+            .filter(|target| {
+                inspection.object_name != "Code"
+                    || !matches!(target.name(), "selection" | "highlights")
+            })
             .enumerate()
         {
             let _id = ui.push_id(index);
@@ -351,6 +355,10 @@ fn edit_value_input(
             } else {
                 false
             }
+        }
+        TrackValue::CodeRanges(v) => {
+            ui.text(format!("{name}: {v}"));
+            false
         }
         TrackValue::String(v) => ui
             .input_text_multiline(name, v, [0.0, ui.frame_height() * 3.0])

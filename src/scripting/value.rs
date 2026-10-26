@@ -161,6 +161,7 @@ pub(crate) fn to_lua(lua: &Lua, value: TrackValue) -> Result<Value> {
         TrackValue::I32(v) => v.into_lua(lua),
         TrackValue::F32(v) => v.into_lua(lua),
         TrackValue::String(v) => v.into_lua(lua),
+        TrackValue::CodeRanges(v) => super::code::ranges_to_lua(lua, &v),
         TrackValue::Enum(v) => v.into_lua(lua),
         other => ValueHandle(other).into_lua(lua),
     }
@@ -174,6 +175,7 @@ pub(crate) fn from_lua(
 ) -> Result<TrackValue> {
     let compatible = match expected {
         TrackValue::Bool(_) => matches!(value, Value::Boolean(_)),
+        TrackValue::CodeRanges(_) => matches!(value, Value::Table(_) | Value::Nil),
         TrackValue::String(_) | TrackValue::Enum(_) => matches!(value, Value::String(_)),
         TrackValue::F32(_) => matches!(value, Value::Integer(_) | Value::Number(_)),
         TrackValue::U32(_) | TrackValue::I32(_) => {
@@ -191,6 +193,7 @@ pub(crate) fn from_lua(
 
     let result = match expected {
         TrackValue::Bool(_) => TrackValue::Bool(bool::from_lua(value, lua)?),
+        TrackValue::CodeRanges(_) => TrackValue::CodeRanges(super::code::parse_ranges(lua, value)?),
         TrackValue::U32(_) => TrackValue::U32(u32::from_lua(value, lua)?),
         TrackValue::I32(_) => TrackValue::I32(i32::from_lua(value, lua)?),
         TrackValue::F32(_) => TrackValue::F32(f32::from_lua(value, lua)?),

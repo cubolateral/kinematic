@@ -2,7 +2,7 @@ use crate::core::{
     AnimatorHandle, Easing, SceneWorld, SignalFrame, SignalHandle, Tween,
     components::{Animation, Inspection, TreeNode},
     objects::HandlerContext,
-    types::{Color, Quad, Quaternion, Vector2, Vector3},
+    types::{CodeRanges, Color, Quad, Quaternion, Vector2, Vector3},
 };
 
 /// Getter function used by a track to read its current value from the ECS world.
@@ -546,6 +546,7 @@ pub enum TrackValue {
     Quaternion(Quaternion),
     Color(Color),
     String(String),
+    CodeRanges(CodeRanges),
 }
 
 impl TrackValue {
@@ -707,6 +708,7 @@ impl TrackValue {
                     aa + (ba - aa) * t,
                 ))
             }
+            (Self::CodeRanges(a), Self::CodeRanges(b)) => Self::CodeRanges(a.lerp(b, t)),
             (Self::String(a), Self::String(b)) => {
                 if t < 1.0 {
                     Self::String(a.clone())
@@ -741,6 +743,7 @@ impl std::fmt::Display for TrackValue {
                 write!(f, "[{r:.2}, {g:.2}, {b:.2}, {a:.2}]")
             }
             Self::String(value) => f.write_str(value),
+            Self::CodeRanges(value) => write!(f, "{value}"),
         }
     }
 }
@@ -796,6 +799,7 @@ impl_track_value_type!(Color, Color);
 impl_track_value_type!(Vector3, Vector3);
 impl_track_value_type!(Quaternion, Quaternion);
 impl_track_value_type!(String, String);
+impl_track_value_type!(CodeRanges, CodeRanges);
 
 /// Typed interface for updating a single tracked component field.
 #[derive(Clone)]

@@ -22,6 +22,7 @@ struct Destination {
 pub(crate) struct AnimationDefinition {
     pub(super) object: ObjectHandle,
     destinations: Vec<Destination>,
+    code_action: Option<super::code::CodeAction>,
 }
 
 pub(super) fn channel(value: &TrackValue, name: &str) -> Result<u8> {
@@ -198,6 +199,15 @@ impl AnimationDefinition {
         Self {
             object,
             destinations: Vec::new(),
+            code_action: None,
+        }
+    }
+
+    pub(super) fn code(object: ObjectHandle, action: super::code::CodeAction) -> Self {
+        Self {
+            object,
+            destinations: Vec::new(),
+            code_action: Some(action),
         }
     }
 
@@ -314,6 +324,7 @@ impl AnimationDefinition {
             .map_or((1 << finish.channels()) - 1, |c| 1 << c);
 
         Ok(Self {
+            code_action: None,
             object: property.object.clone(),
             destinations: vec![Destination {
                 property,
@@ -331,6 +342,10 @@ impl AnimationDefinition {
         let runtime = self.object.runtime()?;
 
         runtime.construction()?;
+
+        if let Some(action) = &self.code_action {
+            return super::code::resolve(&self.object, action)?.play(seconds, ease);
+        }
 
         let seconds = duration(seconds.unwrap_or(0.0))?;
         let easing = parse_easing(ease)?;
@@ -451,6 +466,7 @@ impl AnimationDefinition {
 
         Self {
             object: object.clone(),
+            code_action: None,
             destinations: vec![Destination {
                 property: PropertyHandle {
                     object,

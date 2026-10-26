@@ -36,6 +36,10 @@ pub(crate) fn objects() -> Vec<NativeObject> {
         native::<Line2D>(),
         native::<Image2D>(),
         NativeObject {
+            methods: super::code::METHODS,
+            ..native::<Code>()
+        },
+        NativeObject {
             methods: Text2DHandler::lua_methods(),
             ..native::<Text2D>()
         },

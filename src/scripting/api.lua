@@ -1,5 +1,24 @@
 ---@meta
 
+--- Position written as {line, column}. Both start at 1; columns count Unicode characters.
+---@class Kinematic.CodePosition
+---@field [integer] integer
+local CodePosition = {}
+
+--- Text interval. Prefer code:word, code:lines, code:find, or code:find_all to build it.
+--- Manual form: {{start_line, start_column}, {end_line, end_column}}. The end is exclusive.
+---@class Kinematic.CodeRange
+---@field [integer] Kinematic.CodePosition
+local CodeRange = {}
+
+--- List mixing intervals, search results, and other lists. Missing search results are ignored.
+---@class Kinematic.CodeRangeList
+---@field [integer] Kinematic.CodeRange|Kinematic.CodeRangeList|nil
+local CodeRangeList = {}
+
+--- One interval or a list of intervals. Lists may be nested.
+---@alias Kinematic.CodeRanges Kinematic.CodeRange|Kinematic.CodeRangeList
+
 --- Vector, color, quaternion, or quad value.
 ---@alias Kinematic.Value Kinematic.Vec2|Kinematic.Vec3|Kinematic.Color|Kinematic.Quaternion|Kinematic.Quad
 

@@ -307,6 +307,8 @@ pub(super) fn configure(
             text.font = font.0.as_ref().clone();
         } else if let Ok(mut text) = world.get::<&mut Text3DShape>(entity) {
             text.font = font.0.as_ref().clone();
+        } else if let Ok(mut code) = world.get::<&mut CodeShape>(entity) {
+            code.font = font.0.as_ref().clone();
         } else {
             return Err(mlua::Error::runtime("Font requires a text object."));
         }

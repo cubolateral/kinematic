@@ -767,7 +767,9 @@ fn use_uniforms(
             TrackValue::I32(value) => program.use_uniform(name, *value),
             TrackValue::U32(value) => program.use_uniform(name, *value),
             TrackValue::Bool(value) => program.use_uniform(name, i32::from(*value)),
-            TrackValue::Enum(_) | TrackValue::String(_) => unreachable!(),
+            TrackValue::Enum(_) | TrackValue::String(_) | TrackValue::CodeRanges(_) => {
+                unreachable!()
+            }
         }
     }
 

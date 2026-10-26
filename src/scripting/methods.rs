@@ -76,7 +76,7 @@ impl Text3DHandler {
     }
 }
 
-fn text_transition<T: Trackable + 'static>(
+pub(super) fn text_transition<T: Trackable + 'static>(
     entity: hecs::Entity,
     text: String,
     morph: bool,

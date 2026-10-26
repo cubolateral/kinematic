@@ -1,0 +1,18 @@
+%YAML 1.2
+---
+name: HLSL
+file_extensions: [hlsl, hlsli, fx, fxh]
+scope: source.hlsl
+contexts:
+  main:
+    - match: '\b(?:bool|int|uint|dword|half|float|double|min16float|min10float|min16int|min12int|min16uint)(?:[1-4](?:x[1-4])?)?\b'
+      scope: storage.type.hlsl
+    - match: '\b(?:AppendStructuredBuffer|Buffer|ByteAddressBuffer|ConsumeStructuredBuffer|InputPatch|OutputPatch|PointStream|LineStream|TriangleStream|RWBuffer|RWByteAddressBuffer|RWStructuredBuffer|StructuredBuffer|SamplerState|SamplerComparisonState|sampler|sampler[123]D|samplerCUBE|(?:RW|RasterizerOrdered)?Texture(?:1D|2D|3D|Cube)(?:MS)?(?:Array)?)\b'
+      scope: storage.type.hlsl
+    - match: '\b(?:cbuffer|tbuffer|register|packoffset|groupshared|globallycoherent|in|out|inout|uniform|unorm|snorm|row_major|column_major|precise|linear|centroid|nointerpolation|noperspective|sample|technique|technique10|technique11|pass|compile|discard)\b'
+      scope: storage.modifier.hlsl
+    - match: '\b(?:numthreads|domain|partitioning|outputtopology|outputcontrolpoints|patchconstantfunc|maxvertexcount|earlydepthstencil|shader|RootSignature)\b'
+      scope: support.function.hlsl
+    - match: '\bSV_[A-Za-z0-9_]+\b'
+      scope: support.constant.hlsl
+    - include: scope:source.c

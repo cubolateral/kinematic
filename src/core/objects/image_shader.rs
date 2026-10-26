@@ -247,7 +247,7 @@ pub(crate) fn validate_shader_track_value(value: &TrackValue) -> Result<(), Stri
         TrackValue::Quaternion(value) => value.is_finite(),
         TrackValue::Color(value) => value.rgba().iter().all(|value| value.is_finite()),
         TrackValue::Bool(_) | TrackValue::U32(_) | TrackValue::I32(_) => true,
-        TrackValue::Enum(_) | TrackValue::String(_) => {
+        TrackValue::Enum(_) | TrackValue::String(_) | TrackValue::CodeRanges(_) => {
             return Err("Shader uniforms must use numeric or boolean TrackValues.".into());
         }
     };
