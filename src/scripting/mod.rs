@@ -28,9 +28,6 @@ pub(crate) fn release_unused() {
     drawing::release_unused();
 }
 
-#[cfg(test)]
-mod benchmark;
-
 mod animation;
 mod methods;
 

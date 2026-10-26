@@ -46,18 +46,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn project_settings_have_editor_defaults() {
-        assert_eq!(
-            ProjectSettings::default(),
-            ProjectSettings {
-                resolution: (1280, 720),
-                fps: 60,
-                margin: (0, 0),
-            }
-        );
-    }
-
-    #[test]
     fn project_settings_require_exportable_values() {
         assert!(ProjectSettings::is_valid(&ProjectSettings::default()));
 

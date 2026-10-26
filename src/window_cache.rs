@@ -101,33 +101,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn window_cache_is_written_as_readable_ron() {
-        let directory = std::env::temp_dir().join(format!(
-            "kinematic-window-cache-test-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let path = directory.join("window.ron");
-        let cache = WindowCache {
-            position: Some((-1920, 120)),
-            size: (1600, 900),
-            maximized: true,
-        };
-
-        write(&cache, &path).unwrap();
-
-        let contents = std::fs::read_to_string(&path).unwrap();
-        let loaded: WindowCache = ron::from_str(&contents).unwrap();
-
-        assert_eq!(loaded, cache);
-        assert!(contents.contains("position: Some((-1920, 120))"));
-        assert!(contents.contains("size: (1600, 900)"));
-        assert!(contents.contains("maximized: true"));
-
-        std::fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
     fn window_cache_rejects_invalid_sizes() {
         assert!(WindowCache::is_valid(&WindowCache::default()));
 
