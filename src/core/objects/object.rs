@@ -177,6 +177,23 @@ pub trait ObjectHandler: Clone {
             .set(name);
     }
 
+    /// Moves this object to a container, preserving local properties and lifetime.
+    fn reparent(&self, node: &impl crate::core::objects::NodeHandler) {
+        let world = self.object_world();
+        assert!(
+            std::rc::Rc::ptr_eq(&world, &node.container_world()),
+            "Objects belong to different scenes."
+        );
+        let animator = self.object_animator();
+        animator.assert_finite_scope();
+        crate::core::objects::reparent_child(
+            &world,
+            node.container_entity(),
+            self.entity(),
+            animator.time(),
+        );
+    }
+
     /// Ends this object's lifetime at the current scheduling time.
     fn remove(&self) {
         let animator = self.object_animator();

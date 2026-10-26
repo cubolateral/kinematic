@@ -306,6 +306,25 @@ pub(crate) fn attach_child(
     child: hecs::Entity,
     time: f32,
 ) {
+    attach_child_inner(scene_world, parent, child, time, false);
+}
+
+pub(crate) fn reparent_child(
+    scene_world: &SceneWorld,
+    parent: hecs::Entity,
+    child: hecs::Entity,
+    time: f32,
+) {
+    attach_child_inner(scene_world, parent, child, time, true);
+}
+
+fn attach_child_inner(
+    scene_world: &SceneWorld,
+    parent: hecs::Entity,
+    child: hecs::Entity,
+    time: f32,
+    reparent: bool,
+) {
     let world = scene_world.borrow();
 
     assert!(
@@ -358,13 +377,25 @@ pub(crate) fn attach_child(
         );
     }
 
-    if let Some(container) = world.get::<&TreeNode>(child).unwrap().parent {
-        assert_eq!(
-            container, parent,
-            "An object must not belong to more than one container."
-        );
+    let previous = world.get::<&TreeNode>(child).unwrap().parent;
 
+    if previous == Some(parent) {
         return;
+    }
+
+    assert!(
+        reparent || previous.is_none(),
+        "An object must not belong to more than one container."
+    );
+
+    if let Some(previous) = previous {
+        world
+            .get::<&mut TreeNode>(previous)
+            .unwrap()
+            .children
+            .as_mut()
+            .unwrap()
+            .retain(|entity| *entity != child);
     }
 
     world
@@ -379,7 +410,9 @@ pub(crate) fn attach_child(
         .expect("Added object must contain a Node component.")
         .parent = Some(parent);
 
-    activate_subtree(&world, child, time);
+    if previous.is_none() {
+        activate_subtree(&world, child, time);
+    }
 
     crate::core::invalidate_lifetimes(&world);
 }

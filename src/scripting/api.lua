@@ -75,6 +75,10 @@ function Object:from(fields) end
 ---@param child Kinematic.Object
 function Object:add(child) end
 
+--- Moves this object to a new container for the whole timeline, preserving local properties and lifetime.
+---@param node Kinematic.Object
+function Object:reparent(node) end
+
 --- Ends this object subtree lifetime at the current schedule time.
 --- Entities and hierarchy edges are retained so seeking backward restores the object.
 function Object:remove() end

@@ -1116,3 +1116,50 @@ fn morph_moves_shared_glyphs_without_crossfading_them() {
         assert_eq!(start, render(0.0));
     }
 }
+
+#[test]
+fn reparent_moves_subtrees_and_preserves_lifetimes() {
+    let scene = load(
+        r#"
+return function(s)
+    local left = s:group_2d {id='left', position=k.vec2(10, 0)}
+    local right = s:group_2d {id='right', position=k.vec2(20, 0)}
+    s:world_2d():add(left)
+    s:world_2d():add(right)
+    local ball = s:circle {id='ball', position=k.vec2(3, 0)}
+    s:wait(1)
+    left:add(ball)
+    s:wait(1)
+    ball:remove()
+    s:wait(1)
+    ball:reparent(right)
+    ball:reparent(right)
+    assert(#left:children() == 0 and #right:children() == 1)
+    assert(ball:global_position().x == 23 and ball.position:get().x == 3)
+    left:reparent(right)
+    assert(#right:children() == 2 and #s:world_2d():children() == 1)
+    local function rejects(callback, message)
+        local ok, err = pcall(callback)
+        assert(not ok and string.find(tostring(err), message, 1, true))
+    end
+    rejects(function() right:reparent(left) end, 'cycle')
+    rejects(function() right:reparent(right) end, 'itself')
+    rejects(function() ball:reparent(s:world_3d()) end, 'Cannot mix 2D and 3D')
+    rejects(function() ball:reparent(s:root()) end, 'Only canvases')
+    assert(#right:children() == 2 and #left:children() == 0)
+    local inactive = s:circle {id='inactive'}
+    inactive:reparent(left)
+    assert(#left:children() == 1)
+end
+"#,
+    );
+    let world = scene.scene().world();
+    let ball = world
+        .get::<&crate::core::components::TreeNode>(scene.entity("ball").unwrap())
+        .unwrap();
+    assert_eq!(ball.lifetime, [1.0, 2.0]);
+    let inactive = world
+        .get::<&crate::core::components::TreeNode>(scene.entity("inactive").unwrap())
+        .unwrap();
+    assert_eq!(inactive.lifetime, [3.0, f32::INFINITY]);
+}

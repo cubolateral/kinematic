@@ -1294,6 +1294,24 @@ impl UserData for ObjectHandle {
             })
         });
 
+        methods.add_method("reparent", |_, this, parent: mlua::UserDataRef<Self>| {
+            let runtime = this.runtime()?;
+            runtime.construction()?;
+            if !Weak::ptr_eq(&this.runtime, &parent.runtime) {
+                return Err(mlua::Error::runtime("Objects belong to different scenes."));
+            }
+            parent.runtime()?;
+            engine(|| {
+                runtime.animator.borrow().assert_finite_scope();
+                crate::core::objects::reparent_child(
+                    &runtime.world.borrow(),
+                    parent.entity,
+                    this.entity,
+                    runtime.animator.borrow().time(),
+                );
+            })
+        });
+
         methods.add_method("remove", |_, this, ()| {
             let runtime = this.runtime()?;
 
@@ -2243,6 +2261,7 @@ pub(super) const OBJECT_METHODS: &[&str] = &[
     "prop",
     "add",
     "remove",
+    "reparent",
     "texture",
     "uniform",
     "inputs",
