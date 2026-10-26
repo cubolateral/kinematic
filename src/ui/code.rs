@@ -777,7 +777,7 @@ impl Tab {
 pub(super) struct State {
     tabs: BTreeMap<PathBuf, Tab>,
     pub(super) bold_font: Option<dear_imgui_rs::FontId>,
-    zoom: f32,
+    pub(super) zoom: f32,
     pub(super) projects_open: bool,
     root: String,
     browser: Option<browser::State>,

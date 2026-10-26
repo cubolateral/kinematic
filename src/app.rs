@@ -146,6 +146,7 @@ impl App {
     }
 
     fn save_layout(&mut self) {
+        self.ui.save_cache();
         let mut text = String::new();
 
         self.imgui.save_ini_settings(&mut text);
@@ -279,7 +280,7 @@ impl App {
             }
 
             if let Some(preview) = &mut audio {
-                if let Err(error) = preview.update(editor.as_ref()) {
+                if let Err(error) = preview.update(editor.as_ref(), self.ui.audio_volume()) {
                     eprintln!("Audio preview failed: {error}");
                     audio = None;
                 }
@@ -300,7 +301,7 @@ impl App {
 
                 editor.update();
                 if let Some(preview) = &mut audio {
-                    if let Err(error) = preview.update(Some(editor)) {
+                    if let Err(error) = preview.update(Some(editor), self.ui.audio_volume()) {
                         eprintln!("Audio preview failed: {error}");
                         audio = None;
                     }

@@ -423,7 +423,11 @@ schedule sounds. Simulation sounds stay within the declared scene duration;
 use a final wait if their release tails need room.
 
 Preview and export use the same deterministic 48 kHz stereo synthesis, envelope
-edge fades, and soft saturation after mixing. Preview follows playback and clears
+edge fades, and soft saturation after mixing. The speaker button immediately after
+the playback controls opens a compact horizontal 0–100% preview volume slider.
+The volume is shared with fullscreen playback and restored from the user-data editor cache
+(`.kinematic/cache/editor.ron`), alongside the text editor zoom. The default
+volume is 100%. Preview follows playback and clears
 queued audio on pause, seek, loop, or reconstruction. Its latency includes the
 editor frame and the SDL device buffer. Export uses integer sample boundaries,
 writes temporary PCM alongside the existing streamed video, then muxes AAC audio

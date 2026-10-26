@@ -14,6 +14,7 @@ pub(super) fn draw(
     fps: f32,
     interactive: bool,
     is_fullscreen: bool,
+    volume: &mut i32,
 ) -> bool {
     let is_playing = timeline.is_playing();
     let spacing = unsafe { ui.style().item_spacing() }[0];
@@ -23,7 +24,7 @@ pub(super) fn draw(
         ui.cursor_pos_x() + ((ui.content_region_avail_width() - width) * 0.5).max(0.0),
     );
 
-    transport_controls(timeline, ui, interactive);
+    transport_controls(timeline, ui, interactive, volume);
 
     ui.same_line();
 
@@ -75,6 +76,7 @@ pub(in crate::ui) fn fullscreen_controls(
     ui: &dear_imgui_rs::Ui,
     fps: f32,
     interactive: bool,
+    volume: &mut i32,
 ) -> bool {
     let scrubber_min = ui.cursor_screen_pos();
     let scrubber_width = ui.content_region_avail_width().max(1.0);
@@ -86,14 +88,15 @@ pub(in crate::ui) fn fullscreen_controls(
 
         ui.set_cursor_screen_pos([scrubber_min[0], buttons_y]);
 
-        let response = draw(timeline, ui, fps, interactive, true);
+        let response = draw(timeline, ui, fps, interactive, true, volume);
 
         let mouse = ui.io().mouse_pos();
         let panel_hovered = ui.is_mouse_hovering_rect(
             scrubber_min,
             [scrubber_min[0] + scrubber_width, panel_bottom],
         );
-        let blocked_by_button = ui.is_any_item_hovered();
+        let blocked_by_button = ui.is_any_item_hovered()
+            || ui.is_popup_open_with_flags("", dear_imgui_rs::PopupQueryFlags::ANY_POPUP);
         let left = dear_imgui_rs::MouseButton::Left;
 
         if !interactive {
@@ -126,7 +129,12 @@ pub(in crate::ui) fn fullscreen_controls(
     }
 }
 
-fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interactive: bool) {
+fn transport_controls(
+    timeline: &mut Timeline,
+    ui: &dear_imgui_rs::Ui,
+    interactive: bool,
+    volume: &mut i32,
+) {
     let is_playing = timeline.is_playing();
 
     if transport_button(
@@ -181,6 +189,10 @@ fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interacti
 
     ui.same_line();
 
+    volume_button(ui, volume);
+
+    ui.same_line();
+
     let clicked = controls::text_button_colored(
         ui,
         icons::RETWEET,
@@ -201,10 +213,27 @@ fn transport_controls(timeline: &mut Timeline, ui: &dear_imgui_rs::Ui, interacti
     }
 }
 
+fn volume_button(ui: &dear_imgui_rs::Ui, volume: &mut i32) {
+    if controls::text_button(ui, icons::VOLUME_HIGH, [BUTTON_SIZE; 2]) {
+        ui.open_popup("Preview volume");
+    }
+    if ui.is_item_hovered() {
+        ui.tooltip_text(format!("Volume: {volume}%."));
+    }
+    if let Some(_popup) = ui.begin_popup("Preview volume") {
+        ui.set_next_item_width(140.0);
+        ui.slider_config("##Volume", 0, 100)
+            .display_format(
+                dear_imgui_rs::NumericFormat::new("%d%%").expect("Valid volume format."),
+            )
+            .build(volume);
+    }
+}
+
 fn transport_width(ui: &dear_imgui_rs::Ui) -> f32 {
     let spacing = unsafe { ui.style().item_spacing() }[0];
 
-    BUTTON_SIZE * 6.0 + spacing * 5.0
+    BUTTON_SIZE * 7.0 + spacing * 6.0
 }
 
 fn fullscreen_button(ui: &dear_imgui_rs::Ui, is_fullscreen: bool) -> bool {

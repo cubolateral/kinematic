@@ -23,6 +23,7 @@ pub(super) fn draw(
     ui: &dear_imgui_rs::Ui,
     state: &mut State,
     keyboard: bool,
+    volume: &mut i32,
 ) -> bool {
     let is_exporting = editor.is_exporting();
     let mut toggle_fullscreen = false;
@@ -39,7 +40,8 @@ pub(super) fn draw(
         let fps = editor.preview_fps();
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
 
-        toggle_fullscreen = controls::draw(editor.timeline_mut(), ui, fps, !is_exporting, false);
+        toggle_fullscreen =
+            controls::draw(editor.timeline_mut(), ui, fps, !is_exporting, false, volume);
 
         ui.spacing();
         ui.separator();

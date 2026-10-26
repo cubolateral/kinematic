@@ -22,3 +22,5 @@ pub(super) const SHARE: &str = "\u{f064}";
 
 pub(super) const FOLDER: &str = "\u{f07b}";
 pub(super) const FILE: &str = "\u{f15b}";
+
+pub(super) const VOLUME_HIGH: &str = "\u{f028}";

@@ -451,8 +451,12 @@ fn tab_flags(selected: bool) -> dear_imgui_rs::TabItemFlags {
     }
 }
 
-pub(super) fn draw_fullscreen(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
-    fullscreen::draw(editor, ui)
+pub(super) fn draw_fullscreen(
+    editor: &mut Editor,
+    ui: &dear_imgui_rs::Ui,
+    volume: &mut i32,
+) -> bool {
+    fullscreen::draw(editor, ui, volume)
 }
 
 #[cfg(test)]

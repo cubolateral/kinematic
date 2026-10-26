@@ -3,6 +3,7 @@
 use crate::ui::inputs::Action as InputAction;
 
 mod browser;
+mod cache;
 mod code;
 mod controls;
 mod inputs;
@@ -33,6 +34,7 @@ pub(crate) struct Ui {
     font: dear_imgui_rs::FontId,
     appearance: theme::Appearance,
     is_fullscreen: bool,
+    audio_volume: i32,
     preview: preview::State,
     inspector: inspector::State,
     settings: settings::State,
@@ -92,7 +94,10 @@ impl Ui {
         context.io_mut().set_config_flags(flags);
         context.io_mut().set_config_drag_click_to_input_text(true);
 
+        let cache = cache::Cache::load();
         let mut code = code::State::default();
+
+        code.zoom = cache.code_zoom;
 
         code.projects_open = true;
         let font = theme::initialize(context);
@@ -104,12 +109,25 @@ impl Ui {
             font,
             appearance: settings::load(),
             is_fullscreen: false,
+            audio_volume: cache.audio_volume,
             preview: preview::State::new(crate::editor::EditorMode::default()),
             inspector: inspector::State::default(),
             settings: settings::State::default(),
             timeline: timeline::State::default(),
             scene_tree: scene_tree::State::default(),
         }
+    }
+
+    pub(crate) fn save_cache(&self) {
+        cache::Cache {
+            audio_volume: self.audio_volume,
+            code_zoom: self.code.zoom,
+        }
+        .save();
+    }
+
+    pub(crate) fn audio_volume(&self) -> f32 {
+        self.audio_volume as f32 / 100.0
     }
 
     pub fn draw(&mut self, editor: &mut Editor, ui: &mut dear_imgui_rs::Ui) {
@@ -123,7 +141,7 @@ impl Ui {
             && inputs::active(ui, InputAction::ToggleFullscreen);
 
         if self.is_fullscreen {
-            let fullscreen_button = preview::draw_fullscreen(editor, ui);
+            let fullscreen_button = preview::draw_fullscreen(editor, ui, &mut self.audio_volume);
 
             if fullscreen_shortcut || fullscreen_button {
                 self.is_fullscreen = false;
@@ -168,7 +186,13 @@ impl Ui {
 
             inspector::draw(editor, ui, &mut self.inspector);
 
-            timeline::draw(editor, ui, &mut self.timeline, !self.code.focused)
+            timeline::draw(
+                editor,
+                ui,
+                &mut self.timeline,
+                !self.code.focused,
+                &mut self.audio_volume,
+            )
         };
 
         if initial_layout && !self.code.focused {

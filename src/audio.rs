@@ -24,7 +24,8 @@ impl AudioPreview {
         })
     }
 
-    pub fn update(&mut self, editor: Option<&Editor>) -> Result<(), String> {
+    pub fn update(&mut self, editor: Option<&Editor>, volume: f32) -> Result<(), String> {
+        self.stream.set_gain(volume).map_err(|e| e.to_string())?;
         let transport = editor.map(Editor::audio_transport);
         if let (Some(editor), Some((true, revision, end))) = (editor, transport) {
             if let Some((previous_revision, start)) = self.cursor
@@ -73,7 +74,12 @@ mod tests {
         let samples = crate::core::audio::limit((*sound.samples()).clone());
         preview.stream.put_data_f32(&samples).unwrap();
         preview.cursor = Some((0, 0));
-        preview.update(None).unwrap();
+        preview.update(None, 0.5).unwrap();
+        assert_eq!(preview.stream.get_gain().unwrap(), 0.5);
+        preview.update(None, 0.0).unwrap();
+        assert_eq!(preview.stream.get_gain().unwrap(), 0.0);
+        preview.update(None, 1.0).unwrap();
+        assert_eq!(preview.stream.get_gain().unwrap(), 1.0);
         assert_eq!(preview.stream.queued_bytes().unwrap(), 0);
     }
 }

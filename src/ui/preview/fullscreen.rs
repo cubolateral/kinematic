@@ -5,7 +5,7 @@ use super::image;
 
 const CONTROLS_HEIGHT: f32 = 72.0;
 
-pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
+pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, volume: &mut i32) -> bool {
     let viewport = ui.main_viewport();
     let viewport_pos = viewport.pos();
     let viewport_size = viewport.size();
@@ -52,7 +52,8 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
         viewport_pos,
         viewport_size,
         is_controlling,
-    ) {
+    ) && !ui.is_popup_open_with_flags("", dear_imgui_rs::PopupQueryFlags::ANY_POPUP)
+    {
         editor.timeline_mut().is_controlling = false;
 
         return false;
@@ -70,8 +71,13 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
         .size(controls_size, dear_imgui_rs::Condition::Always)
         .flags(window_flags)
         .build(|| {
-            toggle_fullscreen =
-                timeline::fullscreen_controls(editor.timeline_mut(), ui, fps, !is_exporting);
+            toggle_fullscreen = timeline::fullscreen_controls(
+                editor.timeline_mut(),
+                ui,
+                fps,
+                !is_exporting,
+                volume,
+            );
         });
 
     toggle_fullscreen
