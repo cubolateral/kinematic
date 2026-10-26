@@ -54,7 +54,7 @@ pub(super) struct Callbacks {
     pub inputs: Vec<(String, hecs::Entity, TrackTarget, Option<u8>)>,
     pub methods: Option<Table>,
     pub states: Vec<(String, hecs::Entity)>,
-    pub sounds: Vec<(String, super::audio::SoundHandle)>,
+    pub sounds: Vec<(String, super::audio::AudioHandle)>,
     pub simulation_key: String,
     pub visual_key: String,
     pub history_key: Option<String>,
@@ -479,7 +479,7 @@ pub(super) fn configure_inputs(handle: &ObjectHandle, inputs: Table) -> Result<(
         let (name, input) = pair?;
 
         if let Value::UserData(value) = &input {
-            if let Ok(sound) = value.borrow::<super::audio::SoundHandle>() {
+            if let Ok(sound) = value.borrow::<super::audio::AudioHandle>() {
                 if !Weak::ptr_eq(&handle.runtime, &sound.runtime) {
                     return Err(mlua::Error::runtime(
                         "Sounds must belong to the same scene.",

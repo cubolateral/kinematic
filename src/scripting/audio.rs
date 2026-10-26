@@ -1,7 +1,13 @@
 use super::runtime::Runtime;
-use crate::core::audio::{SceneAudio, Sound, SoundEvent};
-use mlua::{Result, Table, UserData, UserDataMethods};
-use std::rc::{Rc, Weak};
+use crate::core::audio::{SAMPLE_RATE, SceneAudio, Sound, SoundEvent};
+use mlua::{Result, Table, UserData, UserDataFields, UserDataMethods};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    path::Path,
+    rc::{Rc, Weak},
+    sync::{Arc, Weak as SyncWeak},
+};
 
 pub(super) struct AudioStep {
     pub entity: hecs::Entity,
@@ -11,12 +17,173 @@ pub(super) struct AudioStep {
     pub events: Vec<SoundEvent>,
 }
 
+#[derive(Debug)]
+enum Source {
+    Synth(Sound),
+    File(u64),
+}
+
+struct AudioAsset {
+    source: Source,
+    samples: Arc<Vec<[f32; 2]>>,
+}
+
 #[derive(Clone)]
-pub(super) struct SoundHandle {
+pub(super) struct AudioResource(Arc<AudioAsset>);
+
+impl std::fmt::Debug for AudioResource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0.source {
+            Source::Synth(sound) => f.debug_tuple("Synth").field(sound).finish(),
+            Source::File(id) => f.debug_tuple("File").field(id).finish(),
+        }
+    }
+}
+
+impl UserData for AudioResource {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("duration", |_, this| {
+            Ok(this.0.samples.len() as f64 / SAMPLE_RATE as f64)
+        });
+    }
+}
+
+thread_local! {
+    static SYNTHS: RefCell<BTreeMap<String, SyncWeak<AudioAsset>>> = RefCell::new(BTreeMap::new());
+    static FILES: RefCell<BTreeMap<Vec<u8>, SyncWeak<AudioAsset>>> = RefCell::new(BTreeMap::new());
+}
+
+pub(super) fn release_unused() {
+    SYNTHS.with(|cache| {
+        cache
+            .borrow_mut()
+            .retain(|_, value| value.strong_count() > 0)
+    });
+    FILES.with(|cache| {
+        cache
+            .borrow_mut()
+            .retain(|_, value| value.strong_count() > 0)
+    });
+}
+
+pub(super) fn register(runtime: &Rc<Runtime>, api: &Table) -> Result<()> {
+    let weak = Rc::downgrade(runtime);
+    api.set(
+        "audio_synth",
+        runtime.lua.create_function(move |_, options: Table| {
+            let runtime = weak
+                .upgrade()
+                .ok_or_else(|| mlua::Error::runtime("Scene has been released."))?;
+            runtime.construction()?;
+            let sound = configure(Sound::default(), options)?;
+            let resource = SYNTHS.with(|cache| {
+                let mut cache = cache.borrow_mut();
+                cache.retain(|_, value| value.strong_count() > 0);
+                let key = format!("{sound:?}");
+                if let Some(asset) = cache.get(&key).and_then(SyncWeak::upgrade) {
+                    return AudioResource(asset);
+                }
+                let asset = Arc::new(AudioAsset {
+                    samples: sound.samples(),
+                    source: Source::Synth(sound),
+                });
+                cache.insert(key, Arc::downgrade(&asset));
+                AudioResource(asset)
+            });
+            runtime
+                .audio
+                .borrow_mut()
+                .register_samples(&resource.0.samples)
+                .map_err(mlua::Error::runtime)?;
+            runtime.assets.borrow_mut().push(Box::new(resource.clone()));
+            Ok(resource)
+        })?,
+    )?;
+    let weak = Rc::downgrade(runtime);
+    api.set(
+        "audio_file",
+        runtime.lua.create_function(move |_, path: String| {
+            let runtime = weak
+                .upgrade()
+                .ok_or_else(|| mlua::Error::runtime("Scene has been released."))?;
+            runtime.construction()?;
+            let bytes = runtime.resource(Path::new(&path))?;
+            let resource = FILES.with(|cache| -> Result<AudioResource> {
+                let mut cache = cache.borrow_mut();
+                cache.retain(|_, value| value.strong_count() > 0);
+                if let Some(asset) = cache.get(&bytes).and_then(SyncWeak::upgrade) {
+                    return Ok(AudioResource(asset));
+                }
+                let samples =
+                    super::audio_file::decode(&bytes, runtime.deadline.get()).map_err(|error| {
+                        mlua::Error::runtime(format!("Audio file '{path}': {error}"))
+                    })?;
+                static NEXT_FILE: std::sync::atomic::AtomicU64 =
+                    std::sync::atomic::AtomicU64::new(1);
+                let id = NEXT_FILE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let asset = Arc::new(AudioAsset {
+                    samples: Arc::new(samples),
+                    source: Source::File(id),
+                });
+                cache.insert(bytes, Arc::downgrade(&asset));
+                Ok(AudioResource(asset))
+            })?;
+            runtime
+                .audio
+                .borrow_mut()
+                .register_samples(&resource.0.samples)
+                .map_err(mlua::Error::runtime)?;
+            runtime.assets.borrow_mut().push(Box::new(resource.clone()));
+            Ok(resource)
+        })?,
+    )?;
+    Ok(())
+}
+
+#[derive(Clone)]
+pub(super) struct AudioHandle {
     pub runtime: Weak<Runtime>,
-    pub sound: Sound,
+    source: AudioResource,
+    gain: f32,
+    pan: f32,
     audio: SceneAudio,
-    samples: Rc<std::cell::OnceCell<std::sync::Arc<Vec<[f32; 2]>>>>,
+}
+
+impl AudioHandle {
+    pub fn fingerprint(&self) -> String {
+        format!("{:?}|{}|{}", self.source, self.gain, self.pan)
+    }
+}
+
+fn playback_options(
+    options: &Table,
+    mut gain: f32,
+    mut pan: f32,
+    source: bool,
+) -> Result<(f32, f32)> {
+    for pair in options.clone().pairs::<String, mlua::Value>() {
+        let (name, _) = pair?;
+        match name.as_str() {
+            "source" if source => (),
+            "gain" => gain = options.get("gain")?,
+            "pan" => pan = options.get("pan")?,
+            _ => {
+                return Err(mlua::Error::runtime(format!(
+                    "Unknown audio playback option '{name}'."
+                )));
+            }
+        }
+    }
+    if !gain.is_finite()
+        || !(0.0..=1.0).contains(&gain)
+        || !pan.is_finite()
+        || !(-1.0..=1.0).contains(&pan)
+    {
+        return Err(mlua::Error::runtime(
+            "Audio gain must be 0–1 and pan must be -1–1; both must be finite.",
+        ));
+    }
+    Ok((gain, pan))
 }
 
 fn configure(mut sound: Sound, options: Table) -> Result<Sound> {
@@ -53,8 +220,6 @@ fn configure(mut sound: Sound, options: Table) -> Result<Sound> {
             _ => {
                 let field = match name.as_str() {
                     "end_frequency" => &mut sound.end_frequency,
-                    "gain" => &mut sound.gain,
-                    "pan" => &mut sound.pan,
                     "attack" => &mut sound.attack,
                     "decay" => &mut sound.decay,
                     "sustain" => &mut sound.sustain,
@@ -84,8 +249,6 @@ fn configure(mut sound: Sound, options: Table) -> Result<Sound> {
     for (name, value, min, max) in [
         ("Frequency", sound.frequency, 1.0, 20_000.0),
         ("End frequency", sound.end_frequency, 1.0, 20_000.0),
-        ("Gain", sound.gain, 0.0, 1.0),
-        ("Pan", sound.pan, -1.0, 1.0),
         ("Attack", sound.attack, 0.0, 10.0),
         ("Decay", sound.decay, 0.0, 10.0),
         ("Hold", sound.hold, 0.0, 10.0),
@@ -115,19 +278,28 @@ fn configure(mut sound: Sound, options: Table) -> Result<Sound> {
     Ok(sound)
 }
 
-pub(super) fn create(runtime: Rc<Runtime>, options: Table) -> Result<SoundHandle> {
+pub(super) fn create(runtime: Rc<Runtime>, options: Table) -> Result<AudioHandle> {
     runtime.construction()?;
     super::runtime::engine(|| runtime.animator.borrow().assert_finite_scope())?;
-    let sound = configure(Sound::default(), options)?;
-    Ok(SoundHandle {
+    let source = options
+        .get::<mlua::UserDataRef<AudioResource>>("source")?
+        .clone();
+    let (gain, pan) = playback_options(&options, 0.2, 0.0, true)?;
+    runtime
+        .audio
+        .borrow_mut()
+        .register_samples(&source.0.samples)
+        .map_err(mlua::Error::runtime)?;
+    Ok(AudioHandle {
         runtime: Rc::downgrade(&runtime),
-        samples: Default::default(),
-        sound,
+        source,
+        gain,
+        pan,
         audio: runtime.audio.clone(),
     })
 }
 
-impl UserData for SoundHandle {
+impl UserData for AudioHandle {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("play", |_, this, options: Option<Table>| {
             let runtime = this
@@ -139,35 +311,32 @@ impl UserData for SoundHandle {
                 runtime.construction()?;
                 super::runtime::engine(|| runtime.animator.borrow().assert_finite_scope())?;
             }
-            let override_sound = options
-                .map(|options| configure(this.sound.clone(), options))
-                .transpose()?;
-            let sound = override_sound.as_ref().unwrap_or(&this.sound);
+            let (gain, pan) = if let Some(options) = options {
+                playback_options(&options, this.gain, this.pan, false)?
+            } else {
+                (this.gain, this.pan)
+            };
             let key = step
                 .as_ref()
                 .map(|step| (step.entity, step.frame, step.update_index));
-            let pending = step.as_ref().map_or(0, |step| {
-                step.events.iter().map(|event| event.samples.len()).sum()
-            });
+            let pending = step.as_ref().map_or(0, |step| step.events.len());
             this.audio
                 .borrow()
-                .check_capacity(sound.sample_count(), key, pending)
+                .check_capacity(key, pending)
                 .map_err(mlua::Error::runtime)?;
-            let samples = if override_sound.is_some() {
-                sound.samples()
-            } else {
-                this.samples.get_or_init(|| sound.samples()).clone()
+            let event = SoundEvent {
+                time: step
+                    .as_ref()
+                    .map_or_else(|| runtime.animator.borrow().time(), |step| step.time)
+                    as f64,
+                samples: this.source.0.samples.clone(),
+                gain,
+                pan,
             };
             if let Some(step) = step.as_mut() {
-                step.events.push(SoundEvent {
-                    time: step.time as f64,
-                    samples,
-                });
+                step.events.push(event);
             } else {
-                this.audio.borrow_mut().scheduled.push(SoundEvent {
-                    time: runtime.animator.borrow().time() as f64,
-                    samples,
-                });
+                this.audio.borrow_mut().scheduled.push(event);
             }
             Ok(())
         });

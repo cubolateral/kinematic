@@ -371,73 +371,103 @@ advance by exactly `1/fps`; UI/selection overlays never enter output. Runtime or
 drawing errors cancel export and remove the incomplete output through the native
 exporter's failure path.
 
-## Procedural sound
+## Audio resources and playback
 
-Create a scene-local resource with `s:sound { ... }`. Creation is silent;
-`:play()` schedules an occurrence at the current animator time without advancing
-it. Overrides belong to that occurrence. Scheduled sound tails contribute to the
-scene duration, so a scene containing only sound can play and export.
+Create immutable resources with `k.audio_synth { ... }` or
+`k.audio_file("assets/audio/hit.wav")`. Create a scene-local player with
+`s:audio { source = resource, gain = 0.2, pan = 0 }`. Resource and player creation
+are silent. Both resource types expose their read-only `duration` in seconds.
 
 ```lua
-local boink = s:sound { preset = "boink", gain = 0.2 }
-boink:play()
-boink:play { frequency = 600, gain = 0.15 }
-s:wait(0.5)
-boink:play()
+local boink = k.audio_synth { preset = "boink", frequency = 450 }
+local recording = k.audio_file("assets/audio/hit.wav")
+
+return function(s)
+    local effect = s:audio { source = boink, gain = 0.2 }
+    local hit = s:audio { source = recording, gain = 0.5 }
+
+    effect:play()
+    hit:play { gain = 0.3, pan = -0.5 }
+    s:wait(0.5)
+    hit:play()
+end
 ```
 
-`boink`, `pluck`, `click`, `impact`, and `whoosh` select parameters of the same
-synthesizer. Every parameter can be overridden; the preset is optional.
+`:play()` schedules an occurrence at the current animator time without advancing
+it. Its optional table accepts only `gain` and `pan`; overrides affect only that
+occurrence. Player defaults are gain 0.2 (range 0–1) and centered stereo balance
+0 (range -1–1). Different players and occurrences share the same resource samples.
+Scheduled tails contribute to scene duration, so a scene containing only audio
+can play and export.
+
+`k.audio_synth` accepts the following options. `boink`, `pluck`, `click`, `impact`,
+and `whoosh` select starting parameters of the same synthesizer; every parameter
+can be overridden and the preset is optional.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
+| `preset` | None | One of the five built-in starting configurations. |
 | `waveform` | `"sine"` | `"sine"`, `"triangle"`, or deterministic `"noise"`. |
 | `frequency`, `end_frequency` | 440 Hz | Linear frequency sweep over the envelope; 1–20000 Hz. |
-| `gain`, `pan` | 0.2, 0 | Volume 0–1 and constant-power stereo pan -1–1. |
 | `attack`, `decay` | 0.004, 0.08 s | Time to rise to full level and fall to sustain. |
 | `sustain`, `hold`, `release` | 0.3, 0.03 s, 0.15 s | Sustain level 0–1, time held, and fade to zero. |
 | `noise`, `overtone` | 0, 0 | Noise blend 0–1 and second sine harmonic gain 0–1. |
 | `cutoff`, `seed` | 12000 Hz, 0 | One-pole low-pass cutoff 20–20000 Hz and unsigned 32-bit noise seed. |
 
-Scenes allow up to eight million stereo sample frames across occurrences (64 MB
-of PCM, counting shared occurrences separately). Each envelope stage is nonnegative and at most ten seconds; the sum must be
-0.001–10 seconds. Non-finite values and unknown options are rejected. Without a
-sweep, changing `frequency` also changes its endpoint. A preset with a sweep
-retains its endpoint unless `end_frequency` is supplied.
+Each envelope stage is nonnegative and at most ten seconds; the sum must be
+0.001–10 seconds. Without a sweep, changing `frequency` also changes its endpoint.
+A preset with a sweep retains its endpoint unless `end_frequency` is supplied.
+Unknown options and non-finite values are rejected. Synth options belong to the
+resource; create another resource for a different frequency or envelope.
 
-Use sounds as declared simulation inputs, preserving the isolated update
-callback rules:
+`k.audio_file` loads project-relative WAV, MP3, OGG, and FLAC content through
+FFmpeg, which must be on `PATH` for preview and `--check` as well as export.
+Files use the same path restrictions and frozen revision reads as other resources.
+Decoding runs only during construction, is bounded by its execution deadline,
+and converts content to stereo 48 kHz PCM with short edge fades. Identical file
+contents share decoded samples while referenced; a changed file reloads its
+resource and invalidates dependent simulation history. Decode errors keep the
+last valid revision active.
+
+Each scene allows eight million unique stereo sample frames (64 MB of PCM,
+about 167 seconds) and 100000 occurrences. Reusing a resource does not duplicate
+its sample budget. Encoded files retain the existing 64 MiB resource limit.
+File audio is loaded into memory; long-track streaming is not implemented.
+
+Use players as declared simulation inputs, preserving isolated update callbacks:
 
 ```lua
-object:inputs { hit = boink }
--- In the object's update(state, frame, inputs) callback:
+object:inputs { hit = hit }
+-- In update(state, frame, inputs):
 -- inputs.hit:play { gain = 0.15 }
 ```
 
 Simulation occurrences use `frame.time`, including multiple explicit updates at
 the same step. Replay replaces occurrences by object, step, and update order;
-checkpoints retain the sound history. Reload preserves history only when its
-simulation dependencies, including sound parameters, still match. Evaluation
-and drawing never start playback. Drawing, signals, and repeat scopes cannot
-schedule sounds. Simulation sounds stay within the declared scene duration;
-use a final wait if their release tails need room.
+checkpoints retain the audio history. Reload preserves history only when its
+simulation dependencies, including source content and player defaults, still
+match. Evaluation and drawing never start playback. Drawing, signals, and repeat
+scopes cannot schedule audio. Simulation audio stays within the declared scene
+duration; use a final wait if release tails need room.
 
-Preview and export use the same deterministic 48 kHz stereo synthesis, envelope
-edge fades, and soft saturation after mixing. The speaker button immediately after
-the playback controls opens a compact horizontal 0–100% preview volume slider.
-The volume is shared with fullscreen playback and restored from the user-data editor cache
-(`.kinematic/cache/editor.ron`), alongside the text editor zoom. The default
-volume is 100%. Preview follows playback and clears
+Preview and export use the same stereo PCM mixer and soft saturation. The
+speaker button immediately after playback controls opens a compact horizontal
+0–100% preview volume slider. Its value is shared with fullscreen playback and
+restored from the user-data editor cache (`.kinematic/cache/editor.ron`), alongside
+the text editor zoom. Its default is 100%. Preview follows playback and clears
 queued audio on pause, seek, loop, or reconstruction. Its latency includes the
 editor frame and the SDL device buffer. Export uses integer sample boundaries,
 writes temporary PCM alongside the existing streamed video, then muxes AAC audio
-with the encoded video without re-encoding it. Temporary files are removed on
-completion or cancellation; export requires space for the temporary video and
-stereo PCM (384 kB/s). Sound tails stop at scene boundaries.
+without re-encoding video. Export needs space for temporary video and stereo PCM
+(384 kB/s). Sound tails stop at scene boundaries.
 
-See [`examples/lua/audio`](../examples/lua/audio) for presets, a custom sweep,
-and a simulated bounce. Audio files, continuous voices, reverb, node editing,
-and spatial audio are outside this API.
+The former `s:sound { ... }` constructor is replaced by
+`s:audio { source = k.audio_synth { ... }, gain = ..., pan = ... }`.
+Move synthesis parameters into the resource and playback adjustments onto the
+player or occurrence. See [`examples/lua/audio`](../examples/lua/audio) for shared
+synthesizer and WAV resources, presets, a custom sweep, and simulated bounces.
+Continuous synthesis, pitch shifting, loops, reverb, node editing, and spatial
+audio are outside this API.
 
 ## Execution limits
 

@@ -1,5 +1,31 @@
 # Lua validation
 
+## Audio resources and file loading
+
+Validated on October 26, 2026:
+
+- `cargo fmt --check` and `cargo check --workspace` passed.
+- `cargo test --workspace` reported 373 passing binary tests, five failures and
+  eight ignored tests. The failures remain the previously reproduced syntax
+  coloring, settings-default and LuaLS initialization failures. All four macro
+  tests passed separately.
+- `SDL_AUDIODRIVER=dummy cargo test audio -- --include-ignored` passed all seven
+  selected tests. Coverage includes WAV/MP3/OGG/FLAC conversion, immutable source
+  resources, shared PCM budgets, decoder deadlines and oversized/corrupt input,
+  SDL output, AAC timing, and file changes invalidating simulation history while
+  failed reloads preserve the valid revision.
+- `--check examples/lua/audio` passed with the new `k.audio_file`, `k.audio_synth`
+  and `s:audio` API. The example includes a generated 22.05 kHz mono WAV fixture
+  shared by two players with independent gain and pan.
+- A temporary copy exported through the application at 160 × 90 and 60 FPS:
+  510 video frames and 8.5 seconds of stereo 48 kHz audio, matching video duration.
+  Decoding confirmed the WAV occurrences at 3.6 and 3.9 seconds, their expected
+  left/right balance, silence afterward, and procedural simulation bounces.
+
+Physical listening and Windows/macOS behavior were not tested. File loading now
+requires FFmpeg during scene construction. Audio stays in memory with a 64 MB
+unique-PCM budget per scene; streaming, pitch control and loops remain excluded.
+
 ## Procedural audio validation
 
 Validated on October 26, 2026:

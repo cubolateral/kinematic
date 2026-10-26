@@ -1169,10 +1169,12 @@ fn sound_resources_schedule_without_advancing_or_mutating_defaults() {
     let scene = load(
         r#"
 return function(s)
-    local unused=s:sound{preset='whoosh'}
-    local boink=s:sound{preset='boink',gain=0.2}
+    local unused=k.audio_synth{preset='whoosh'}
+    local source=k.audio_synth{preset='boink'}
+    assert(source.duration>0)
+    local boink=s:audio{source=source,gain=0.2}
     boink:play()
-    boink:play{frequency=600,gain=0.15}
+    boink:play{gain=0.15,pan=-0.5}
     s:wait(0.5)
     boink:play()
     s:all(function(s) s:wait(1); boink:play() end)
@@ -1191,14 +1193,21 @@ end
         [0.0, 0.0, 0.5, 0.5]
     );
     assert_eq!(audio.scheduled[0].samples, audio.scheduled[2].samples);
-    assert_ne!(audio.scheduled[0].samples, audio.scheduled[1].samples);
+    assert!(std::sync::Arc::ptr_eq(
+        &audio.scheduled[0].samples,
+        &audio.scheduled[1].samples
+    ));
+    assert_eq!(audio.scheduled[0].gain, 0.2);
+    assert_eq!(audio.scheduled[1].gain, 0.15);
+    assert_eq!(audio.scheduled[1].pan, -0.5);
+    assert_eq!(audio.scheduled[2].gain, 0.2);
 }
 
 #[test]
 fn simulation_sounds_survive_seek_checkpoints_and_reload_without_duplicates() {
     let script = r#"
 return function(s)
-    local hit=s:sound{preset='click'}
+    local hit=s:audio{source=k.audio_synth{preset='click'}}
     local simulation=k.object{state={n=0},inputs={},update=function(state,frame,inputs)
         state.n=state.n+1
         if frame.index%30==0 then
@@ -1259,7 +1268,7 @@ fn explicit_simulation_updates_at_the_same_step_keep_each_sound() {
     let scene = load(
         r#"
 return function(s)
-    local sound=s:sound{preset='click'}
+    local sound=s:audio{source=k.audio_synth{preset='click'}}
     local object=s:object(k.object{inputs={},update=function(state,frame,inputs) inputs.sound:play() end},{auto_update=false})
     object:inputs{sound=sound}
     s:world_2d():add(object)
@@ -1310,7 +1319,7 @@ fn sound_validation_and_failed_simulation_leave_no_partial_events() {
             LuaScene::load(
                 ProjectContext::new(".").unwrap(),
                 "intro.lua",
-                sources(&format!("return function(s) s:sound{options} end")),
+                sources(&format!("return function(s) k.audio_synth{options} end")),
                 (640, 480),
                 60,
                 (0, 0)
@@ -1318,15 +1327,21 @@ fn sound_validation_and_failed_simulation_leave_no_partial_events() {
             .is_err()
         );
     }
-    assert!(LuaScene::load(
-        ProjectContext::new(".").unwrap(), "intro.lua",
-        sources("return function(s) local sound=s:sound{attack=1,decay=1,hold=7,release=1}; for i=1,20 do sound:play() end end"),
-        (640,480),60,(0,0)
-    ).err().unwrap().to_string().contains("sample budget"));
+    let shared = load(
+        "return function(s) local sound=s:audio{source=k.audio_synth{attack=1,decay=1,hold=7,release=1}}; for i=1,20 do sound:play() end end",
+    );
+    let audio = shared.scene().audio.borrow();
+    assert_eq!(audio.scheduled.len(), 20);
+    assert!(
+        audio
+            .scheduled
+            .iter()
+            .all(|event| std::sync::Arc::ptr_eq(&event.samples, &audio.scheduled[0].samples))
+    );
     let scene = load(
         r#"
 return function(s)
-    local sound=s:sound{preset='click'}
+    local sound=s:audio{source=k.audio_synth{preset='click'}}
     local object=s:object(k.object{inputs={},update=function(state,frame,inputs)
         inputs.sound:play()
         if frame.index==10 then error('Failed step.') end
@@ -1345,13 +1360,154 @@ end
 
 #[test]
 fn sound_tails_extend_the_scene_without_advancing_the_animator() {
-    assert_eq!(load("return function(s) s:sound{} end").duration(), 0.0);
+    assert_eq!(
+        load("return function(s) s:audio{source=k.audio_synth{}} end").duration(),
+        0.0
+    );
     let scene = load(
-        "return function(s) local tone=s:sound{waveform='triangle',frequency=220,attack=0.01,decay=0.02,hold=0.03,release=0.04}; tone:play(); tone:play(); s:wait(0.01); tone:play() end",
+        "return function(s) local tone=s:audio{source=k.audio_synth{waveform='triangle',frequency=220,attack=0.01,decay=0.02,hold=0.03,release=0.04}}; tone:play(); tone:play(); s:wait(0.01); tone:play() end",
     );
     let audio = scene.scene().audio.borrow();
     assert_eq!(audio.scheduled[0].time, 0.0);
     assert_eq!(audio.scheduled[1].time, 0.0);
     assert!((audio.scheduled[2].time - 0.01).abs() < 1e-6);
     assert!((scene.duration() - 0.11).abs() < 0.0001);
+}
+
+#[test]
+fn audio_resources_and_players_validate_separate_immutable_options() {
+    let scene = load(
+        r#"
+return function(s)
+    local source=k.audio_synth{preset='boink'}
+    assert(source.duration>0)
+    assert(not pcall(function() source.duration=2 end))
+    assert(not pcall(function() source:play() end))
+    local left=s:audio{source=source,gain=0.2,pan=-1}
+    local right=s:audio{source=source,gain=0.5,pan=1}
+    left:play(); right:play{gain=0.1}; right:play()
+end
+"#,
+    );
+    let audio = scene.scene().audio.borrow();
+    assert!(
+        audio
+            .scheduled
+            .iter()
+            .all(|event| std::sync::Arc::ptr_eq(&event.samples, &audio.scheduled[0].samples))
+    );
+    assert_eq!(audio.scheduled[1].gain, 0.1);
+    assert_eq!(audio.scheduled[2].gain, 0.5);
+    for script in [
+        "return function(s) s:audio{} end",
+        "return function(s) s:audio{source=k.audio_synth{},frequency=600} end",
+        "return function(s) s:audio{source=k.audio_synth{},gain=0/0} end",
+        "return function(s) s:audio{source=k.audio_synth{},pan=2} end",
+        "return function(s) s:audio{source=k.audio_synth{}}:play{frequency=600} end",
+        "return function(s) k.audio_file('../outside.wav') end",
+    ] {
+        assert!(
+            LuaScene::load(
+                ProjectContext::new(".").unwrap(),
+                "intro.lua",
+                sources(script),
+                (640, 480),
+                60,
+                (0, 0)
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+#[ignore = "Requires FFmpeg with WAV support."]
+fn audio_files_share_samples_and_invalidate_simulation_history_on_content_changes() {
+    let root = std::env::temp_dir().join(format!("kinematic-file-audio-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("assets")).unwrap();
+    let fixture = include_bytes!("../../examples/lua/audio/assets/chime.wav");
+    std::fs::write(root.join("assets/hit.wav"), fixture).unwrap();
+    let script = r#"
+return function(s)
+    local source=k.audio_file('assets/hit.wav')
+    local again=k.audio_file('assets/hit.wav')
+    assert(source.duration>0.24 and source.duration<0.26)
+    local hit=s:audio{source=source,gain=0.4}
+    local right=s:audio{source=again,gain=0.2,pan=1}
+    hit:play(); right:play()
+    local object=s:object(k.object{state={},inputs={},update=function(state,frame,inputs)
+        if frame.index%30==0 then inputs.hit:play() end
+    end},{id='simulation'})
+    object:inputs{hit=hit}; s:world_2d():add(object); s:wait(4)
+end
+"#;
+    std::fs::write(root.join("intro.lua"), script).unwrap();
+    let mut scene = LuaScene::load(
+        ProjectContext::new(&root).unwrap(),
+        "intro.lua",
+        Sources::default(),
+        (640, 480),
+        60,
+        (0, 0),
+    )
+    .unwrap();
+    assert!(
+        scene
+            .dependencies()
+            .contains(&PathBuf::from("assets/hit.wav"))
+    );
+    scene.update(3.5).unwrap();
+    {
+        let audio = scene.scene().audio.borrow();
+        assert!(std::sync::Arc::ptr_eq(
+            &audio.scheduled[0].samples,
+            &audio.scheduled[1].samples
+        ));
+        assert!(
+            audio
+                .steps
+                .values()
+                .flatten()
+                .all(|event| std::sync::Arc::ptr_eq(&event.samples, &audio.scheduled[0].samples))
+        );
+    }
+    let mix = |scene: &LuaScene| {
+        let mut samples = vec![[0.0; 2]; 192_000];
+        scene.scene().audio.borrow().mix(0.0, 0, &mut samples);
+        samples
+    };
+    let expected = mix(&scene);
+    let steps = scene.simulation_steps();
+    scene.reload(Sources::default()).unwrap();
+    assert_eq!(scene.simulation_steps(), 0);
+    assert!(steps > 0);
+    assert_eq!(mix(&scene), expected);
+    scene.update(0.1).unwrap();
+    scene.update(3.5).unwrap();
+    assert_eq!(mix(&scene), expected);
+    let mut changed = fixture.to_vec();
+    for sample in changed[44..].chunks_exact_mut(2) {
+        let value = i16::from_le_bytes(sample.try_into().unwrap()) / 2;
+        sample.copy_from_slice(&value.to_le_bytes());
+    }
+    std::fs::write(root.join("assets/hit.wav"), changed).unwrap();
+    scene.reload(Sources::default()).unwrap();
+    assert!(scene.simulation_steps() > 0);
+    assert_ne!(mix(&scene), expected);
+    assert_eq!(
+        scene
+            .scene()
+            .audio
+            .borrow()
+            .steps
+            .values()
+            .map(Vec::len)
+            .sum::<usize>(),
+        8
+    );
+    let valid = mix(&scene);
+    std::fs::write(root.join("assets/hit.wav"), b"Invalid audio.").unwrap();
+    assert!(scene.reload(Sources::default()).is_err());
+    assert_eq!(mix(&scene), valid);
+    std::fs::remove_dir_all(root).unwrap();
 }

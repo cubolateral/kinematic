@@ -1,6 +1,7 @@
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc, sync::Arc};
 
 pub(crate) const SAMPLE_RATE: u32 = 48_000;
+pub(crate) const MAX_SAMPLE_FRAMES: usize = 8_000_000;
 pub(crate) type SceneAudio = Rc<RefCell<AudioEvents>>;
 
 #[derive(Clone, Debug)]
@@ -8,8 +9,6 @@ pub(crate) struct Sound {
     pub waveform: String,
     pub frequency: f32,
     pub end_frequency: f32,
-    pub gain: f32,
-    pub pan: f32,
     pub attack: f32,
     pub decay: f32,
     pub sustain: f32,
@@ -27,8 +26,6 @@ impl Default for Sound {
             waveform: "sine".into(),
             frequency: 440.0,
             end_frequency: 440.0,
-            gain: 0.2,
-            pan: 0.0,
             attack: 0.004,
             decay: 0.08,
             sustain: 0.3,
@@ -95,8 +92,6 @@ impl Sound {
     pub fn samples(&self) -> Arc<Vec<[f32; 2]>> {
         let duration = self.attack + self.decay + self.hold + self.release;
         let count = self.sample_count();
-        let pan = (self.pan + 1.0) * std::f32::consts::FRAC_PI_4;
-        let stereo = [pan.cos(), pan.sin()];
         let mut phase = 0.0_f64;
         let mut filtered = 0.0;
         let alpha = 1.0 - (-std::f32::consts::TAU * self.cutoff / SAMPLE_RATE as f32).exp();
@@ -128,11 +123,11 @@ impl Sound {
                     filtered += alpha * (voice - filtered);
                     // Always fade the edges, including envelopes with zero attack or release.
                     let fade = (t / 0.002).min((duration - t) / 0.002).clamp(0.0, 1.0);
-                    let sample = filtered * envelope * fade * self.gain;
+                    let sample = filtered * envelope * fade;
                     phase += (self.frequency + (self.end_frequency - self.frequency) * t / duration)
                         as f64
                         / SAMPLE_RATE as f64;
-                    [sample * stereo[0], sample * stereo[1]]
+                    [sample; 2]
                 })
                 .collect(),
         )
@@ -143,34 +138,54 @@ impl Sound {
 pub(crate) struct SoundEvent {
     pub time: f64,
     pub samples: Arc<Vec<[f32; 2]>>,
+    pub gain: f32,
+    pub pan: f32,
 }
 
 #[derive(Clone, Default)]
 pub(crate) struct AudioEvents {
     pub scheduled: Vec<SoundEvent>,
     pub steps: BTreeMap<(hecs::Entity, u64, usize), Vec<SoundEvent>>,
+    buffers: Vec<std::sync::Weak<Vec<[f32; 2]>>>,
 }
 
 impl AudioEvents {
+    pub fn register_samples(&mut self, samples: &Arc<Vec<[f32; 2]>>) -> Result<(), String> {
+        self.buffers.retain(|buffer| buffer.strong_count() > 0);
+        if self
+            .buffers
+            .iter()
+            .any(|buffer| buffer.as_ptr() == Arc::as_ptr(samples))
+        {
+            return Ok(());
+        }
+        let stored = self
+            .buffers
+            .iter()
+            .filter_map(|buffer| buffer.upgrade())
+            .map(|buffer| buffer.len())
+            .sum::<usize>();
+        if stored + samples.len() > MAX_SAMPLE_FRAMES {
+            return Err("Scene audio resources exceed the 64 MB sample budget.".into());
+        }
+        self.buffers.push(Arc::downgrade(samples));
+        Ok(())
+    }
+
     pub fn check_capacity(
         &self,
-        samples: usize,
         replacing: Option<(hecs::Entity, u64, usize)>,
         pending: usize,
     ) -> Result<(), String> {
-        let stored = self
-            .scheduled
-            .iter()
-            .chain(
-                self.steps
-                    .iter()
-                    .filter(|(key, _)| Some(**key) != replacing)
-                    .flat_map(|(_, events)| events),
-            )
-            .map(|event| event.samples.len())
-            .sum::<usize>();
-        if stored + pending + samples > 8_000_000 {
-            return Err("Scene sound occurrences exceed the 64 MB sample budget.".into());
+        let stored = self.scheduled.len()
+            + self
+                .steps
+                .iter()
+                .filter(|(key, _)| Some(**key) != replacing)
+                .map(|(_, events)| events.len())
+                .sum::<usize>();
+        if stored + pending >= 100_000 {
+            return Err("Scene exceeds 100000 audio occurrences.".into());
         }
         Ok(())
     }
@@ -181,25 +196,31 @@ impl AudioEvents {
             let from = (at - start as i64).max(0) as usize;
             let to = (at + event.samples.len() as i64 - start as i64).clamp(0, output.len() as i64)
                 as usize;
+            let balance = [
+                (event.pan.max(0.0) * std::f32::consts::FRAC_PI_2)
+                    .cos()
+                    .max(0.0)
+                    * event.gain,
+                (event.pan.min(0.0) * std::f32::consts::FRAC_PI_2)
+                    .cos()
+                    .max(0.0)
+                    * event.gain,
+            ];
             for (index, frame) in output.iter_mut().enumerate().take(to).skip(from) {
                 let source = event.samples[(start as i64 + index as i64 - at) as usize];
-                frame[0] += source[0];
-                frame[1] += source[1];
+                frame[0] += source[0] * balance[0];
+                frame[1] += source[1] * balance[1];
             }
         }
     }
 
     pub fn copy_steps(&mut self, previous: &Self, entity: hecs::Entity) -> Result<(), String> {
-        let samples = previous
-            .steps
-            .iter()
-            .filter(|(key, _)| key.0 == entity)
-            .flat_map(|(_, events)| events)
-            .map(|event| event.samples.len())
-            .sum();
-        self.check_capacity(samples, None, 0)?;
         for (key, events) in &previous.steps {
             if key.0 == entity {
+                for event in events {
+                    self.register_samples(&event.samples)?;
+                }
+                self.check_capacity(Some(*key), events.len().saturating_sub(1))?;
                 self.steps.insert(*key, events.clone());
             }
         }
@@ -232,6 +253,8 @@ mod tests {
                 scheduled: vec![SoundEvent {
                     time: 0.01,
                     samples,
+                    gain: 0.2,
+                    pan: 0.0,
                 }],
                 ..Default::default()
             };
@@ -243,5 +266,22 @@ mod tests {
             assert_eq!(whole, split);
             assert!(limit(whole).iter().all(|v| v.abs() <= 1.0));
         }
+    }
+}
+
+#[cfg(test)]
+mod resource_tests {
+    use super::*;
+
+    #[test]
+    fn shared_samples_count_once_and_unused_buffers_release_the_budget() {
+        let samples = Arc::new(vec![[0.0; 2]; MAX_SAMPLE_FRAMES]);
+        let mut audio = AudioEvents::default();
+        audio.register_samples(&samples).unwrap();
+        audio.register_samples(&samples).unwrap();
+        let extra = Arc::new(vec![[0.0; 2]]);
+        assert!(audio.register_samples(&extra).is_err());
+        drop(samples);
+        audio.register_samples(&extra).unwrap();
     }
 }

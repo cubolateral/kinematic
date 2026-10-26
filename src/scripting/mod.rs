@@ -24,6 +24,7 @@ mod callback;
 
 pub(crate) fn release_unused() {
     resources::release_unused();
+    audio::release_unused();
 
     drawing::release_unused();
 }
@@ -34,3 +35,5 @@ mod methods;
 mod code;
 
 mod audio;
+
+mod audio_file;

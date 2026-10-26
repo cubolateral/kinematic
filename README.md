@@ -10,7 +10,8 @@ library or scene API.
 Build from this repository with a Rust toolchain supporting edition 2024,
 CMake and a native C/C++ compiler. SDL3 and Lua are built with the application;
 you do not need a separate Lua installation. The editor requires a desktop
-session supporting OpenGL 3.3. Install FFmpeg on `PATH` for MP4 export.
+session supporting OpenGL 3.3. Install FFmpeg on `PATH` for audio-file loading
+and MP4 export.
 
 ```sh
 cargo run --release
@@ -69,7 +70,7 @@ the project settings. The existing project format remains unchanged.
 Lua supports 2D and 3D objects, hierarchical canvases and projections, property
 tweens, sequential/parallel scheduling, loops, snapshots, reactive signals,
 deterministic random values, custom drawing, shaders, seekable simulations and
-procedural sound effects shared by SDL preview and MP4 export.
+file and procedural audio resources shared by SDL preview and MP4 export.
 Scene Tree, Timeline and Preview share selection. Inspector edits for explicit
 object IDs persist separately from scripts. Code diagnostics and failed reloads
 preserve the last valid preview. Export excludes editor overlays.
@@ -77,7 +78,7 @@ preserve the last valid preview. Export excludes editor overlays.
 See [Lua projects and API](docs/lua.md) for the full workflow, scene API,
 custom objects, shader contracts, persistence and optional Lua Language Server.
 Runnable projects are in [examples/lua](examples/lua): 2D, 3D, simulation
-(including Game of Life), and [procedural audio](examples/lua/audio).
+(including Game of Life), and [audio](examples/lua/audio).
 
 ## Storage
 

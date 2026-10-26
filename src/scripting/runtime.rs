@@ -771,6 +771,7 @@ impl Runtime {
         extension::register(lua, &api)?;
         super::drawing::register(lua, &api)?;
         super::resources::register(self, &api)?;
+        super::audio::register(self, &api)?;
 
         let easing = lua.create_table()?;
 
@@ -932,7 +933,7 @@ impl SceneHandle {
 
 impl UserData for SceneHandle {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("sound", |_, this, options: Table| {
+        methods.add_method("audio", |_, this, options: Table| {
             super::audio::create(this.runtime()?, options)
         });
         methods.add_method(
@@ -1920,7 +1921,7 @@ impl Runtime {
             callback
                 .sounds
                 .iter()
-                .map(|(name, sound)| (name, &sound.sound))
+                .map(|(name, sound)| (name, sound.fingerprint()))
                 .collect::<Vec<_>>()
         ))
     }

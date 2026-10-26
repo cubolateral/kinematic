@@ -199,13 +199,13 @@ mod tests {
         let mut encoder = Encoder::new(&output, (2, 2), 30, true).unwrap();
         let directory = encoder.directory.clone();
         let sound = Sound::preset("boink").unwrap();
-        let audio = AudioEvents {
-            scheduled: vec![SoundEvent {
-                time: 0.25,
-                samples: sound.samples(),
-            }],
-            ..Default::default()
-        };
+        let mut audio = AudioEvents::default();
+        audio.scheduled.push(SoundEvent {
+            time: 0.25,
+            samples: sound.samples(),
+            gain: 0.2,
+            pan: 0.0,
+        });
         let mut samples = vec![[0.0; 2]; SAMPLE_RATE as usize];
         audio.mix(0.0, 0, &mut samples);
         let expected = limit(samples);
