@@ -532,7 +532,7 @@ impl Tab {
 
                     if over_popup || hovered == self.hover_candidate.map(|(position, _)| position) {
                         popup.last_hover = ui.time();
-                    } else if hovered.is_some() || ui.time() - popup.last_hover > 0.25 {
+                    } else if ui.time() - popup.last_hover > 0.25 {
                         if popup.focused && editor_hovered {
                             ui.set_window_focus(Some(WINDOW_NAME));
                             self.editor.focus();
@@ -621,7 +621,7 @@ impl Tab {
                     }
                 }
 
-                if self.documentation_has_content && self.completions.items.is_empty() {
+                if self.documentation_has_content {
                     let popup = self.documentation_popup.get_or_insert_with(|| {
                         let viewport = ui.window_viewport();
                         let work_position = viewport.work_pos();
@@ -1973,7 +1973,7 @@ mod tests {
         state.draw(&mut documents, &settings, context.frame());
         context.end_frame();
         assert_eq!(documents.open[b].text, "        value");
-        documents.edit(b, "circle()".into());
+        documents.edit(b, "circle() value".into());
         state.prepare(&context, Some(&documents), &settings);
         state.draw(&mut documents, &settings, context.frame());
         context.end_frame();
@@ -2127,7 +2127,20 @@ mod tests {
             popup_position
         );
 
-        assert_eq!(documents.open[b].text, "circle()");
+        assert_eq!(documents.open[b].text, "circle() value");
+
+        let other_word = (260..700)
+            .map(|x| [x as f32, point[1]])
+            .find(|point| {
+                super::text::word_at_mouse(&state.tabs[b].editor, *point)
+                    .is_some_and(|word| word.start != dear_imgui_cte::Position::new(0, 0))
+            })
+            .unwrap();
+        context.io_mut().set_delta_time(0.01);
+        context.io_mut().add_mouse_pos_event(other_word);
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+        assert!(state.tabs[b].documentation_popup.is_some());
 
         let popup = state
             .tabs
@@ -2163,6 +2176,25 @@ mod tests {
 
             assert!(state.tabs[b].documentation_popup.is_some(), "{point:?}");
         }
+
+        let cursor = state.tabs[b].editor.main_cursor_position();
+        state
+            .tabs
+            .get_mut(b)
+            .unwrap()
+            .completions
+            .receive(&serde_json::json!([{ "label": "circle" }]), cursor);
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
+
+        for name in ["Documentation##Code", "Suggestions##Code"] {
+            let name = std::ffi::CString::new(name).unwrap();
+            let window = unsafe { dear_imgui_rs::sys::igFindWindowByName(name.as_ptr()) };
+
+            assert!(!window.is_null() && unsafe { (*window).Active }, "{name:?}");
+        }
+
+        state.tabs.get_mut(b).unwrap().completions.clear();
 
         context.io_mut().set_delta_time(0.01);
         context.io_mut().add_mouse_pos_event([-100.0, -100.0]);
@@ -2250,15 +2282,15 @@ mod tests {
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::Tab, false);
 
-        documents.edit(b, "ball.".into());
+        let completion_source = format!("{}ball.\n{}", "other\n".repeat(50), "other\n".repeat(50));
+        documents.edit(b, completion_source.clone());
         state.prepare(&context, Some(&documents), &settings);
 
-        state
-            .tabs
-            .get_mut(b)
-            .unwrap()
-            .editor
-            .set_cursor(Position::new(0, 5))
+        let completion_cursor = Position::new(50, 5);
+        let tab = state.tabs.get_mut(b).unwrap();
+        tab.editor.set_cursor(completion_cursor).unwrap();
+        tab.editor
+            .scroll_to_line(50, dear_imgui_cte::ScrollAlignment::Bottom)
             .unwrap();
 
         state.focus_requested = true;
@@ -2270,7 +2302,7 @@ mod tests {
 
         state.tabs.get_mut(b).unwrap().completions.receive(
             &serde_json::json!([{"label":"radius", "kind":5}, {"label":"position", "kind":5}]),
-            Position::new(0, 5),
+            completion_cursor,
         );
 
         let mut suggestion_position = [0.0, 0.0];
@@ -2280,22 +2312,58 @@ mod tests {
 
             state.draw(&mut documents, &settings, ui);
 
-            ui.window("Suggestions##Code")
-                .build(|| suggestion_position = ui.window_pos());
+            let window =
+                unsafe { dear_imgui_rs::sys::igFindWindowByName(c"Suggestions##Code".as_ptr()) };
+            assert!(!window.is_null());
+            let position = unsafe { (*window).Pos };
+            suggestion_position = [position.x, position.y];
 
             context.end_frame();
+        }
+
+        let first_visible_row = state.tabs[b].editor.first_visible_row();
+
+        for y in [18.0, 38.0, 240.0] {
+            context
+                .io_mut()
+                .add_mouse_pos_event([suggestion_position[0] + 30.0, suggestion_position[1] + y]);
+
+            for _ in 0..3 {
+                state.draw(&mut documents, &settings, context.frame());
+                context.end_frame();
+            }
+
+            for (key, selected) in [
+                (dear_imgui_rs::Key::DownArrow, 1),
+                (dear_imgui_rs::Key::UpArrow, 0),
+                (dear_imgui_rs::Key::DownArrow, 1),
+                (dear_imgui_rs::Key::UpArrow, 0),
+            ] {
+                for down in [true, false] {
+                    context.io_mut().add_key_event(key, down);
+                    state.draw(&mut documents, &settings, context.frame());
+                    context.end_frame();
+                    assert_eq!(state.tabs[b].completions.selected, selected);
+                    assert_eq!(state.tabs[b].completions.items.len(), 2);
+                    assert_eq!(
+                        state.tabs[b].editor.main_cursor_position(),
+                        completion_cursor
+                    );
+                    assert_eq!(state.tabs[b].editor.first_visible_row(), first_visible_row);
+                }
+            }
         }
 
         context
             .io_mut()
             .add_mouse_pos_event([suggestion_position[0] + 30.0, suggestion_position[1] + 38.0]);
+        state.draw(&mut documents, &settings, context.frame());
+        context.end_frame();
 
-        for _ in 0..3 {
-            state.draw(&mut documents, &settings, context.frame());
-            context.end_frame();
-        }
-
-        for expected in ["ball.", "ball.position"] {
+        for expected in [
+            completion_source.clone(),
+            completion_source.replace("ball.", "ball.position"),
+        ] {
             for pressed in [true, false] {
                 context
                     .io_mut()

@@ -49,13 +49,22 @@ impl Completion {
             return None;
         }
 
-        if inputs::active(ui, InputAction::PreviousSuggestion) {
+        // Register every binding before CTE so the list owns its navigation keys.
+        let [previous, next, accept, cancel] = [
+            InputAction::PreviousSuggestion,
+            InputAction::NextSuggestion,
+            InputAction::AcceptSuggestion,
+            InputAction::CancelSuggestion,
+        ]
+        .map(|action| inputs::map().routed(ui, action));
+
+        if previous {
             self.selected = (self.selected + self.items.len() - 1) % self.items.len();
-        } else if inputs::active(ui, InputAction::NextSuggestion) {
+        } else if next {
             self.selected = (self.selected + 1) % self.items.len();
-        } else if inputs::active(ui, InputAction::AcceptSuggestion) {
+        } else if accept {
             return Some(true);
-        } else if inputs::active(ui, InputAction::CancelSuggestion) {
+        } else if cancel {
             self.clear();
 
             return Some(false);
@@ -128,7 +137,7 @@ impl Completion {
             "Suggestions##Code",
             position,
             Some(size),
-            dear_imgui_rs::WindowFlags::empty(),
+            dear_imgui_rs::WindowFlags::NO_NAV,
             || {
                 ui.child_window("Candidates")
                     .size([0.0, 190.0_f32.min(size[1] * 0.6)])
