@@ -150,11 +150,13 @@ fn layout(shape: &CodeShape, source: &str, fill: Color) -> Layout {
     let mut cells = Vec::new();
     let mut max_width = 0.0_f32;
     let mut byte_offset = 0;
+    let mut groups = crate::core::objects::text_morph::TokenGroups::default();
     let tokens = syntax_tokens(source, shape, fill);
     let mut token_index = 0;
     let (space, _) = font.measure_str(" ", None);
     let mut count = 0_usize;
     for (line_index, line) in source.split('\n').enumerate() {
+        groups.next('\n');
         let raw_length = line.len();
         count += 1;
         let line = line.strip_suffix('\r').unwrap_or(line);
@@ -193,6 +195,7 @@ fn layout(shape: &CodeShape, source: &str, fill: Color) -> Layout {
                 rect: skia_safe::Rect::from_xywh(x, y, width, height),
                 part: MorphPart {
                     key: text,
+                    group: groups.next(ch),
                     path: builder.detach(),
                     color: Some(tokens[token_index].1),
                 },
@@ -227,6 +230,7 @@ fn emphasized_parts(layout: &Layout, shape: &CodeShape) -> Vec<MorphPart> {
                 + (1.0 - shape.dim_opacity) * shape.selection.coverage(cell.position, true);
             MorphPart {
                 key: cell.part.key.clone(),
+                group: cell.part.group,
                 path: cell.part.path.clone(),
                 color: Some(rgba.into()),
             }
@@ -324,7 +328,7 @@ fn draw_code(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
         draw_highlights(&from, &shape, opacity * (1.0 - fade.progress), canvas);
         draw_highlights(&to, &shape, opacity * fade.progress, canvas);
         if fade.morph || token_edit {
-            for part in morph_parts(&parts, &incoming, fade.progress) {
+            for part in morph_parts(&parts, &incoming, fade.progress, fade.group) {
                 part_style.fill = part.color(style.fill);
                 part_style.stroke.a = style.stroke.a * part_style.fill.a;
                 draw_complete_styled_path(
@@ -556,7 +560,7 @@ mod tests {
                     assert!(!outgoing.iter().any(|old| old.key == part.key));
                 }
             }
-            let draws = morph_parts(&outgoing, &incoming, 0.5);
+            let draws = morph_parts(&outgoing, &incoming, 0.5, false);
             assert!(
                 draws
                     .iter()

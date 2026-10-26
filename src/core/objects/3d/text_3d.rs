@@ -171,7 +171,7 @@ fn draw_text_object(
         let from = text_parts(&shape.text_shape(&shape.text));
         let to = text_parts(&shape.text_shape(text));
         let mut part_material = (*material).clone();
-        for part in morph_parts(&from, &to, fade.progress) {
+        for part in morph_parts(&from, &to, fade.progress, fade.group) {
             if part.opacity <= 0.0 {
                 continue;
             }

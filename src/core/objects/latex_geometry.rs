@@ -10,6 +10,7 @@ pub(super) struct FormulaPart {
     pub path: skia_safe::Path,
     pub color: Option<Color>,
     pub key: String,
+    pub group: usize,
 }
 
 pub(super) struct FormulaGeometry {
@@ -77,6 +78,9 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
             parts: Vec::new(),
         };
 
+        let mut tokens = super::text_morph::TokenGroups::default();
+        let mut previous_scope = "";
+        let mut previous_run = None;
         assert_eq!(display.items.len(), tagged.items.len());
         for ((item, alternate), tagged) in display
             .items
@@ -90,7 +94,19 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
 
             let start = geometry.parts.len();
             emit(item, cache, fill, &mut geometry.parts);
-            let group = &groups[item_color(tagged).r as usize];
+            let (group, run) = &groups[item_color(tagged).r as usize];
+            if group != previous_scope || *run != previous_run {
+                tokens.next(' ');
+                previous_scope = group;
+                previous_run = *run;
+            }
+            let symbol = match item {
+                DisplayItem::GlyphPath { char_code, .. } => {
+                    char::from_u32(*char_code).unwrap_or(' ')
+                }
+                _ => ' ',
+            };
+            let token = tokens.next(symbol);
             let identity = match item {
                 DisplayItem::GlyphPath {
                     font, char_code, ..
@@ -101,6 +117,7 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
             };
             for (index, part) in geometry.parts[start..].iter_mut().enumerate() {
                 part.key = format!("{group}/{identity}/{index}");
+                part.group = token;
             }
         }
 
@@ -136,10 +153,15 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
 }
 
 // A separate display pass carries group labels through RaTeX's own placement logic.
-fn tag_groups(node: &mut ratex_layout::LayoutBox, group: &str, groups: &mut Vec<String>) {
+fn tag_groups(
+    node: &mut ratex_layout::LayoutBox,
+    group: &str,
+    groups: &mut Vec<(String, Option<usize>)>,
+) {
     use ratex_layout::layout_box::{BoxContent, VBoxChildKind};
     let color = ratex_types::color::Color::new(groups.len() as f32, 0.0, 0.0, 1.0);
-    groups.push(group.to_owned());
+    let run = matches!(node.content, BoxContent::GlyphRun { .. }).then_some(groups.len());
+    groups.push((group.to_owned(), run));
     node.color = color;
     let mut child = |node: &mut ratex_layout::LayoutBox, role: &str| {
         tag_groups(node, &format!("{group}/{role}"), groups);
@@ -273,6 +295,7 @@ pub(super) fn morph_geometry(text: &str, thickness: f32) -> Vec<super::text_morp
         .iter()
         .map(|part| super::text_morph::MorphPart {
             key: part.key.clone(),
+            group: part.group,
             path: super::text_2d::weighted_path(&part.path, thickness),
             color: part.color,
         })
@@ -327,6 +350,7 @@ fn emit(
                         .with_offset((*x as f32, *y as f32)),
                     color,
                     key: String::new(),
+                    group: 0,
                 });
             }
         }
@@ -344,6 +368,7 @@ fn emit(
                 ),
                 color,
                 key: String::new(),
+                group: 0,
             });
         }
         DisplayItem::Line {
@@ -374,6 +399,7 @@ fn emit(
                     ),
                     color,
                     key: String::new(),
+                    group: 0,
                 });
 
                 offset += dash * 2.0;
@@ -397,6 +423,7 @@ fn emit(
                         path: path.with_offset((*x as f32, *y as f32)),
                         color,
                         key: String::new(),
+                        group: 0,
                     });
                 }
             };
@@ -447,6 +474,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn text_word_groups_respect_spaces_and_symbols() {
+        let parts = morph_geometry(r"\text{local d = wji make:func}", 0.0);
+        let mut lengths = Vec::new();
+        for (index, part) in parts.iter().enumerate() {
+            if index == 0 || part.group != parts[index - 1].group {
+                lengths.push(0);
+            }
+            *lengths.last_mut().unwrap() += 1;
+        }
+        assert_eq!(lengths, [5, 1, 1, 3, 4, 1, 4]);
+    }
+
+    #[test]
+    fn grouped_morph_keeps_words_whole_inside_formula_roles() {
+        use crate::core::objects::text_morph::morph_parts;
+        for (from, to) in [
+            ("abc+def", "def+abcd"),
+            (r"\frac{abc}{def}", r"\frac{abcd}{def}"),
+        ] {
+            let from = morph_geometry(from, 0.0);
+            let to = morph_geometry(to, 0.0);
+            let draws = morph_parts(&from, &to, 0.5, true);
+            assert!(
+                draws
+                    .iter()
+                    .filter(|draw| !draw.incoming && draw.part.key.contains(":97/"))
+                    .all(|draw| draw.opacity == 0.5)
+            );
+            assert!(
+                draws
+                    .iter()
+                    .filter(|draw| !draw.incoming && draw.part.key.contains(":100/"))
+                    .all(|draw| draw.opacity == 1.0)
+            );
+        }
+    }
+
+    #[test]
     fn morph_preserves_fraction_script_and_matrix_groups() {
         use crate::core::objects::text_morph::morph_parts;
         for (from, to, fading) in [
@@ -461,7 +526,7 @@ mod tests {
         ] {
             let from = morph_geometry(from, 0.0);
             let to = morph_geometry(to, 0.0);
-            let draws = morph_parts(&from, &to, 0.5);
+            let draws = morph_parts(&from, &to, 0.5, false);
             assert_eq!(
                 draws.iter().filter(|draw| draw.opacity == 0.5).count(),
                 fading
@@ -469,7 +534,7 @@ mod tests {
         }
         let from = morph_geometry(r"\frac{x+x}{x}", 0.0);
         let to = morph_geometry(r"\frac{x+x+1}{x}", 0.0);
-        let draws = morph_parts(&from, &to, 0.5);
+        let draws = morph_parts(&from, &to, 0.5, false);
         assert_eq!(
             draws.iter().filter(|draw| draw.opacity == 1.0).count(),
             from.len()
@@ -482,7 +547,7 @@ mod tests {
         use crate::core::objects::text_morph::morph_parts;
         let from = morph_geometry(r"\color{red}{x}", 0.0);
         let to = morph_geometry(r"\color{blue}{x}^2", 0.0);
-        let draws = morph_parts(&from, &to, 0.5);
+        let draws = morph_parts(&from, &to, 0.5, false);
         let base = draws
             .iter()
             .find(|draw| draw.opacity == 1.0)

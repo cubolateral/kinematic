@@ -18,61 +18,65 @@ pub(crate) struct LuaMethod {
 #[kinematic_macros::lua_methods]
 impl Text2DHandler {
     /// Moves matching glyphs and fades added or removed glyphs.
+    /// Group matches whole words and individual symbols instead. Default: false.
     /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
-    pub(crate) fn morph(&self, text: String) -> Task {
-        text_transition::<TextShape>(self.entity(), text, true)
+    pub(crate) fn morph(&self, text: String, group: Option<bool>) -> Task {
+        text_transition::<TextShape>(self.entity(), text, true, group.unwrap_or(false))
     }
 
     /// Crossfades the current text into the new text.
     /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
     pub(crate) fn fade(&self, text: String) -> Task {
-        text_transition::<TextShape>(self.entity(), text, false)
+        text_transition::<TextShape>(self.entity(), text, false, false)
     }
 }
 
 #[kinematic_macros::lua_methods]
 impl Latex2DHandler {
     /// Moves matching glyphs and fades added or removed glyphs.
+    /// Group matches whole words and individual symbols instead. Default: false.
     /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
-    pub(crate) fn morph(&self, text: String) -> Task {
-        text_transition::<Latex2DShape>(self.entity(), text, true)
+    pub(crate) fn morph(&self, text: String, group: Option<bool>) -> Task {
+        text_transition::<Latex2DShape>(self.entity(), text, true, group.unwrap_or(false))
     }
 
     /// Crossfades the current formula into the new formula.
     /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
     pub(crate) fn fade(&self, text: String) -> Task {
-        text_transition::<Latex2DShape>(self.entity(), text, false)
+        text_transition::<Latex2DShape>(self.entity(), text, false, false)
     }
 }
 
 #[kinematic_macros::lua_methods]
 impl Latex3DHandler {
     /// Moves matching glyphs and fades added or removed glyphs.
+    /// Group matches whole words and individual symbols instead. Default: false.
     /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
-    pub(crate) fn morph(&self, text: String) -> Task {
-        text_transition::<Latex3DShape>(self.entity(), text, true)
+    pub(crate) fn morph(&self, text: String, group: Option<bool>) -> Task {
+        text_transition::<Latex3DShape>(self.entity(), text, true, group.unwrap_or(false))
     }
 
     /// Crossfades the current formula into the new formula.
     /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
     pub(crate) fn fade(&self, text: String) -> Task {
-        text_transition::<Latex3DShape>(self.entity(), text, false)
+        text_transition::<Latex3DShape>(self.entity(), text, false, false)
     }
 }
 
 #[kinematic_macros::lua_methods]
 impl Text3DHandler {
     /// Moves matching glyphs and fades added or removed glyphs.
+    /// Group matches whole words and individual symbols instead. Default: false.
     /// Returns an animation; call `:play(duration, easing)` to schedule it.
     #[lua]
-    pub(crate) fn morph(&self, text: String) -> Task {
-        text_transition::<Text3DShape>(self.entity(), text, true)
+    pub(crate) fn morph(&self, text: String, group: Option<bool>) -> Task {
+        text_transition::<Text3DShape>(self.entity(), text, true, group.unwrap_or(false))
     }
 }
 
@@ -80,6 +84,7 @@ pub(super) fn text_transition<T: Trackable + 'static>(
     entity: hecs::Entity,
     text: String,
     morph: bool,
+    group: bool,
 ) -> Task {
     let tween = |target, from, to, duration, implicit| Task::RuntimeTween {
         entity,
@@ -95,6 +100,13 @@ pub(super) fn text_transition<T: Trackable + 'static>(
     };
 
     Task::All(vec![
+        tween(
+            TrackTarget::property(std::any::TypeId::of::<TextFade>(), TextFade::track(4)),
+            TrackValue::Bool(group),
+            TrackValue::Bool(group),
+            0.0,
+            false,
+        ),
         tween(
             TrackTarget::property(std::any::TypeId::of::<TextFade>(), TextFade::track(3)),
             TrackValue::Bool(morph),

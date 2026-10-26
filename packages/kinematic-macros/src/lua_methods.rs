@@ -64,6 +64,7 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
         let mut names = Vec::new();
         let mut annotations = String::new();
         let mut conversions = Vec::new();
+        let mut required = 0;
 
         for input in inputs {
             let FnArg::Typed(input) = input else {
@@ -84,7 +85,37 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
                 ));
             };
 
-            let ty = path.path.segments.last().unwrap().ident.to_string();
+            let mut value_type = &*input.ty;
+            let optional = path.path.segments.last().unwrap().ident == "Option";
+            if optional {
+                let syn::PathArguments::AngleBracketed(args) =
+                    &path.path.segments.last().unwrap().arguments
+                else {
+                    unreachable!()
+                };
+                let Some(syn::GenericArgument::Type(inner)) = args.args.first() else {
+                    return Err(syn::Error::new_spanned(
+                        input,
+                        "Expected an optional primitive type.",
+                    ));
+                };
+                value_type = inner;
+            } else {
+                if required != names.len() {
+                    return Err(syn::Error::new_spanned(
+                        input,
+                        "Required arguments must precede optional arguments.",
+                    ));
+                }
+                required += 1;
+            }
+            let Type::Path(value_path) = value_type else {
+                return Err(syn::Error::new_spanned(
+                    value_type,
+                    "Expected a primitive type.",
+                ));
+            };
+            let ty = value_path.path.segments.last().unwrap().ident.to_string();
             let lua_type = match ty.as_str() {
                 "String" => "string",
                 "bool" => "boolean",
@@ -98,7 +129,7 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
                 }
             };
             let ident = &name.ident;
-            let rust_type = &input.ty;
+            let rust_type = value_type;
             let compatible = match ty.as_str() {
                 "String" => quote!(matches!(value, mlua::Value::String(_))),
                 "bool" => quote!(matches!(value, mlua::Value::Boolean(_))),
@@ -117,15 +148,23 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
                 quote!()
             };
 
-            conversions.push(quote! {
-                let value = values.next().unwrap();
+            let conversion = quote! {
                 if !(#compatible) { return Err(mlua::Error::runtime("Incompatible native method argument type.")); }
-
                 let #ident = <#rust_type as mlua::FromLua>::from_lua(value, lua)?;
                 #validate
+                #ident
+            };
+            let conversion = if optional {
+                quote!(if value.is_nil() { None } else { Some({ #conversion }) })
+            } else {
+                quote!({ #conversion })
+            };
+            conversions.push(quote! {
+                let value = values.next().unwrap_or(mlua::Value::Nil);
+                let #ident = #conversion;
             });
-
-            annotations.push_str(&format!("---@param {} {lua_type}\n", name.ident));
+            let suffix = if optional { "?" } else { "" };
+            annotations.push_str(&format!("---@param {} {lua_type}{suffix}\n", name.ident));
             names.push(&name.ident);
         }
 
@@ -166,7 +205,7 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
                 invoke: |lua, object, args| {
                     use crate::core::objects::ObjectHandler;
                     use mlua::IntoLua;
-                    if args.len() != #count { return Err(mlua::Error::runtime("Incorrect number of native method arguments.")); }
+                    if !(#required..=#count).contains(&args.len()) { return Err(mlua::Error::runtime("Incorrect number of native method arguments.")); }
 
                     let mut values = args.into_iter();
                     #(#conversions)*

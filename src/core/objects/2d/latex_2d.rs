@@ -128,7 +128,7 @@ fn draw_latex_object(
             canvas.scale((size, size));
             let mut part_style = (*style).clone();
             part_style.stroke_width /= size;
-            for part in morph_parts(&from, &to, fade.progress) {
+            for part in morph_parts(&from, &to, fade.progress, fade.group) {
                 part_style.fill = part.color(style.fill);
                 draw_complete_styled_path(
                     &part.path(),

@@ -11,7 +11,7 @@ use crate::core::{
 use mlua::{FromLuaMulti, IntoLua, Lua, MultiValue, Result, Table, Value};
 
 pub(super) enum CodeAction {
-    Morph(String),
+    Morph(String, bool),
     Fade(String),
     Insert(CodePosition, String),
     Replace(CodeRanges, String),
@@ -46,7 +46,7 @@ pub(super) fn resolve(object: &ObjectHandle, action: &CodeAction) -> Result<Anim
                 TrackValue::CodeRanges(ranges.clone()),
             ));
         }
-        CodeAction::Morph(text) | CodeAction::Fade(text) => source.clone_from(text),
+        CodeAction::Morph(text, _) | CodeAction::Fade(text) => source.clone_from(text),
         CodeAction::Insert(position, text) => {
             edits.push([*position, *position]);
             replacement.clone_from(text);
@@ -99,11 +99,12 @@ pub(super) fn resolve(object: &ObjectHandle, action: &CodeAction) -> Result<Anim
     for interval in intervals.into_iter().rev() {
         source.replace_range(interval, &replacement);
     }
-    let active = !matches!(action, CodeAction::Morph(_) | CodeAction::Fade(_));
+    let active = !matches!(action, CodeAction::Morph(..) | CodeAction::Fade(_));
     let mut tasks = vec![text_transition::<CodeShape>(
         object.entity,
         source,
-        matches!(action, CodeAction::Morph(_)),
+        matches!(action, CodeAction::Morph(..)),
+        matches!(action, CodeAction::Morph(_, true)),
     )];
     for (info, value) in [
         (
@@ -289,7 +290,22 @@ fn coordinate(value: Value, zero: bool) -> Result<usize> {
 }
 
 fn matches(lua: &Lua, object: &ObjectHandle, args: MultiValue) -> Result<Vec<CodeRange>> {
-    let value: Value = arguments(lua, args, 1)?;
+    let count = args.len();
+    if !(1..=3).contains(&count) {
+        return Err(mlua::Error::runtime(
+            "Code search requires text and optional match_case and match_whole_word booleans.",
+        ));
+    }
+    let (value, match_case, match_whole_word): (Value, Value, Value) = arguments(lua, args, count)?;
+    let boolean = |value| match value {
+        Value::Nil => Ok(false),
+        Value::Boolean(value) => Ok(value),
+        _ => Err(mlua::Error::runtime(
+            "Code search options must be booleans.",
+        )),
+    };
+    let match_case = boolean(match_case)?;
+    let match_whole_word = boolean(match_whole_word)?;
     let Value::String(text) = value else {
         return Err(mlua::Error::runtime("Code search text must be a string."));
     };
@@ -300,15 +316,39 @@ fn matches(lua: &Lua, object: &ObjectHandle, args: MultiValue) -> Result<Vec<Cod
     let TrackValue::String(source) = object.property("code")?.value()? else {
         unreachable!()
     };
-    Ok(source
-        .match_indices(&*text)
-        .map(|(offset, text)| {
-            [
-                code_position(&source, offset),
-                code_position(&source, offset + text.len()),
-            ]
-        })
-        .collect())
+    let word = |ch: char| ch.is_alphanumeric() || ch == '_';
+    let mut result = Vec::new();
+    let mut previous_end = 0;
+    for (start, _) in source.char_indices() {
+        if start < previous_end {
+            continue;
+        }
+        let mut end = start;
+        let mut chars = source[start..].char_indices();
+        let found = text.chars().all(|expected| {
+            let Some((offset, ch)) = chars.next() else {
+                return false;
+            };
+            end = start + offset + ch.len_utf8();
+            if match_case {
+                ch == expected
+            } else {
+                ch.to_lowercase().eq(expected.to_lowercase())
+            }
+        });
+        if !found
+            || (match_whole_word
+                && ((text.chars().next().is_some_and(word)
+                    && source[..start].chars().next_back().is_some_and(word))
+                    || (text.chars().next_back().is_some_and(word)
+                        && source[end..].chars().next().is_some_and(word))))
+        {
+            continue;
+        }
+        result.push([code_position(&source, start), code_position(&source, end)]);
+        previous_end = end;
+    }
+    Ok(result)
 }
 
 macro_rules! code_methods {
@@ -445,17 +485,26 @@ code:select({code:find('1'), code:find_all('oi'), code:lines(1)}):play(1)
         range_to_lua(lua, [[first, 1], end])?.into_lua(lua)
     }
 
-    #[doc = r#"Moves matching characters and fades inserted or removed characters. Preparing leaves the timeline unchanged.
+    #[doc = r#"Moves matching characters and fades inserted or removed characters. Group matches whole words and individual symbols instead. Default: false. Preparing leaves the timeline unchanged.
 
 ```lua
 code:morph('local value = 42\nprint(value)'):play(1)
 ```"#]
-    fn morph(lua, object, args; text: "string") -> "Kinematic.Animation" {
-        let value: Value = arguments(lua, args, 1)?;
+    fn morph(lua, object, args; text: "string", group: "boolean?") -> "Kinematic.Animation" {
+        let count = args.len();
+        if !(1..=2).contains(&count) {
+            return Err(mlua::Error::runtime("Morph requires text and an optional group boolean."));
+        }
+        let (value, group): (Value, Value) = arguments(lua, args, count)?;
         let Value::String(text) = value else {
             return Err(mlua::Error::runtime("Code text must be a string."));
         };
-        prepare(lua, object, CodeAction::Morph(text.to_str()?.to_owned()))
+        let group = match group {
+            Value::Nil => false,
+            Value::Boolean(group) => group,
+            _ => return Err(mlua::Error::runtime("Morph group must be a boolean.")),
+        };
+        prepare(lua, object, CodeAction::Morph(text.to_str()?.to_owned(), group))
     }
 
     #[doc = r#"Crossfades the current code into a new block.
@@ -560,7 +609,7 @@ code:highlight({}):play(1)
     }
 
 
-    #[doc = r#"Finds the first literal, case-sensitive occurrence in the code at the current scene time. Returns a CodeRange to pass to select, highlight, replace, or erase, or nil when absent. The result is a fixed range, not a live query.
+    #[doc = r#"Finds the first literal occurrence in the code at the current scene time. Match_case and match_whole_word default to false. Whole words use letters, digits, and underscores; adjacent punctuation is allowed. Returns a CodeRange to pass to select, highlight, replace, or erase, or nil when absent. The result is a fixed range, not a live query.
 
 ```lua
 local range = code:find('value')
@@ -568,19 +617,19 @@ if range then
     code:replace(range, 'answer'):play(1)
 end
 ```"#]
-    fn find(lua, object, args; text: "string") -> "Kinematic.CodeRange?" {
+    fn find(lua, object, args; text: "string", match_case: "boolean?", match_whole_word: "boolean?") -> "Kinematic.CodeRange?" {
         match matches(lua, object, args)?.first() {
             Some(range) => range_to_lua(lua, *range)?.into_lua(lua),
             None => Ok(Value::Nil),
         }
     }
 
-    #[doc = r#"Finds all non-overlapping literal, case-sensitive occurrences at the current scene time. Returns an empty list when absent. Returned coordinates do not follow later edits.
+    #[doc = r#"Finds all non-overlapping literal occurrences at the current scene time. Match_case and match_whole_word default to false. Whole words use letters, digits, and underscores; adjacent punctuation is allowed. Returns an empty list when absent. Returned coordinates do not follow later edits.
 
 ```lua
 code:highlight(code:find_all('value')):play(1)
 ```"#]
-    fn find_all(lua, object, args; text: "string") -> "Kinematic.CodeRange[]" {
+    fn find_all(lua, object, args; text: "string", match_case: "boolean?", match_whole_word: "boolean?") -> "Kinematic.CodeRange[]" {
         ranges_to_lua(lua, &CodeRanges::new(matches(lua, object, args)?))
     }
 }
@@ -603,6 +652,78 @@ mod tests {
             60,
             (0, 0),
         )
+    }
+
+    #[test]
+    fn searches_support_case_and_word_options_next_to_punctuation() {
+        load(
+            r#"
+return function(s)
+    local c = s:code {code='Foo(foo):foo foo_bar food FOO\nÉ(é)'}
+    s:world_2d():add(c)
+    assert(#c:find_all('foo') == 6)
+    assert(#c:find_all('foo', true) == 4)
+    assert(#c:find_all('foo', false, true) == 4)
+    assert(#c:find_all('foo', true, true) == 2)
+    assert(c:find('foo')[1][2] == 1)
+    assert(c:find('foo', true)[1][2] == 5)
+    assert(c:find('OO', false, true) == nil)
+    assert(#c:find_all('(', false, true) == 2)
+    assert(#c:find_all('foo', nil, true) == 4)
+    local accents = c:find_all('é')
+    assert(#accents == 2)
+    assert(accents[1][1][1] == 2 and accents[1][1][2] == 1 and accents[1][2][2] == 2)
+    assert(accents[2][1][2] == 3 and accents[2][2][2] == 4)
+    assert(#c:find_all('é', true, true) == 1)
+    c:replace(c:find_all('foo', false, true), 'x'):play(1)
+    assert(c.code:get() == 'x(x):x foo_bar food x\nÉ(é)')
+    local repeated = s:code {code='aaaa'}
+    s:world_2d():add(repeated)
+    assert(#repeated:find_all('aa') == 2)
+end
+"#,
+        )
+        .unwrap();
+        let definitions = crate::scripting::definitions();
+        for method in ["find", "find_all"] {
+            assert!(definitions.contains(&format!(
+                "function Code:{method}(text, match_case, match_whole_word) end"
+            )));
+        }
+    }
+
+    #[test]
+    fn morph_group_is_optional_typed_and_preserved_when_seeking() {
+        for (builder, world, property) in [
+            ("text_2d", "world_2d", "text"),
+            ("text_3d", "world_3d", "text"),
+            ("latex_2d", "world_2d", "text"),
+            ("latex_3d", "world_3d", "text"),
+            ("code", "world_2d", "code"),
+        ] {
+            let scene = load(&format!(
+                r#"
+return function(s)
+    local c = s:{builder} {{id='object', {property}='abc'}}
+    s:{world}():add(c)
+    assert(not pcall(function() c:morph('def', 1) end))
+    assert(not pcall(function() c:morph('def', true, false) end))
+    c:morph('def', true):play(1, k.ease.linear)
+    c:morph('ghi'):play(1, k.ease.linear)
+    c:morph('jkl', false):play(1, k.ease.linear)
+end
+"#
+            ))
+            .unwrap();
+            let entity = scene.entity("object").unwrap();
+            for (time, group) in [(0.5, true), (1.5, false), (2.5, false), (0.5, true)] {
+                scene.update(time).unwrap();
+                let world = scene.scene().world();
+                let fade = world.get::<&TextFade>(entity).unwrap();
+                assert!(fade.active && fade.morph, "{builder}");
+                assert_eq!(fade.group, group, "{builder} at {time}");
+            }
+        }
     }
 
     #[test]
@@ -728,6 +849,9 @@ end
             "c:highlight({{{1, 1}, {1, 99}}}):play(1)",
             "c:find('')",
             "c:find_all('')",
+            "c:find('a', 1)",
+            "c:find_all('a', false, 'true')",
+            "c:find('a', false, false, true)",
             "c:highlight(1)",
             "c:morph(5):play(1)",
             "c:word(1, 0)",

@@ -147,7 +147,7 @@ fn draw_latex_object(
             let from = morph_geometry(&shape.text, thickness);
             let to = morph_geometry(text, thickness);
             let mut part_material = (*material).clone();
-            for part in morph_parts(&from, &to, fade.progress) {
+            for part in morph_parts(&from, &to, fade.progress, fade.group) {
                 if part.opacity <= 0.0 {
                     continue;
                 }
