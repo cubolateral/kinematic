@@ -65,7 +65,7 @@ end
 
 The manifest lists scenes in playback order and stores resolution, FPS and
 margins. Configuration defaults to 1280 × 720 at 60 FPS. Edit these values in
-the project settings. The existing project format remains unchanged.
+the project settings. Scene entries can remain Lua paths or include UI audio clips.
 
 Lua supports 2D and 3D objects, hierarchical canvases and projections, property
 tweens, sequential/parallel scheduling, loops, snapshots, reactive signals,
@@ -73,7 +73,18 @@ deterministic random values, custom drawing, shaders, seekable simulations and
 file and procedural audio resources shared by SDL preview and MP4 export.
 Scene Tree, Timeline and Preview share selection. Inspector edits for explicit
 object IDs persist separately from scripts. Code diagnostics and failed reloads
-preserve the last valid preview. Export excludes editor overlays.
+preserve the last valid preview. The Export menu provides video export and
+screenshots. Export excludes editor overlays.
+
+Drag project WAV, MP3, OGG or FLAC files from Files onto the Timeline's Audio
+track, or use Import audio in its context menu. Imports append after the scene's
+last clip. The single track allows overlaps and displays cached waveforms. Drag a clip to move it or
+its edges to trim without modifying the source. Edits snap to project frames;
+Escape cancels a drag. Ctrl+B splits at the playhead; Delete or Backspace removes
+the selected clip. Right-click a clip for its editing menu. The Audio section
+collapses like the object tracks. Sound adjusts volume/pan and selects clips
+hidden by overlaps; Inspector handles objects only. Audio and object selection
+are independent. Clip edits save atomically when the gesture ends.
 
 See [Lua projects and API](docs/lua.md) for the full workflow, scene API,
 custom objects, shader contracts, persistence and optional Lua Language Server.

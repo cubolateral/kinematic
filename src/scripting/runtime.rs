@@ -54,6 +54,7 @@ pub(crate) struct Runtime {
 
 /// A compiled Lua scene and the isolated VM that owns its callbacks.
 pub struct LuaScene {
+    audio_clips: Vec<super::AudioClip>,
     pub(crate) scene: Scene,
     runtime: Rc<Runtime>,
     path: PathBuf,
@@ -77,6 +78,44 @@ pub(super) fn engine<T>(f: impl FnOnce() -> T) -> Result<T> {
 }
 
 impl LuaScene {
+    pub(crate) fn prepare_audio_clips(
+        &self,
+        clips: &[super::AudioClip],
+    ) -> Result<Vec<crate::core::audio::SoundEvent>> {
+        super::audio::clip_events(
+            &self.runtime.context,
+            &self.runtime.sources,
+            clips,
+            &self.scene.audio.borrow(),
+        )
+        .map_err(mlua::Error::runtime)
+    }
+
+    pub(crate) fn set_audio_clips(&mut self, clips: &[super::AudioClip]) -> Result<()> {
+        let events = self.prepare_audio_clips(clips)?;
+        self.apply_audio_clips(clips, events);
+        Ok(())
+    }
+
+    pub(crate) fn apply_audio_clips(
+        &mut self,
+        clips: &[super::AudioClip],
+        events: Vec<crate::core::audio::SoundEvent>,
+    ) {
+        let mut audio = self.scene.audio.borrow_mut();
+        for event in &events {
+            audio
+                .register_samples(&event.samples)
+                .expect("Prepared audio fits the scene budget.");
+        }
+        audio.clips = events;
+        self.audio_clips = clips.to_vec();
+        self.runtime
+            .dependencies
+            .borrow_mut()
+            .extend(clips.iter().map(|clip| clip.file.clone()));
+    }
+
     pub(crate) fn path(&self) -> &Path {
         &self.path
     }
@@ -296,6 +335,7 @@ impl LuaScene {
         scene.keep_runtime(runtime.clone());
 
         let result = Self {
+            audio_clips: Vec::new(),
             scene,
             runtime,
             path,
@@ -503,7 +543,13 @@ impl LuaScene {
             ron::to_string(&self.scene.event_definitions()).map_err(mlua::Error::external)?,
         );
 
-        self.prepare_configured(sources, self.resolution, self.fps, self.margin)
+        self.prepare_configured(
+            sources,
+            self.resolution,
+            self.fps,
+            self.margin,
+            &self.audio_clips,
+        )
     }
 
     pub(crate) fn has_simulations(&self) -> bool {
@@ -527,7 +573,13 @@ impl LuaScene {
     }
 
     pub(crate) fn prepare_reload_pending(&self, sources: Sources) -> Result<Self> {
-        self.prepare_configured(sources, self.resolution, self.fps, self.margin)
+        self.prepare_configured(
+            sources,
+            self.resolution,
+            self.fps,
+            self.margin,
+            &self.audio_clips,
+        )
     }
 
     pub(crate) fn prepare_settings_pending(
@@ -536,8 +588,9 @@ impl LuaScene {
         resolution: (u32, u32),
         fps: u32,
         margin: (u32, u32),
+        clips: &[super::AudioClip],
     ) -> Result<Self> {
-        self.prepare_configured(sources, resolution, fps, margin)
+        self.prepare_configured(sources, resolution, fps, margin, clips)
     }
 
     fn prepare_configured(
@@ -546,10 +599,11 @@ impl LuaScene {
         resolution: (u32, u32),
         fps: u32,
         margin: (u32, u32),
+        clips: &[super::AudioClip],
     ) -> Result<Self> {
         let previous = self.runtime.definitions.borrow().clone();
         let allocated = self.scene.world().iter().map(|e| e.entity()).collect();
-        let candidate = Self::prepare(
+        let mut candidate = Self::prepare(
             self.runtime.context.clone(),
             self.path.clone(),
             sources,
@@ -560,6 +614,7 @@ impl LuaScene {
             allocated,
             Some(self.scene.render_key().0),
         )?;
+        candidate.set_audio_clips(clips)?;
 
         {
             let previous = self.scene.world();
@@ -649,6 +704,7 @@ impl LuaScene {
         self.fps = candidate.fps;
         self.margin = candidate.margin;
         self.runtime = candidate.runtime;
+        self.audio_clips = candidate.audio_clips;
 
         self.revision += 1;
         drop(candidate.scene);

@@ -39,6 +39,7 @@ struct Dialog {
 
 #[derive(Default)]
 pub(super) struct State {
+    pub(super) dragged_audio: Option<PathBuf>,
     selected: Option<PathBuf>,
     context: Option<(PathBuf, bool)>,
     dialog: Option<Dialog>,
@@ -200,6 +201,13 @@ impl State {
             *context_clicked = true;
         }
 
+        if !entry.directory && crate::ui::timeline::is_audio_file(path) {
+            if let Some(_source) = ui.drag_drop_source_config("KINEMATIC_AUDIO").begin() {
+                self.dragged_audio = Some(path.clone());
+                ui.text(path.to_string_lossy());
+            }
+        }
+
         let icon = if entry.directory {
             icons::FOLDER
         } else {
@@ -228,7 +236,7 @@ impl State {
         if clicked {
             self.selected = Some(path.clone());
 
-            if !entry.directory {
+            if !entry.directory && !crate::ui::timeline::is_audio_file(path) {
                 match documents.open(path) {
                     Ok(()) => *focus = true,
                     Err(message) => *error = Some(message),

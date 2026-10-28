@@ -20,14 +20,17 @@ interaction details belong in the panel modules, not in `ui/mod.rs`.
 - `widgets.rs`: Small drawing and measurement helpers shared by panels.
 - `windows.rs`: Shared templates for centered floating windows, modals, and popups.
 - `scene_tree.rs`: Active scene hierarchy and entity selection.
-- `inspector.rs`: Read-only inspection of the selected entity.
-- `export.rs`: Export popup and its local UI state.
+- `inspector.rs`: Selected entity inspection.
+- `sound.rs`: Independent audio selection and volume/pan editing, including obscured overlaps.
+- `export.rs`: Export menu, screenshots and progress.
 - `preview/`: Canvas preview, hit testing, and fullscreen presentation.
 - `timeline/`: Timeline composition and its independent responsibilities.
 
 The Timeline is split as follows:
 
-- `state.rs`: Persistent Timeline UI state.
+- `state.rs`: Persistent Timeline UI state, temporary clip drags and waveform cache.
+- `audio.rs`: Collapsible audio track, clip mouse capture, project file drops and editing context menus.
+- `waveform.rs`: Bounded peak summaries shared by clips using the same samples.
 - `layout.rs`: Coordinate conversion and calculated panel geometry.
 - `metrics.rs`: Timeline-specific dimensions.
 - `controls.rs`: Playback shortcuts, transport, and fullscreen controls.
@@ -97,3 +100,10 @@ selection uses `Ctrl+D` and `Ctrl+Shift+L`; custom range edits (word deletion,
 line duplication/insertion, cutting whole lines, and explicit comment chords) collapse to one caret.
 Vertical caret insertion, column selection, workspace search, rename/refactoring,
 and a command palette are not implemented.
+
+The audio integration checks need FFmpeg and SDL/OpenGL. On a headless system,
+run them sequentially because SDL initialization uses process-wide state:
+
+```sh
+SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy cargo test --workspace audio -- --include-ignored --test-threads=1
+```

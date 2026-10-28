@@ -1,6 +1,7 @@
 //! Lua project loading and isolated scene revisions.
 mod native;
 mod project;
+pub(crate) use project::AudioClip;
 mod runtime;
 mod value;
 
@@ -34,6 +35,6 @@ mod methods;
 
 mod code;
 
-mod audio;
+pub(crate) mod audio;
 
 mod audio_file;

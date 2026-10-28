@@ -50,7 +50,7 @@ impl UserData for AudioResource {
 
 thread_local! {
     static SYNTHS: RefCell<BTreeMap<String, SyncWeak<AudioAsset>>> = RefCell::new(BTreeMap::new());
-    static FILES: RefCell<BTreeMap<Vec<u8>, SyncWeak<AudioAsset>>> = RefCell::new(BTreeMap::new());
+    static FILES: RefCell<BTreeMap<Vec<u8>, SyncWeak<Vec<[f32; 2]>>>> = RefCell::new(BTreeMap::new());
 }
 
 pub(super) fn release_unused() {
@@ -64,6 +64,61 @@ pub(super) fn release_unused() {
             .borrow_mut()
             .retain(|_, value| value.strong_count() > 0)
     });
+}
+
+pub(crate) fn load_file(
+    bytes: Vec<u8>,
+    deadline: std::time::Instant,
+) -> std::result::Result<Arc<Vec<[f32; 2]>>, String> {
+    FILES.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        cache.retain(|_, value| value.strong_count() > 0);
+        if let Some(samples) = cache.get(&bytes).and_then(SyncWeak::upgrade) {
+            return Ok(samples);
+        }
+        let samples = Arc::new(super::audio_file::decode(&bytes, deadline)?);
+        cache.insert(bytes, Arc::downgrade(&samples));
+        Ok(samples)
+    })
+}
+
+pub(crate) fn clip_events(
+    context: &crate::core::ProjectContext,
+    sources: &super::Sources,
+    clips: &[super::AudioClip],
+    existing: &crate::core::audio::AudioEvents,
+) -> std::result::Result<Vec<SoundEvent>, String> {
+    let mut budget = existing.clone();
+    budget.clips.clear();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut events = Vec::new();
+    for clip in clips {
+        clip.validate(context)?;
+        let bytes = sources
+            .read(context, &clip.file)
+            .map_err(|e| e.to_string())?;
+        let samples = load_file(bytes, deadline)?;
+        budget.register_samples(&samples)?;
+        let offset = (clip.offset * SAMPLE_RATE as f64).round() as usize;
+        let end = ((clip.offset + clip.duration) * SAMPLE_RATE as f64).round() as usize;
+        let frames = end.saturating_sub(offset);
+        if frames == 0 || offset.saturating_add(frames) > samples.len() {
+            return Err(format!(
+                "Audio clip '{}' exceeds its source duration.",
+                clip.file.display()
+            ));
+        }
+        budget.check_capacity(None, events.len())?;
+        events.push(SoundEvent {
+            time: clip.at,
+            samples,
+            offset,
+            frames,
+            gain: clip.gain,
+            pan: clip.pan,
+        });
+    }
+    Ok(events)
 }
 
 pub(super) fn register(runtime: &Rc<Runtime>, api: &Table) -> Result<()> {
@@ -108,26 +163,11 @@ pub(super) fn register(runtime: &Rc<Runtime>, api: &Table) -> Result<()> {
                 .ok_or_else(|| mlua::Error::runtime("Scene has been released."))?;
             runtime.construction()?;
             let bytes = runtime.resource(Path::new(&path))?;
-            let resource = FILES.with(|cache| -> Result<AudioResource> {
-                let mut cache = cache.borrow_mut();
-                cache.retain(|_, value| value.strong_count() > 0);
-                if let Some(asset) = cache.get(&bytes).and_then(SyncWeak::upgrade) {
-                    return Ok(AudioResource(asset));
-                }
-                let samples =
-                    super::audio_file::decode(&bytes, runtime.deadline.get()).map_err(|error| {
-                        mlua::Error::runtime(format!("Audio file '{path}': {error}"))
-                    })?;
-                static NEXT_FILE: std::sync::atomic::AtomicU64 =
-                    std::sync::atomic::AtomicU64::new(1);
-                let id = NEXT_FILE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let asset = Arc::new(AudioAsset {
-                    samples: Arc::new(samples),
-                    source: Source::File(id),
-                });
-                cache.insert(bytes, Arc::downgrade(&asset));
-                Ok(AudioResource(asset))
-            })?;
+            let samples = load_file(bytes, runtime.deadline.get()).map_err(mlua::Error::runtime)?;
+            let resource = AudioResource(Arc::new(AudioAsset {
+                source: Source::File(Arc::as_ptr(&samples) as u64),
+                samples,
+            }));
             runtime
                 .audio
                 .borrow_mut()
@@ -330,6 +370,8 @@ impl UserData for AudioHandle {
                     .map_or_else(|| runtime.animator.borrow().time(), |step| step.time)
                     as f64,
                 samples: this.source.0.samples.clone(),
+                offset: 0,
+                frames: this.source.0.samples.len(),
                 gain,
                 pan,
             };

@@ -10,6 +10,7 @@ pub(super) enum Interaction {
     Zoom,
     Pan,
     Event,
+    Audio,
 }
 
 #[derive(Clone, Copy)]
@@ -31,6 +32,11 @@ pub(in crate::ui) struct State {
     pub(super) interaction: Interaction,
     pressed_scene: Option<usize>,
     event_drag: Option<EventDrag>,
+    pub(super) waveforms: std::collections::HashMap<usize, super::waveform::Waveform>,
+    pub(super) audio_collapsed: bool,
+    #[cfg(test)]
+    pub(super) audio_clip_rect: Option<[[f32; 2]; 2]>,
+    pub(super) audio_drag: Option<super::audio::ClipDrag>,
 }
 
 impl State {
@@ -198,6 +204,7 @@ impl State {
         self.interaction = Interaction::None;
         self.pressed_scene = None;
         self.event_drag = None;
+        self.audio_drag = None;
     }
 
     fn set_view(&mut self, start: f32, end: f32) {

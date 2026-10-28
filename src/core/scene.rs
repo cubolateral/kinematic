@@ -683,17 +683,16 @@ impl Scene {
     }
 
     pub(crate) fn duration(&self) -> f32 {
-        self.audio
-            .borrow()
-            .scheduled
-            .iter()
-            .fold(self.animator.duration(), |duration, event| {
+        let audio = self.audio.borrow();
+        audio.scheduled.iter().chain(&audio.clips).fold(
+            self.animator.duration(),
+            |duration, event| {
                 duration.max(
-                    (event.time
-                        + event.samples.len() as f64 / crate::core::audio::SAMPLE_RATE as f64)
+                    (event.time + event.frames as f64 / crate::core::audio::SAMPLE_RATE as f64)
                         as f32,
                 )
-            })
+            },
+        )
     }
 
     pub(crate) fn time(&self) -> f32 {

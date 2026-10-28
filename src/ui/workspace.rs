@@ -1,4 +1,4 @@
-use super::{code, inspector, preview, scene_tree, timeline};
+use super::{code, inspector, preview, scene_tree, sound, timeline};
 use dear_imgui_rs::{DockLayout, DockLayoutApply, DockSplit};
 
 pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
@@ -8,7 +8,7 @@ pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
         DockLayout::split(
             DockSplit::Left,
             0.25,
-            tabs([scene_tree::WINDOW_NAME, code::FILES_WINDOW]),
+            tabs([code::FILES_WINDOW]),
             tabs([timeline::WINDOW_NAME, code::CONSOLE_WINDOW]),
         ),
         DockLayout::split(
@@ -20,11 +20,16 @@ pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
                 tabs([code::WINDOW_NAME]),
                 tabs([preview::WINDOW_NAME]),
             ),
-            tabs([inspector::WINDOW_NAME]),
+            tabs([
+                scene_tree::WINDOW_NAME,
+                inspector::WINDOW_NAME,
+                sound::WINDOW_NAME,
+            ]),
         ),
     );
 
     ui.dockspace()
+        .root_id(ui.get_id("Workspace"))
         .layout(&layout, DockLayoutApply::IfMissing)
         .build()
         .expect("Workspace layout must be valid.");

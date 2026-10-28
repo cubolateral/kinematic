@@ -18,7 +18,6 @@ pub(super) const PENCIL: &str = "\u{f040}";
 pub(super) const PLAY: &str = "\u{f04b}";
 pub(super) const RETWEET: &str = "\u{f079}";
 pub(super) const RESET: &str = "\u{f2f1}";
-pub(super) const SHARE: &str = "\u{f064}";
 
 pub(super) const FOLDER: &str = "\u{f07b}";
 pub(super) const FILE: &str = "\u{f15b}";

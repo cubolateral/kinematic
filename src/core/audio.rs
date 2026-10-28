@@ -138,6 +138,8 @@ impl Sound {
 pub(crate) struct SoundEvent {
     pub time: f64,
     pub samples: Arc<Vec<[f32; 2]>>,
+    pub offset: usize,
+    pub frames: usize,
     pub gain: f32,
     pub pan: f32,
 }
@@ -145,6 +147,7 @@ pub(crate) struct SoundEvent {
 #[derive(Clone, Default)]
 pub(crate) struct AudioEvents {
     pub scheduled: Vec<SoundEvent>,
+    pub clips: Vec<SoundEvent>,
     pub steps: BTreeMap<(hecs::Entity, u64, usize), Vec<SoundEvent>>,
     buffers: Vec<std::sync::Weak<Vec<[f32; 2]>>>,
 }
@@ -178,6 +181,7 @@ impl AudioEvents {
         pending: usize,
     ) -> Result<(), String> {
         let stored = self.scheduled.len()
+            + self.clips.len()
             + self
                 .steps
                 .iter()
@@ -191,11 +195,20 @@ impl AudioEvents {
     }
 
     pub fn mix(&self, offset: f64, start: u64, output: &mut [[f32; 2]]) {
-        for event in self.scheduled.iter().chain(self.steps.values().flatten()) {
+        for event in self
+            .scheduled
+            .iter()
+            .chain(&self.clips)
+            .chain(self.steps.values().flatten())
+        {
             let at = ((offset + event.time) * SAMPLE_RATE as f64).round() as i64;
             let from = (at - start as i64).max(0) as usize;
-            let to = (at + event.samples.len() as i64 - start as i64).clamp(0, output.len() as i64)
-                as usize;
+            let to = (at
+                + event
+                    .frames
+                    .min(event.samples.len().saturating_sub(event.offset)) as i64
+                - start as i64)
+                .clamp(0, output.len() as i64) as usize;
             let balance = [
                 (event.pan.max(0.0) * std::f32::consts::FRAC_PI_2)
                     .cos()
@@ -207,7 +220,8 @@ impl AudioEvents {
                     * event.gain,
             ];
             for (index, frame) in output.iter_mut().enumerate().take(to).skip(from) {
-                let source = event.samples[(start as i64 + index as i64 - at) as usize];
+                let source =
+                    event.samples[event.offset + (start as i64 + index as i64 - at) as usize];
                 frame[0] += source[0] * balance[0];
                 frame[1] += source[1] * balance[1];
             }
@@ -252,6 +266,8 @@ mod tests {
             let events = AudioEvents {
                 scheduled: vec![SoundEvent {
                     time: 0.01,
+                    offset: 0,
+                    frames: samples.len(),
                     samples,
                     gain: 0.2,
                     pan: 0.0,
@@ -283,5 +299,39 @@ mod resource_tests {
         assert!(audio.register_samples(&extra).is_err());
         drop(samples);
         audio.register_samples(&extra).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod clip_tests {
+    use super::*;
+
+    #[test]
+    fn trimmed_stereo_clips_mix_identically_across_chunks_and_scene_offsets() {
+        let samples = Arc::new(
+            (0..32)
+                .map(|i| [i as f32 / 32.0, -(i as f32) / 32.0])
+                .collect::<Vec<_>>(),
+        );
+        let mut audio = AudioEvents::default();
+        audio.register_samples(&samples).unwrap();
+        audio.clips.push(SoundEvent {
+            time: 4.0 / SAMPLE_RATE as f64,
+            samples,
+            offset: 7,
+            frames: 9,
+            gain: 0.5,
+            pan: -1.0,
+        });
+        let mut whole = vec![[0.0; 2]; 32];
+        let scene_offset = 3.0 / SAMPLE_RATE as f64;
+        audio.mix(scene_offset, 0, &mut whole);
+        assert!(whole[..7].iter().all(|frame| *frame == [0.0; 2]));
+        assert_eq!(whole[7], [7.0 / 64.0, 0.0]);
+        assert!(whole[16..].iter().all(|frame| *frame == [0.0; 2]));
+        let mut chunks = vec![[0.0; 2]; 32];
+        audio.mix(scene_offset, 0, &mut chunks[..10]);
+        audio.mix(scene_offset, 10, &mut chunks[10..]);
+        assert_eq!(whole, chunks);
     }
 }

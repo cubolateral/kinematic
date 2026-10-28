@@ -54,16 +54,19 @@ impl Documents {
     // Read the current disk revision rather than the last evaluated project revision.
     pub(super) fn scene_manifest(
         &self,
-        change: impl FnOnce(&mut Vec<PathBuf>),
+        change: impl FnOnce(&mut Manifest),
     ) -> Result<Option<(Vec<u8>, Vec<u8>)>, String> {
         let original =
             std::fs::read(self.context.root().join(MANIFEST)).map_err(|e| e.to_string())?;
         let mut manifest: Manifest = ron::de::from_bytes(&original).map_err(|e| e.to_string())?;
-        let previous = manifest.scenes.clone();
+        let previous = (manifest.scenes.clone(), manifest.audio.clone());
 
-        change(&mut manifest.scenes);
+        change(&mut manifest);
+        manifest
+            .audio
+            .retain(|path, _| manifest.scenes.contains(path));
 
-        if previous == manifest.scenes {
+        if previous == (manifest.scenes.clone(), manifest.audio.clone()) {
             return Ok(None);
         }
 
@@ -122,7 +125,7 @@ impl Documents {
             return Err("Scene filenames must end in .lua.".into());
         }
 
-        let manifest = self.scene_manifest(|scenes| scenes.push(path.to_owned()))?;
+        let manifest = self.scene_manifest(|manifest| manifest.scenes.push(path.to_owned()))?;
         let full = self.context.resolve(path).map_err(|e| e.to_string())?;
 
         atomic_write(&full, template.source().as_bytes(), None).map_err(|e| e.to_string())?;
@@ -155,7 +158,8 @@ impl Documents {
             return Err("Save or close unsaved files before deleting this item.".into());
         }
 
-        let manifest = self.scene_manifest(|scenes| scenes.retain(|p| !p.starts_with(path)))?;
+        let manifest =
+            self.scene_manifest(|manifest| manifest.scenes.retain(|p| !p.starts_with(path)))?;
         let full = self.context.resolve(path).map_err(|e| e.to_string())?;
 
         // Stage deletion so a manifest conflict can restore the complete subtree.
@@ -381,7 +385,7 @@ mod tests {
         docs.open.remove(Path::new(MANIFEST));
 
         let change = docs
-            .scene_manifest(|paths| paths.push("new.lua".into()))
+            .scene_manifest(|manifest| manifest.scenes.push("new.lua".into()))
             .unwrap();
 
         std::fs::write(root.join(MANIFEST), "External manifest").unwrap();
@@ -397,6 +401,48 @@ mod tests {
 
         drop(docs);
 
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod audio_tests {
+    use super::*;
+    use crate::scripting::{AudioClip, LuaProject};
+
+    #[test]
+    fn file_operations_preserve_audio_associations() {
+        let root =
+            std::env::temp_dir().join(format!("kinematic-audio-files-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut project = LuaProject::create(&root, "Audio files", false).unwrap();
+        std::fs::write(root.join("assets/a.wav"), b"Audio fixture.").unwrap();
+        project.manifest.audio.insert(
+            "scenes/intro.lua".into(),
+            vec![AudioClip {
+                id: 1,
+                file: "assets/a.wav".into(),
+                at: 0.0,
+                offset: 0.0,
+                duration: 0.1,
+                gain: 1.0,
+                pan: 0.0,
+            }],
+        );
+        project.save().unwrap();
+        let mut docs = Documents::new(project.context.clone(), "").unwrap();
+        docs.lsp = None;
+        docs.rename(Path::new("assets/a.wav"), Path::new("assets/b.wav"))
+            .unwrap();
+        docs.rename(Path::new("scenes/intro.lua"), Path::new("scenes/main.lua"))
+            .unwrap();
+        let project = LuaProject::open(&root).unwrap();
+        let clips = &project.manifest.audio[Path::new("scenes/main.lua")];
+        assert_eq!(clips[0].file, Path::new("assets/b.wav"));
+        docs.create_scene(Path::new("other.lua"), SceneTemplate::None)
+            .unwrap();
+        docs.delete(Path::new("scenes/main.lua")).unwrap();
+        assert!(LuaProject::open(&root).unwrap().manifest.audio.is_empty());
         std::fs::remove_dir_all(root).unwrap();
     }
 }

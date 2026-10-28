@@ -341,12 +341,23 @@ impl Documents {
         self.check_file_path(from)?;
         self.check_file_path(to)?;
 
-        let manifest = self.scene_manifest(|scenes| {
-            for path in scenes {
+        let manifest = self.scene_manifest(|manifest| {
+            for path in &mut manifest.scenes {
                 if let Some(next) = files::renamed_path(path, from, to) {
                     *path = next;
                 }
             }
+            manifest.audio = std::mem::take(&mut manifest.audio)
+                .into_iter()
+                .map(|(path, mut clips)| {
+                    for clip in &mut clips {
+                        if let Some(next) = files::renamed_path(&clip.file, from, to) {
+                            clip.file = next;
+                        }
+                    }
+                    (files::renamed_path(&path, from, to).unwrap_or(path), clips)
+                })
+                .collect();
         })?;
 
         self.file_paths = None;

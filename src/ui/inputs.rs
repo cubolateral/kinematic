@@ -18,6 +18,8 @@ pub(super) enum Action {
     ToggleCamera,
     ResetCamera,
     PlayPause,
+    SplitAudio,
+    DeleteAudio,
     ToggleLoop,
     PreviousFrame,
     NextFrame,
@@ -222,6 +224,21 @@ impl Default for InputMap {
                     &[Key::R],
                 )
                 .trigger(Repeat),
+                Binding::new(
+                    SplitAudio,
+                    Editor,
+                    "Split audio at playhead",
+                    "Ctrl + B",
+                    &[Key::B],
+                )
+                .modifiers(KeyMods::CTRL, KeyMods::CTRL),
+                Binding::new(
+                    DeleteAudio,
+                    Editor,
+                    "Delete audio clip",
+                    "Delete / Backspace",
+                    &[Key::Delete, Key::Backspace],
+                ),
                 Binding::new(PlayPause, Editor, "Play / pause", "Space", &[Key::Space])
                     .modifiers(KeyMods::empty(), KeyMods::SHIFT)
                     .trigger(Repeat),

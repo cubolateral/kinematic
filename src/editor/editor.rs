@@ -1,3 +1,6 @@
+#[path = "audio.rs"]
+mod audio;
+
 use crate::{
     core::{
         Project, ProjectSettings, Scene, TrackTarget, TrackValue, objects::ObjectHandler,
@@ -250,7 +253,13 @@ impl Editor {
                     project.manifest.resolution,
                     project.manifest.fps,
                     project.manifest.margin,
-                ) {
+                )
+                .and_then(|mut scene| {
+                    scene.set_audio_clips(
+                        project.manifest.audio.get(path).map_or(&[], Vec::as_slice),
+                    )?;
+                    Ok(scene)
+                }) {
                     Ok(scene) => SceneInstance::Lua(scene),
                     Err(error) => {
                         documents.diagnostics.push(error.to_string());
@@ -467,6 +476,7 @@ impl Editor {
                 }) = self.scenes.get(index)
                 {
                     if settings_changed
+                        || manifest.audio.get(path) != project.manifest.audio.get(path)
                         || documents
                             .changed
                             .iter()
@@ -478,13 +488,14 @@ impl Editor {
                                 manifest.resolution,
                                 manifest.fps,
                                 manifest.margin,
+                                manifest.audio.get(path).map_or(&[], Vec::as_slice),
                             )
                             .map_err(|e| e.to_string())?;
 
                         candidates.push((index, candidate));
                     }
                 } else {
-                    let candidate = crate::scripting::LuaScene::load(
+                    let mut candidate = crate::scripting::LuaScene::load(
                         project.context.clone(),
                         path,
                         sources.clone(),
@@ -494,6 +505,9 @@ impl Editor {
                     )
                     .map_err(|e| e.to_string())?;
 
+                    candidate
+                        .set_audio_clips(manifest.audio.get(path).map_or(&[], Vec::as_slice))
+                        .map_err(|e| e.to_string())?;
                     candidates.push((index, candidate));
                 }
             }
@@ -762,13 +776,7 @@ impl Editor {
                 .focused_scene
                 .and_then(|focus| order.iter().position(|index| *index == focus));
 
-            if let Some((selected, entity)) = self.selection.get() {
-                self.selection.clear();
-
-                if let Some(index) = order.iter().position(|old| *old == selected) {
-                    self.selection.select(index, entity);
-                }
-            }
+            self.selection.remap_scenes(&order);
 
             let mut previous = std::mem::take(&mut self.scenes)
                 .into_iter()
@@ -1117,6 +1125,10 @@ impl Editor {
                             settings.resolution,
                             settings.fps,
                             settings.margin,
+                            manifest
+                                .audio
+                                .get(&manifest.scenes[index])
+                                .map_or(&[], Vec::as_slice),
                         ),
                         SceneInstance::Empty(_) => crate::scripting::LuaScene::load(
                             project.context.clone(),
@@ -1125,7 +1137,16 @@ impl Editor {
                             settings.resolution,
                             settings.fps,
                             settings.margin,
-                        ),
+                        )
+                        .and_then(|mut scene| {
+                            scene.set_audio_clips(
+                                manifest
+                                    .audio
+                                    .get(&manifest.scenes[index])
+                                    .map_or(&[], Vec::as_slice),
+                            )?;
+                            Ok(scene)
+                        }),
                     }
                     .map_err(|error| error.to_string())?;
 

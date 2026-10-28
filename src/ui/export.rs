@@ -1,17 +1,7 @@
 use crate::editor::Editor;
 
-use super::{controls, icons};
-
 pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
-    if controls::text_button(ui, icons::SHARE, [ui.frame_height(); 2]) {
-        ui.open_popup("Export");
-    }
-
-    if ui.is_item_hovered() {
-        ui.tooltip_text("Export");
-    }
-
-    let Some(_popup) = super::windows::popup(ui, "Export", ui.frame_height() * 10.0) else {
+    let Some(_menu) = ui.begin_menu("Export") else {
         return false;
     };
 
@@ -21,11 +11,11 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     {
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
 
-        if ui.button_with_size("Save screenshot", [ui.content_region_avail_width(), 0.0]) {
+        if ui.menu_item("Save screenshot") {
             editor.request_screenshot();
         }
 
-        if ui.button_with_size("Export scene", [ui.content_region_avail_width(), 0.0]) {
+        if ui.menu_item("Export scene") {
             editor.export_scene(true);
 
             started = editor.is_exporting();
@@ -34,7 +24,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
 
     let label = if is_exporting { "Cancel" } else { "Export" };
 
-    if ui.button_with_size(label, [ui.content_region_avail_width(), 0.0]) {
+    if ui.menu_item(label) {
         editor.toggle_export(true);
 
         started = !is_exporting && editor.is_exporting();

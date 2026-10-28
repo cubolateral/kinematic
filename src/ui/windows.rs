@@ -1,6 +1,6 @@
 //! Shared floating window and dialog templates, independent of editor state.
 
-use dear_imgui_rs::{Condition, ModalPopupToken, PopupToken, Ui, Window, WindowFlags};
+use dear_imgui_rs::{Condition, ModalPopupToken, Ui, Window, WindowFlags};
 
 pub(super) fn window<'ui>(ui: &'ui Ui, title: &'ui str, size: [f32; 2]) -> Window<'ui> {
     center_next(ui);
@@ -52,14 +52,6 @@ pub(super) fn sized_modal<'ui>(
         .opened(open)
         .flags(flags)
         .begin()
-}
-
-pub(super) fn popup<'ui>(ui: &'ui Ui, title: &str, width: f32) -> Option<PopupToken<'ui>> {
-    center_next(ui);
-
-    set_next_size([width, 0.0], Condition::Always);
-
-    ui.begin_popup(title)
 }
 
 fn center_next(ui: &Ui) {

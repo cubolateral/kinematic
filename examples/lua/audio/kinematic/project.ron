@@ -1,1 +1,32 @@
-(version: 1, name: "Procedural Audio", scenes: ["scenes/intro.lua"], resolution: (640, 360), fps: 60, margin: (0, 0))
+(
+    version: 1,
+    name: "Procedural Audio",
+    scenes: [
+        (
+            file: "scenes/intro.lua",
+            audio: [
+                (
+                    id: 1,
+                    file: "assets/chime.wav",
+                    at: 0.36666666666666664,
+                    offset: 0.0,
+                    duration: 0.1764375,
+                    gain: 1.0,
+                    pan: 1.0,
+                ),
+                (
+                    id: 2,
+                    file: "assets/chime.wav",
+                    at: 0.6833333333333333,
+                    offset: 0.09310416666666663,
+                    duration: 0.15687500000000004,
+                    gain: 1.0,
+                    pan: 1.0,
+                ),
+            ],
+        ),
+    ],
+    resolution: (640, 360),
+    fps: 60,
+    margin: (0, 0),
+)

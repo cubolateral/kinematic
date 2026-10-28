@@ -15,6 +15,7 @@ mod preview;
 mod properties;
 mod scene_tree;
 mod settings;
+mod sound;
 mod theme;
 mod timeline;
 mod widgets;
@@ -37,6 +38,7 @@ pub(crate) struct Ui {
     audio_volume: i32,
     preview: preview::State,
     inspector: inspector::State,
+    sound: sound::State,
     settings: settings::State,
     timeline: timeline::State,
     scene_tree: scene_tree::State,
@@ -53,7 +55,6 @@ fn draw_top_bar(
     };
 
     draw_project_menu(code, settings, ui);
-    ui.set_cursor_pos_x(ui.cursor_pos_x() + ui.content_region_avail_width() - ui.frame_height());
 
     export::draw(editor, ui)
 }
@@ -87,6 +88,11 @@ fn draw_project_menu(
 }
 
 impl Ui {
+    #[cfg(test)]
+    pub(crate) fn selected_audio_rect(&self) -> Option<[[f32; 2]; 2]> {
+        self.timeline.selected_audio_rect()
+    }
+
     pub fn new(context: &mut dear_imgui_rs::Context) -> Self {
         let mut flags = context.io().config_flags();
 
@@ -112,6 +118,7 @@ impl Ui {
             audio_volume: cache.audio_volume,
             preview: preview::State::new(crate::editor::EditorMode::default()),
             inspector: inspector::State::default(),
+            sound: sound::State::default(),
             settings: settings::State::default(),
             timeline: timeline::State::default(),
             scene_tree: scene_tree::State::default(),
@@ -185,6 +192,7 @@ impl Ui {
             preview::draw(editor, ui, &mut self.preview, !self.code.focused);
 
             inspector::draw(editor, ui, &mut self.inspector);
+            sound::draw(editor, ui, &mut self.sound);
 
             timeline::draw(
                 editor,
@@ -192,6 +200,7 @@ impl Ui {
                 &mut self.timeline,
                 !self.code.focused,
                 &mut self.audio_volume,
+                self.code.dragged_audio(),
             )
         };
 

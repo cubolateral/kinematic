@@ -202,9 +202,19 @@ mod tests {
         let mut audio = AudioEvents::default();
         audio.scheduled.push(SoundEvent {
             time: 0.25,
+            offset: 0,
+            frames: sound.sample_count(),
             samples: sound.samples(),
             gain: 0.2,
             pan: 0.0,
+        });
+        audio.clips.push(SoundEvent {
+            time: 0.5,
+            offset: 240,
+            frames: 480,
+            samples: sound.samples(),
+            gain: 0.4,
+            pan: -0.5,
         });
         let mut samples = vec![[0.0; 2]; SAMPLE_RATE as usize];
         audio.mix(0.0, 0, &mut samples);

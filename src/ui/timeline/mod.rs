@@ -1,3 +1,4 @@
+mod audio;
 mod controls;
 mod interaction;
 mod layout;
@@ -7,6 +8,7 @@ mod ruler;
 mod scene;
 mod state;
 mod tracks;
+mod waveform;
 
 use crate::{editor::Editor, ui::widgets::hide_single_window_tab};
 
@@ -16,6 +18,13 @@ use metrics::SCRUBBER_HEIGHT;
 use state::Interaction;
 pub(super) use state::State;
 
+#[cfg(test)]
+impl State {
+    pub(in crate::ui) fn selected_audio_rect(&self) -> Option<[[f32; 2]; 2]> {
+        self.audio_clip_rect
+    }
+}
+
 pub(super) const WINDOW_NAME: &str = "Timeline";
 
 pub(super) fn draw(
@@ -24,6 +33,7 @@ pub(super) fn draw(
     state: &mut State,
     keyboard: bool,
     volume: &mut i32,
+    dragged_audio: Option<&std::path::Path>,
 ) -> bool {
     let is_exporting = editor.is_exporting();
     let mut toggle_fullscreen = false;
@@ -37,6 +47,7 @@ pub(super) fn draw(
     hide_single_window_tab(ui);
 
     ui.window(WINDOW_NAME).build(|| {
+        audio_shortcuts(editor, ui, keyboard);
         let fps = editor.preview_fps();
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
 
@@ -89,6 +100,8 @@ pub(super) fn draw(
 
                 scene::draw(editor, ui, &draw_list, layout, time, state, !is_exporting);
 
+                audio::draw(editor, ui, &draw_list, layout, time, state, dragged_audio);
+
                 objects::draw(editor, ui, &draw_list, layout, time, !is_exporting);
 
                 ruler::draw_mouse_indicator(ui, &draw_list, layout);
@@ -121,4 +134,31 @@ pub(super) fn draw(
     });
 
     toggle_fullscreen
+}
+
+pub(in crate::ui) fn audio_shortcuts(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
+    if keyboard
+        && ui.is_window_focused_with_flags(dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS)
+        && editor.audio_editable()
+        && editor.selected_audio().is_some()
+        && !ui.io().want_text_input()
+        && !ui.is_any_item_active()
+    {
+        if crate::ui::inputs::active(ui, crate::ui::inputs::Action::SplitAudio) {
+            editor.split_audio();
+        }
+        if crate::ui::inputs::active(ui, crate::ui::inputs::Action::DeleteAudio) {
+            editor.delete_audio();
+        }
+    }
+}
+
+pub(in crate::ui) fn is_audio_file(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            ["wav", "mp3", "ogg", "flac"]
+                .iter()
+                .any(|format| ext.eq_ignore_ascii_case(format))
+        })
 }

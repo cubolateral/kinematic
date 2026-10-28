@@ -797,6 +797,10 @@ pub(super) struct State {
     pub error: Option<String>,
 }
 impl State {
+    pub(super) fn dragged_audio(&self) -> Option<&std::path::Path> {
+        self.files.dragged_audio.as_deref()
+    }
+
     pub fn prepare(
         &mut self,
         context: &dear_imgui_rs::Context,

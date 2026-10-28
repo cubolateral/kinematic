@@ -33,6 +33,37 @@ Existing exports are preserved by adding a numeric suffix to the new filename.
 )
 ```
 
+Scenes without UI audio retain the path-only format above. The editor stores
+clips inside their scene entry, alongside its Lua `file`:
+
+```ron
+scenes: [
+    (file: "scenes/intro.lua", audio: [
+        (id: 1, file: "assets/chime.wav", at: 0.25, offset: 0.1,
+         duration: 0.2, gain: 0.5, pan: -0.5),
+    ]),
+    "scenes/outro.lua",
+],
+```
+
+`at`, `offset` and `duration` are seconds: `at` is local to the scene,
+`offset` selects the beginning in the source file, and `duration` limits the
+played excerpt. IDs are unique within the scene; gain is 0–1 and pan is -1–1.
+Clips can extend scene duration. Their buffers share the existing file cache,
+48 kHz mixer and 64 MB scene sample budget with Lua audio. Seeking or rebuilding
+replaces the clip list rather than scheduling new occurrences.
+
+Edit these clips exclusively through the UI: drag a project audio file from
+Files onto Audio to append it after the last clip, move or trim it on the single
+track, split with Ctrl+B, and delete with Delete/Backspace. Overlaps mix together.
+Waveforms show the visible source excerpt at the current zoom. Use Sound to
+select overlapping clips and change volume or pan. Audio and object selections
+are independent; Inspector handles objects only. Right-click a clip for editing
+actions. The Audio header collapses its track. Drag edits are temporary until
+release; Escape cancels them. Saves
+replace the manifest atomically and reject external conflicts. Source audio
+files remain unchanged. There is no Lua API for editing these clips.
+
 Paths are relative to the project root (the parent of `kinematic/`), including
 module imports, fonts, images, shader files, caches and output. Absolute paths, parent traversal and symlinks
 that leave the project are rejected. `require("folder.module")` resolves
