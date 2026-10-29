@@ -1,18 +1,10 @@
 use super::{
     layout::{Layout, TimeRange},
-    metrics::{PANEL_TEXT_PADDING, TRACK_SPACING},
+    metrics::{EVENT_HEIGHT, PANEL_TEXT_PADDING, ROW_SPACING, SCENE_HEIGHT},
     state::State,
 };
-use crate::{
-    editor::Editor,
-    ui::{
-        icons::ARROW_LEFT,
-        widgets::{draw_panel_rect, text_size},
-    },
-};
-
-const SCENE_HEIGHT: f32 = 48.0;
-const EVENT_HEIGHT: f32 = SCENE_HEIGHT * 0.5;
+use crate::{editor::Editor, ui::widgets::text_size};
+use kinematic_ui::timeline::painting;
 
 pub(super) fn draw(
     editor: &mut Editor,
@@ -23,9 +15,16 @@ pub(super) fn draw(
     state: &mut State,
     interactive: bool,
 ) {
-    ui.dummy([0.0, TRACK_SPACING]);
+    ui.dummy([0.0, ROW_SPACING]);
 
     let top = ui.cursor_screen_pos()[1];
+    painting::separator(
+        ui,
+        draw_list,
+        layout.timeline_left,
+        layout.timeline_right(),
+        top + SCENE_HEIGHT + 2.0,
+    );
 
     ui.dummy([layout.timeline_right() - layout.content_left, SCENE_HEIGHT]);
 
@@ -60,8 +59,6 @@ pub(super) fn draw(
     let mut hovered_scene = None;
     let mut over_event = false;
     let mut back_position = None;
-    let arrow_size = text_size(ui, ARROW_LEFT);
-    let arrow_spacing = arrow_size[0] + text_size(ui, " ")[0];
 
     for (index, name, range, _) in &scenes {
         let start = range[0].max(time.start);
@@ -74,56 +71,21 @@ pub(super) fn draw(
         let min = [time.x(layout, start), top];
         let max = [time.x(layout, end), top + SCENE_HEIGHT];
         let hovered = ui.is_window_hovered() && ui.is_mouse_hovering_rect(min, max);
-        let fill = if hovered {
-            ui.get_color_u32(dear_imgui_rs::StyleColor::ButtonHovered)
-        } else if *index == active_scene {
-            active_scene_color(ui)
-        } else {
-            ui.get_color_u32(dear_imgui_rs::StyleColor::WindowBg)
-        };
-        let is_active = *index == active_scene;
-
         if hovered {
             hovered_scene = Some(*index);
         }
-
-        let border = ui.get_color_u32(if is_active {
-            dear_imgui_rs::StyleColor::CheckMark
-        } else {
-            dear_imgui_rs::StyleColor::Border
-        });
-
-        draw_panel_rect(
+        let back = painting::scene(
+            ui,
             draw_list,
-            min,
-            max,
-            Some(fill),
-            border,
-            if is_active { 2.0 } else { 1.0 },
-        );
-
-        let text_height = text_size(ui, name)[1];
-        let focused = editor.focused_scene_index() == Some(*index);
-
-        if focused {
-            back_position = Some([
-                min[0] + PANEL_TEXT_PADDING,
-                top + (EVENT_HEIGHT - text_height) * 0.5,
-            ]);
-        }
-
-        let text_clip = draw_list.push_clip_rect(min, max, true);
-
-        draw_list.add_text(
-            [
-                min[0] + PANEL_TEXT_PADDING + if focused { arrow_spacing } else { 0.0 },
-                top + (EVENT_HEIGHT - text_height) * 0.5,
-            ],
-            ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+            [min, max],
             name,
+            *index == active_scene,
+            hovered,
+            editor.focused_scene_index() == Some(*index),
         );
-
-        drop(text_clip);
+        if back.is_some() {
+            back_position = back;
+        }
     }
 
     for (index, _, range, events) in &scenes {
@@ -147,21 +109,7 @@ pub(super) fn draw(
             ];
             let duration_max = [time.x(layout, global_end.min(time.end)), top + SCENE_HEIGHT];
 
-            if duration_max[0] > duration_min[0] {
-                // Extend under the handle to fill its rounded corners.
-                draw_list
-                    .add_rect(
-                        duration_min,
-                        [
-                            duration_max[0] + crate::ui::CORNER_RADIUS * 2.0,
-                            duration_max[1],
-                        ],
-                        ui.get_color_u32_with_alpha(dear_imgui_rs::StyleColor::CheckMark, 0.5),
-                    )
-                    .rounding(crate::ui::CORNER_RADIUS)
-                    .filled(true)
-                    .build();
-            }
+            painting::event_span(ui, draw_list, duration_min, duration_max);
 
             let text_size = text_size(ui, event_name);
             let handle_min = [time.x(layout, global_end), top + EVENT_HEIGHT];
@@ -187,30 +135,7 @@ pub(super) fn draw(
                 ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeEW));
             }
 
-            let accent = ui.get_color_u32(dear_imgui_rs::StyleColor::CheckMark);
-            let text = ui.get_color_u32(dear_imgui_rs::StyleColor::Text);
-
-            draw_panel_rect(
-                draw_list,
-                handle_min,
-                handle_max,
-                Some(if is_dragging { text } else { accent }),
-                if is_dragging { accent } else { text },
-                1.0,
-            );
-
-            let event_clip = draw_list.push_clip_rect(handle_min, handle_max, true);
-
-            draw_list.add_text(
-                [
-                    handle_min[0] + PANEL_TEXT_PADDING,
-                    top + EVENT_HEIGHT + (EVENT_HEIGHT - text_size[1]) * 0.5,
-                ],
-                if is_dragging { accent } else { text },
-                event_name,
-            );
-
-            drop(event_clip);
+            painting::event_handle(ui, draw_list, [handle_min, handle_max], event_name);
         }
     }
 
@@ -218,20 +143,7 @@ pub(super) fn draw(
 
     let next_row = ui.cursor_screen_pos();
     let back_hovered = if let Some(position) = back_position {
-        ui.set_cursor_screen_pos(position);
-
-        let clicked = ui.invisible_button("##back_to_all_scenes", arrow_size);
-        let hovered = ui.is_item_hovered();
-
-        draw_list.add_text(
-            position,
-            ui.get_color_u32(if hovered {
-                dear_imgui_rs::StyleColor::TextDisabled
-            } else {
-                dear_imgui_rs::StyleColor::Text
-            }),
-            ARROW_LEFT,
-        );
+        let (clicked, hovered) = painting::back(ui, draw_list, position);
 
         if clicked && interactive {
             ui.set_cursor_screen_pos(next_row);
@@ -310,8 +222,4 @@ pub(super) fn draw(
             editor.set_event_duration(drag.scene, drag.file_event, drag.duration);
         }
     }
-}
-
-fn active_scene_color(ui: &dear_imgui_rs::Ui) -> u32 {
-    ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg)
 }

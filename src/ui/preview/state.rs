@@ -1,3 +1,4 @@
+use kinematic_ui::canvas::View;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Mode {
     Preview,
@@ -6,6 +7,7 @@ pub(super) enum Mode {
 }
 
 pub(in crate::ui) struct State {
+    pub(in crate::ui) view: View,
     mode: Mode,
     requested_mode: Option<Mode>,
     canvas_2d: Option<(usize, hecs::Entity)>,
@@ -27,6 +29,7 @@ impl State {
         };
 
         Self {
+            view: View::default(),
             mode,
             requested_mode: Some(mode),
             canvas_2d: None,

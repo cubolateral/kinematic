@@ -1,19 +1,19 @@
 use super::browser;
 use crate::editor::{Editor, documents::Documents};
 use crate::ui::inputs::{self, Action as InputAction};
-use dear_imgui_cte::{
-    AutocompleteConfig, CteUiExt, Language, Palette, PaletteColor, Position, TextEditor,
-};
+use dear_imgui_cte::{AutocompleteConfig, CteUiExt, Language, PaletteColor, Position, TextEditor};
+#[cfg(test)]
+use kinematic_ui::code::text::ruler_columns;
+use kinematic_ui::code::{TextActions, documentation, popup, text};
+use kinematic_ui::controls;
+use kinematic_ui::widgets;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::BTreeMap, path::PathBuf, rc::Rc};
 
 mod completion;
 mod diagnostics;
-mod documentation;
 mod files;
-mod popup;
 mod shortcuts;
-mod text;
 
 pub(super) const WINDOW_NAME: &str = "Code";
 pub(super) const FILES_WINDOW: &str = "Files";
@@ -665,10 +665,12 @@ impl Tab {
                             popup.bounds =
                                 [position, [position[0] + size[0], position[1] + size[1]]];
 
-                            if let Err(error) =
-                                self.documentation_view
-                                    .draw(ui, &mut self.documentation, font_size)
-                            {
+                            if let Err(error) = self.documentation_view.draw(
+                                ui,
+                                &mut self.documentation,
+                                font_size,
+                                text_actions(ui),
+                            ) {
                                 *output_error = Some(error);
                             }
 
@@ -759,7 +761,9 @@ impl Tab {
                         Some(size),
                         dear_imgui_rs::WindowFlags::NO_INPUTS,
                         || {
-                            if let Err(error) = self.popup_content.draw(ui, font_size) {
+                            if let Err(error) =
+                                self.popup_content.draw(ui, font_size, text_actions(ui))
+                            {
                                 *output_error = Some(error);
                             }
                         },
@@ -827,22 +831,7 @@ impl State {
                     editor.set_auto_indent_enabled(true);
                     editor.set_text(&doc.text)?;
 
-                    let mut palette = Palette::dark();
-
-                    for (slot, color) in [
-                        (PaletteColor::Text, 0xffd4d4d4),
-                        (PaletteColor::Identifier, 0xffd4d4d4),
-                        (PaletteColor::Keyword, 0xffd69c56),
-                        (PaletteColor::Declaration, 0xffb0c94e),
-                        (PaletteColor::Number, 0xffa8ceb5),
-                        (PaletteColor::String, 0xff7891ce),
-                        (PaletteColor::Comment, 0xff55996a),
-                        (PaletteColor::Background, 0x00000000),
-                        (PaletteColor::LineNumber, 0xff858585),
-                        (PaletteColor::Selection, text::SELECTION_COLOR),
-                    ] {
-                        palette.set(slot, color);
-                    }
+                    let mut palette = kinematic_ui::code::palette();
 
                     editor.set_palette(&palette)?;
 
@@ -947,10 +936,10 @@ impl State {
         if self.projects_open {
             let mut open = true;
 
-            super::windows::window(ui, "Projects", [440.0, 250.0])
+            super::windows::window(ui, "Projects")
                 .opened(&mut open)
                 .build(|| {
-                    ui.text("Directory");
+                    widgets::text(ui, "Directory");
 
                     let style = ui.clone_style();
                     let browse_width =
@@ -961,23 +950,23 @@ impl State {
                             .max(1.0),
                     );
 
-                    ui.input_text("##ProjectDirectory", &mut self.root).build();
+                    controls::text_input(ui, "##ProjectDirectory", &mut self.root);
                     ui.same_line();
 
-                    if ui.button_with_size("Browse", [browse_width, 0.0]) {
+                    if controls::button_sized(ui, "Browse", [browse_width, 0.0]) {
                         self.browse();
                     }
 
-                    if ui.button("Open project") {
+                    if controls::button(ui, "Open project") {
                         self.pending = Some(Pending::Project(ProjectAction::Open(
                             self.root.clone().into(),
                         )));
                     }
 
-                    ui.input_text("Name", &mut self.name).build();
-                    ui.checkbox("3D template", &mut self.three_d);
+                    controls::text_input(ui, "Name", &mut self.name);
+                    controls::checkbox(ui, "3D template", &mut self.three_d);
 
-                    if ui.button("Create project") {
+                    if controls::button(ui, "Create project") {
                         self.pending = Some(Pending::Project(ProjectAction::Create(
                             self.root.clone().into(),
                             self.name.clone(),
@@ -988,13 +977,13 @@ impl State {
                     if editor.is_some() {
                         ui.same_line();
 
-                        if ui.button("Close project") {
+                        if controls::button(ui, "Close project") {
                             self.pending = Some(Pending::Project(ProjectAction::Close));
                         }
                     }
 
                     if let Some(error) = &self.error {
-                        ui.text_wrapped(error);
+                        widgets::message(ui, error);
                     }
                 });
 
@@ -1035,15 +1024,22 @@ impl State {
             let mut open = true;
 
             if let Some(_modal) = super::windows::modal(ui, "Unsaved changes", &mut open) {
-                ui.text("Save changes before continuing?");
+                widgets::text(ui, "Save changes before continuing?");
 
-                if ui.button("Save") {
+                if controls::button(ui, "Save") {
                     let result = editor
                         .as_deref_mut()
-                        .and_then(|e| e.documents.as_mut())
-                        .map_or(Ok(()), |d| match &pending {
-                            Pending::Document(path) => d.save(path),
-                            Pending::Project(_) => d.save_all(),
+                        .map_or(Ok(()), |editor| match &pending {
+                            Pending::Document(path) => editor
+                                .documents
+                                .as_mut()
+                                .map_or(Ok(()), |documents| documents.save(path)),
+                            Pending::Project(_) => editor.save_project().and_then(|()| {
+                                editor
+                                    .documents
+                                    .as_mut()
+                                    .map_or(Ok(()), Documents::save_all)
+                            }),
                         });
 
                     match result {
@@ -1058,21 +1054,21 @@ impl State {
 
                 ui.same_line();
 
-                if ui.button("Discard") {
+                if controls::button(ui, "Discard") {
                     self.finish(pending, editor.as_deref_mut());
                     ui.close_current_popup();
                 }
 
                 ui.same_line();
 
-                if ui.button("Cancel") {
+                if controls::button(ui, "Cancel") {
                     self.pending = None;
 
                     ui.close_current_popup();
                 }
 
                 if let Some(error) = &self.error {
-                    ui.text_wrapped(error);
+                    widgets::message(ui, error);
                 }
             }
 
@@ -1280,7 +1276,7 @@ impl State {
             }
         }
 
-        ui.window(FILES_WINDOW).build(|| {
+        super::windows::panel(ui, FILES_WINDOW, || {
             self.focus_requested |= self.files.draw(documents, ui, &mut self.error);
         });
 
@@ -1288,9 +1284,7 @@ impl State {
             ui.set_window_focus(Some(WINDOW_NAME));
         }
 
-        ui.window(WINDOW_NAME).build(|| {
-            let _tabs_style = ui.push_style_var(dear_imgui_rs::StyleVar::TabRounding(0.0));
-
+        super::windows::panel(ui, WINDOW_NAME, || {
             self.focused = ui
                 .is_window_focused_with_flags(dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS);
 
@@ -1316,7 +1310,7 @@ impl State {
 
             self.zoom = self.zoom.clamp(10.0 - base_size, 28.0 - base_size);
 
-            if documents.replaying && ui.button("Cancel replay") {
+            if documents.replaying && controls::button(ui, "Cancel replay") {
                 documents.cancel_replay();
             }
 
@@ -1349,9 +1343,9 @@ impl State {
                         documents.active = Some(path.clone());
 
                         if documents.open[&path].conflict {
-                            ui.text_wrapped("This file changed outside the editor.");
+                            widgets::message(ui, "This file changed outside the editor.");
 
-                            if ui.button("Keep local buffer") {
+                            if controls::button(ui, "Keep local buffer") {
                                 if let Err(error) = documents.resolve_conflict(&path, true) {
                                     self.error = Some(error);
                                 }
@@ -1359,7 +1353,7 @@ impl State {
 
                             ui.same_line();
 
-                            if ui.button("Load disk version") {
+                            if controls::button(ui, "Load disk version") {
                                 if let Err(error) = documents.resolve_conflict(&path, false) {
                                     self.error = Some(error);
                                 }
@@ -1482,9 +1476,9 @@ impl State {
             }
         }
 
-        ui.window(CONSOLE_WINDOW).build(|| {
+        super::windows::panel(ui, CONSOLE_WINDOW, || {
             for line in &documents.console {
-                ui.text_wrapped(line);
+                widgets::message(ui, line);
             }
         });
     }
@@ -1509,13 +1503,6 @@ impl State {
         }
     }
 }
-fn ruler_columns(rulers: &str) -> impl Iterator<Item = usize> + '_ {
-    rulers
-        .split(',')
-        .filter_map(|value| value.trim().parse::<u16>().ok())
-        .filter(|column| *column > 0)
-        .map(usize::from)
-}
 fn indentation_backspace(prefix: &str, tab_size: usize) -> Option<usize> {
     if prefix.is_empty() || !prefix.bytes().all(|byte| byte == b' ') {
         return None;
@@ -1532,10 +1519,7 @@ fn diagnostic_markers(
     editor.clear_markers();
 
     for (line, error) in line_diagnostics(value) {
-        let color = if error { 0xff5555f1 } else { 0xff55cde2 };
-        let background = if error { 0x445555f1 } else { 0x4455cde2 };
-
-        editor.add_marker(line, color, background, "", "")?;
+        kinematic_ui::code::marker(editor, line, error)?;
     }
 
     Ok(())
@@ -2549,4 +2533,11 @@ fn assistance_text(value: &serde_json::Value) -> String {
                 .join("\n")
         })
         .unwrap_or_default()
+}
+
+fn text_actions(ui: &dear_imgui_rs::Ui) -> TextActions {
+    TextActions {
+        select_all: inputs::active(ui, InputAction::SelectAll),
+        copy: inputs::active(ui, InputAction::Copy),
+    }
 }

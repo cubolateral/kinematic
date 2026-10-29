@@ -1,15 +1,20 @@
 use crate::ui::inputs::{self, Action as InputAction};
+use kinematic_ui::widgets;
 mod fullscreen;
 mod image;
+mod playback;
 mod state;
 
 use crate::editor::Editor;
 
-use super::{controls, icons, widgets::hide_single_window_tab};
+use kinematic_ui::canvas::{
+    camera_frame, camera_mask as draw_camera_mask, project_outline as draw_project_outline,
+};
 use state::Mode;
 
 pub(super) const WINDOW_NAME: &str = "Preview";
 
+pub(in crate::ui) use playback::shortcuts;
 pub(super) use state::State;
 
 pub(super) fn draw(
@@ -17,12 +22,12 @@ pub(super) fn draw(
     ui: &dear_imgui_rs::Ui,
     state: &mut State,
     keyboard_enabled: bool,
-) {
+    volume: &mut i32,
+) -> bool {
+    let mut toggle_fullscreen = false;
     let is_exporting = editor.is_exporting();
 
-    hide_single_window_tab(ui);
-
-    ui.window(WINDOW_NAME).build(|| {
+    kinematic_ui::windows::viewport_panel(ui, WINDOW_NAME, || {
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
         let plain_keyboard_input = keyboard_enabled
             && !is_exporting
@@ -45,7 +50,7 @@ pub(super) fn draw(
             match state.mode() {
                 Mode::Two => editor.toggle_editor_2d_camera_view(),
                 Mode::Three => editor.toggle_editor_3d_camera_view(),
-                Mode::Preview => {}
+                Mode::Preview => state.view = kinematic_ui::canvas::View::default(),
             }
         }
 
@@ -59,89 +64,115 @@ pub(super) fn draw(
             }
         }
 
-        let Some(_tabs) = ui.tab_bar("Preview modes") else {
-            return;
-        };
+        kinematic_ui::windows::viewport_body(ui, || {
+            let Some(_tabs) = ui.tab_bar("Preview modes") else {
+                return;
+            };
 
-        let preview_tab =
-            ui.tab_item_with_flags("PREVIEW", None, tab_flags(requested == Some(Mode::Preview)));
+            let preview_tab = ui.tab_item_with_flags(
+                "PREVIEW",
+                None,
+                tab_flags(requested == Some(Mode::Preview)),
+            );
 
-        if ui.is_item_hovered() {
-            inputs::tooltip(ui, InputAction::Preview, "Show the final exported view");
-        }
-
-        if let Some(_tab) = preview_tab
-            && requested.is_none_or(|mode| mode == Mode::Preview)
-        {
-            state.set_mode(Mode::Preview);
-
-            let min = ui.cursor_screen_pos();
-            let available = ui.content_region_avail();
-            let margin = editor.margin_visible().then(|| editor.margin_size());
-
-            image::draw(ui, image::preview(editor), available, margin);
-            ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + 8.0]);
-
-            if margin_button(ui, editor.margin_visible()) {
-                editor.toggle_margin();
+            if ui.is_item_hovered() {
+                inputs::tooltip(ui, InputAction::Preview, "Show the final exported view");
             }
 
-            if let Some(error) = editor.render_error() {
-                ui.text_wrapped(error);
-            }
-
-            if !is_exporting
-                && ui.is_window_hovered()
-                && ui.is_mouse_hovering_rect(min, [min[0] + available[0], min[1] + available[1]])
-                && !ui.is_item_hovered()
-                && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)
+            if let Some(_tab) = preview_tab
+                && requested.is_none_or(|mode| mode == Mode::Preview)
             {
-                editor.clear_selection();
-            }
-        }
+                state.set_mode(Mode::Preview);
 
-        let editor_2d_tab =
-            ui.tab_item_with_flags("2D", None, tab_flags(requested == Some(Mode::Two)));
+                let min = ui.cursor_screen_pos();
+                let available = ui.content_region_avail();
+                let margin = editor.margin_visible().then(|| editor.margin_size());
 
-        if ui.is_item_hovered() {
-            inputs::tooltip(ui, InputAction::Edit2d, "Edit the selected Canvas2D");
-        }
-
-        if let Some(_tab) = editor_2d_tab
-            && requested.is_none_or(|mode| mode == Mode::Two)
-        {
-            state.set_mode(Mode::Two);
-
-            let canvas = editor.editor_2d_canvas();
-
-            if state.sync_canvas_2d(editor.active_scene_index(), canvas) {
-                editor.reset_editor_2d_view();
-            }
-
-            draw_editor_2d(editor, ui);
-        }
-
-        let editor_3d_tab =
-            ui.tab_item_with_flags("3D", None, tab_flags(requested == Some(Mode::Three)));
-
-        if ui.is_item_hovered() {
-            inputs::tooltip(ui, InputAction::Edit3d, "Edit the selected Canvas3D");
-        }
-
-        if let Some(_tab) = editor_3d_tab
-            && requested.is_none_or(|mode| mode == Mode::Three)
-        {
-            state.set_mode(Mode::Three);
-
-            let canvas = editor.editor_3d_canvas();
-
-            if state.sync_canvas_3d(editor.active_scene_index(), canvas) {
-                editor.reset_editor_3d_view();
+                if image::draw_navigable(
+                    ui,
+                    image::preview(editor),
+                    available,
+                    margin,
+                    &mut state.view,
+                ) {
+                    editor.clear_selection();
+                }
+                if kinematic_ui::canvas::preview_tools(
+                    ui,
+                    min,
+                    &mut state.view,
+                    editor.margin_visible(),
+                    [
+                        inputs::map()
+                            .binding(InputAction::ToggleCamera)
+                            .display
+                            .as_str(),
+                        inputs::map()
+                            .binding(InputAction::ToggleMargin)
+                            .display
+                            .as_str(),
+                    ],
+                ) {
+                    editor.toggle_margin();
+                }
+                if let Some(error) = editor.render_error() {
+                    ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + ui.frame_height() + 16.0]);
+                    widgets::message(ui, error);
+                }
             }
 
-            draw_editor_3d(editor, ui, plain_keyboard_input);
-        }
+            let editor_2d_tab =
+                ui.tab_item_with_flags("2D", None, tab_flags(requested == Some(Mode::Two)));
+
+            if ui.is_item_hovered() {
+                inputs::tooltip(ui, InputAction::Edit2d, "Edit the selected Canvas2D");
+            }
+
+            if let Some(_tab) = editor_2d_tab
+                && requested.is_none_or(|mode| mode == Mode::Two)
+            {
+                state.set_mode(Mode::Two);
+
+                let canvas = editor.editor_2d_canvas();
+
+                if state.sync_canvas_2d(editor.active_scene_index(), canvas) {
+                    editor.reset_editor_2d_view();
+                }
+
+                draw_editor_2d(editor, ui);
+            }
+
+            let editor_3d_tab =
+                ui.tab_item_with_flags("3D", None, tab_flags(requested == Some(Mode::Three)));
+
+            if ui.is_item_hovered() {
+                inputs::tooltip(ui, InputAction::Edit3d, "Edit the selected Canvas3D");
+            }
+
+            if let Some(_tab) = editor_3d_tab
+                && requested.is_none_or(|mode| mode == Mode::Three)
+            {
+                state.set_mode(Mode::Three);
+
+                let canvas = editor.editor_3d_canvas();
+
+                if state.sync_canvas_3d(editor.active_scene_index(), canvas) {
+                    editor.reset_editor_3d_view();
+                }
+
+                draw_editor_3d(editor, ui, plain_keyboard_input);
+            }
+        });
+        kinematic_ui::timeline::ruler::duration_bar(
+            ui,
+            editor.absolute_time(),
+            editor.project_duration(),
+        );
+        let fps = editor.preview_fps();
+        toggle_fullscreen =
+            playback::draw(editor.timeline_mut(), ui, fps, !is_exporting, false, volume);
     });
+    toggle_fullscreen
 }
 
 fn draw_editor_3d(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
@@ -164,10 +195,9 @@ fn draw_editor_3d(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
             let [a, b] = camera_frame(min, available, canvas_aspect);
             let size = editor.editor_3d_canvas_camera().1;
 
-            image::draw_margin(
+            kinematic_ui::canvas::margin(
                 ui,
-                a,
-                b,
+                [a, b],
                 [size.0.max(1) as f32, size.1.max(1) as f32],
                 editor.margin_size(),
             );
@@ -206,87 +236,27 @@ fn draw_editor_3d(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
         editor.control_editor_3d([0.0; 2], [0.0; 3], 0.0, false);
     }
 
-    ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + 8.0]);
-
-    if camera_button(ui, editor.editor_3d_camera_view()) {
+    let tools = kinematic_ui::canvas::tools(
+        ui,
+        min,
+        available,
+        editor.editor_3d_camera_view(),
+        editor.margin_visible(),
+        &editor.editor_3d_axes(),
+        camera_shortcuts(),
+    );
+    if tools.camera {
         editor.toggle_editor_3d_camera_view();
     }
-
-    ui.same_line();
-
-    if reset_camera_button(ui) {
+    if tools.reset {
         editor.reset_editor_3d_camera_transform();
     }
-
-    ui.same_line();
-
-    if margin_button(ui, editor.margin_visible()) {
+    if tools.margin {
         editor.toggle_margin();
     }
-
-    ui.set_cursor_screen_pos([min[0] + available[0] - 112.0, min[1] + 8.0]);
-
-    for (axis, label, color) in [
-        (0, "X", [1.0, 0.3, 0.3, 1.0]),
-        (1, "Y", [0.3, 1.0, 0.3, 1.0]),
-        (2, "Z", [0.35, 0.55, 1.0, 1.0]),
-    ] {
-        if axis > 0 {
-            ui.same_line();
-        }
-
-        ui.set_next_item_allow_overlap();
-
-        let enabled = editor.editor_3d_axes()[axis];
-        let _color = ui.push_style_color(
-            dear_imgui_rs::StyleColor::Text,
-            if enabled {
-                color
-            } else {
-                [0.45, 0.45, 0.45, 1.0]
-            },
-        );
-
-        if ui.button_with_size(label, [32.0, ui.frame_height()]) {
-            editor.toggle_editor_3d_axis(axis);
-        }
+    if let Some(axis) = tools.axis {
+        editor.toggle_editor_3d_axis(axis);
     }
-}
-
-fn draw_camera_mask(ui: &dear_imgui_rs::Ui, min: [f32; 2], size: [f32; 2], camera_aspect: f32) {
-    let size = [size[0].max(1.0), size[1].max(1.0)];
-    let max = [min[0] + size[0], min[1] + size[1]];
-    let draw = ui.get_window_draw_list();
-    let _clip = draw.push_clip_rect(min, max, true);
-    let [rect_min, rect_max] = camera_frame(min, size, camera_aspect);
-
-    for [shade_min, shade_max] in [
-        [min, [max[0], rect_min[1]]],
-        [[min[0], rect_max[1]], max],
-        [[min[0], rect_min[1]], [rect_min[0], rect_max[1]]],
-        [[rect_max[0], rect_min[1]], [max[0], rect_max[1]]],
-    ] {
-        draw.add_rect(shade_min, shade_max, [0.0, 0.0, 0.0, 0.25])
-            .filled(true)
-            .build();
-    }
-
-    draw.add_rect(rect_min, rect_max, [0.7, 0.7, 0.7, 1.0])
-        .thickness(1.0)
-        .build();
-}
-
-fn camera_frame(min: [f32; 2], size: [f32; 2], camera_aspect: f32) -> [[f32; 2]; 2] {
-    let editor_aspect = size[0].max(1.0) / size[1].max(1.0);
-    let (width, height) = if editor_aspect >= camera_aspect {
-        (size[0] * camera_aspect / editor_aspect, size[1])
-    } else {
-        (size[0], size[1] * editor_aspect / camera_aspect)
-    };
-    let left = min[0] + (size[0] - width) * 0.5;
-    let top = min[1] + (size[1] - height) * 0.5;
-
-    [[left, top], [left + width, top + height]]
 }
 
 fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
@@ -308,123 +278,39 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         draw_project_outline(ui, min, available, canvas_aspect);
     }
 
-    ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + 8.0]);
-
-    if camera_button(ui, editor.editor_2d_camera_view()) {
+    let tools = kinematic_ui::canvas::tools(
+        ui,
+        min,
+        available,
+        editor.editor_2d_camera_view(),
+        editor.margin_visible(),
+        &editor.editor_2d_axes(),
+        camera_shortcuts(),
+    );
+    if tools.camera {
         editor.toggle_editor_2d_camera_view();
     }
-
-    ui.same_line();
-
-    if reset_camera_button(ui) {
+    if tools.reset {
         editor.reset_editor_2d_camera_transform();
     }
-
-    ui.same_line();
-
-    if margin_button(ui, editor.margin_visible()) {
+    if tools.margin {
         editor.toggle_margin();
     }
-
-    ui.set_cursor_screen_pos([min[0] + available[0] - 80.0, min[1] + 8.0]);
-
-    for (axis, label, color) in [
-        (0, "X", [1.0, 0.3, 0.3, 1.0]),
-        (1, "Y", [0.3, 1.0, 0.3, 1.0]),
-    ] {
-        if axis > 0 {
-            ui.same_line();
-        }
-
-        ui.set_next_item_allow_overlap();
-
-        let enabled = editor.editor_2d_axes()[axis];
-        let _color = ui.push_style_color(
-            dear_imgui_rs::StyleColor::Text,
-            if enabled {
-                color
-            } else {
-                [0.45, 0.45, 0.45, 1.0]
-            },
-        );
-
-        if ui.button_with_size(label, [32.0, ui.frame_height()]) {
-            editor.toggle_editor_2d_axis(axis);
-        }
+    if let Some(axis) = tools.axis {
+        editor.toggle_editor_2d_axis(axis);
     }
-
     if let Some(error) = editor.render_error() {
-        ui.text_wrapped(error);
+        widgets::message(ui, error);
     }
 }
 
-fn draw_project_outline(ui: &dear_imgui_rs::Ui, min: [f32; 2], size: [f32; 2], aspect: f32) {
-    let [rect_min, rect_max] = camera_frame(min, size, aspect);
-
-    ui.get_window_draw_list()
-        .add_rect(rect_min, rect_max, [0.5, 0.5, 0.5, 1.0])
-        .thickness(1.0)
-        .build();
-}
-
-fn camera_button(ui: &dear_imgui_rs::Ui, camera_view: bool) -> bool {
-    ui.set_next_item_allow_overlap();
-
-    let clicked = controls::text_button_colored(
-        ui,
-        icons::VIDEO_CAMERA,
-        [ui.frame_height(); 2],
-        if camera_view {
-            dear_imgui_rs::StyleColor::Text
-        } else {
-            dear_imgui_rs::StyleColor::TextDisabled
-        },
-    );
-
-    if ui.is_item_hovered() {
-        inputs::tooltip(
-            ui,
-            InputAction::ToggleCamera,
-            if camera_view {
-                "Use the free editor camera"
-            } else {
-                "Use the canvas camera"
-            },
-        );
-    }
-
-    clicked
-}
-
-fn margin_button(ui: &dear_imgui_rs::Ui, visible: bool) -> bool {
-    ui.set_next_item_allow_overlap();
-
-    let clicked = controls::text_button_colored(
-        ui,
-        "M",
-        [ui.frame_height(); 2],
-        if visible {
-            dear_imgui_rs::StyleColor::Text
-        } else {
-            dear_imgui_rs::StyleColor::TextDisabled
-        },
-    );
-
-    if ui.is_item_hovered() {
-        inputs::tooltip(ui, InputAction::ToggleMargin, "Toggle margin");
-    }
-
-    clicked
-}
-
-fn reset_camera_button(ui: &dear_imgui_rs::Ui) -> bool {
-    let clicked = controls::text_button(ui, icons::RESET, [ui.frame_height(); 2]);
-
-    if ui.is_item_hovered() {
-        inputs::tooltip(ui, InputAction::ResetCamera, "Reset camera transform");
-    }
-
-    clicked
+fn camera_shortcuts() -> [&'static str; 3] {
+    [
+        InputAction::ToggleCamera,
+        InputAction::ResetCamera,
+        InputAction::ToggleMargin,
+    ]
+    .map(|action| inputs::map().binding(action).display.as_str())
 }
 
 fn shortcut_mode(ui: &dear_imgui_rs::Ui, enabled: bool) -> Option<Mode> {
@@ -457,23 +343,4 @@ pub(super) fn draw_fullscreen(
     volume: &mut i32,
 ) -> bool {
     fullscreen::draw(editor, ui, volume)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::camera_frame;
-
-    #[test]
-    fn camera_frame_keeps_the_canvas_aspect_inside_a_dynamic_view() {
-        let wide_camera = camera_frame([10.0, 20.0], [1600.0, 1000.0], 16.0 / 9.0);
-
-        assert_eq!([wide_camera[0][0], wide_camera[1][0]], [10.0, 1610.0]);
-        assert!((wide_camera[0][1] - 70.0).abs() < 0.001);
-        assert!((wide_camera[1][1] - 970.0).abs() < 0.001);
-
-        assert_eq!(
-            camera_frame([0.0, 0.0], [2000.0, 1000.0], 1.0),
-            [[500.0, 0.0], [1500.0, 1000.0]]
-        );
-    }
 }

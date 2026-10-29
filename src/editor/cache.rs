@@ -7,6 +7,8 @@ const CACHE_PATH: &str = "kinematic/cache/editor.ron";
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub(super) struct EditorCache {
+    pub(super) preview_pan: [f32; 2],
+    pub(super) preview_zoom: f32,
     pub(super) camera_2d: Camera2DCache,
     pub(super) camera_3d: Camera3DCache,
     pub(super) timeline_time: f32,
@@ -14,13 +16,14 @@ pub(super) struct EditorCache {
     pub(super) fullscreen: bool,
     pub(super) margin_visible: bool,
     pub(super) loop_enabled: bool,
-    pub(super) timeline_tracks_expanded: bool,
     pub(super) focused_scene: Option<String>,
 }
 
 impl Default for EditorCache {
     fn default() -> Self {
         Self {
+            preview_pan: [0.0; 2],
+            preview_zoom: 1.0,
             camera_2d: Camera2DCache::default(),
             camera_3d: Camera3DCache::default(),
             timeline_time: 0.0,
@@ -28,7 +31,6 @@ impl Default for EditorCache {
             fullscreen: false,
             margin_visible: true,
             loop_enabled: true,
-            timeline_tracks_expanded: false,
             focused_scene: None,
         }
     }
@@ -101,7 +103,10 @@ impl EditorCache {
     }
 
     fn is_valid(cache: &Self) -> bool {
-        cache.camera_2d.pan.iter().all(|value| value.is_finite())
+        cache.preview_pan.iter().all(|value| value.is_finite())
+            && cache.preview_zoom.is_finite()
+            && (0.01..=100.0).contains(&cache.preview_zoom)
+            && cache.camera_2d.pan.iter().all(|value| value.is_finite())
             && cache.camera_2d.zoom.is_finite()
             && cache.camera_2d.zoom > 0.0
             && cache
@@ -185,6 +190,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn removed_timeline_preference_does_not_discard_cached_time() {
+        let cache: EditorCache =
+            ron::from_str("(timeline_time: 1.5, timeline_tracks_expanded: true)").unwrap();
+        assert_eq!(cache.timeline_time, 1.5);
+        assert_eq!(cache.preview_pan, [0.0; 2]);
+        assert_eq!(cache.preview_zoom, 1.0);
+    }
+
+    #[test]
+    fn preview_cache_rejects_nonfinite_pan_and_invalid_zoom() {
+        let mut cache = EditorCache::default();
+        assert!(EditorCache::is_valid(&cache));
+        cache.preview_zoom = 0.0;
+        assert!(!EditorCache::is_valid(&cache));
+        cache.preview_zoom = 1.0;
+        cache.preview_pan[0] = f32::NAN;
+        assert!(!EditorCache::is_valid(&cache));
+    }
+
+    #[test]
     fn cached_time_resets_when_project_is_shorter() {
         let cache = EditorCache {
             timeline_time: 4.0,
@@ -205,6 +230,8 @@ mod tests {
         ));
         let path = directory.join("editor.ron");
         let cache = EditorCache {
+            preview_pan: [25.0, -30.0],
+            preview_zoom: 1.75,
             camera_2d: Camera2DCache {
                 pan: [12.0, -8.0],
                 zoom: 2.0,
@@ -223,7 +250,6 @@ mod tests {
             fullscreen: true,
             margin_visible: false,
             loop_enabled: false,
-            timeline_tracks_expanded: true,
             focused_scene: Some("Main".to_owned()),
         };
 
@@ -234,7 +260,6 @@ mod tests {
 
         assert_eq!(loaded, cache);
         assert!(contents.contains("timeline_time: 1.5"));
-        assert!(contents.contains("timeline_tracks_expanded: true"));
         assert!(contents.contains("focused_scene: Some(\"Main\")"));
 
         std::fs::remove_dir_all(directory).unwrap();

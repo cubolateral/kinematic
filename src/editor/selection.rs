@@ -2,7 +2,7 @@
 #[derive(Default)]
 pub(crate) struct Selection {
     object: Option<(usize, hecs::Entity)>,
-    audio: Option<(usize, u64)>,
+    audio: Option<u64>,
 }
 
 impl Selection {
@@ -14,12 +14,12 @@ impl Selection {
         self.object = Some((scene, entity));
     }
 
-    pub(crate) fn audio(&self) -> Option<(usize, u64)> {
+    pub(crate) fn audio(&self) -> Option<u64> {
         self.audio
     }
 
-    pub(crate) fn select_audio(&mut self, scene: usize, id: u64) {
-        self.audio = Some((scene, id));
+    pub(crate) fn select_audio(&mut self, id: u64) {
+        self.audio = Some(id);
     }
 
     pub(crate) fn remap_scenes(&mut self, order: &[usize]) {
@@ -29,12 +29,10 @@ impl Selection {
                 .position(|old| *old == scene)
                 .map(|index| (index, entity))
         });
-        self.audio = self.audio.and_then(|(scene, id)| {
-            order
-                .iter()
-                .position(|old| *old == scene)
-                .map(|index| (index, id))
-        });
+    }
+
+    pub(crate) fn clear_audio(&mut self) {
+        self.audio = None;
     }
 
     pub fn clear(&mut self) {
@@ -52,16 +50,18 @@ mod tests {
         let entity = world.spawn(());
         let mut selection = Selection::default();
         selection.select(1, entity);
-        selection.select_audio(0, 42);
+        selection.select_audio(42);
         assert_eq!(selection.get(), Some((1, entity)));
         selection.select(1, entity);
-        assert_eq!(selection.audio(), Some((0, 42)));
+        assert_eq!(selection.audio(), Some(42));
         selection.remap_scenes(&[1, 0]);
         assert_eq!(selection.get(), Some((0, entity)));
-        assert_eq!(selection.audio(), Some((1, 42)));
+        assert_eq!(selection.audio(), Some(42));
         selection.clear();
-        assert_eq!(selection.audio(), Some((1, 42)));
+        assert_eq!(selection.audio(), Some(42));
         selection.remap_scenes(&[0]);
+        assert_eq!(selection.audio(), Some(42));
+        selection.clear_audio();
         assert_eq!(selection.audio(), None);
     }
 }

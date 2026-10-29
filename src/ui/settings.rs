@@ -1,9 +1,11 @@
+use kinematic_ui::widgets;
 use std::{fs, path::Path};
 
 use crate::ui::inputs::{self, Category};
 use crate::{core::ProjectSettings, editor::Editor};
 
-use super::{inspector, properties::field, theme::Appearance};
+use super::{properties::field, theme::Appearance};
+use kinematic_ui::{controls, numbers};
 
 const PROJECT_WINDOW: &str = "Project settings";
 const EDITOR_WINDOW: &str = "Editor settings";
@@ -17,7 +19,7 @@ pub(super) struct State {
     resolution: [i32; 2],
     fps: i32,
     margin: [i32; 2],
-    numeric: inspector::State,
+    numeric: numbers::State,
 }
 
 pub(super) fn load() -> Appearance {
@@ -78,7 +80,7 @@ pub(super) fn draw(
     if state.project_open {
         let mut open = true;
 
-        super::windows::window(ui, PROJECT_WINDOW, [520.0, 220.0])
+        super::windows::window(ui, PROJECT_WINDOW)
             .opened(&mut open)
             .build(|| {
                 if let Some(editor) = editor {
@@ -128,17 +130,18 @@ pub(super) fn draw(
                         && state.margin[1] < state.resolution[1] / 2;
 
                     if !valid_resolution {
-                        ui.text_wrapped(
+                        widgets::message(
+                            ui,
                             "Resolution dimensions must be even numbers from 2 to 8192.",
                         );
                     }
 
                     if !valid_fps {
-                        ui.text_wrapped("FPS must be between 1 and 1000.");
+                        widgets::message(ui, "FPS must be between 1 and 1000.");
                     }
 
                     if !valid_margin {
-                        ui.text_wrapped("Margin must fit inside the resolution.");
+                        widgets::message(ui, "Margin must fit inside the resolution.");
                     }
 
                     if project_changed && valid_resolution && valid_fps && valid_margin {
@@ -164,11 +167,11 @@ pub(super) fn draw(
 
     let mut open = true;
 
-    super::windows::window(ui, EDITOR_WINDOW, [520.0, 420.0])
+    super::windows::window(ui, EDITOR_WINDOW)
         .opened(&mut open)
         .build(|| {
-            if let Some(_tabs) = ui.tab_bar("Editor settings sections") {
-                if let Some(_editor) = ui.tab_item("Code Editor") {
+            if let Some(_tabs) = super::windows::tabs(ui, "Editor settings sections") {
+                if let Some(_editor) = super::windows::tab(ui, "Code Editor") {
                     let settings = &mut appearance.editor;
                     let defaults = super::code::Settings::default();
 
@@ -198,43 +201,43 @@ pub(super) fn draw(
                         "Insert spaces",
                         &mut settings.insert_spaces,
                         defaults.insert_spaces,
-                        |value| ui.checkbox("##value", value),
+                        |value| controls::checkbox(ui, "##value", value),
                     );
                     changed |= field(
                         ui,
                         "Word wrap",
                         &mut settings.word_wrap,
                         defaults.word_wrap,
-                        |value| ui.checkbox("##value", value),
+                        |value| controls::checkbox(ui, "##value", value),
                     );
                     changed |= field(
                         ui,
                         "Rulers",
                         &mut settings.rulers,
                         defaults.rulers,
-                        |value| ui.input_text("##value", value).build(),
+                        |value| controls::text_input(ui, "##value", value),
                     );
-                    ui.text_disabled("Comma-separated columns, e.g. 80,100.");
+                    widgets::muted(ui, "Comma-separated columns, e.g. 80,100.");
                     changed |= field(
                         ui,
                         "Line numbers",
                         &mut settings.line_numbers,
                         defaults.line_numbers,
-                        |value| ui.checkbox("##value", value),
+                        |value| controls::checkbox(ui, "##value", value),
                     );
                     changed |= field(
                         ui,
                         "Automatic suggestions",
                         &mut settings.autocomplete,
                         defaults.autocomplete,
-                        |value| ui.checkbox("##value", value),
+                        |value| controls::checkbox(ui, "##value", value),
                     );
                     changed |= field(
                         ui,
                         "Show whitespace",
                         &mut settings.show_spaces,
                         defaults.show_spaces,
-                        |value| ui.checkbox("##value", value),
+                        |value| controls::checkbox(ui, "##value", value),
                     );
                     changed |= field(
                         ui,
@@ -244,13 +247,13 @@ pub(super) fn draw(
                         |value| input_usize(ui, &mut state.numeric, value, 200, 2000),
                     );
 
-                    ui.separator_with_text("Files");
+                    super::properties::section(ui, "Files");
                     changed |= field(
                         ui,
                         "Auto save",
                         &mut settings.auto_save,
                         defaults.auto_save,
-                        |value| ui.checkbox("##value", value),
+                        |value| controls::checkbox(ui, "##value", value),
                     );
                     changed |= field(
                         ui,
@@ -260,36 +263,36 @@ pub(super) fn draw(
                         |value| input_usize(ui, &mut state.numeric, value, 100, 60_000),
                     );
 
-                    ui.separator_with_text("Formatting");
+                    super::properties::section(ui, "Formatting");
                     changed |= field(
                         ui,
                         "Format on save",
                         &mut settings.format_on_save,
                         defaults.format_on_save,
-                        |value| ui.checkbox("##value", value),
+                        |value| controls::checkbox(ui, "##value", value),
                     );
-                    ui.text_disabled("Uses the tab size and indentation settings above.");
+                    widgets::muted(ui, "Uses the tab size and indentation settings above.");
                     changed |= field(
                         ui,
                         "Trim trailing whitespace",
                         &mut settings.trim_trailing_whitespace,
                         defaults.trim_trailing_whitespace,
-                        |value| ui.checkbox("##value", value),
+                        |value| controls::checkbox(ui, "##value", value),
                     );
                     changed |= field(
                         ui,
                         "Insert final newline",
                         &mut settings.insert_final_newline,
                         defaults.insert_final_newline,
-                        |value| ui.checkbox("##value", value),
+                        |value| controls::checkbox(ui, "##value", value),
                     );
                 }
 
-                if let Some(_shortcuts) = ui.tab_item("Shortcuts") {
+                if let Some(_shortcuts) = super::windows::tab(ui, "Shortcuts") {
                     draw_shortcuts(ui);
                 }
 
-                if let Some(_appearance) = ui.tab_item("Appearance") {
+                if let Some(_appearance) = super::windows::tab(ui, "Appearance") {
                     let defaults = Appearance::default();
 
                     changed |= field(
@@ -297,14 +300,14 @@ pub(super) fn draw(
                         "Background",
                         &mut appearance.background,
                         defaults.background,
-                        |value| ui.color_edit4("##value", value),
+                        |value| controls::color(ui, "##value", value),
                     );
                     changed |= field(
                         ui,
                         "Accent",
                         &mut appearance.accent,
                         defaults.accent,
-                        |value| ui.color_edit4("##value", value),
+                        |value| controls::color(ui, "##value", value),
                     );
                     changed |= field(
                         ui,
@@ -330,79 +333,34 @@ pub(super) fn draw(
 }
 
 fn draw_shortcuts(ui: &dear_imgui_rs::Ui) {
-    let flags = dear_imgui_rs::TableFlags::SCROLL_Y;
-
-    let Some(_table) = ui.begin_table_with_sizing(
-        "Shortcut list",
-        2,
-        dear_imgui_rs::TableOptions::from(flags),
-        [0.0, ui.content_region_avail()[1]],
-        0.0,
-    ) else {
-        return;
-    };
-
-    ui.table_setup_scroll_freeze(0, 1);
-    ui.table_setup_column("Action", dear_imgui_rs::TableColumnFlags::empty(), None);
-    ui.table_setup_column("Binding", dear_imgui_rs::TableColumnFlags::empty(), None);
-    ui.table_headers_row();
-
-    for (category, title) in [
+    let groups = [
         (Category::Editor, "Editor"),
         (Category::CodeEditor, "Code Editor"),
-    ] {
-        ui.table_next_row();
-        ui.table_next_column();
-
-        let group = ui
-            .tree_node_config(title)
-            .default_open(true)
-            .open_on_arrow(true)
-            .open_on_double_click(true)
-            .no_tree_push_on_open(true)
-            .push();
-
-        ui.table_next_column();
-
-        if group.is_some() {
-            for binding in inputs::map()
-                .bindings
-                .iter()
-                .filter(|binding| binding.category == category)
-            {
-                ui.table_next_row();
-                ui.table_next_column();
-                ui.set_cursor_pos_x(ui.cursor_pos_x() + ui.tree_node_to_label_spacing());
-                ui.text(binding.name);
-                ui.table_next_column();
-                ui.text(&binding.display);
-            }
-        }
-    }
+    ]
+    .map(|(category, title)| {
+        let bindings = inputs::map()
+            .bindings
+            .iter()
+            .filter(|binding| binding.category == category)
+            .map(|binding| (binding.name, binding.display.as_str()))
+            .collect();
+        (title, bindings)
+    });
+    kinematic_ui::lists::bindings(ui, groups);
 }
 
 fn input_int(
     ui: &dear_imgui_rs::Ui,
-    state: &mut inspector::State,
+    state: &mut numbers::State,
     label: &str,
     value: &mut i32,
 ) -> bool {
-    inspector::numeric_drag(
-        ui,
-        state,
-        label,
-        value,
-        1.0,
-        "%d",
-        dear_imgui_rs::sys::ImGuiDataType_S32,
-        None,
-        None,
-    )
+    numbers::drag(ui, state, label, value, 1.0, "%d", None, None)
 }
 
 fn input_int_components(
     ui: &dear_imgui_rs::Ui,
-    state: &mut inspector::State,
+    state: &mut numbers::State,
     values: &mut [i32; 2],
 ) -> bool {
     super::properties::components(ui, values, ["x", "y"], |_, value| {
@@ -412,20 +370,19 @@ fn input_int_components(
 
 fn input_usize(
     ui: &dear_imgui_rs::Ui,
-    state: &mut inspector::State,
+    state: &mut numbers::State,
     value: &mut usize,
     min: i32,
     max: i32,
 ) -> bool {
     let mut number = (*value).min(i32::MAX as usize) as i32;
-    let changed = inspector::numeric_drag(
+    let changed = numbers::drag(
         ui,
         state,
         "##value",
         &mut number,
         1.0,
         "%d",
-        dear_imgui_rs::sys::ImGuiDataType_S32,
         Some(&min),
         Some(&max),
     );
@@ -437,19 +394,18 @@ fn input_usize(
 
 fn input_float(
     ui: &dear_imgui_rs::Ui,
-    state: &mut inspector::State,
+    state: &mut numbers::State,
     value: &mut f32,
     min: f32,
     max: f32,
 ) -> bool {
-    let changed = inspector::numeric_drag(
+    let changed = numbers::drag(
         ui,
         state,
         "##value",
         value,
         0.01,
-        &inspector::float_format(*value),
-        dear_imgui_rs::sys::ImGuiDataType_Float,
+        &numbers::float_format(*value),
         Some(&min),
         Some(&max),
     );
@@ -468,68 +424,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn settings_open_independently_and_start_centered() {
+    fn settings_open_independently_without_saving_window_geometry() {
         let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
-
         context.set_ini_filename(None::<&str>).unwrap();
-
         context
             .font_atlas()
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
-
         context.io_mut().set_display_size([1280.0, 720.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
-
         let mut state = State::default();
         let mut appearance = Appearance::default();
-
-        assert!(!draw(&mut appearance, &mut state, None, context.frame()));
-        context.end_frame();
-
-        let mut layout = String::new();
-
-        context.save_ini_settings(&mut layout);
-        assert!(!layout.contains("[Window][Editor settings]"));
-
         state.editor_open = true;
-
-        assert!(!draw(&mut appearance, &mut state, None, context.frame()));
+        draw(&mut appearance, &mut state, None, context.frame());
         context.end_frame();
-        context.save_ini_settings(&mut layout);
-        assert!(layout.contains("[Window][Editor settings]"));
-        assert!(!layout.contains("[Window][Project settings]"));
-        assert!(!state.initialized);
-
-        for _ in 0..2 {
-            assert!(!draw(&mut appearance, &mut state, None, context.frame()));
-            context.end_frame();
-        }
-
-        layout.clear();
-        context.save_ini_settings(&mut layout);
-        assert!(layout.contains("[Window][Editor settings]\nPos=380,150\nSize=520,420"));
-
-        state.editor_open = false;
+        assert!(state.editor_open && !state.project_open);
         state.project_open = true;
-
-        for _ in 0..2 {
-            assert!(!draw(&mut appearance, &mut state, None, context.frame()));
-            context.end_frame();
-        }
-
-        layout.clear();
-        context.save_ini_settings(&mut layout);
-        assert!(layout.contains("[Window][Project settings]\nPos=380,250\nSize=520,220"));
-        assert!(!state.editor_open);
-
-        state.editor_open = true;
-
-        assert!(!draw(&mut appearance, &mut state, None, context.frame()));
+        draw(&mut appearance, &mut state, None, context.frame());
         context.end_frame();
-        assert!(state.project_open && state.editor_open);
+        assert!(state.editor_open && state.project_open);
+        let mut saved = String::new();
+        context.save_ini_settings(&mut saved);
+        assert!(!saved.contains("[Window][Editor settings]"));
+        assert!(!saved.contains("[Window][Project settings]"));
     }
 
     #[test]

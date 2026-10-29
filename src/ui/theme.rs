@@ -1,4 +1,4 @@
-use dear_imgui_rs::{ColorStackToken, Context, FontId, StyleColor, Ui};
+use dear_imgui_rs::{ColorStackToken, Context, FontId, Ui};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
@@ -13,11 +13,12 @@ pub(super) struct Appearance {
 
 impl Default for Appearance {
     fn default() -> Self {
+        let visual = kinematic_ui::theme::Theme::default();
         Self {
-            background: [0.0, 0.0, 0.0, 1.0],
-            accent: [0.0, 0.549, 1.0, 1.0],
-            contrast: 1.0,
-            scale: 1.0,
+            background: visual.background,
+            accent: visual.accent,
+            contrast: visual.contrast,
+            scale: visual.scale,
             editor: super::code::Settings::default(),
         }
     }
@@ -25,176 +26,39 @@ impl Default for Appearance {
 
 impl Appearance {
     pub fn apply_scale(&self, context: &mut Context) {
-        context
-            .style_mut()
-            .set_font_scale_main(self.scale.clamp(0.75, 1.25));
+        self.visual().apply_scale(context);
+    }
+
+    fn visual(&self) -> kinematic_ui::theme::Theme {
+        kinematic_ui::theme::Theme {
+            background: self.background,
+            accent: self.accent,
+            contrast: self.contrast,
+            scale: self.scale,
+        }
     }
 
     pub fn push<'ui>(&self, ui: &'ui Ui) -> Vec<ColorStackToken<'ui>> {
-        let background = self.background;
-        let contrast = self.contrast.clamp(0.0, 1.0);
-        let foreground =
-            if background[0] * 0.299 + background[1] * 0.587 + background[2] * 0.114 > 0.5 {
-                [0.0, 0.0, 0.0, 1.0]
-            } else {
-                [1.0, 1.0, 1.0, 1.0]
-            };
-
-        let mix = |amount: f32| {
-            [
-                background[0] + (foreground[0] - background[0]) * amount * contrast,
-                background[1] + (foreground[1] - background[1]) * amount * contrast,
-                background[2] + (foreground[2] - background[2]) * amount * contrast,
-                background[3],
-            ]
-        };
-
-        let surface = mix(0.08);
-        let hover = mix(0.14);
-        let active = mix(0.22);
-        let border = mix(0.30);
-        let disabled = mix(0.50);
-        let accent = self.accent;
-        let colors = [
-            (StyleColor::Text, foreground),
-            (StyleColor::TextDisabled, disabled),
-            (StyleColor::TextLink, accent),
-            (StyleColor::TextSelectedBg, accent),
-            (StyleColor::WindowBg, background),
-            (StyleColor::ChildBg, background),
-            (StyleColor::PopupBg, background),
-            (StyleColor::DockingEmptyBg, background),
-            (StyleColor::Border, border),
-            (StyleColor::BorderShadow, [0.0; 4]),
-            (StyleColor::FrameBg, background),
-            (StyleColor::FrameBgHovered, hover),
-            (StyleColor::FrameBgActive, active),
-            (StyleColor::TitleBg, background),
-            (StyleColor::TitleBgActive, surface),
-            (StyleColor::TitleBgCollapsed, disabled),
-            (StyleColor::MenuBarBg, background),
-            (StyleColor::Button, background),
-            (StyleColor::ButtonHovered, hover),
-            (StyleColor::ButtonActive, active),
-            (StyleColor::Header, surface),
-            (StyleColor::HeaderHovered, hover),
-            (StyleColor::HeaderActive, active),
-            (StyleColor::CheckMark, accent),
-            (StyleColor::CheckboxSelectedBg, background),
-            (StyleColor::SliderGrab, hover),
-            (StyleColor::SliderGrabActive, accent),
-            (StyleColor::ScrollbarBg, background),
-            (StyleColor::ScrollbarGrab, surface),
-            (StyleColor::ScrollbarGrabHovered, hover),
-            (StyleColor::ScrollbarGrabActive, active),
-            (StyleColor::Separator, border),
-            (StyleColor::SeparatorHovered, hover),
-            (StyleColor::SeparatorActive, active),
-            (StyleColor::ResizeGrip, surface),
-            (StyleColor::ResizeGripHovered, hover),
-            (StyleColor::ResizeGripActive, active),
-            (StyleColor::Tab, surface),
-            (StyleColor::TabHovered, hover),
-            (StyleColor::TabSelected, active),
-            (StyleColor::TabSelectedOverline, active),
-            (StyleColor::TabDimmed, background),
-            (StyleColor::TabDimmedSelected, active),
-            (StyleColor::TabDimmedSelectedOverline, active),
-            (StyleColor::DockingPreview, active),
-            (StyleColor::TableHeaderBg, surface),
-            (StyleColor::TableBorderStrong, border),
-            (StyleColor::TableBorderLight, border),
-            (StyleColor::TableRowBg, background),
-            (StyleColor::TableRowBgAlt, surface),
-            (StyleColor::InputTextCursor, foreground),
-            (StyleColor::TreeLines, border),
-            (StyleColor::DragDropTarget, accent),
-            (StyleColor::DragDropTargetBg, surface),
-            (StyleColor::NavCursor, accent),
-            (StyleColor::NavWindowingHighlight, accent),
-            (StyleColor::NavWindowingDimBg, disabled),
-            (StyleColor::UnsavedMarker, accent),
-            (StyleColor::PlotLines, foreground),
-            (StyleColor::PlotLinesHovered, accent),
-            (StyleColor::PlotHistogram, foreground),
-            (StyleColor::PlotHistogramHovered, accent),
-        ];
-
-        let mut tokens = colors
-            .into_iter()
-            .map(|(style_color, color)| ui.push_style_color(style_color, color))
-            .collect::<Vec<_>>();
-
-        // Stack guards must be released in reverse push order.
-        tokens.reverse();
-
-        tokens
+        self.visual().push(ui)
     }
 }
 
 pub(super) fn initialize(context: &mut Context) -> FontId {
-    apply_geometry(context);
-
-    context
-        .style_mut()
-        .set_color(StyleColor::ModalWindowDimBg, [0.0; 4]);
-
-    load_font(context)
-}
-
-fn load_font(context: &mut Context) -> FontId {
-    const FONT: &[u8] = include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf"
-    ));
-
-    context
-        .font_atlas()
-        .add_font(&[dear_imgui_rs::FontSource::stb_truetype_with_size(
-            dear_imgui_rs::StbTrueTypeFontData::from_slice(FONT)
-                .expect("Embedded font must be valid."),
-            16.0,
-        )])
+    kinematic_ui::theme::initialize(
+        context,
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf"
+        )),
+    )
 }
 
 pub(super) fn load_bold_font(context: &mut Context) -> FontId {
-    const FONT: &[u8] = include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf"
-    ));
-
-    context
-        .font_atlas()
-        .add_font(&[dear_imgui_rs::FontSource::stb_truetype_with_size(
-            dear_imgui_rs::StbTrueTypeFontData::from_slice(FONT)
-                .expect("Embedded font must be valid."),
-            16.0,
-        )])
-}
-
-fn apply_geometry(context: &mut Context) {
-    let style = context.style_mut();
-
-    style.set_window_rounding(super::CORNER_RADIUS);
-    style.set_child_rounding(super::CORNER_RADIUS);
-    style.set_popup_rounding(super::CORNER_RADIUS);
-    style.set_frame_rounding(super::CORNER_RADIUS);
-    style.set_grab_rounding(super::CORNER_RADIUS);
-    style.set_tab_rounding(super::CORNER_RADIUS);
-    style.set_scrollbar_rounding(super::CORNER_RADIUS);
-    style.set_image_rounding(super::CORNER_RADIUS);
-    style.set_drag_drop_target_rounding(super::CORNER_RADIUS);
-
-    style.set_window_border_size(1.0);
-    style.set_child_border_size(1.0);
-    style.set_popup_border_size(1.0);
-    style.set_frame_border_size(1.0);
-
-    style.set_window_padding([8.0, 8.0]);
-    style.set_frame_padding([6.0, 4.0]);
-    style.set_item_spacing([8.0, 5.0]);
-    style.set_item_inner_spacing([6.0, 4.0]);
-
-    style.set_scrollbar_size(12.0);
-    style.set_grab_min_size(10.0);
+    kinematic_ui::theme::load_font(
+        context,
+        include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf"
+        )),
+    )
 }

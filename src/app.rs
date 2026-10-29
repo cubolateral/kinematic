@@ -412,6 +412,7 @@ impl App {
                                 &self.gl,
                                 self.ui.editor_mode(),
                                 self.ui.is_fullscreen(),
+                                self.ui.preview_view(),
                             );
 
                             previous.preview_mut().unregister(&mut self.imgui_renderer);
@@ -446,7 +447,12 @@ impl App {
         self.ui.reset_project();
 
         if let Some(mut editor) = editor {
-            editor.shutdown(&self.gl, self.ui.editor_mode(), self.ui.is_fullscreen());
+            editor.shutdown(
+                &self.gl,
+                self.ui.editor_mode(),
+                self.ui.is_fullscreen(),
+                self.ui.preview_view(),
+            );
             editor.preview_mut().unregister(&mut self.imgui_renderer);
             editor.editor_2d_mut().unregister(&mut self.imgui_renderer);
             editor.editor_3d_mut().unregister(&mut self.imgui_renderer);

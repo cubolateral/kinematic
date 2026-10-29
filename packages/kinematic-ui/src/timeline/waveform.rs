@@ -2,7 +2,7 @@ use std::sync::{Arc, Weak};
 
 const BLOCK: usize = 256;
 
-pub(super) struct Waveform {
+pub struct Waveform {
     pub samples: Weak<Vec<[f32; 2]>>,
     peaks: Vec<[f32; 2]>,
 }

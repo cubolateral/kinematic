@@ -1,51 +1,47 @@
 # UI module guide
 
 `ui::Ui` is the editor UI orchestrator. It owns UI-only state, applies the theme,
-creates the workspace, and delegates each panel to its module. Rendering and
-interaction details belong in the panel modules, not in `ui/mod.rs`.
+creates the workspace, and delegates each panel to its module. Project-specific
+interaction belongs in the panel modules. Reusable presentation belongs in
+`packages/kinematic-ui`, not in the application panels.
 
 ## Module map
 
 - `browser.rs`: Internal folder picker with asynchronous listing and navigation.
-- `theme.rs`: Appearance state, font loading, colors, scale, and style geometry.
+- `theme.rs`: Persisted appearance settings and application font assets; delegates styling to `kinematic_ui::theme`.
 - `workspace.rs`: Default docking layout. It refers to panels through their
   `WINDOW_NAME` constants.
 - `inputs.rs`: Action bindings, modifier matching, and shortcut display names.
 - `settings.rs`: Separate Project settings and Editor settings windows opened from the menus.
 - `code.rs`: Lua buffers, file tabs, focus, and inline LuaLS assistance.
-- `code/diagnostics.rs`: Compact diagnostic footer with severity filters and counts.
+- `code/diagnostics.rs`: Converts runtime/LuaLS messages into UI diagnostics and routes clicked locations.
 - `code/shortcuts.rs`: VS Code Linux editing overrides, command chords, and keyboard navigation.
-- `code/text.rs`: Word hit testing, occurrence highlights, and selected newline overlays.
 - `code/files.rs`: Project file tree, context menu, and file operation dialogs.
-- `widgets.rs`: Small drawing and measurement helpers shared by panels.
-- `windows.rs`: Shared templates for centered floating windows, modals, and popups.
 - `scene_tree.rs`: Active scene hierarchy and entity selection.
 - `inspector.rs`: Selected entity inspection.
 - `sound.rs`: Independent audio selection and volume/pan editing, including obscured overlaps.
 - `export.rs`: Export menu, screenshots and progress.
-- `preview/`: Canvas preview, hit testing, and fullscreen presentation.
+- `preview/`: Canvas preview, zoom/pan, playback controls, hit testing, and fullscreen presentation.
 - `timeline/`: Timeline composition and its independent responsibilities.
 
 The Timeline is split as follows:
 
 - `state.rs`: Persistent Timeline UI state, temporary clip drags and waveform cache.
 - `audio.rs`: Collapsible audio track, clip mouse capture, project file drops and editing context menus.
-- `waveform.rs`: Bounded peak summaries shared by clips using the same samples.
-- `layout.rs`: Coordinate conversion and calculated panel geometry.
-- `metrics.rs`: Timeline-specific dimensions.
-- `controls.rs`: Playback shortcuts, transport, and fullscreen controls.
 - `interaction.rs`: Mouse gesture state transitions.
-- `ruler.rs`: Grid, scrubber, playhead, and time labels.
-- `objects.rs`: Object lifetimes, hierarchy rows, and selection.
-- `tracks.rs`: Animation tracks, segments, keyframes, and tooltips.
+Ruler, layout, metrics, waveform summaries, block painting, and transport are in
+`kinematic_ui::timeline`. Preview geometry and overlays are in `kinematic_ui::canvas`.
+Code popovers, documentation, and text overlays are in `kinematic_ui::code`.
 
 ## Boundaries
 
 - Keep project, scene, and animation behavior in `core` and `editor`.
 - Keep persistent interaction state in the panel's `State` type.
 - Access shared selection and playback through `Editor`.
-- Keep drawing helpers stateless and place them in `widgets.rs` only when more
-  than one panel uses them.
+- Use `kinematic_ui::{controls, numbers, properties, windows}` for ordinary controls and layouts.
+- Keep custom drawing, colors, spacing, and shapes in `kinematic-ui`.
+- Keep direct ImGui access only at lifecycle, docking, input-routing, and remaining
+  CTE integration boundaries. Do not create panel-specific copies of shared components.
 - Keep editor types internal to the binary.
 - Do not let preview overlays enter exported frames.
 
@@ -56,12 +52,12 @@ To add a panel:
 1. Create its module with a `WINDOW_NAME` constant and a `draw` function.
 2. Store panel state beside the other fields in `ui::Ui`, if needed.
 3. Call it from `Ui::draw`.
-4. Add it to `workspace::apply_default_layout`.
+4. Add it to `workspace::draw`.
 
-Use `windows::window` for floating windows, `windows::modal` for dialogs, and
-`windows::sized_modal` when a dialog needs a specific size. These templates own
-initial positioning and sizing; callers supply content and actions. Keep this
-module independent of editor and project types so it can move to `kinematic-ui`.
+Use `kinematic_ui::windows::panel` for docked panels, `windows::window` for
+floating windows, `windows::modal` for dialogs, and `windows::sized_modal` when
+a dialog needs a specific size. These templates own positioning and sizing;
+callers supply content and actions. Keep them independent of editor and project types.
 Context menus and inline code assistance keep their contextual anchors.
 
 To change Timeline behavior, update the module that owns that responsibility.

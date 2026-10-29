@@ -15,7 +15,8 @@ pub struct Manifest {
     pub version: u32,
     pub name: String,
     pub scenes: Vec<PathBuf>,
-    pub(crate) audio: BTreeMap<PathBuf, Vec<AudioClip>>,
+    pub(crate) audio: Vec<AudioClip>,
+    pub(crate) legacy_audio: BTreeMap<PathBuf, Vec<AudioClip>>,
     pub resolution: (u32, u32),
     pub fps: u32,
     pub margin: (u32, u32),
@@ -24,6 +25,8 @@ pub struct Manifest {
 #[serde(deny_unknown_fields)]
 pub(crate) struct AudioClip {
     pub id: u64,
+    #[serde(default)]
+    pub lane: usize,
     pub file: PathBuf,
     pub at: f64,
     pub offset: f64,
@@ -83,6 +86,8 @@ struct ManifestData {
     version: u32,
     name: String,
     scenes: Vec<SceneEntry>,
+    #[serde(default)]
+    audio: Vec<AudioClip>,
     resolution: (u32, u32),
     fps: u32,
     margin: (u32, u32),
@@ -149,7 +154,8 @@ impl From<ManifestData> for Manifest {
             version: data.version,
             name: data.name,
             scenes,
-            audio,
+            audio: data.audio,
+            legacy_audio: audio,
             resolution: data.resolution,
             fps: data.fps,
             margin: data.margin,
@@ -164,7 +170,7 @@ impl From<Manifest> for ManifestData {
             .into_iter()
             .map(|file| {
                 match manifest
-                    .audio
+                    .legacy_audio
                     .remove(&file)
                     .filter(|clips| !clips.is_empty())
                 {
@@ -177,6 +183,7 @@ impl From<Manifest> for ManifestData {
             version: manifest.version,
             name: manifest.name,
             scenes,
+            audio: manifest.audio,
             resolution: manifest.resolution,
             fps: manifest.fps,
             margin: manifest.margin,
@@ -216,18 +223,49 @@ impl Manifest {
             }
         }
 
-        for clips in self.audio.values() {
+        for clips in std::iter::once(&self.audio).chain(self.legacy_audio.values()) {
             let mut ids = BTreeSet::new();
             if clips.len() > 100_000 {
-                return Err("Scene exceeds 100000 audio clips.".into());
+                return Err("Project exceeds 100000 audio clips.".into());
             }
             for clip in clips {
                 clip.validate(context)?;
                 if !ids.insert(clip.id) {
-                    return Err("Audio clip IDs must be unique within a scene.".into());
+                    return Err("Audio clip IDs must be unique.".into());
                 }
             }
         }
+        Ok(())
+    }
+
+    pub(crate) fn migrate_audio(&mut self, durations: &[f32]) -> Result<(), String> {
+        if self.legacy_audio.is_empty() {
+            return Ok(());
+        }
+        let mut clips = self.audio.clone();
+        let mut ids = clips.iter().map(|clip| clip.id).collect::<BTreeSet<_>>();
+        let mut next = 0;
+        let mut start: f32 = 0.0;
+        for (path, duration) in self.scenes.iter().zip(durations) {
+            for clip in self.legacy_audio.get(path).into_iter().flatten() {
+                let mut clip = clip.clone();
+                clip.at += start as f64;
+                if ids.contains(&clip.id) {
+                    while ids.contains(&next) {
+                        next += 1;
+                    }
+                    clip.id = next;
+                }
+                ids.insert(clip.id);
+                clips.push(clip);
+            }
+            start += *duration;
+        }
+        if clips.len() > 100_000 {
+            return Err("Project exceeds 100000 audio clips.".into());
+        }
+        self.audio = clips;
+        self.legacy_audio.clear();
         Ok(())
     }
 
@@ -285,7 +323,8 @@ impl LuaProject {
             version: 1,
             name: name.into(),
             scenes: vec!["scenes/intro.lua".into()],
-            audio: BTreeMap::new(),
+            audio: Vec::new(),
+            legacy_audio: BTreeMap::new(),
             resolution: (1280, 720),
             fps: 60,
             margin: (0, 0),
@@ -336,6 +375,10 @@ impl LuaProject {
         }
     }
 
+    pub(crate) fn saved_manifest(&self) -> Result<Manifest, String> {
+        ron::de::from_bytes(&self.saved).map_err(|error| error.to_string())
+    }
+
     pub fn save(&mut self) -> Result<(), String> {
         self.manifest.validate(&self.context)?;
 
@@ -369,12 +412,6 @@ impl LuaProject {
                     self.manifest.fps,
                     self.manifest.margin,
                 )
-                .and_then(|mut scene| {
-                    scene.set_audio_clips(
-                        self.manifest.audio.get(path).map_or(&[], Vec::as_slice),
-                    )?;
-                    Ok(scene)
-                })
                 .map_err(|e| e.to_string())
             })
             .collect()
@@ -386,12 +423,50 @@ mod tests {
     use super::*;
 
     #[test]
+    fn old_audio_clips_default_to_the_first_lane() {
+        let mut clip: AudioClip = ron::from_str(r#"(id: 1, file: "assets/a.wav", at: 0.0, offset: 0.0, duration: 1.0, gain: 1.0, pan: 0.0)"#).unwrap();
+        assert_eq!(clip.lane, 0);
+        clip.lane = 2;
+        assert_eq!(clip.split(0.5, 2).unwrap().lane, 2);
+    }
+
+    #[test]
+    fn legacy_audio_migrates_to_absolute_time_with_unique_ids() {
+        let mut manifest: Manifest =
+            ron::from_str(include_str!("../../examples/lua/2d/kinematic/project.ron")).unwrap();
+        manifest.scenes = vec!["a.lua".into(), "b.lua".into()];
+        let clip: AudioClip = ron::from_str(r#"(id: 1, file: "assets/a.wav", at: 0.25, offset: 0.0, duration: 10.0, gain: 1.0, pan: 0.0)"#).unwrap();
+        manifest
+            .legacy_audio
+            .insert("a.lua".into(), vec![clip.clone()]);
+        manifest.legacy_audio.insert("b.lua".into(), vec![clip]);
+        let serialized = ron::to_string(&manifest).unwrap();
+        let mut manifest: Manifest = ron::from_str(&serialized).unwrap();
+        manifest.migrate_audio(&[2.0, 3.0]).unwrap();
+        assert_eq!(
+            manifest
+                .audio
+                .iter()
+                .map(|clip| clip.at)
+                .collect::<Vec<_>>(),
+            [0.25, 2.25]
+        );
+        assert_ne!(manifest.audio[0].id, manifest.audio[1].id);
+        assert!(manifest.legacy_audio.is_empty());
+        let saved = ron::to_string(&manifest).unwrap();
+        let restored: Manifest = ron::from_str(&saved).unwrap();
+        assert_eq!(restored.audio, manifest.audio);
+        assert!(restored.legacy_audio.is_empty());
+    }
+
+    #[test]
     fn legacy_and_audio_scene_entries_round_trip_without_losing_clips() {
         let legacy = include_str!("../../examples/lua/2d/kinematic/project.ron");
         let mut manifest: Manifest = ron::from_str(legacy).unwrap();
         assert!(manifest.audio.is_empty());
         let clip = AudioClip {
             id: 42,
+            lane: 2,
             file: "assets/chime.wav".into(),
             at: 0.25,
             offset: 0.05,
@@ -399,9 +474,7 @@ mod tests {
             gain: 0.5,
             pan: -0.5,
         };
-        manifest
-            .audio
-            .insert(manifest.scenes[0].clone(), vec![clip.clone()]);
+        manifest.audio.extend([clip.clone()]);
         manifest.scenes.push("other.lua".into());
         let text = ron::to_string(&manifest).unwrap();
         let restored: Manifest = ron::from_str(&text).unwrap();
@@ -433,6 +506,7 @@ mod tests {
         .unwrap();
         let clip = AudioClip {
             id: 1,
+            lane: 0,
             file: "assets/chime.wav".into(),
             at: 0.25,
             offset: 0.05,
@@ -440,45 +514,38 @@ mod tests {
             gain: 0.5,
             pan: -0.5,
         };
-        project
-            .manifest
-            .audio
-            .insert("scenes/intro.lua".into(), vec![clip.clone()]);
+        project.manifest.audio.extend([clip.clone()]);
         project.save().unwrap();
         let project = LuaProject::open(&root).unwrap();
-        assert_eq!(
-            project.manifest.audio.values().next().unwrap(),
-            &[clip.clone()]
-        );
+        assert_eq!(project.manifest.audio.as_slice(), &[clip.clone()]);
         let mut scene = project.load_scenes(&Sources::default()).unwrap().remove(0);
-        {
-            let audio = scene.scene.audio.borrow();
-            assert!(std::sync::Arc::ptr_eq(
-                &audio.clips[0].samples,
-                &audio.scheduled[0].samples
-            ));
-        }
-        let mix = |scene: &LuaScene| {
-            let mut frames = vec![[0.0; 2]; 48_000];
-            scene.scene.audio.borrow().mix(0.0, 0, &mut frames);
-            frames
+        let sources = Sources::default();
+        let prepare = |clips: &[AudioClip]| {
+            super::super::audio::clip_events(
+                &project.context,
+                &sources,
+                clips,
+                &crate::core::audio::AudioEvents::default(),
+            )
         };
-        let expected = mix(&scene);
+        let events = prepare(&project.manifest.audio).unwrap();
+        assert!(scene.scene.audio.borrow().clips.is_empty());
+        assert!(std::sync::Arc::ptr_eq(
+            &events[0].samples,
+            &scene.scene.audio.borrow().scheduled[0].samples
+        ));
         scene.update(0.8).unwrap();
         scene.update(0.0).unwrap();
         let candidate = scene.prepare_seek().unwrap();
         scene.apply_reload(candidate);
-        assert_eq!(scene.scene.audio.borrow().clips.len(), 1);
-        assert_eq!(mix(&scene), expected);
-        let mut clips = vec![clip.clone()];
-        let right = clips[0].split(0.35, 2).unwrap();
-        clips.push(right);
-        scene.set_audio_clips(&clips).unwrap();
-        assert_eq!(mix(&scene), expected);
+        assert!(scene.scene.audio.borrow().clips.is_empty());
+        assert!(std::sync::Arc::ptr_eq(
+            &events[0].samples,
+            &prepare(&project.manifest.audio).unwrap()[0].samples
+        ));
         let mut invalid = clip.clone();
         invalid.offset = 200.0;
-        assert!(scene.set_audio_clips(&[invalid]).is_err());
-        assert_eq!(mix(&scene), expected);
+        assert!(prepare(&[invalid]).is_err());
         let mut invalid = clip;
         invalid.pan = f32::NAN;
         assert!(invalid.validate(&project.context).is_err());

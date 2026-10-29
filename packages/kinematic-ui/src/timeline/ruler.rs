@@ -1,19 +1,17 @@
-use crate::ui::widgets::text_size;
+use crate::widgets::text_size;
 
 use super::{
     layout::{Layout, TimeRange},
     metrics::{GRID_TARGET_SPACING, LABEL_PADDING, SCRUBBER_HEIGHT},
 };
 
-pub(super) fn draw_scrubber(
+pub fn draw_scrubber(
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     layout: Layout,
     time: TimeRange,
-    playhead_x: f32,
 ) {
     let text_y = layout.top + 8.0;
-    let line_y = layout.top + SCRUBBER_HEIGHT - 2.0;
     let end_text = format_grid_time(time.end, grid_step(time, layout.timeline_width));
     let end_width = text_size(ui, &end_text)[0];
 
@@ -22,25 +20,9 @@ pub(super) fn draw_scrubber(
         ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
         end_text,
     );
-
-    draw_list.add_line_h(
-        playhead_x,
-        layout.timeline_right(),
-        line_y,
-        ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg),
-        2.0,
-    );
-
-    draw_list.add_line_h(
-        layout.timeline_left,
-        playhead_x,
-        line_y,
-        ui.get_color_u32(dear_imgui_rs::StyleColor::SliderGrabActive),
-        2.0,
-    );
 }
 
-pub(super) fn draw_time_grid_lines(
+pub fn draw_time_grid_lines(
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     layout: Layout,
@@ -59,12 +41,18 @@ pub(super) fn draw_time_grid_lines(
     while tick <= time.end + step * 0.001 {
         let x = time.x(layout, tick);
 
-        draw_list.add_line_v(x, layout.viewport_top, layout.bottom, color, 1.0);
+        draw_list.add_line_v(
+            x,
+            layout.top + SCRUBBER_HEIGHT - 10.0,
+            layout.top + SCRUBBER_HEIGHT - 2.0,
+            color,
+            1.0,
+        );
         tick += step;
     }
 }
 
-pub(super) fn draw_time_grid_labels(
+pub fn draw_time_grid_labels(
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     layout: Layout,
@@ -91,7 +79,7 @@ pub(super) fn draw_time_grid_labels(
     }
 }
 
-pub(super) fn draw_playhead(
+pub fn draw_playhead(
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     layout: Layout,
@@ -101,27 +89,20 @@ pub(super) fn draw_playhead(
         playhead_x,
         layout.viewport_top,
         layout.bottom,
-        ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+        ui.get_color_u32(dear_imgui_rs::StyleColor::CheckMark),
         2.0,
     );
 }
 
-pub(super) fn draw_time_panel(
+pub fn draw_time_panel(
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     layout: Layout,
     time: TimeRange,
     playhead_x: f32,
 ) {
-    let text_color = ui.get_color_u32(dear_imgui_rs::StyleColor::Text);
-
-    draw_list.add_line_v(
-        playhead_x,
-        layout.top + SCRUBBER_HEIGHT - 10.0,
-        layout.viewport_top,
-        text_color,
-        2.0,
-    );
+    let accent = ui.style_color(dear_imgui_rs::StyleColor::CheckMark);
+    let text_color = crate::theme::contrast_text(accent);
 
     let text = format_grid_time(time.current, grid_step(time, layout.timeline_width));
     let size = text_size(ui, &text);
@@ -135,29 +116,28 @@ pub(super) fn draw_time_panel(
         position[1] + size[1] + LABEL_PADDING[1],
     ];
 
-    draw_list
-        .add_rect(
-            min,
-            max,
-            ui.get_color_u32(dear_imgui_rs::StyleColor::PopupBg),
-        )
-        .rounding(crate::ui::CORNER_RADIUS)
-        .filled(true)
-        .build();
+    draw_list.add_line_v(
+        playhead_x,
+        max[1] - 1.0,
+        layout.viewport_top.max(max[1]),
+        ui.get_color_u32(dear_imgui_rs::StyleColor::CheckMark),
+        2.0,
+    );
 
     draw_list
         .add_rect(
             min,
             max,
-            ui.get_color_u32(dear_imgui_rs::StyleColor::Border),
+            ui.get_color_u32(dear_imgui_rs::StyleColor::CheckMark),
         )
-        .rounding(crate::ui::CORNER_RADIUS)
+        .rounding(crate::theme::CORNER_RADIUS)
+        .filled(true)
         .build();
 
     draw_list.add_text(position, text_color, text);
 }
 
-pub(super) fn draw_mouse_indicator(
+pub fn draw_mouse_indicator(
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
     layout: Layout,
@@ -215,7 +195,7 @@ fn format_grid_time(time: f32, step: f32) -> String {
     format_time(time, decimals)
 }
 
-pub(super) fn format_time(time: f32, decimals: usize) -> String {
+pub fn format_time(time: f32, decimals: usize) -> String {
     let scale = 10_u64.pow(decimals as u32);
     let ticks = (time.max(0.0) as f64 * scale as f64).round() as u64;
     let seconds = (ticks % (60 * scale)) as f64 / scale as f64;
@@ -254,4 +234,41 @@ mod tests {
         assert_eq!(format_time(65.25, 2), "01:05.25");
         assert_eq!(format_time(3661.5, 2), "1:01:01.50");
     }
+}
+
+pub fn progress_line(
+    ui: &dear_imgui_rs::Ui,
+    draw: &dear_imgui_rs::DrawListMut<'_>,
+    min: [f32; 2],
+    width: f32,
+    ratio: f32,
+) {
+    let x = min[0] + width * ratio.clamp(0.0, 1.0);
+    draw.add_line_h(
+        x,
+        min[0] + width,
+        min[1],
+        ui.get_color_u32(dear_imgui_rs::StyleColor::FrameBg),
+        2.0,
+    );
+    draw.add_line_h(
+        min[0],
+        x,
+        min[1],
+        ui.get_color_u32(dear_imgui_rs::StyleColor::SliderGrabActive),
+        2.0,
+    );
+}
+
+pub fn duration_bar(ui: &dear_imgui_rs::Ui, time: f32, duration: f32) {
+    let min = ui.cursor_screen_pos();
+    let width = ui.content_region_avail_width().max(1.0);
+    ui.dummy([width, 3.0]);
+    progress_line(
+        ui,
+        &ui.get_window_draw_list(),
+        [min[0], min[1] + 1.0],
+        width,
+        if duration > 0.0 { time / duration } else { 0.0 },
+    );
 }

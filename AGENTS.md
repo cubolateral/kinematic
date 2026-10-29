@@ -5,7 +5,8 @@ Kinematic is an animation editor for Lua projects, implemented in Rust. The sour
 ## Architecture
 
 - src/core/ contains the internal scene, object, animation, project, and component model.
-- src/editor/ and src/ui/ contain crate-private editor state and Dear ImGui views.
+- src/editor/ and src/ui/ contain crate-private editor state and panel composition.
+- packages/kinematic-ui/ owns reusable UI components and visual style. Use it for ordinary controls; keep direct ImGui access for deep canvas, docking, and code-editor integrations.
 - src/app.rs owns SDL, OpenGL, ImGui, and the application loop.
 - src/renderer/ owns MP4 export and reuses the application's existing graphics resources.
 - packages/kinematic-macros/ contains the procedural macros used by internal objects and components.
@@ -28,7 +29,7 @@ Kinematic is an animation editor for Lua projects, implemented in Rust. The sour
 ## API and style boundaries
 
 - The binary is the only user interface. Projects and scenes are written exclusively in Lua.
-- Keep Rust modules and macros internal; do not add a library target or Rust scene declaration API.
+- Keep application modules and macros internal. Only the UI component crate exposes reusable presentation APIs; do not add a Rust scene declaration API.
 - For crate items, import with use crate::... and do not use absolute paths beginning with ::. Qualified paths are fine for external dependencies.
 - Preserve the separation between project definition, animation evaluation, rendering, and editor controls unless intentionally changing the architecture.
 - Keep comments and string literals concise, start them with an uppercase letter, and end them with punctuation.

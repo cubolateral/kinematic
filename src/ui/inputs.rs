@@ -38,6 +38,7 @@ pub(super) enum Action {
     Cancel,
     Find,
     Save,
+    SaveProject,
     ZoomIn,
     ZoomOut,
     Definition,
@@ -335,6 +336,8 @@ impl Default for InputMap {
                     .modifiers(KeyMods::empty(), KeyMods::all())
                     .trigger(Repeat),
                 Binding::new(Find, CodeEditor, "Find", "Ctrl + F", &[Key::F])
+                    .modifiers(KeyMods::CTRL, KeyMods::CTRL),
+                Binding::new(SaveProject, Editor, "Save project", "Ctrl + S", &[Key::S])
                     .modifiers(KeyMods::CTRL, KeyMods::CTRL),
                 Binding::new(Save, CodeEditor, "Save file", "Ctrl + S", &[Key::S])
                     .modifiers(KeyMods::CTRL, KeyMods::CTRL),
@@ -902,6 +905,8 @@ mod tests {
             (Action::GoToStart, Key::LeftArrow, KeyMods::SHIFT, true),
             (Action::PreviousFrame, Key::LeftArrow, KeyMods::SHIFT, false),
             (Action::Save, Key::S, KeyMods::CTRL, true),
+            (Action::SaveProject, Key::S, KeyMods::CTRL, true),
+            (Action::SaveProject, Key::S, KeyMods::empty(), false),
             (Action::Save, Key::S, KeyMods::empty(), false),
             (Action::CameraFast, Key::ModShift, KeyMods::SHIFT, true),
             (Action::ToggleMargin, Key::N, KeyMods::empty(), true),

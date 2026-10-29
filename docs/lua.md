@@ -33,35 +33,37 @@ Existing exports are preserved by adding a numeric suffix to the new filename.
 )
 ```
 
-Scenes without UI audio retain the path-only format above. The editor stores
-clips inside their scene entry, alongside its Lua `file`:
+Imported audio belongs to the project, independently of scene entries:
 
 ```ron
-scenes: [
-    (file: "scenes/intro.lua", audio: [
-        (id: 1, file: "assets/chime.wav", at: 0.25, offset: 0.1,
-         duration: 0.2, gain: 0.5, pan: -0.5),
-    ]),
-    "scenes/outro.lua",
+scenes: ["scenes/intro.lua", "scenes/outro.lua"],
+audio: [
+    (id: 1, file: "assets/chime.wav", at: 0.25, offset: 0.1,
+     duration: 0.2, gain: 0.5, pan: -0.5),
 ],
 ```
 
-`at`, `offset` and `duration` are seconds: `at` is local to the scene,
+`at`, `offset` and `duration` are seconds: `at` is absolute in the project,
 `offset` selects the beginning in the source file, and `duration` limits the
-played excerpt. IDs are unique within the scene; gain is 0–1 and pan is -1–1.
-Clips can extend scene duration. Their buffers share the existing file cache,
-48 kHz mixer and 64 MB scene sample budget with Lua audio. Seeking or rebuilding
+played excerpt. IDs are unique within the project; gain is 0–1 and pan is -1–1.
+Focusing a scene crops the visible and audible interval without changing clips.
+The optional `lane` index defaults to zero and controls only vertical placement.
+Drag vertically to create lanes for overlapping clips; horizontal edits stop at
+neighbors in the same lane. Clips can extend project duration without changing scene boundaries. Their buffers share
+the existing file cache and 48 kHz mixer with Lua audio. Seeking or rebuilding
 replaces the clip list rather than scheduling new occurrences.
 
 Edit these clips exclusively through the UI: drag a project audio file from
-Files onto Audio to append it after the last clip, move or trim it on the single
-track, split with Ctrl+B, and delete with Delete/Backspace. Overlaps mix together.
+Files onto Audio to append it after the last clip, move or trim it within a
+horizontal lane, split with Ctrl+B, and delete with Delete/Backspace. Overlaps mix
+together.
 Waveforms show the visible source excerpt at the current zoom. Use Sound to
 select overlapping clips and change volume or pan. Audio and object selections
 are independent; Inspector handles objects only. Right-click a clip for editing
-actions. The Audio header collapses its track. Drag edits are temporary until
-release; Escape cancels them. Saves
-replace the manifest atomically and reject external conflicts. Source audio
+actions. The Audio header collapses its lanes. Drag edits are temporary until
+release; Escape cancels them. Audio edits reuse decoded buffers and remain in
+memory until Ctrl+S saves the project. Small pointer movements only select clips.
+Project saves replace the manifest atomically and reject external conflicts. Source audio
 files remain unchanged. There is no Lua API for editing these clips.
 
 Paths are relative to the project root (the parent of `kinematic/`), including
@@ -460,9 +462,8 @@ contents share decoded samples while referenced; a changed file reloads its
 resource and invalidates dependent simulation history. Decode errors keep the
 last valid revision active.
 
-Each scene allows eight million unique stereo sample frames (64 MB of PCM,
-about 167 seconds) and 100000 occurrences. Reusing a resource does not duplicate
-its sample budget. Encoded files retain the existing 64 MiB resource limit.
+Each scene allows 100000 occurrences. Encoded and decoded audio have no fixed
+size limit; decoded samples remain in memory and resources share their buffers.
 File audio is loaded into memory; long-track streaming is not implemented.
 
 Use players as declared simulation inputs, preserving isolated update callbacks:

@@ -1,0 +1,10 @@
+pub const LABEL_PADDING: [f32; 2] = [8.0, 4.0];
+pub const SCRUBBER_HEIGHT: f32 = 40.0;
+pub const ROW_SPACING: f32 = 4.0;
+pub const PANEL_TEXT_PADDING: f32 = 10.0;
+pub const GRID_TARGET_SPACING: f32 = 100.0;
+pub const DRAG_DIRECTION_THRESHOLD: f32 = 4.0;
+pub const SCENE_HEIGHT: f32 = 48.0;
+pub const EVENT_HEIGHT: f32 = SCENE_HEIGHT * 0.5;
+pub const AUDIO_HEIGHT: f32 = 64.0;
+pub const CLIP_HANDLE: f32 = 6.0;

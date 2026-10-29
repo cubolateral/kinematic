@@ -7,25 +7,15 @@ use crate::{
     },
     editor::Editor,
 };
-use std::{collections::HashMap, ffi::CString, os::raw::c_void, ptr};
+use kinematic_ui::widgets;
+use std::collections::HashMap;
 
-use super::{
-    properties,
-    widgets::{NumericValue, numeric_input_arrows},
-};
+use kinematic_ui::{controls, numbers, properties, windows};
 
 pub(super) const WINDOW_NAME: &str = "Inspector";
-const DRAG_DIRECTION_THRESHOLD: f32 = 4.0;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DragAxis {
-    Horizontal,
-    Vertical,
-}
-
 #[derive(Default)]
 pub(super) struct State {
-    drag: Option<(dear_imgui_rs::Id, Option<DragAxis>)>,
+    numeric: numbers::State,
     rotations: HashMap<dear_imgui_rs::Id, RotationEdit>,
 }
 
@@ -57,9 +47,9 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
     let is_exporting = editor.is_exporting();
     let is_playing = editor.timeline_mut().is_playing();
 
-    ui.window(WINDOW_NAME).build(|| {
+    windows::panel(ui, WINDOW_NAME, || {
         let Some((scene_index, entity)) = selected else {
-            ui.text_wrapped("Select an object from the Scene Tree or Timeline.");
+            widgets::message(ui, "Select an object from the Scene Tree or Timeline.");
 
             return;
         };
@@ -70,7 +60,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         let world = scene.world();
 
         let Ok(inspection) = world.get::<&Inspection>(entity) else {
-            ui.text_disabled("The selected object is unavailable.");
+            widgets::muted(ui, "The selected object is unavailable.");
 
             return;
         };
@@ -82,28 +72,31 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             .get::<&TreeNode>(entity)
             .expect("Inspected object must contain a Node component.");
 
-        ui.text(name.get());
+        widgets::text(ui, name.get());
         ui.same_line();
 
-        ui.text_disabled(if node.is_activated {
-            "Active."
-        } else {
-            "Inactive."
-        });
+        widgets::muted(
+            ui,
+            if node.is_activated {
+                "Active."
+            } else {
+                "Inactive."
+            },
+        );
 
-        ui.text_disabled(format!("Entity ID: {}.", entity.to_bits()));
-        ui.text_disabled(format!("Object type: {}.", inspection.object_name));
-        ui.separator();
+        widgets::muted(ui, format!("Entity ID: {}.", entity.to_bits()));
+        widgets::muted(ui, format!("Object type: {}.", inspection.object_name));
+        widgets::separator(ui);
 
         if let Ok(settings) = world.get::<&CanvasSettings>(entity) {
-            property(
+            properties::read_only(
                 ui,
                 "Resolution",
                 &format!("{} x {}.", settings.resolution.0, settings.resolution.1),
             );
         }
         if let Ok(source) = world.get::<&ProjectionSource>(entity) {
-            property(
+            properties::read_only(
                 ui,
                 "Source canvas",
                 &source.0.map_or_else(
@@ -113,7 +106,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             );
         }
 
-        ui.text_disabled("Temporary edits. Reset when playback resumes.");
+        widgets::muted(ui, "Temporary edits. Reset when playback resumes.");
         let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing);
 
         for (index, target) in inspection
@@ -160,13 +153,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
     });
 }
 
-fn property(ui: &dear_imgui_rs::Ui, name: &str, value: &str) {
-    properties::row(ui, name, false, || {
-        ui.text_disabled(value);
-        false
-    });
-}
-
 fn edit_value(
     ui: &dear_imgui_rs::Ui,
     state: &mut State,
@@ -188,7 +174,9 @@ fn edit_value_input(
     track: Option<&TrackInfo>,
 ) -> bool {
     match value {
-        TrackValue::Bool(v) => ui.checkbox(if *v { "On###value" } else { "Off###value" }, v),
+        TrackValue::Bool(v) => {
+            controls::checkbox(ui, if *v { "On###value" } else { "Off###value" }, v)
+        }
         TrackValue::Enum(v) => {
             let Some(track) = track else {
                 return false;
@@ -202,7 +190,7 @@ fn edit_value_input(
                 return false;
             };
 
-            if ui.combo_simple_string(name, &mut current, variants) {
+            if controls::choice(ui, name, &mut current, variants) {
                 *v = variants[current];
 
                 true
@@ -211,20 +199,19 @@ fn edit_value_input(
             }
         }
         TrackValue::F32(v) => {
-            let format = float_format(*v);
+            let format = numbers::float_format(*v);
             let (min, max) = match track.map(|track| track.limits) {
                 Some(TrackLimits::F32 { min, max }) => (min, max),
                 _ => (None, None),
             };
 
-            numeric_drag(
+            numbers::drag(
                 ui,
-                state,
+                &mut state.numeric,
                 name,
                 v,
                 0.01,
                 &format,
-                dear_imgui_rs::sys::ImGuiDataType_Float,
                 min.as_ref(),
                 max.as_ref(),
             )
@@ -240,14 +227,13 @@ fn edit_value_input(
                 false
             }
         }
-        TrackValue::U32(v) => numeric_drag(
+        TrackValue::U32(v) => numbers::drag(
             ui,
-            state,
+            &mut state.numeric,
             name,
             v,
             1.0,
             "%u",
-            dear_imgui_rs::sys::ImGuiDataType_U32,
             match track.map(|track| &track.limits) {
                 Some(TrackLimits::U32 { min, .. }) => min.as_ref(),
                 _ => None,
@@ -257,14 +243,13 @@ fn edit_value_input(
                 _ => None,
             },
         ),
-        TrackValue::I32(v) => numeric_drag(
+        TrackValue::I32(v) => numbers::drag(
             ui,
-            state,
+            &mut state.numeric,
             name,
             v,
             1.0,
             "%d",
-            dear_imgui_rs::sys::ImGuiDataType_S32,
             match track.map(|track| &track.limits) {
                 Some(TrackLimits::I32 { min, .. }) => min.as_ref(),
                 _ => None,
@@ -335,7 +320,7 @@ fn edit_value_input(
                 }
             };
 
-            if ui.combo_simple_string("##rotation_mode", &mut mode, &["Euler", "Quaternion"]) {
+            if controls::choice(ui, "##rotation_mode", &mut mode, &["Euler", "Quaternion"]) {
                 state.rotations.get_mut(&id).unwrap().mode = mode;
             }
 
@@ -348,7 +333,7 @@ fn edit_value_input(
         TrackValue::Color(v) => {
             let mut values = v.rgba();
 
-            if ui.color_edit4(name, &mut values) {
+            if controls::color(ui, name, &mut values) {
                 *v = crate::core::types::Color::new(values[0], values[1], values[2], values[3]);
 
                 true
@@ -357,20 +342,14 @@ fn edit_value_input(
             }
         }
         TrackValue::CodeRanges(v) => {
-            ui.text(format!("{name}: {v}"));
+            widgets::text(ui, format!("{name}: {v}"));
             false
         }
-        TrackValue::String(v) => ui
-            .input_text_multiline(name, v, [0.0, ui.frame_height() * 3.0])
-            .flags(
-                dear_imgui_rs::InputTextMultilineFlags::CTRL_ENTER_FOR_NEW_LINE
-                    | dear_imgui_rs::InputTextMultilineFlags::WORD_WRAP,
-            )
-            .build(),
+        TrackValue::String(v) => controls::text_area(ui, name, v),
     }
 }
 
-pub(super) fn edit_float_components<const N: usize>(
+fn edit_float_components<const N: usize>(
     ui: &dear_imgui_rs::Ui,
     state: &mut State,
     name: &str,
@@ -380,16 +359,15 @@ pub(super) fn edit_float_components<const N: usize>(
 ) -> bool {
     properties::components(ui, values, prefixes, |prefix, value| {
         let label = format!("{name}:{prefix}");
-        let format = format!("{}{unit}", float_format(*value));
+        let format = format!("{}{unit}", numbers::float_format(*value));
 
-        numeric_drag(
+        numbers::drag(
             ui,
-            state,
+            &mut state.numeric,
             &label,
             value,
             if unit.is_empty() { 0.01 } else { 0.1 },
             &format,
-            dear_imgui_rs::sys::ImGuiDataType_Float,
             None,
             None,
         )
@@ -408,109 +386,9 @@ fn quaternion_from_degrees(angles: [f32; 3]) -> glam::Quat {
     normalized_quaternion(glam::Quat::from_euler(glam::EulerRot::XYZ, x, y, z))
 }
 
-pub(super) fn numeric_drag<T>(
-    ui: &dear_imgui_rs::Ui,
-    state: &mut State,
-    label: &str,
-    value: &mut T,
-    speed: f32,
-    format: &str,
-    data_type: dear_imgui_rs::sys::ImGuiDataType,
-    min: Option<&T>,
-    max: Option<&T>,
-) -> bool
-where
-    T: NumericValue,
-{
-    let label = CString::new(label).expect("Inspector labels must not contain null bytes.");
-    let format = CString::new(format).expect("Inspector formats must not contain null bytes.");
-    let flags = dear_imgui_rs::sys::ImGuiSliderFlags_NoRoundToFormat;
-
-    // SAFETY: The data type matches T at every call site and both strings live through the call.
-    let mut changed = unsafe {
-        dear_imgui_rs::sys::igDragScalar(
-            label.as_ptr(),
-            data_type,
-            value as *mut T as *mut c_void,
-            0.0,
-            min.map_or(ptr::null(), |value| value as *const T as *const c_void),
-            max.map_or(ptr::null(), |value| value as *const T as *const c_void),
-            format.as_ptr(),
-            flags,
-        )
-    };
-
-    let text_editing = ui.is_item_active() && ui.io().want_text_input();
-
-    if !ui.is_item_active() {
-        if state.drag.is_some_and(|(id, _)| id == ui.item_id()) {
-            state.drag = None;
-        }
-    } else if !text_editing && ui.is_mouse_down(dear_imgui_rs::MouseButton::Left) {
-        let item = ui.item_id();
-
-        if ui.is_item_activated() {
-            state.drag = Some((item, None));
-        }
-
-        if let Some((_, axis)) = state.drag.as_mut().filter(|(id, _)| *id == item) {
-            if axis.is_none() {
-                let delta = ui.mouse_drag_delta_with_threshold(
-                    dear_imgui_rs::MouseButton::Left,
-                    DRAG_DIRECTION_THRESHOLD,
-                );
-
-                if delta[0].abs().max(delta[1].abs()) >= DRAG_DIRECTION_THRESHOLD {
-                    *axis = Some(if delta[1].abs() > delta[0].abs() {
-                        DragAxis::Vertical
-                    } else {
-                        DragAxis::Horizontal
-                    });
-                }
-            }
-
-            let amount = match *axis {
-                Some(DragAxis::Vertical) => -ui.io().mouse_delta()[1] * speed,
-                Some(DragAxis::Horizontal) => ui.io().mouse_delta()[0] * speed * 10.0,
-                None => 0.0,
-            };
-
-            changed |= value.offset(amount);
-        }
-    }
-
-    changed |= numeric_input_arrows(ui, value);
-
-    if ui.is_item_hovered() && !text_editing {
-        ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeAll));
-    }
-
-    changed
-}
-
-pub(super) fn float_format(value: f32) -> String {
-    let text = value.to_string();
-
-    if text.contains(['e', 'E']) {
-        return "%.9g".to_owned();
-    }
-
-    let decimal_places = text
-        .split_once('.')
-        .map_or(1, |(_, fraction)| fraction.len());
-
-    if decimal_places > 9 {
-        return "%.9g".to_owned();
-    }
-
-    format!("%.{}f", decimal_places.max(1))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        RotationEdit, State, edit_value, euler_degrees, float_format, quaternion_from_degrees,
-    };
+    use super::{RotationEdit, State, edit_value, euler_degrees, quaternion_from_degrees};
     use crate::core::TrackValue;
 
     #[test]
@@ -626,13 +504,5 @@ mod tests {
         edit.sync(external);
         assert_eq!(edit.mode, 1);
         assert!(external.dot(quaternion_from_degrees(edit.euler)).abs() > 1.0 - 1e-6);
-    }
-
-    #[test]
-    fn float_format_keeps_only_required_decimal_places() {
-        assert_eq!(float_format(1.0), "%.1f");
-        assert_eq!(float_format(1.2323), "%.4f");
-        assert_eq!(float_format(2.4300), "%.2f");
-        assert_eq!(float_format(1e-20), "%.9g");
     }
 }

@@ -17,6 +17,23 @@ pub struct Sources {
 }
 impl Sources {
     pub(crate) fn read(&self, context: &ProjectContext, path: &Path) -> std::io::Result<Vec<u8>> {
+        self.read_resource(context, path, true)
+    }
+
+    pub(crate) fn read_audio(
+        &self,
+        context: &ProjectContext,
+        path: &Path,
+    ) -> std::io::Result<Vec<u8>> {
+        self.read_resource(context, path, false)
+    }
+
+    fn read_resource(
+        &self,
+        context: &ProjectContext,
+        path: &Path,
+        limited: bool,
+    ) -> std::io::Result<Vec<u8>> {
         let full = context.resolve(path)?;
 
         if let Some(text) = self.text.get(path) {
@@ -24,18 +41,21 @@ impl Sources {
         }
 
         if let Some(bytes) = self.files.borrow().get(&full) {
+            if limited && bytes.len() > 64 * 1024 * 1024 {
+                return Err(std::io::Error::other("Resource exceeds 64 MiB."));
+            }
             return Ok(bytes.to_vec());
         }
 
         let metadata = std::fs::metadata(&full)?;
 
-        if metadata.len() > 64 * 1024 * 1024 {
+        if limited && metadata.len() > 64 * 1024 * 1024 {
             return Err(std::io::Error::other("Resource exceeds 64 MiB."));
         }
 
         let bytes = std::fs::read(&full)?;
 
-        if bytes.len() > 64 * 1024 * 1024 {
+        if limited && bytes.len() > 64 * 1024 * 1024 {
             return Err(std::io::Error::other("Resource exceeds 64 MiB."));
         }
 
@@ -77,5 +97,30 @@ impl From<BTreeMap<PathBuf, String>> for Sources {
             text,
             ..Self::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn large_audio_does_not_bypass_the_limit_for_other_resources() {
+        let root =
+            std::env::temp_dir().join(format!("kinematic-audio-source-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let file = root.join("large.wav");
+        let size = 64 * 1024 * 1024 + 1;
+        std::fs::File::create(&file).unwrap().set_len(size).unwrap();
+        let context = ProjectContext::new(&root).unwrap();
+        let sources = Sources::default();
+        let path = Path::new("large.wav");
+        assert!(sources.read(&context, path).is_err());
+        assert_eq!(
+            sources.read_audio(&context, path).unwrap().len() as u64,
+            size
+        );
+        assert!(sources.read(&context, path).is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

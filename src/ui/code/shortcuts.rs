@@ -2,6 +2,7 @@ use crate::ui::code::{
     Documents, InputAction, Pending, Position, Settings, State, Tab, TextEditor, inputs,
 };
 use dear_imgui_cte::{CteResult, ScrollAlignment, Selection};
+use kinematic_ui::widgets;
 
 impl Tab {
     pub(super) fn shortcuts(&mut self, ui: &dear_imgui_rs::Ui) -> CteResult<()> {
@@ -681,11 +682,14 @@ impl State {
         let mut position = None;
 
         if let Some(_popup) = ui.begin_popup("Navigate code") {
-            ui.text(if *files {
-                "Go to file"
-            } else {
-                "Go to line:column"
-            });
+            widgets::text(
+                ui,
+                if *files {
+                    "Go to file"
+                } else {
+                    "Go to line:column"
+                },
+            );
 
             if self.navigation_opening {
                 ui.set_keyboard_focus_here();
@@ -743,7 +747,7 @@ impl State {
                         }
                     }
 
-                    Err(error) => ui.text_wrapped(error),
+                    Err(error) => widgets::message(ui, error),
                 }
             } else if enter {
                 let mut parts = query.split(':');

@@ -1,4 +1,6 @@
 use crate::ui::inputs::{self, Action as InputAction};
+use kinematic_ui::controls;
+use kinematic_ui::widgets;
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -10,9 +12,7 @@ use std::{
     thread,
 };
 
-use dear_imgui_rs::{ListClipper, MouseButton, StyleVar, TableFlags, Ui};
-
-use super::icons;
+use dear_imgui_rs::{ListClipper, MouseButton, TableFlags, Ui};
 
 struct Entry {
     path: PathBuf,
@@ -151,10 +151,6 @@ impl State {
             ui.open_popup(TITLE);
         }
 
-        let _frames = ui.push_style_var(StyleVar::FrameBorderSize(0.0));
-        let _children = ui.push_style_var(StyleVar::ChildBorderSize(0.0));
-        let _windows = ui.push_style_var(StyleVar::WindowBorderSize(0.0));
-        let _popup_border = ui.push_style_var(StyleVar::PopupBorderSize(0.0));
         let mut open = true;
 
         {
@@ -167,7 +163,7 @@ impl State {
                 ] {
                     let _disabled = ui.begin_disabled_with_cond(!enabled);
 
-                    if button(ui, label) {
+                    if controls::button(ui, label) {
                         let index = (self.history_index as isize + step) as usize;
                         let path = self.history[index].clone();
 
@@ -182,7 +178,7 @@ impl State {
                 {
                     let _disabled = ui.begin_disabled_with_cond(self.cwd.parent().is_none());
 
-                    if button(ui, "Up") {
+                    if controls::button(ui, "Up") {
                         if let Some(parent) = self.cwd.parent().map(Path::to_path_buf) {
                             self.navigate(&parent, true);
                         }
@@ -191,7 +187,7 @@ impl State {
 
                 ui.same_line();
 
-                if button(ui, "Refresh") {
+                if controls::button(ui, "Refresh") {
                     self.refresh();
                 }
 
@@ -200,25 +196,21 @@ impl State {
                 let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" });
 
                 if let Some(home) = home {
-                    if button(ui, "Home") {
+                    if controls::button(ui, "Home") {
                         self.navigate(Path::new(&home), true);
                     }
                 }
 
                 ui.set_next_item_width(-1.0);
 
-                if ui
-                    .input_text("##BrowserPath", &mut self.path)
-                    .enter_returns_true(true)
-                    .build()
-                {
+                if controls::text_submit(ui, "##BrowserPath", &mut self.path) {
                     self.navigate(&PathBuf::from(&self.path), true);
                 }
 
                 ui.set_next_item_width((ui.content_region_avail_width() - 170.0).max(1.0));
-                ui.input_text("Search", &mut self.search).build();
+                controls::text_input(ui, "Search", &mut self.search);
                 ui.same_line();
-                ui.checkbox("Hidden files", &mut self.hidden);
+                controls::checkbox(ui, "Hidden files", &mut self.hidden);
 
                 let query = self.search.to_lowercase();
                 let entries: Vec<_> = self
@@ -254,30 +246,11 @@ impl State {
                             ui.table_next_row();
                             ui.table_next_column();
 
-                            let (icon, color) = if entry.directory {
-                                (icons::FOLDER, [0.95, 0.72, 0.3, 1.0])
-                            } else {
-                                (icons::FILE, [0.4, 0.7, 0.95, 1.0])
-                            };
-
-                            ui.text_colored(color, icon);
-                            ui.same_line();
-
-                            let position = ui.cursor_screen_pos();
-                            let clicked = ui
-                                .selectable_config("##Entry")
-                                .size([ui.content_region_avail_width(), ui.text_line_height()])
-                                .flags(
-                                    dear_imgui_rs::SelectableFlags::NO_AUTO_CLOSE_POPUPS
-                                        | dear_imgui_rs::SelectableFlags::ALLOW_DOUBLE_CLICK,
-                                )
-                                .selected(self.selected.as_ref() == Some(&entry.path))
-                                .build();
-
-                            ui.get_window_draw_list().add_text(
-                                position,
-                                ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+                            let clicked = kinematic_ui::lists::file_row(
+                                ui,
                                 &entry.name,
+                                entry.directory,
+                                self.selected.as_ref() == Some(&entry.path),
                             );
 
                             if clicked {
@@ -295,7 +268,8 @@ impl State {
                             ui.table_next_column();
 
                             if !entry.directory {
-                                ui.text(
+                                widgets::text(
+                                    ui,
                                     entry.path.extension().unwrap_or_default().to_string_lossy(),
                                 );
                             }
@@ -307,11 +281,11 @@ impl State {
                 }
 
                 if self.loading.is_some() {
-                    ui.text("Loading...");
+                    widgets::text(ui, "Loading...");
                 }
 
                 if let Some(error) = &self.error {
-                    ui.text_wrapped(error);
+                    widgets::message(ui, error);
                 }
 
                 let target = self.selected.as_ref().unwrap_or(&self.cwd);
@@ -327,7 +301,7 @@ impl State {
                         self.loading.is_some() || self.error.is_some() || !valid,
                     );
 
-                    if button(ui, "Select Folder") {
+                    if controls::button(ui, "Select Folder") {
                         ui.close_current_popup();
 
                         return Some(Some(target.clone()));
@@ -336,7 +310,7 @@ impl State {
 
                 ui.same_line();
 
-                if button(ui, "Cancel") || inputs::active(ui, InputAction::Cancel) {
+                if controls::button(ui, "Cancel") || inputs::active(ui, InputAction::Cancel) {
                     ui.close_current_popup();
 
                     return Some(None);
@@ -350,12 +324,6 @@ impl State {
 
         None
     }
-}
-
-fn button(ui: &Ui, label: &str) -> bool {
-    let _border = ui.push_style_var(StyleVar::FrameBorderSize(1.0));
-
-    ui.button(label)
 }
 
 fn valid_project(path: &Path) -> bool {
@@ -423,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn browser_draws_and_restores_the_editors_border_style() {
+    fn browser_uses_the_shared_borderless_style() {
         let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
 
@@ -455,8 +423,8 @@ mod tests {
             let _font = ui.push_font(font);
 
             assert!(state.draw(ui).is_none());
-            assert_eq!(ui.clone_style().frame_border_size(), 1.0);
-            assert_eq!(ui.clone_style().child_border_size(), 1.0);
+            assert_eq!(ui.clone_style().frame_border_size(), 0.0);
+            assert_eq!(ui.clone_style().child_border_size(), 0.0);
 
             drop(_font);
             context.end_frame();

@@ -23,8 +23,8 @@ Validated on October 26, 2026:
   left/right balance, silence afterward, and procedural simulation bounces.
 
 Physical listening and Windows/macOS behavior were not tested. File loading now
-requires FFmpeg during scene construction. Audio stays in memory with a 64 MB
-unique-PCM budget per scene; streaming, pitch control and loops remain excluded.
+requires FFmpeg during scene construction. Audio stays in memory without a fixed
+file or decoded-sample size limit; streaming, pitch control and loops remain excluded.
 
 ## Procedural audio validation
 
@@ -34,7 +34,7 @@ Validated on October 26, 2026:
 - The procedural audio regressions passed: silent resources, per-occurrence
   overrides, scheduling without animator advancement, sound tails, deterministic
   chunked mixing, multiple updates per step, checkpoints, reload and failure
-  rollback. Invalid parameters and the sample budget are checked.
+  rollback. Invalid parameters and occurrence limits are checked.
 - `cargo test --workspace` reported 370 passing binary tests, five failures and
   six ignored tests. An isolated checkout of the original revision reproduced
   the same five failures: two syntax-coloring tests, a settings default assertion,

@@ -8,6 +8,7 @@ autolib = false
 
 [dependencies]
 kinematic-macros = { path = "packages/kinematic-macros" }
+kinematic-ui = { path = "packages/kinematic-ui" }
 
 sdl3 = { version = "0.18.4", features = ["build-from-source"] }
 glow = "0.17.0"

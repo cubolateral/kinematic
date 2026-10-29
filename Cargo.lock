@@ -612,6 +612,7 @@ dependencies = [
  "glow 0.18.0",
  "hecs",
  "kinematic-macros",
+ "kinematic-ui",
  "lyon_tessellation",
  "mlua",
  "notify",
@@ -638,6 +639,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.3",
+]
+
+[[package]]
+name = "kinematic-ui"
+version = "0.1.0"
+dependencies = [
+ "dear-imgui-cte",
+ "dear-imgui-rs",
 ]
 
 [[package]]

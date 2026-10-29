@@ -177,6 +177,7 @@ impl Default for EditorView2D {
 }
 
 struct PendingLua {
+    audio: Option<crate::core::audio::AudioEvents>,
     save_manifest: bool,
     revision: u64,
     seek: Option<(usize, f32)>,
@@ -189,6 +190,8 @@ pub(crate) struct Editor {
     pub(crate) lua_project: Option<crate::scripting::LuaProject>,
     pub(crate) documents: Option<crate::editor::documents::Documents>,
     pending_lua: Option<PendingLua>,
+    project_audio: crate::core::audio::AudioEvents,
+    saved_audio: Vec<crate::scripting::AudioClip>,
     scenes: Vec<EditorScene>,
     active_scene: usize,
     focused_scene: Option<usize>,
@@ -218,12 +221,11 @@ pub(crate) struct Editor {
     pub(crate) performance: Performance,
     pending_project_settings: Option<ProjectSettings>,
     margin_visible: bool,
-    timeline_tracks_expanded: bool,
 }
 
 impl Editor {
     pub(crate) fn new_lua(
-        project: crate::scripting::LuaProject,
+        mut project: crate::scripting::LuaProject,
         imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
         skia_context: &mut skia_safe::gpu::DirectContext,
         gl: &std::rc::Rc<glow::Context>,
@@ -253,13 +255,7 @@ impl Editor {
                     project.manifest.resolution,
                     project.manifest.fps,
                     project.manifest.margin,
-                )
-                .and_then(|mut scene| {
-                    scene.set_audio_clips(
-                        project.manifest.audio.get(path).map_or(&[], Vec::as_slice),
-                    )?;
-                    Ok(scene)
-                }) {
+                ) {
                     Ok(scene) => SceneInstance::Lua(scene),
                     Err(error) => {
                         documents.diagnostics.push(error.to_string());
@@ -282,6 +278,34 @@ impl Editor {
                 }
             })
             .collect::<Vec<_>>();
+        let mut manifest = project.manifest.clone();
+        let migrate = !manifest.legacy_audio.is_empty()
+            && scenes
+                .iter()
+                .all(|entry| matches!(entry.scene, SceneInstance::Lua(_)));
+        if migrate {
+            manifest.migrate_audio(
+                &scenes
+                    .iter()
+                    .map(|entry| entry.scene.duration())
+                    .collect::<Vec<_>>(),
+            )?;
+        } else if !manifest.legacy_audio.is_empty() {
+            documents
+                .diagnostics
+                .push("Legacy audio requires valid scene scripts before migration.".into());
+        }
+        let audio = crate::scripting::audio::clip_events(
+            &project.context,
+            &sources,
+            &manifest.audio,
+            &crate::core::audio::AudioEvents::default(),
+        );
+        if migrate && audio.is_ok() {
+            manifest.validate(&project.context)?;
+            project.manifest = manifest;
+            project.save()?;
+        }
         let metadata = Project {
             name: project.manifest.name.clone(),
             context: project.context.clone(),
@@ -296,6 +320,14 @@ impl Editor {
             three_context,
         );
 
+        match audio {
+            Ok(events) => editor.project_audio.clips = events,
+            Err(error) => documents.diagnostics.push(error),
+        }
+        if editor.focused_scene.is_none() {
+            editor.timeline.set_duration(editor.project_duration());
+        }
+        editor.saved_audio = project.manifest.audio.clone();
         editor.documents = Some(documents);
         editor.lua_project = Some(project);
 
@@ -362,6 +394,8 @@ impl Editor {
             lua_project: None,
             documents: None,
             pending_lua: None,
+            project_audio: crate::core::audio::AudioEvents::default(),
+            saved_audio: Vec::new(),
             scenes,
             active_scene: focused_scene.unwrap_or(0),
             focused_scene,
@@ -404,7 +438,6 @@ impl Editor {
             performance: Performance::default(),
             pending_project_settings: None,
             margin_visible: cache.margin_visible,
-            timeline_tracks_expanded: cache.timeline_tracks_expanded,
         }
     }
 
@@ -429,7 +462,7 @@ impl Editor {
             let manifest_changed = documents
                 .changed
                 .contains(std::path::Path::new(crate::scripting::MANIFEST));
-            let manifest = if manifest_changed {
+            let mut manifest = if manifest_changed {
                 let text = sources
                     .get(std::path::Path::new(crate::scripting::MANIFEST))
                     .cloned()
@@ -449,6 +482,16 @@ impl Editor {
             } else {
                 project.manifest.clone()
             };
+            if documents.project_dirty && manifest_changed {
+                let saved = project.saved_manifest()?;
+                if manifest.audio != saved.audio || manifest.legacy_audio != saved.legacy_audio {
+                    return Err("Project audio changed on disk; resolve the conflict before saving local audio.".into());
+                }
+                if project.manifest.legacy_audio.is_empty() {
+                    manifest.legacy_audio.clear();
+                }
+                manifest.audio = project.manifest.audio.clone();
+            }
             let settings_changed = manifest.settings() != project.manifest.settings();
             let mut candidates = Vec::new();
             let mut order = Vec::new();
@@ -476,7 +519,6 @@ impl Editor {
                 }) = self.scenes.get(index)
                 {
                     if settings_changed
-                        || manifest.audio.get(path) != project.manifest.audio.get(path)
                         || documents
                             .changed
                             .iter()
@@ -488,14 +530,13 @@ impl Editor {
                                 manifest.resolution,
                                 manifest.fps,
                                 manifest.margin,
-                                manifest.audio.get(path).map_or(&[], Vec::as_slice),
                             )
                             .map_err(|e| e.to_string())?;
 
                         candidates.push((index, candidate));
                     }
                 } else {
-                    let mut candidate = crate::scripting::LuaScene::load(
+                    let candidate = crate::scripting::LuaScene::load(
                         project.context.clone(),
                         path,
                         sources.clone(),
@@ -505,19 +546,44 @@ impl Editor {
                     )
                     .map_err(|e| e.to_string())?;
 
-                    candidate
-                        .set_audio_clips(manifest.audio.get(path).map_or(&[], Vec::as_slice))
-                        .map_err(|e| e.to_string())?;
                     candidates.push((index, candidate));
                 }
             }
 
+            let migrated = !manifest.legacy_audio.is_empty();
+            if migrated {
+                manifest.migrate_audio(
+                    &order
+                        .iter()
+                        .map(|index| {
+                            candidates
+                                .iter()
+                                .find(|(candidate, _)| candidate == index)
+                                .map_or_else(
+                                    || self.scenes[*index].scene.duration(),
+                                    |(_, scene)| scene.duration(),
+                                )
+                        })
+                        .collect::<Vec<_>>(),
+                )?;
+                manifest.validate(&project.context)?;
+            }
+            let audio = crate::core::audio::AudioEvents {
+                clips: crate::scripting::audio::clip_events(
+                    &project.context,
+                    &sources,
+                    &manifest.audio,
+                    &crate::core::audio::AudioEvents::default(),
+                )?,
+                ..Default::default()
+            };
             Ok::<_, String>(PendingLua {
-                save_manifest: false,
+                audio: Some(audio),
+                save_manifest: migrated && !documents.project_dirty,
                 revision: documents.revision,
                 seek: None,
                 candidates,
-                manifest: manifest_changed.then_some((manifest, order)),
+                manifest: (manifest_changed || migrated).then_some((manifest, order)),
             })
         })();
 
@@ -700,7 +766,19 @@ impl Editor {
 
             project.manifest = pending.manifest.as_ref().unwrap().0.clone();
 
-            if let Err(error) = project.save() {
+            let draft_audio = project.manifest.audio.clone();
+            let draft_legacy = project.manifest.legacy_audio.clone();
+            let saved = (|| {
+                if documents.project_dirty {
+                    let baseline = project.saved_manifest()?;
+                    project.manifest.audio = baseline.audio;
+                    project.manifest.legacy_audio = baseline.legacy_audio;
+                }
+                project.save()
+            })();
+            project.manifest.audio = draft_audio;
+            project.manifest.legacy_audio = draft_legacy;
+            if let Err(error) = saved {
                 project.manifest = previous;
                 documents.replaying = false;
 
@@ -731,6 +809,9 @@ impl Editor {
             documents.changed.clear();
         }
 
+        if let Some(audio) = pending.audio {
+            self.project_audio = audio;
+        }
         for (index, candidate) in pending.candidates {
             if let Some(scene) = self.scenes.get_mut(index) {
                 scene.inspector_edits.reset_all(&scene.scene);
@@ -755,7 +836,9 @@ impl Editor {
             .drain(..documents.console.len().saturating_sub(500));
 
         documents.status = if documents.changed.is_empty() {
-            if documents.dirty() {
+            if documents.project_dirty {
+                "Unsaved project changes."
+            } else if documents.dirty() {
                 "Preview uses saved files. Unsaved edits pending."
             } else {
                 "Preview is current."
@@ -808,6 +891,9 @@ impl Editor {
                 client.set_scenes(&manifest.scenes);
             }
 
+            if !self.documents.as_ref().unwrap().project_dirty {
+                self.saved_audio = manifest.audio.clone();
+            }
             self.lua_project.as_mut().unwrap().accept_manifest(manifest);
 
             let duration = recalculate_scene_ranges(&mut self.scenes);
@@ -835,10 +921,12 @@ impl Editor {
             }
         });
 
-        self.timeline
-            .set_duration(self.focused_scene.map_or(duration, |index| {
-                self.scenes[index].end - self.scenes[index].start
-            }));
+        self.timeline.set_duration(
+            self.focused_scene
+                .map_or(duration.max(self.project_duration()), |index| {
+                    self.scenes[index].end - self.scenes[index].start
+                }),
+        );
 
         self.evaluated = None;
         self.rendered = None;
@@ -1020,8 +1108,16 @@ impl Editor {
         self.render_error.as_deref()
     }
 
-    pub fn shutdown(&mut self, gl: &glow::Context, mode: EditorMode, fullscreen: bool) {
+    pub fn shutdown(
+        &mut self,
+        gl: &glow::Context,
+        mode: EditorMode,
+        fullscreen: bool,
+        preview: ([f32; 2], f32),
+    ) {
         EditorCache {
+            preview_pan: preview.0,
+            preview_zoom: preview.1,
             camera_2d: Camera2DCache {
                 pan: self.editor_view_2d.pan,
                 zoom: self.editor_view_2d.zoom,
@@ -1040,7 +1136,6 @@ impl Editor {
             fullscreen,
             margin_visible: self.margin_visible,
             loop_enabled: self.timeline.loop_enabled(),
-            timeline_tracks_expanded: self.timeline_tracks_expanded,
             focused_scene: self
                 .focused_scene
                 .map(|index| match &self.scenes[index].scene {
@@ -1069,10 +1164,15 @@ impl Editor {
         &self.project.context
     }
 
-    pub(crate) fn cached_view(&self) -> (EditorMode, bool) {
+    pub(crate) fn cached_view(&self) -> (EditorMode, bool, [f32; 2], f32) {
         let cache = EditorCache::load(&self.project.context);
 
-        (cache.mode, cache.fullscreen)
+        (
+            cache.mode,
+            cache.fullscreen,
+            cache.preview_pan,
+            cache.preview_zoom,
+        )
     }
 
     pub(crate) fn project_info(&self) -> (&str, ProjectSettings) {
@@ -1125,10 +1225,6 @@ impl Editor {
                             settings.resolution,
                             settings.fps,
                             settings.margin,
-                            manifest
-                                .audio
-                                .get(&manifest.scenes[index])
-                                .map_or(&[], Vec::as_slice),
                         ),
                         SceneInstance::Empty(_) => crate::scripting::LuaScene::load(
                             project.context.clone(),
@@ -1137,16 +1233,7 @@ impl Editor {
                             settings.resolution,
                             settings.fps,
                             settings.margin,
-                        )
-                        .and_then(|mut scene| {
-                            scene.set_audio_clips(
-                                manifest
-                                    .audio
-                                    .get(&manifest.scenes[index])
-                                    .map_or(&[], Vec::as_slice),
-                            )?;
-                            Ok(scene)
-                        }),
+                        ),
                     }
                     .map_err(|error| error.to_string())?;
 
@@ -1165,6 +1252,7 @@ impl Editor {
                     documents.status = "Preparing project settings before saving.".into();
 
                     self.pending_lua = Some(PendingLua {
+                        audio: None,
                         save_manifest: true,
                         revision: documents.revision,
                         seek: None,
@@ -1212,10 +1300,12 @@ impl Editor {
         &mut self.scenes[self.active_scene].scene
     }
 
+    #[cfg(test)]
     pub(crate) fn scene(&self, index: usize) -> &Scene {
         &self.scenes[index].scene
     }
 
+    #[cfg(test)]
     pub(crate) fn scene_range(&self, index: usize) -> [f32; 2] {
         let scene = &self.scenes[index];
 
@@ -1320,8 +1410,7 @@ impl Editor {
 
         let time = self.scenes[index].start + self.timeline.time();
 
-        self.timeline
-            .set_duration(self.scenes.last().map_or(0.0, |scene| scene.end));
+        self.timeline.set_duration(self.project_duration());
 
         self.timeline.go_to(time);
 
@@ -1332,14 +1421,6 @@ impl Editor {
 
     pub fn active_scene_index(&self) -> usize {
         self.active_scene
-    }
-
-    pub(crate) fn timeline_tracks_expanded(&self) -> bool {
-        self.timeline_tracks_expanded
-    }
-
-    pub(crate) fn toggle_timeline_tracks(&mut self) {
-        self.timeline_tracks_expanded = !self.timeline_tracks_expanded;
     }
 
     pub fn selected_entity(&self) -> Option<hecs::Entity> {
@@ -1363,6 +1444,7 @@ impl Editor {
         documents.status = "Validating the edited timeline and drawing before saving.".into();
 
         self.pending_lua = Some(PendingLua {
+            audio: None,
             save_manifest: false,
             revision: documents.revision,
             seek: None,
@@ -1743,6 +1825,8 @@ impl Editor {
                 );
             }
         }
+        self.project_audio
+            .mix(-(self.timeline_origin() as f64), start, &mut samples);
         crate::core::audio::limit(samples)
     }
 
@@ -2021,6 +2105,7 @@ impl Editor {
                                 documents.status = "Replaying the active revision. Cancel keeps the previous preview.".into();
 
                                 self.pending_lua = Some(PendingLua {
+                                    audio: None,
                                     save_manifest: false,
                                     revision: documents.revision,
                                     candidates: vec![(active_scene, candidate)],

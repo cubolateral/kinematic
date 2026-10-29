@@ -42,6 +42,7 @@ pub(crate) struct Documents {
     pub changed: BTreeSet<PathBuf>,
     pub status: String,
     pub replaying: bool,
+    pub project_dirty: bool,
     pub lsp: Option<super::lsp::Client>,
     pub replies: Vec<super::lsp::Reply>,
     pub formatting: Option<serde_json::Value>,
@@ -88,6 +89,7 @@ impl Documents {
             changed: BTreeSet::new(),
             status: "Ready.".into(),
             replaying: false,
+            project_dirty: false,
             last_edit: Instant::now(),
             file_paths: None,
             _watcher: watcher,
@@ -237,7 +239,7 @@ impl Documents {
     }
 
     pub fn dirty(&self) -> bool {
-        self.open.values().any(Document::dirty)
+        self.project_dirty || self.open.values().any(Document::dirty)
     }
 
     pub fn auto_save_paths(&self, delay: Duration) -> Vec<PathBuf> {
@@ -347,7 +349,12 @@ impl Documents {
                     *path = next;
                 }
             }
-            manifest.audio = std::mem::take(&mut manifest.audio)
+            for clip in &mut manifest.audio {
+                if let Some(next) = files::renamed_path(&clip.file, from, to) {
+                    clip.file = next;
+                }
+            }
+            manifest.legacy_audio = std::mem::take(&mut manifest.legacy_audio)
                 .into_iter()
                 .map(|(path, mut clips)| {
                     for clip in &mut clips {

@@ -1,7 +1,6 @@
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc, sync::Arc};
 
 pub(crate) const SAMPLE_RATE: u32 = 48_000;
-pub(crate) const MAX_SAMPLE_FRAMES: usize = 8_000_000;
 pub(crate) type SceneAudio = Rc<RefCell<AudioEvents>>;
 
 #[derive(Clone, Debug)]
@@ -149,32 +148,9 @@ pub(crate) struct AudioEvents {
     pub scheduled: Vec<SoundEvent>,
     pub clips: Vec<SoundEvent>,
     pub steps: BTreeMap<(hecs::Entity, u64, usize), Vec<SoundEvent>>,
-    buffers: Vec<std::sync::Weak<Vec<[f32; 2]>>>,
 }
 
 impl AudioEvents {
-    pub fn register_samples(&mut self, samples: &Arc<Vec<[f32; 2]>>) -> Result<(), String> {
-        self.buffers.retain(|buffer| buffer.strong_count() > 0);
-        if self
-            .buffers
-            .iter()
-            .any(|buffer| buffer.as_ptr() == Arc::as_ptr(samples))
-        {
-            return Ok(());
-        }
-        let stored = self
-            .buffers
-            .iter()
-            .filter_map(|buffer| buffer.upgrade())
-            .map(|buffer| buffer.len())
-            .sum::<usize>();
-        if stored + samples.len() > MAX_SAMPLE_FRAMES {
-            return Err("Scene audio resources exceed the 64 MB sample budget.".into());
-        }
-        self.buffers.push(Arc::downgrade(samples));
-        Ok(())
-    }
-
     pub fn check_capacity(
         &self,
         replacing: Option<(hecs::Entity, u64, usize)>,
@@ -231,9 +207,6 @@ impl AudioEvents {
     pub fn copy_steps(&mut self, previous: &Self, entity: hecs::Entity) -> Result<(), String> {
         for (key, events) in &previous.steps {
             if key.0 == entity {
-                for event in events {
-                    self.register_samples(&event.samples)?;
-                }
                 self.check_capacity(Some(*key), events.len().saturating_sub(1))?;
                 self.steps.insert(*key, events.clone());
             }
@@ -286,23 +259,6 @@ mod tests {
 }
 
 #[cfg(test)]
-mod resource_tests {
-    use super::*;
-
-    #[test]
-    fn shared_samples_count_once_and_unused_buffers_release_the_budget() {
-        let samples = Arc::new(vec![[0.0; 2]; MAX_SAMPLE_FRAMES]);
-        let mut audio = AudioEvents::default();
-        audio.register_samples(&samples).unwrap();
-        audio.register_samples(&samples).unwrap();
-        let extra = Arc::new(vec![[0.0; 2]]);
-        assert!(audio.register_samples(&extra).is_err());
-        drop(samples);
-        audio.register_samples(&extra).unwrap();
-    }
-}
-
-#[cfg(test)]
 mod clip_tests {
     use super::*;
 
@@ -314,7 +270,6 @@ mod clip_tests {
                 .collect::<Vec<_>>(),
         );
         let mut audio = AudioEvents::default();
-        audio.register_samples(&samples).unwrap();
         audio.clips.push(SoundEvent {
             time: 4.0 / SAMPLE_RATE as f64,
             samples,

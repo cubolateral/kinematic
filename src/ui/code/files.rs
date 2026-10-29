@@ -1,7 +1,8 @@
 use crate::editor::documents::{Documents, FileEntry, SceneTemplate};
-use crate::ui::icons;
 use crate::ui::inputs::{self, Action as InputAction};
-use dear_imgui_rs::{Condition, MouseButton, StyleColor, Ui};
+use dear_imgui_rs::{Condition, MouseButton, Ui};
+use kinematic_ui::controls;
+use kinematic_ui::widgets;
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -56,7 +57,7 @@ impl State {
         let files = match documents.files() {
             Ok(files) => files,
             Err(message) => {
-                ui.text_wrapped(&message);
+                widgets::message(ui, &message);
 
                 return false;
             }
@@ -112,13 +113,13 @@ impl State {
             if let Some((target, directory)) = &self.context {
                 if *directory {
                     for kind in [Action::Folder, Action::File, Action::Scene] {
-                        if ui.menu_item(kind.title()) {
+                        if controls::menu_item(ui, kind.title()) {
                             action = Some(kind);
                         }
                     }
 
-                    ui.separator();
-                } else if ui.menu_item("Open") {
+                    widgets::separator(ui);
+                } else if controls::menu_item(ui, "Open") {
                     match documents.open(target) {
                         Ok(()) => focus = true,
                         Err(message) => *error = Some(message),
@@ -130,11 +131,11 @@ impl State {
                         Path::new(crate::scripting::MANIFEST).starts_with(target),
                     );
 
-                    if ui.menu_item("Rename...") {
+                    if controls::menu_item(ui, "Rename...") {
                         action = Some(Action::Rename);
                     }
 
-                    if ui.menu_item("Delete...") {
+                    if controls::menu_item(ui, "Delete...") {
                         action = Some(Action::Delete);
                     }
                 }
@@ -204,34 +205,11 @@ impl State {
         if !entry.directory && crate::ui::timeline::is_audio_file(path) {
             if let Some(_source) = ui.drag_drop_source_config("KINEMATIC_AUDIO").begin() {
                 self.dragged_audio = Some(path.clone());
-                ui.text(path.to_string_lossy());
+                widgets::text(ui, path.to_string_lossy());
             }
         }
 
-        let icon = if entry.directory {
-            icons::FOLDER
-        } else {
-            icons::FILE
-        };
-        let color = if entry.directory {
-            [0.95, 0.72, 0.3, 1.0]
-        } else {
-            [0.4, 0.7, 0.95, 1.0]
-        };
-        let x = position[0] + ui.tree_node_to_label_spacing();
-        let y = position[1] + ui.clone_style().frame_padding()[1];
-
-        {
-            let draw = ui.get_window_draw_list();
-
-            draw.add_text([x, y], color, icon);
-
-            draw.add_text(
-                [x + ui.calc_text_size(icon)[0] + 6.0, y],
-                ui.get_color_u32(StyleColor::Text),
-                name,
-            );
-        }
+        kinematic_ui::lists::file_label(ui, position, name, entry.directory);
 
         if clicked {
             self.selected = Some(path.clone());
@@ -285,53 +263,62 @@ impl State {
             let width = ui.content_region_avail_width().max(1.0);
             let _wrap = ui.push_text_wrap_pos(ui.cursor_pos()[0] + width);
 
-            ui.text_wrapped(if dialog.target.as_os_str().is_empty() {
-                "Project root".into()
-            } else {
-                dialog.target.to_string_lossy().into_owned()
-            });
+            widgets::message(
+                ui,
+                if dialog.target.as_os_str().is_empty() {
+                    "Project root".into()
+                } else {
+                    dialog.target.to_string_lossy().into_owned()
+                },
+            );
 
-            ui.separator();
+            widgets::separator(ui);
 
             let deleting = matches!(dialog.action, Action::Delete);
             let mut submit = false;
             let validation = if deleting {
-                ui.text_wrapped("Permanently delete this item and all its contents? Scene entries will be removed from the manifest.");
+                widgets::message(
+                    ui,
+                    "Permanently delete this item and all its contents? Scene entries will be removed from the manifest.",
+                );
 
                 None
             } else {
-                ui.text("Name");
+                widgets::text(ui, "Name");
                 ui.set_next_item_width(width);
 
                 if ui.is_window_appearing() {
                     ui.set_keyboard_focus_here();
                 }
 
-                submit = ui
-                    .input_text("##Name", &mut dialog.name)
-                    .enter_returns_true(true)
-                    .build();
+                submit = controls::text_submit(ui, "##Name", &mut dialog.name);
 
                 submit |= inputs::active(ui, InputAction::Confirm);
 
                 if matches!(dialog.action, Action::Scene) {
-                    ui.text("Template");
+                    widgets::text(ui, "Template");
 
                     for (label, template) in [
                         ("No template", SceneTemplate::None),
                         ("2D template", SceneTemplate::TwoD),
                         ("3D template", SceneTemplate::ThreeD),
                     ] {
-                        if ui.radio_button(label, dialog.template == template) {
+                        if controls::radio_button(ui, label, dialog.template == template) {
                             dialog.template = template;
                         }
                     }
 
-                    ui.text_wrapped("The .lua extension is added automatically. The scene is linked in the manifest.");
+                    widgets::message(
+                        ui,
+                        "The .lua extension is added automatically. The scene is linked in the manifest.",
+                    );
                 }
 
                 if matches!(dialog.action, Action::Rename) {
-                    ui.text_wrapped("Scene paths are updated. Lua imports are not rewritten.");
+                    widgets::message(
+                        ui,
+                        "Scene paths are updated. Lua imports are not rewritten.",
+                    );
                 }
 
                 filename(&dialog.name, matches!(dialog.action, Action::Scene)).err()
@@ -341,17 +328,15 @@ impl State {
 
             if !dialog.name.is_empty() {
                 if let Some(message) = &validation {
-                    ui.text_wrapped(message);
+                    widgets::message(ui, message);
                 }
             }
 
             if let Some(message) = &dialog.error {
-                let _color = ui.push_style_color(StyleColor::Text, [1.0, 0.45, 0.4, 1.0]);
-
-                ui.text_wrapped(message);
+                widgets::error(ui, message);
             }
 
-            ui.separator();
+            widgets::separator(ui);
 
             let label = match dialog.action {
                 Action::Delete => "Delete",
@@ -362,12 +347,12 @@ impl State {
             {
                 let _disabled = ui.begin_disabled_with_cond(validation.is_some());
 
-                submit |= ui.button(label);
+                submit |= controls::button(ui, label);
             }
 
             ui.same_line();
 
-            if ui.button("Cancel") || inputs::active(ui, InputAction::Cancel) {
+            if controls::button(ui, "Cancel") || inputs::active(ui, InputAction::Cancel) {
                 finished = true;
 
                 ui.close_current_popup();

@@ -1,38 +1,10 @@
 use super::documentation::Documentation;
 use dear_imgui_cte::{Palette, PaletteColor, Position, TextEditor};
-use dear_imgui_rs::{Condition, StyleColor, StyleVar, Ui, WindowFlags};
+use dear_imgui_rs::Ui;
 
-pub(super) fn window<R>(
-    ui: &Ui,
-    name: &str,
-    position: [f32; 2],
-    size: Option<[f32; 2]>,
-    flags: WindowFlags,
-    content: impl FnOnce() -> R,
-) -> Option<R> {
-    let _rounding = ui.push_style_var(StyleVar::WindowRounding(7.0));
-    let _padding = ui.push_style_var(StyleVar::WindowPadding([12.0, 12.0]));
-    let _border = ui.push_style_var(StyleVar::WindowBorderSize(1.0));
-    let background = ui.clone_style().color(StyleColor::WindowBg);
-    let _background = ui.push_style_color(StyleColor::WindowBg, background);
-    let _child = ui.push_style_color(StyleColor::ChildBg, background);
-    let mut window = ui.window(name).position(position, Condition::Always).flags(
-        WindowFlags::NO_DECORATION
-            | WindowFlags::NO_MOVE
-            | WindowFlags::NO_FOCUS_ON_APPEARING
-            | WindowFlags::NO_DOCKING
-            | WindowFlags::NO_SAVED_SETTINGS
-            | flags,
-    );
+pub use crate::windows::anchored as window;
 
-    if let Some(size) = size {
-        window = window.size(size, Condition::Always);
-    }
-
-    window.build(content)
-}
-
-pub(super) fn editor(
+pub fn editor(
     context: &dear_imgui_rs::Context,
     palette: &Palette,
 ) -> dear_imgui_cte::CteResult<TextEditor> {
@@ -51,7 +23,7 @@ pub(super) fn editor(
     Ok(editor)
 }
 
-pub(super) struct Content {
+pub struct Content {
     buffer: TextEditor,
     view: Documentation,
     source: String,
@@ -84,8 +56,13 @@ impl Content {
         Ok(())
     }
 
-    pub fn draw(&mut self, ui: &Ui, font_size: f32) -> Result<(), String> {
-        self.view.draw(ui, &mut self.buffer, font_size)
+    pub fn draw(
+        &mut self,
+        ui: &Ui,
+        font_size: f32,
+        actions: super::TextActions,
+    ) -> Result<(), String> {
+        self.view.draw(ui, &mut self.buffer, font_size, actions)
     }
 
     pub fn height(&self) -> f32 {

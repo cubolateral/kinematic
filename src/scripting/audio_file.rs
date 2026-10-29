@@ -1,6 +1,6 @@
-use crate::core::audio::{MAX_SAMPLE_FRAMES, SAMPLE_RATE};
+use crate::core::audio::SAMPLE_RATE;
 use std::{
-    io::{Read, Write},
+    io::{BufReader, Read, Write},
     process::{Command, Stdio},
     time::{Duration, Instant},
 };
@@ -22,12 +22,7 @@ pub(super) fn decode(bytes: &[u8], deadline: Instant) -> Result<Vec<[f32; 2]>, S
             "-vn",
             "-sn",
             "-dn",
-            "-t",
         ])
-        .arg(format!(
-            "{:.9}",
-            (MAX_SAMPLE_FRAMES + 1) as f64 / SAMPLE_RATE as f64
-        ))
         .args(["-f", "f32le", "-acodec", "pcm_f32le", "-ac", "2", "-ar"])
         .arg(SAMPLE_RATE.to_string())
         .arg("pipe:1")
@@ -46,12 +41,18 @@ pub(super) fn decode(bytes: &[u8], deadline: Instant) -> Result<Vec<[f32; 2]>, S
         .expect("Audio decoder output must be piped.");
     let decoded = std::thread::scope(|scope| {
         let writer = scope.spawn(move || input.write_all(bytes));
-        let reader = scope.spawn(move || {
-            let mut decoded = Vec::new();
-            output
-                .take((MAX_SAMPLE_FRAMES as u64 + 1) * 8)
-                .read_to_end(&mut decoded)
-                .map(|_| decoded)
+        let reader = scope.spawn(move || -> std::io::Result<Vec<[f32; 2]>> {
+            let mut output = BufReader::new(output);
+            let mut samples = Vec::new();
+            let mut frame = [0; 8];
+            while output.read(&mut frame[..1])? != 0 {
+                output.read_exact(&mut frame[1..])?;
+                samples.push([
+                    f32::from_le_bytes(frame[..4].try_into().unwrap()),
+                    f32::from_le_bytes(frame[4..].try_into().unwrap()),
+                ]);
+            }
+            Ok(samples)
         });
         let status = loop {
             if Instant::now() >= deadline {
@@ -76,23 +77,12 @@ pub(super) fn decode(bytes: &[u8], deadline: Instant) -> Result<Vec<[f32; 2]>, S
             .join()
             .map_err(|_| "Audio decoder output worker failed.")?
             .map_err(|error| error.to_string())?;
-        if decoded.len() > MAX_SAMPLE_FRAMES * 8 {
-            return Err("Decoded audio exceeds the 64 MB sample budget.".to_owned());
-        }
-        if !status?.success() || written.is_err() || decoded.is_empty() || decoded.len() % 8 != 0 {
+        if !status?.success() || written.is_err() || decoded.is_empty() {
             return Err("FFmpeg could not decode a valid audio stream.".to_owned());
         }
         Ok(decoded)
     })?;
-    let mut samples = decoded
-        .chunks_exact(8)
-        .map(|frame| {
-            [
-                f32::from_le_bytes(frame[..4].try_into().unwrap()),
-                f32::from_le_bytes(frame[4..].try_into().unwrap()),
-            ]
-        })
-        .collect::<Vec<_>>();
+    let mut samples = decoded;
     if samples.iter().flatten().any(|value| !value.is_finite()) {
         return Err("Decoded audio contains non-finite samples.".into());
     }
@@ -114,7 +104,7 @@ mod tests {
 
     #[test]
     #[ignore = "Requires FFmpeg with WAV, MP3, OGG and FLAC support."]
-    fn decoding_resamples_files_and_rejects_invalid_oversized_or_late_input() {
+    fn decoding_resamples_large_files_and_rejects_invalid_or_late_input() {
         let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("examples/lua/audio/assets/chime.wav");
         let wav = std::fs::read(&fixture).unwrap();
@@ -162,10 +152,7 @@ mod tests {
             .output()
             .unwrap();
         assert!(oversized.status.success());
-        assert!(
-            decode(&oversized.stdout, Instant::now() + Duration::from_secs(10))
-                .unwrap_err()
-                .contains("sample budget")
-        );
+        let large = decode(&oversized.stdout, Instant::now() + Duration::from_secs(10)).unwrap();
+        assert!(large.len() * 8 > 64_000_000);
     }
 }

@@ -6,14 +6,7 @@ use crate::{
     editor::Editor,
 };
 
-const CANVAS_OUTLINE: [f32; 4] = [0.7, 0.7, 0.7, 1.0];
-
-#[derive(Clone, Copy)]
-pub(super) struct PreviewImage {
-    size: [f32; 2],
-    texture: dear_imgui_rs::TextureId,
-    filter: CanvasFilter,
-}
+pub(super) use kinematic_ui::canvas::{Image as PreviewImage, draw, draw_navigable};
 
 pub(super) fn preview(editor: &mut Editor) -> PreviewImage {
     image(editor.preview_mut())
@@ -33,36 +26,8 @@ fn image(canvas: &mut crate::editor::Canvas) -> PreviewImage {
     PreviewImage {
         size: [width.max(1) as f32, height.max(1) as f32],
         texture: canvas.imgui_texture_id(),
-        filter: canvas.target.filter(),
+        nearest: canvas.target.filter() == CanvasFilter::Nearest,
     }
-}
-
-pub(super) fn draw(
-    ui: &dear_imgui_rs::Ui,
-    preview: PreviewImage,
-    available: [f32; 2],
-    margin: Option<(u32, u32)>,
-) {
-    let (_, size, min, max) = placement(ui.cursor_screen_pos(), available, preview.size);
-
-    ui.set_cursor_screen_pos(min);
-
-    set_sampler(&ui.get_window_draw_list(), preview.filter);
-
-    ui.image_config(preview.texture, size)
-        .uv0([0.0, 1.0])
-        .uv1([1.0, 0.0])
-        .build();
-    ui.get_window_draw_list().set_sampler_linear();
-
-    if let Some(margin) = margin {
-        draw_margin(ui, min, max, preview.size, margin);
-    }
-
-    ui.get_window_draw_list()
-        .add_rect(min, max, CANVAS_OUTLINE)
-        .thickness(1.0)
-        .build();
 }
 
 pub(super) fn draw_editor(
@@ -121,137 +86,28 @@ pub(super) fn draw_editor(
         editor.zoom_editor_2d_at(ui.io().mouse_wheel(), anchor);
     }
 
-    let draw_list = ui.get_window_draw_list();
-    let _clip = draw_list.push_clip_rect(min, max, true);
-
-    draw_list
-        .add_rect(min, max, background)
-        .filled(true)
-        .build();
-
     let (pan, zoom) = if camera_view {
         ([0.0; 2], 1.0)
     } else {
         editor.editor_2d_view()
     };
-
-    set_sampler(&draw_list, preview.filter);
-    draw_list.add_image(preview.texture, min, max, [0.0, 1.0], [1.0, 0.0], [1.0; 4]);
-    draw_list.set_sampler_linear();
-
-    let origin = [
-        center[0] + pan[0] * display_scale,
-        center[1] + pan[1] * display_scale,
-    ];
-
-    for (enabled, from, to, color) in [
-        (
-            editor.editor_2d_axes()[0],
-            [min[0], origin[1]],
-            [max[0], origin[1]],
-            [1.0, 0.3, 0.3, 1.0],
-        ),
-        (
-            editor.editor_2d_axes()[1],
-            [origin[0], min[1]],
-            [origin[0], max[1]],
-            [0.3, 1.0, 0.3, 1.0],
-        ),
-    ] {
-        if enabled {
-            draw_list.add_line(from, to, color).thickness(1.0).build();
-        }
-    }
-
-    draw_world_outline(
-        &draw_list,
-        Some(editor.editor_2d_project_outline()),
-        center,
-        display_scale,
-        pan,
-        zoom,
-        CANVAS_OUTLINE,
-        1.0,
-    );
-
-    if editor.margin_visible() {
-        let margin = editor.margin_size();
-        let mut points = editor.editor_2d_project_outline();
-
-        for point in &mut points {
-            point.x += if point.x < 0.0 {
-                margin.0 as f32
-            } else {
-                -(margin.0 as f32)
-            };
-
-            point.y += if point.y < 0.0 {
-                margin.1 as f32
-            } else {
-                -(margin.1 as f32)
-            };
-        }
-
-        let accent = margin_color(ui);
-
-        draw_world_outline(
-            &draw_list,
-            Some(points),
-            center,
+    kinematic_ui::canvas::draw_editor_2d(
+        ui,
+        &kinematic_ui::canvas::Editor2D {
+            image: preview,
+            bounds: [min, max],
             display_scale,
-            pan,
-            zoom,
-            [0.0, 0.0, 0.0, 0.7],
-            3.0,
-        );
-
-        draw_world_outline(
-            &draw_list,
-            Some(points),
-            center,
-            display_scale,
-            pan,
-            zoom,
-            accent,
-            1.0,
-        );
-    }
-
-    if !camera_view {
-        draw_world_outline(
-            &draw_list,
-            editor.editor_2d_camera_outline(),
-            center,
-            display_scale,
-            pan,
-            zoom,
-            CANVAS_OUTLINE,
-            1.0,
-        );
-    }
-
-    let selection = editor.editor_2d_selection_outline();
-
-    draw_world_outline(
-        &draw_list,
-        selection,
-        center,
-        display_scale,
-        pan,
-        zoom,
-        [0.0, 0.0, 0.0, 1.0],
-        3.0,
-    );
-
-    draw_world_outline(
-        &draw_list,
-        selection,
-        center,
-        display_scale,
-        pan,
-        zoom,
-        [1.0, 1.0, 1.0, 1.0],
-        1.0,
+            view: kinematic_ui::canvas::View { pan, zoom },
+            background,
+            axes: editor.editor_2d_axes(),
+            project: points(editor.editor_2d_project_outline()),
+            camera: (!camera_view)
+                .then(|| editor.editor_2d_camera_outline())
+                .flatten()
+                .map(points),
+            selection: editor.editor_2d_selection_outline().map(points),
+            margin: editor.margin_visible().then(|| editor.margin_size()),
+        },
     );
 
     let over_camera = mouse[0] >= min[0] + 8.0
@@ -275,55 +131,9 @@ pub(super) fn draw_editor_3d(
     available: [f32; 2],
     editor: &mut Editor,
 ) -> (bool, Option<Vector2>) {
-    let size = [available[0].max(1.0), available[1].max(1.0)];
-
-    editor.request_editor_3d_size(size);
-
-    ui.invisible_button_options(
-        "Editor 3D canvas.",
-        size,
-        dear_imgui_rs::InvisibleButtonOptions::new()
-            .flags(dear_imgui_rs::ButtonFlags::ALLOW_OVERLAP)
-            .mouse_buttons(dear_imgui_rs::InvisibleButtonMouseButtons::RIGHT),
-    );
-
-    let hovered = ui.is_item_hovered();
-    let active = ui.is_item_active();
-    let min = ui.item_rect_min();
-    let max = ui.item_rect_max();
-
-    set_sampler(&ui.get_window_draw_list(), preview.filter);
-    ui.get_window_draw_list().add_image(
-        preview.texture,
-        min,
-        max,
-        [0.0, 1.0],
-        [1.0, 0.0],
-        [1.0; 4],
-    );
-    ui.get_window_draw_list().set_sampler_linear();
-
-    let mouse = ui.io().mouse_pos();
-    let over_camera = mouse[0] >= min[0] + 8.0
-        && mouse[0] <= min[0] + 24.0 + ui.frame_height() * 3.0
-        && mouse[1] >= min[1] + 8.0
-        && mouse[1] <= min[1] + 8.0 + ui.frame_height();
-    let over_controls = mouse[0] >= max[0] - 112.0
-        && mouse[0] <= max[0]
-        && mouse[1] >= min[1] + 8.0
-        && mouse[1] <= min[1] + 8.0 + ui.frame_height();
-    let clicked = (hovered
-        && !over_camera
-        && !over_controls
-        && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left))
-    .then(|| {
-        vec2(
-            mouse[0] - (min[0] + max[0]) * 0.5,
-            mouse[1] - (min[1] + max[1]) * 0.5,
-        )
-    });
-
-    (active, clicked)
+    editor.request_editor_3d_size([available[0].max(1.0), available[1].max(1.0)]);
+    let (active, clicked) = kinematic_ui::canvas::draw_editor_3d(ui, preview, available);
+    (active, clicked.map(|[x, y]| vec2(x, y)))
 }
 
 pub(super) fn wrap_pointer(
@@ -332,117 +142,14 @@ pub(super) fn wrap_pointer(
     min: [f32; 2],
     max: [f32; 2],
 ) {
-    const EDGE: f32 = 2.0;
-
-    const INSET: f32 = 6.0;
-
-    let mouse = ui.io().mouse_pos();
-    let mut target = mouse;
-
-    if mouse[0] <= min[0] + EDGE {
-        target[0] = max[0] - INSET;
-    } else if mouse[0] >= max[0] - EDGE {
-        target[0] = min[0] + INSET;
-    }
-
-    if mouse[1] <= min[1] + EDGE {
-        target[1] = max[1] - INSET;
-    } else if mouse[1] >= max[1] - EDGE {
-        target[1] = min[1] + INSET;
-    }
-
-    if target == mouse {
+    let Some(target) = kinematic_ui::canvas::wrap_target(ui.io().mouse_pos(), min, max) else {
         return;
-    }
-
+    };
     let viewport = ui.main_viewport().pos();
 
     editor.request_editor_mouse_warp([target[0] - viewport[0], target[1] - viewport[1]]);
 }
 
-fn placement(
-    origin: [f32; 2],
-    available: [f32; 2],
-    source: [f32; 2],
-) -> (f32, [f32; 2], [f32; 2], [f32; 2]) {
-    let available = [available[0].max(1.0), available[1].max(1.0)];
-    let scale = (available[0] / source[0]).min(available[1] / source[1]);
-    let size = [source[0] * scale, source[1] * scale];
-    let min = [
-        origin[0] + (available[0] - size[0]) * 0.5,
-        origin[1] + (available[1] - size[1]) * 0.5,
-    ];
-
-    (scale, size, min, [min[0] + size[0], min[1] + size[1]])
-}
-
-#[allow(clippy::too_many_arguments)]
-fn draw_world_outline(
-    draw_list: &dear_imgui_rs::DrawListMut<'_>,
-    points: Option<[skia_safe::Point; 4]>,
-    center: [f32; 2],
-    display_scale: f32,
-    pan: [f32; 2],
-    zoom: f32,
-    color: [f32; 4],
-    thickness: f32,
-) {
-    let Some(points) = points else {
-        return;
-    };
-
-    let project = |point: skia_safe::Point| {
-        [
-            center[0] + (pan[0] + point.x * zoom) * display_scale,
-            center[1] + (pan[1] + point.y * zoom) * display_scale,
-        ]
-    };
-
-    for index in 0..4 {
-        draw_list
-            .add_line(
-                project(points[index]),
-                project(points[(index + 1) % 4]),
-                color,
-            )
-            .thickness(thickness)
-            .build();
-    }
-}
-
-fn margin_color(ui: &dear_imgui_rs::Ui) -> [f32; 4] {
-    let mut color = unsafe { ui.style().color(dear_imgui_rs::StyleColor::CheckMark) };
-
-    color[3] = 0.7;
-
-    color
-}
-
-pub(super) fn draw_margin(
-    ui: &dear_imgui_rs::Ui,
-    min: [f32; 2],
-    max: [f32; 2],
-    source: [f32; 2],
-    margin: (u32, u32),
-) {
-    let inset = [
-        (max[0] - min[0]) * margin.0 as f32 / source[0].max(1.0),
-        (max[1] - min[1]) * margin.1 as f32 / source[1].max(1.0),
-    ];
-    let a = [min[0] + inset[0], min[1] + inset[1]];
-    let b = [max[0] - inset[0], max[1] - inset[1]];
-    let draw = ui.get_window_draw_list();
-
-    draw.add_rect(a, b, [0.0, 0.0, 0.0, 0.7])
-        .thickness(3.0)
-        .build();
-
-    draw.add_rect(a, b, margin_color(ui)).thickness(1.0).build();
-}
-
-fn set_sampler(draw_list: &dear_imgui_rs::DrawListMut<'_>, filter: CanvasFilter) {
-    match filter {
-        CanvasFilter::Nearest => draw_list.set_sampler_nearest(),
-        CanvasFilter::Linear => draw_list.set_sampler_linear(),
-    }
+fn points(points: [skia_safe::Point; 4]) -> kinematic_ui::canvas::Quad {
+    points.map(|point| [point.x, point.y])
 }

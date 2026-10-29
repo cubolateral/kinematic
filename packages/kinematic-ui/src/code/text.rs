@@ -2,9 +2,9 @@ use dear_imgui_cte::{Position, Selection, TextEditor, VisualPosition};
 use dear_imgui_rs::{StyleColor, Ui};
 use std::ops::Range;
 
-pub(super) const SELECTION_COLOR: u32 = 0xff784f26;
+pub const SELECTION_COLOR: u32 = 0xff784f26;
 
-pub(super) struct Layout {
+pub struct Layout {
     origin: [f32; 2],
     min: [f32; 2],
     max: [f32; 2],
@@ -74,7 +74,7 @@ fn word(line: &str, column: usize, trailing: bool) -> Option<Range<usize>> {
     Some(start..end)
 }
 
-pub(super) fn word_at_mouse(editor: &TextEditor, mouse: [f32; 2]) -> Option<Selection> {
+pub fn word_at_mouse(editor: &TextEditor, mouse: [f32; 2]) -> Option<Selection> {
     // CTE's text-area check rejects scrolled document coordinates.
     if !editor.is_mouse_over_glyph(mouse).ok()? {
         return None;
@@ -88,7 +88,7 @@ pub(super) fn word_at_mouse(editor: &TextEditor, mouse: [f32; 2]) -> Option<Sele
     ))
 }
 
-pub(super) fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str) {
+pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str) {
     let Layout {
         origin,
         min,
@@ -221,7 +221,7 @@ pub(super) fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str) 
     }
 
     let color = ui.get_color_u32(StyleColor::Header);
-    for column in super::ruler_columns(rulers) {
+    for column in ruler_columns(rulers) {
         let x = origin[0] + column as f32 * width;
         draw.add_line([x, min[1]], [x, max[1]], color).build();
     }
@@ -246,7 +246,7 @@ mod tests {
 
     #[test]
     fn backgrounds_and_hover_follow_native_text_after_scrolling() {
-        let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
+        let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
         context.set_ini_filename(None::<&str>).unwrap();
         context
@@ -395,4 +395,12 @@ mod tests {
             );
         }
     }
+}
+
+pub fn ruler_columns(rulers: &str) -> impl Iterator<Item = usize> + '_ {
+    rulers
+        .split(',')
+        .filter_map(|value| value.trim().parse::<u16>().ok())
+        .filter(|column| *column > 0)
+        .map(usize::from)
 }

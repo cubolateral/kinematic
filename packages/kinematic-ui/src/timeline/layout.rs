@@ -1,5 +1,5 @@
 #[derive(Clone, Copy)]
-pub(super) struct TimeRange {
+pub struct TimeRange {
     pub current: f32,
     pub start: f32,
     pub end: f32,
@@ -20,7 +20,7 @@ impl TimeRange {
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct Layout {
+pub struct Layout {
     pub content_left: f32,
     pub top: f32,
     pub viewport_top: f32,

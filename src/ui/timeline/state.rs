@@ -6,7 +6,7 @@ pub(super) enum Interaction {
     None,
 
     Scrubber,
-    Tracks,
+    Pending,
     Zoom,
     Pan,
     Event,
@@ -34,6 +34,8 @@ pub(in crate::ui) struct State {
     event_drag: Option<EventDrag>,
     pub(super) waveforms: std::collections::HashMap<usize, super::waveform::Waveform>,
     pub(super) audio_collapsed: bool,
+    pub(super) right_dragged: bool,
+    pub(super) audio_hovered: bool,
     #[cfg(test)]
     pub(super) audio_clip_rect: Option<[[f32; 2]; 2]>,
     pub(super) audio_drag: Option<super::audio::ClipDrag>,
@@ -94,15 +96,15 @@ impl State {
             if right_pressed {
                 Interaction::Scrubber
             } else {
-                Interaction::Tracks
+                Interaction::Pending
             }
         } else {
             Interaction::None
         };
     }
 
-    pub fn resolve_tracks(&mut self, delta: [f32; 2]) {
-        if self.interaction != Interaction::Tracks {
+    pub fn resolve_drag(&mut self, delta: [f32; 2]) {
+        if self.interaction != Interaction::Pending {
             return;
         }
 
@@ -160,7 +162,7 @@ impl State {
         let moved = drag_delta[0].abs().max(drag_delta[1].abs()) >= DRAG_DIRECTION_THRESHOLD;
 
         (!moved
-            && matches!(self.interaction, Interaction::None | Interaction::Tracks)
+            && matches!(self.interaction, Interaction::None | Interaction::Pending)
             && scene == Some(pressed))
         .then_some(pressed)
     }

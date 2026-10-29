@@ -1,5 +1,6 @@
 use crate::ui::inputs::{self, Action as InputAction};
 use dear_imgui_cte::{Position, Selection, TextEditor};
+use kinematic_ui::widgets;
 use serde_json::Value;
 
 #[derive(Default)]
@@ -147,33 +148,19 @@ impl Completion {
                             let kind = kind(item);
                             let row = format!("{label}##{index}");
                             let selected = index == self.selected;
-                            let _white = ui.push_style_color(
-                                dear_imgui_rs::StyleColor::Text,
-                                [1.0, 1.0, 1.0, 1.0],
+                            let pressed = kinematic_ui::lists::suggestion(
+                                ui,
+                                &row,
+                                label,
+                                kind,
+                                content.packed_color(color(item)),
+                                selected,
                             );
-
-                            ui.selectable_config(&row).selected(selected).build();
-
-                            // The source editor keeps keyboard focus behind this overlay.
-                            let pressed = ui.is_item_hovered_with_flags(
-                                dear_imgui_rs::ItemHoveredFlags::ALLOW_WHEN_OVERLAPPED_BY_WINDOW,
-                            ) && ui
-                                .is_mouse_clicked(dear_imgui_rs::MouseButton::Left);
 
                             if pressed {
                                 accept = selected;
                                 self.selected = index;
                                 self.resolve = !selected;
-                            }
-
-                            if !kind.is_empty() {
-                                let origin = ui.item_rect_min();
-
-                                ui.get_window_draw_list().add_text(
-                                    [origin[0] + ui.calc_text_size(label)[0] + 28.0, origin[1]],
-                                    content.packed_color(color(item)),
-                                    kind,
-                                );
                             }
 
                             if index == self.selected && self.scroll_selected {
@@ -182,7 +169,7 @@ impl Completion {
                         }
                     });
 
-                ui.separator();
+                widgets::separator(ui);
 
                 if let Some(item) = self.items.get(self.selected) {
                     if let Err(failure) = content.set(&documentation(item)) {
@@ -192,7 +179,7 @@ impl Completion {
 
                 ui.child_window("Details").build(ui, || {
                     if error.is_none() {
-                        if let Err(failure) = content.draw(ui, font_size) {
+                        if let Err(failure) = content.draw(ui, font_size, super::text_actions(ui)) {
                             error = Some(failure);
                         }
                     }

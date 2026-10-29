@@ -95,30 +95,36 @@ pub(crate) fn clip_events(
     for clip in clips {
         clip.validate(context)?;
         let bytes = sources
-            .read(context, &clip.file)
+            .read_audio(context, &clip.file)
             .map_err(|e| e.to_string())?;
         let samples = load_file(bytes, deadline)?;
-        budget.register_samples(&samples)?;
-        let offset = (clip.offset * SAMPLE_RATE as f64).round() as usize;
-        let end = ((clip.offset + clip.duration) * SAMPLE_RATE as f64).round() as usize;
-        let frames = end.saturating_sub(offset);
-        if frames == 0 || offset.saturating_add(frames) > samples.len() {
-            return Err(format!(
-                "Audio clip '{}' exceeds its source duration.",
-                clip.file.display()
-            ));
-        }
         budget.check_capacity(None, events.len())?;
-        events.push(SoundEvent {
-            time: clip.at,
-            samples,
-            offset,
-            frames,
-            gain: clip.gain,
-            pan: clip.pan,
-        });
+        events.push(clip_event(clip, samples)?);
     }
     Ok(events)
+}
+
+pub(crate) fn clip_event(
+    clip: &super::AudioClip,
+    samples: Arc<Vec<[f32; 2]>>,
+) -> std::result::Result<SoundEvent, String> {
+    let offset = (clip.offset * SAMPLE_RATE as f64).round() as usize;
+    let end = ((clip.offset + clip.duration) * SAMPLE_RATE as f64).round() as usize;
+    let frames = end.saturating_sub(offset);
+    if frames == 0 || offset.saturating_add(frames) > samples.len() {
+        return Err(format!(
+            "Audio clip '{}' exceeds its source duration.",
+            clip.file.display()
+        ));
+    }
+    Ok(SoundEvent {
+        time: clip.at,
+        samples,
+        offset,
+        frames,
+        gain: clip.gain,
+        pan: clip.pan,
+    })
 }
 
 pub(super) fn register(runtime: &Rc<Runtime>, api: &Table) -> Result<()> {
@@ -145,11 +151,6 @@ pub(super) fn register(runtime: &Rc<Runtime>, api: &Table) -> Result<()> {
                 cache.insert(key, Arc::downgrade(&asset));
                 AudioResource(asset)
             });
-            runtime
-                .audio
-                .borrow_mut()
-                .register_samples(&resource.0.samples)
-                .map_err(mlua::Error::runtime)?;
             runtime.assets.borrow_mut().push(Box::new(resource.clone()));
             Ok(resource)
         })?,
@@ -162,17 +163,19 @@ pub(super) fn register(runtime: &Rc<Runtime>, api: &Table) -> Result<()> {
                 .upgrade()
                 .ok_or_else(|| mlua::Error::runtime("Scene has been released."))?;
             runtime.construction()?;
-            let bytes = runtime.resource(Path::new(&path))?;
+            runtime
+                .dependencies
+                .borrow_mut()
+                .insert(Path::new(&path).to_owned());
+            let bytes = runtime
+                .sources
+                .read_audio(&runtime.context, Path::new(&path))
+                .map_err(mlua::Error::external)?;
             let samples = load_file(bytes, runtime.deadline.get()).map_err(mlua::Error::runtime)?;
             let resource = AudioResource(Arc::new(AudioAsset {
                 source: Source::File(Arc::as_ptr(&samples) as u64),
                 samples,
             }));
-            runtime
-                .audio
-                .borrow_mut()
-                .register_samples(&resource.0.samples)
-                .map_err(mlua::Error::runtime)?;
             runtime.assets.borrow_mut().push(Box::new(resource.clone()));
             Ok(resource)
         })?,
@@ -325,11 +328,6 @@ pub(super) fn create(runtime: Rc<Runtime>, options: Table) -> Result<AudioHandle
         .get::<mlua::UserDataRef<AudioResource>>("source")?
         .clone();
     let (gain, pan) = playback_options(&options, 0.2, 0.0, true)?;
-    runtime
-        .audio
-        .borrow_mut()
-        .register_samples(&source.0.samples)
-        .map_err(mlua::Error::runtime)?;
     Ok(AudioHandle {
         runtime: Rc::downgrade(&runtime),
         source,

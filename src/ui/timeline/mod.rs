@@ -1,18 +1,15 @@
 mod audio;
-mod controls;
 mod interaction;
-mod layout;
-mod metrics;
-mod objects;
-mod ruler;
 mod scene;
 mod state;
-mod tracks;
-mod waveform;
 
-use crate::{editor::Editor, ui::widgets::hide_single_window_tab};
+use crate::editor::Editor;
+use kinematic_ui::{
+    timeline::{layout, metrics, ruler, waveform},
+    windows,
+};
 
-pub(super) use controls::{fullscreen_controls, shortcuts};
+use crate::ui::preview::shortcuts;
 use layout::{Layout, TimeRange};
 use metrics::SCRUBBER_HEIGHT;
 use state::Interaction;
@@ -32,11 +29,9 @@ pub(super) fn draw(
     ui: &dear_imgui_rs::Ui,
     state: &mut State,
     keyboard: bool,
-    volume: &mut i32,
     dragged_audio: Option<&std::path::Path>,
-) -> bool {
+) {
     let is_exporting = editor.is_exporting();
-    let mut toggle_fullscreen = false;
 
     if is_exporting {
         state.cancel_interactions();
@@ -44,18 +39,9 @@ pub(super) fn draw(
 
     shortcuts(editor.timeline_mut(), ui, !is_exporting && keyboard);
 
-    hide_single_window_tab(ui);
-
-    ui.window(WINDOW_NAME).build(|| {
+    windows::panel(ui, WINDOW_NAME, || {
         audio_shortcuts(editor, ui, keyboard);
-        let fps = editor.preview_fps();
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
-
-        toggle_fullscreen =
-            controls::draw(editor.timeline_mut(), ui, fps, !is_exporting, false, volume);
-
-        ui.spacing();
-        ui.separator();
 
         let focused_scene = editor.focused_scene_index();
         let time = {
@@ -96,13 +82,9 @@ pub(super) fn draw(
                 let draw_list = ui.get_window_draw_list();
                 let playhead_x = time.x(layout, time.current);
 
-                ruler::draw_time_grid_lines(ui, &draw_list, layout, time);
-
                 scene::draw(editor, ui, &draw_list, layout, time, state, !is_exporting);
 
                 audio::draw(editor, ui, &draw_list, layout, time, state, dragged_audio);
-
-                objects::draw(editor, ui, &draw_list, layout, time, !is_exporting);
 
                 ruler::draw_mouse_indicator(ui, &draw_list, layout);
 
@@ -116,10 +98,19 @@ pub(super) fn draw(
         let timeline_hovered = (header_hovered || objects_hovered)
             && layout.contains_timeline_x(mouse[0])
             && (layout.top..=layout.bottom).contains(&mouse[1]);
+        if timeline_hovered
+            && !state.audio_hovered
+            && (ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)
+                || ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Right))
+        {
+            editor.clear_audio_selection();
+        }
         let draw_list = ui.get_window_draw_list();
         let playhead_x = time.x(layout, time.current);
 
-        ruler::draw_scrubber(ui, &draw_list, layout, time, playhead_x);
+        ruler::draw_scrubber(ui, &draw_list, layout, time);
+
+        ruler::draw_time_grid_lines(ui, &draw_list, layout, time);
 
         ruler::draw_time_grid_labels(ui, &draw_list, layout, time);
 
@@ -132,8 +123,6 @@ pub(super) fn draw(
             interaction::update(editor.timeline_mut(), ui, layout, state, timeline_hovered);
         }
     });
-
-    toggle_fullscreen
 }
 
 pub(in crate::ui) fn audio_shortcuts(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {

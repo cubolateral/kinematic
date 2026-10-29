@@ -160,7 +160,12 @@ fn lua_simulation_startup_and_frames() {
     );
 
     assert!(editor.render_error().is_none());
-    editor.shutdown(&app.gl, app.ui.editor_mode(), app.ui.is_fullscreen());
+    editor.shutdown(
+        &app.gl,
+        app.ui.editor_mode(),
+        app.ui.is_fullscreen(),
+        app.ui.preview_view(),
+    );
     editor.preview_mut().unregister(&mut app.imgui_renderer);
     editor.editor_2d_mut().unregister(&mut app.imgui_renderer);
     editor.editor_3d_mut().unregister(&mut app.imgui_renderer);
@@ -178,6 +183,7 @@ fn lua_simulation_startup_and_frames() {
 #[ignore = "Requires SDL/OpenGL and FFmpeg; exercises the actual editor and CTE."]
 fn lua_editor_reload_switch_and_frozen_export() {
     let root = std::env::temp_dir().join(format!("kinematic-editor-smoke-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
 
     std::fs::create_dir_all(&root).unwrap();
 
@@ -393,6 +399,7 @@ fn lua_editor_reload_switch_and_frozen_export() {
             Path::new("kinematic/project.ron"),
             ron::to_string(&manifest).unwrap(),
         );
+        docs.save(Path::new("kinematic/project.ron")).unwrap();
 
         settle(&mut app, &mut editor);
         assert_eq!(editor.selected_object(), Some((1, ball)));
@@ -413,7 +420,12 @@ fn lua_editor_reload_switch_and_frozen_export() {
             }
         }
 
-        editor.shutdown(&app.gl, app.ui.editor_mode(), app.ui.is_fullscreen());
+        editor.shutdown(
+            &app.gl,
+            app.ui.editor_mode(),
+            app.ui.is_fullscreen(),
+            app.ui.preview_view(),
+        );
         editor.preview_mut().unregister(&mut app.imgui_renderer);
         editor.editor_2d_mut().unregister(&mut app.imgui_renderer);
         editor.editor_3d_mut().unregister(&mut app.imgui_renderer);
@@ -440,16 +452,43 @@ fn ui_audio_clips_save_mix_and_rebuild() {
     let _ = std::fs::remove_dir_all(&root);
     let mut project = LuaProject::create(&root, "Audio UI", false).unwrap();
     project.manifest.resolution = (96, 64);
+    project.manifest.scenes.push("scenes/other.lua".into());
     project.save().unwrap();
     std::fs::write(
+        root.join("scenes/other.lua"),
+        "return function(s) s:wait(0.1) end",
+    )
+    .unwrap();
+    std::fs::write(
         root.join("scenes/intro.lua"),
-        "return function(s) local ball=s:circle{id='ball',name='Ball'}; s:world_2d():add(ball); s:wait(0.1) end",
+        "return function(s) local ball=s:circle{id='ball',name='Ball'}; s:world_2d():add(ball); s:wait(0.05) end",
     )
     .unwrap();
     let source = include_bytes!("../examples/lua/audio/assets/chime.wav");
     std::fs::write(root.join("assets/chime.wav"), source).unwrap();
+    std::fs::create_dir_all(root.join("kinematic/cache")).unwrap();
+    std::fs::write(
+        root.join("kinematic/cache/editor.ron"),
+        "(preview_pan: (20.0, -10.0), preview_zoom: 1.5)",
+    )
+    .unwrap();
+    project.manifest.legacy_audio.insert(
+        "scenes/other.lua".into(),
+        vec![crate::scripting::AudioClip {
+            id: 77,
+            lane: 0,
+            file: "assets/chime.wav".into(),
+            at: 0.02,
+            offset: 0.0,
+            duration: 0.02,
+            gain: 1.0,
+            pan: 0.0,
+        }],
+    );
+    project.save().unwrap();
     let mut app = App::new();
     app.window.hide();
+    app.window.set_size(1280, 1200).unwrap();
     let three = app.three_context();
     let mut editor = Editor::new_lua(
         project,
@@ -459,11 +498,15 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         three,
     )
     .unwrap();
+    let migrated = LuaProject::open(&root).unwrap();
+    assert!(migrated.manifest.legacy_audio.is_empty());
+    assert!((migrated.manifest.audio[0].at - 0.07).abs() < 1e-6);
+    editor.commit_audio(Vec::new());
     app.ui.restore_project_view(&editor);
-    settle(&mut app, &mut editor);
-    editor.import_audio(0, "assets/chime.wav".into());
-    editor.import_audio(0, "assets/chime.wav".into());
-    let mut clips = editor.audio_clips(0).to_vec();
+    assert_eq!(app.ui.preview_view(), ([20.0, -10.0], 1.5));
+    editor.import_audio("assets/chime.wav".into());
+    editor.import_audio("assets/chime.wav".into());
+    let mut clips = editor.audio_clips().to_vec();
     assert_eq!(clips.len(), 2);
     assert_eq!(clips[1].at, clips[0].duration);
     assert!(
@@ -474,7 +517,7 @@ fn ui_audio_clips_save_mix_and_rebuild() {
     clips[0].gain = 0.5;
     clips[0].pan = -0.2;
     let id = clips[0].id;
-    editor.commit_audio(0, clips);
+    editor.commit_audio(clips);
     let entity = editor
         .scene(0)
         .world()
@@ -484,10 +527,10 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         .unwrap()
         .0;
     editor.select_entity(entity);
-    editor.select_audio(0, id);
+    editor.select_audio(id);
     assert_eq!(editor.selected_object(), Some((0, entity)));
     editor.select_entity(entity);
-    assert_eq!(editor.selected_audio().unwrap().1.id, id);
+    assert_eq!(editor.selected_audio().unwrap().id, id);
     settle(&mut app, &mut editor);
 
     fn pointer(
@@ -514,11 +557,18 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         assert_eq!(std::fs::read(&manifest).unwrap(), saved);
         assert_eq!(editor.timeline_mut().time(), time);
         pointer(app, editor, to, left, false);
+        assert_eq!(std::fs::read(&manifest).unwrap(), saved);
         settle(app, editor);
     }
+    // Let the scrollbar layout settle before measuring clip edges.
+    frame(&mut app, &mut editor);
     let [min, max] = app.ui.selected_audio_rect().unwrap();
     let pixels_per_second = (max[0] - min[0]) / 0.1;
     let y = (min[1] + max[1]) * 0.5;
+    let original = editor.audio_clips()[0].clone();
+    let body = [(min[0] + max[0]) * 0.5, y];
+    drag(&mut app, &mut editor, body, [body[0] + 3.0, y]);
+    assert_eq!(editor.audio_clips()[0], original);
     let right = [max[0] - 2.0, y];
     drag(
         &mut app,
@@ -526,7 +576,7 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         right,
         [right[0] - pixels_per_second / 60.0, y],
     );
-    assert!((editor.audio_clips(0)[0].duration - 5.0 / 60.0).abs() < 1e-6);
+    assert!((editor.audio_clips()[0].duration - 5.0 / 60.0).abs() < 1e-6);
     let [_, max] = app.ui.selected_audio_rect().unwrap();
     let right = [max[0] - 2.0, y];
     drag(
@@ -535,7 +585,7 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         right,
         [right[0] + pixels_per_second / 60.0, y],
     );
-    assert!((editor.audio_clips(0)[0].duration - 0.1).abs() < 1e-6);
+    assert!((editor.audio_clips()[0].duration - 0.1).abs() < 1e-6);
     let [min, _] = app.ui.selected_audio_rect().unwrap();
     drag(
         &mut app,
@@ -543,7 +593,7 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         [min[0] + 2.0, y],
         [min[0] + 2.0 + pixels_per_second / 60.0, y],
     );
-    assert!((editor.audio_clips(0)[0].offset - (0.02 + 1.0 / 60.0)).abs() < 1e-6);
+    assert!((editor.audio_clips()[0].offset - (0.02 + 1.0 / 60.0)).abs() < 1e-6);
     let [min, max] = app.ui.selected_audio_rect().unwrap();
     let body = [(min[0] + max[0]) * 0.5, y];
     drag(
@@ -552,9 +602,60 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         body,
         [body[0] - pixels_per_second / 60.0, y],
     );
-    assert!(editor.audio_clips(0)[0].at < 1e-6);
+    assert!(editor.audio_clips()[0].at < 1e-6);
     assert_eq!(editor.selected_object(), Some((0, entity)));
 
+    let height = kinematic_ui::timeline::metrics::AUDIO_HEIGHT;
+    let [min, max] = app.ui.selected_audio_rect().unwrap();
+    let body = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+    drag(
+        &mut app,
+        &mut editor,
+        body,
+        [body[0] + pixels_per_second * 0.5, body[1]],
+    );
+    let clips = editor.audio_clips();
+    assert!((clips[0].at + clips[0].duration - clips[1].at).abs() < 1e-6);
+    let [min, max] = app.ui.selected_audio_rect().unwrap();
+    let body = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+    drag(&mut app, &mut editor, body, [body[0], body[1] + height]);
+    assert_eq!(editor.audio_clips()[0].lane, 1);
+    let [min, max] = app.ui.selected_audio_rect().unwrap();
+    let body = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+    drag(
+        &mut app,
+        &mut editor,
+        body,
+        [body[0] + pixels_per_second / 60.0, body[1]],
+    );
+    let clips = editor.audio_clips();
+    assert!(clips[0].at + clips[0].duration > clips[1].at);
+    let [min, max] = app.ui.selected_audio_rect().unwrap();
+    let body = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+    drag(
+        &mut app,
+        &mut editor,
+        body,
+        [body[0] - pixels_per_second * 0.5, body[1]],
+    );
+    assert!(editor.audio_clips()[0].at < 1e-6);
+
+    let [min, max] = app.ui.selected_audio_rect().unwrap();
+    let body = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+    let right = dear_imgui_rs::MouseButton::Right;
+    pointer(&mut app, &mut editor, body, right, false);
+    pointer(&mut app, &mut editor, body, right, true);
+    pointer(
+        &mut app,
+        &mut editor,
+        [body[0] + 20.0, body[1]],
+        right,
+        true,
+    );
+    assert!(editor.timeline_mut().is_controlling);
+    pointer(&mut app, &mut editor, body, right, true);
+    pointer(&mut app, &mut editor, body, right, false);
+    frame(&mut app, &mut editor);
     let [min, max] = app.ui.selected_audio_rect().unwrap();
     let body = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
     let right = dear_imgui_rs::MouseButton::Right;
@@ -564,7 +665,10 @@ fn ui_audio_clips_save_mix_and_rebuild() {
     pointer(&mut app, &mut editor, body, right, false);
     assert_eq!(editor.timeline_mut().time(), time);
     let [min, _] = app.ui.selected_audio_rect().unwrap();
-    let header = [min[0] + 35.0, min[1] - 16.0];
+    let header = [
+        min[0] + 35.0,
+        min[1] - height * editor.audio_clips()[0].lane as f32 - 16.0,
+    ];
     let left = dear_imgui_rs::MouseButton::Left;
     pointer(&mut app, &mut editor, header, left, false);
     pointer(&mut app, &mut editor, header, left, false);
@@ -577,19 +681,44 @@ fn ui_audio_clips_save_mix_and_rebuild() {
     assert!(app.ui.selected_audio_rect().is_none());
     pointer(&mut app, &mut editor, header, left, true);
     pointer(&mut app, &mut editor, header, left, false);
+    assert!(editor.selected_audio().is_none());
+    editor.select_audio(id);
+    frame(&mut app, &mut editor);
     assert!(app.ui.selected_audio_rect().is_some());
     let blank = [(min[0] + max[0]) * 0.5, max[1] + 1.0];
     pointer(&mut app, &mut editor, blank, right, false);
+    editor.timeline_mut().play();
     pointer(&mut app, &mut editor, blank, right, true);
+    assert!(!editor.timeline_mut().is_controlling);
+    assert!(!editor.timeline_mut().is_playing());
+    assert!(editor.selected_audio().is_none());
+    let paused = editor.timeline_mut().time();
+    pointer(&mut app, &mut editor, blank, right, true);
+    assert_eq!(editor.timeline_mut().time(), paused);
+    pointer(
+        &mut app,
+        &mut editor,
+        [blank[0] + 15.0, blank[1]],
+        right,
+        true,
+    );
     assert!(editor.timeline_mut().is_controlling);
     pointer(&mut app, &mut editor, blank, right, false);
     editor.timeline_mut().go_to(time);
 
     let expected = editor.mix_audio(0, 48_000);
-    editor.select_audio(0, id);
+    editor.select_audio(id);
     editor.timeline_mut().go_to(0.05);
     editor.split_audio();
-    assert_eq!(editor.audio_clips(0).len(), 3);
+    assert_eq!(editor.audio_clips().len(), 3);
+    assert_eq!(
+        editor
+            .audio_clips()
+            .iter()
+            .filter(|clip| clip.lane == 1)
+            .count(),
+        2
+    );
     assert_eq!(editor.mix_audio(0, 48_000), expected);
     settle(&mut app, &mut editor);
     assert_eq!(editor.mix_audio(0, 48_000), expected);
@@ -600,18 +729,60 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         .request("scenes/intro.lua".into());
     settle(&mut app, &mut editor);
     assert_eq!(editor.mix_audio(0, 48_000), expected);
-    let saved = LuaProject::open(&root).unwrap();
-    assert_eq!(
-        saved.manifest.audio[Path::new("scenes/intro.lua")],
-        editor.audio_clips(0)
+    let persisted = LuaProject::open(&root).unwrap().manifest.audio;
+    let draft = editor.audio_clips().to_vec();
+    let mut settings = editor.project_info().1;
+    settings.margin = (1, 1);
+    editor.apply_project_settings(settings);
+    settle(&mut app, &mut editor);
+    assert_eq!(LuaProject::open(&root).unwrap().manifest.audio, persisted);
+    assert_eq!(editor.audio_clips(), draft);
+    assert!(editor.documents.as_ref().unwrap().project_dirty);
+    assert!(editor.documents.as_ref().unwrap().dirty());
+    assert_ne!(
+        LuaProject::open(&root).unwrap().manifest.audio,
+        editor.audio_clips()
     );
-    editor.select_audio(0, id);
+    frame_input(&mut app, &mut editor, |context| {
+        context
+            .io_mut()
+            .add_key_event(dear_imgui_rs::Key::ModCtrl, true);
+        context.io_mut().add_key_event(dear_imgui_rs::Key::S, true);
+    });
+    frame_input(&mut app, &mut editor, |context| {
+        context.io_mut().add_key_event(dear_imgui_rs::Key::S, false);
+        context
+            .io_mut()
+            .add_key_event(dear_imgui_rs::Key::ModCtrl, false);
+    });
+    assert!(!editor.documents.as_ref().unwrap().project_dirty);
+    let saved = LuaProject::open(&root).unwrap();
+    assert_eq!(saved.manifest.audio, editor.audio_clips());
+    let absolute_clips = editor.audio_clips().to_vec();
+    let global_duration = editor.project_duration();
+    assert!((editor.scene_range(0)[1] - 0.05).abs() < 1e-6);
+    editor.focus_scene(1, 0.0);
+    assert_eq!(editor.audio_clips(), absolute_clips);
+    assert_eq!(editor.project_duration(), global_duration);
+    assert!((editor.absolute_time() - 0.05).abs() < 1e-6);
+    assert_eq!(editor.mix_audio(0, 4800), expected[4800..14400]);
+    editor.select_audio(id);
+    frame(&mut app, &mut editor);
+    assert!(app.ui.selected_audio_rect().is_none());
+    editor.select_audio(editor.audio_clips()[2].id);
+    frame(&mut app, &mut editor);
+    assert!(app.ui.selected_audio_rect().is_some());
+    editor.clear_scene_focus();
+    frame(&mut app, &mut editor);
+    assert_eq!(editor.audio_clips(), absolute_clips);
+    editor.select_audio(id);
     editor.delete_audio();
-    assert_eq!(editor.audio_clips(0).len(), 2);
-    let previous = editor.audio_clips(0).to_vec();
+    assert_eq!(editor.audio_clips().len(), 2);
+    let previous = editor.audio_clips().to_vec();
     std::fs::write(root.join(crate::scripting::MANIFEST), "External changes.").unwrap();
-    editor.commit_audio(0, Vec::new());
-    assert_eq!(editor.audio_clips(0), previous);
+    assert!(editor.save_project().is_err());
+    assert!(editor.documents.as_ref().unwrap().project_dirty);
+    assert_eq!(editor.audio_clips(), previous);
     assert_eq!(
         std::fs::read(root.join("assets/chime.wav")).unwrap(),
         source
@@ -620,7 +791,16 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         std::fs::read_to_string(root.join(crate::scripting::MANIFEST)).unwrap(),
         "External changes."
     );
-    editor.shutdown(&app.gl, app.ui.editor_mode(), app.ui.is_fullscreen());
+    editor.shutdown(
+        &app.gl,
+        app.ui.editor_mode(),
+        app.ui.is_fullscreen(),
+        app.ui.preview_view(),
+    );
+    let cache = std::fs::read_to_string(root.join("kinematic/cache/editor.ron")).unwrap();
+    assert!(cache.contains("preview_zoom: 1.5"));
+    app.ui.restore_project_view(&editor);
+    assert_eq!(app.ui.preview_view(), ([20.0, -10.0], 1.5));
     editor.preview_mut().unregister(&mut app.imgui_renderer);
     editor.editor_2d_mut().unregister(&mut app.imgui_renderer);
     editor.editor_3d_mut().unregister(&mut app.imgui_renderer);

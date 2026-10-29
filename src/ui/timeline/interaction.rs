@@ -22,6 +22,9 @@ pub(super) fn update(
     let left_pressed = ui.is_mouse_clicked(left);
     let right_pressed = ui.is_mouse_clicked(right);
 
+    if timeline_hovered && (left_pressed || right_pressed) {
+        timeline.pause();
+    }
     if matches!(state.interaction, Interaction::Event | Interaction::Audio) {
         timeline.is_controlling = false;
 
@@ -33,7 +36,7 @@ pub(super) fn update(
     } else if left_pressed || right_pressed {
         state.press(timeline_hovered, right_pressed || right_down);
     } else {
-        state.resolve_tracks(ui.mouse_drag_delta_with_threshold(left, DRAG_DIRECTION_THRESHOLD));
+        state.resolve_drag(ui.mouse_drag_delta_with_threshold(left, DRAG_DIRECTION_THRESHOLD));
     }
 
     if state.interaction == Interaction::Zoom && left_down {
@@ -46,9 +49,10 @@ pub(super) fn update(
         state.pan(mouse_delta[0], layout.timeline_width);
     }
 
-    timeline.is_controlling = state.interaction == Interaction::Scrubber && right_down;
+    timeline.is_controlling =
+        state.interaction == Interaction::Scrubber && right_down && state.right_dragged;
 
-    if timeline.is_controlling {
+    if timeline.is_controlling && mouse_delta != [0.0; 2] {
         let (start, end) = state.view_range();
         let visible_time = start
             + ((mouse[0] - layout.timeline_left) / layout.timeline_width).clamp(0.0, 1.0)

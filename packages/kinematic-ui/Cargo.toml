@@ -1,0 +1,11 @@
+[package]
+name = "kinematic-ui"
+description = "Shared ImGui components and visual style for Kinematic."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+dear-imgui-rs = { version = "0.19.0", features = ["multi-viewport"] }
+dear-imgui-cte = "0.19.0"

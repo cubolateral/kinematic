@@ -1,4 +1,4 @@
-use crate::ui::inputs::{self, Action as InputAction};
+use super::TextActions;
 use dear_imgui_cte::{PaletteColor, Position, Selection, TextEditor};
 use dear_imgui_rs::{FocusedFlags, MouseButton, Ui};
 use std::{collections::HashMap, ops::Range};
@@ -17,7 +17,7 @@ struct Block {
 }
 
 #[derive(Default)]
-pub(super) struct Documentation {
+pub struct Documentation {
     pub text: String,
     blocks: Vec<Block>,
     selection: Option<(usize, usize)>,
@@ -210,7 +210,13 @@ impl Documentation {
         });
     }
 
-    pub fn draw(&mut self, ui: &Ui, buffer: &mut TextEditor, font_size: f32) -> Result<(), String> {
+    pub fn draw(
+        &mut self,
+        ui: &Ui,
+        buffer: &mut TextEditor,
+        font_size: f32,
+        actions: TextActions,
+    ) -> Result<(), String> {
         let palette = buffer.palette();
         let mut error = None;
 
@@ -368,7 +374,7 @@ impl Documentation {
 
             let focused = ui.is_window_focused_with_flags(FocusedFlags::ROOT_AND_CHILD_WINDOWS);
 
-            if focused && inputs::active(ui, InputAction::SelectAll) {
+            if focused && actions.select_all {
                 self.selection = Some((0, self.text.len()));
             }
 
@@ -380,7 +386,7 @@ impl Documentation {
                     error = Some(failure.to_string());
                 }
 
-                if focused && inputs::active(ui, InputAction::Copy) {
+                if focused && actions.copy {
                     buffer.copy();
                 }
             }

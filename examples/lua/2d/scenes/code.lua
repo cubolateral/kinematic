@@ -32,7 +32,7 @@ return function(s)
 	s:wait(1)
 	code:select(nil):play(1)
 
-	code:morph('local function double(value)\n    return value * 2\nend\n\nprint(double(42))', true):play(1)
+	code:morph('local function double(value)\n    return value * 2\nend\n\nprint(double(42))'):play(1)
 	s:wait(1)
 	code:morph('print("Done!")', true):play(1)
 	code:erase(code:find('"Done!"')):play(1)

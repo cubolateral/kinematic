@@ -5,29 +5,23 @@ use crate::ui::inputs::Action as InputAction;
 mod browser;
 mod cache;
 mod code;
-mod controls;
 mod inputs;
 pub(crate) use code::ProjectAction;
 mod export;
-mod icons;
 mod inspector;
 mod preview;
-mod properties;
 mod scene_tree;
 mod settings;
 mod sound;
 mod theme;
 mod timeline;
-mod widgets;
-mod windows;
 mod workspace;
 
 use crate::editor::Editor;
+use kinematic_ui::{controls, properties, widgets, windows};
 
 #[cfg(test)]
 static IMGUI_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-pub(super) const CORNER_RADIUS: f32 = 4.0;
 
 pub(crate) struct Ui {
     needs_initial_layout: bool,
@@ -64,24 +58,24 @@ fn draw_project_menu(
     settings: &mut settings::State,
     ui: &dear_imgui_rs::Ui,
 ) {
-    if let Some(_menu) = ui.begin_menu("Projects") {
-        if ui.menu_item("Open / Create Project") {
+    if let Some(_menu) = controls::menu(ui, "Projects") {
+        if controls::menu_item(ui, "Open / Create Project") {
             code.projects_open = true;
         }
 
-        if ui.menu_item("Project settings") {
+        if controls::menu_item(ui, "Project settings") {
             settings.project_open = true;
         }
 
-        ui.separator();
+        widgets::separator(ui);
 
-        if ui.menu_item("Quit") {
+        if controls::menu_item(ui, "Quit") {
             code.request_exit();
         }
     }
 
-    if let Some(_menu) = ui.begin_menu("Editor") {
-        if ui.menu_item("Editor settings") {
+    if let Some(_menu) = controls::menu(ui, "Editor") {
+        if controls::menu_item(ui, "Editor settings") {
             settings.editor_open = true;
         }
     }
@@ -141,6 +135,11 @@ impl Ui {
         let _theme = self.appearance.push(ui);
         let _font = ui.push_font(self.font);
         let io = ui.io();
+        if !editor.is_exporting() && inputs::active(ui, InputAction::SaveProject) {
+            if let Err(error) = editor.save_project() {
+                self.code.error = Some(error);
+            }
+        }
         let plain_keyboard_input =
             !self.code.focused && !io.want_text_input() && !ui.is_any_item_active();
         let fullscreen_shortcut = plain_keyboard_input
@@ -189,7 +188,13 @@ impl Ui {
                 settings::save(&self.appearance);
             }
 
-            preview::draw(editor, ui, &mut self.preview, !self.code.focused);
+            let fullscreen_button = preview::draw(
+                editor,
+                ui,
+                &mut self.preview,
+                !self.code.focused,
+                &mut self.audio_volume,
+            );
 
             inspector::draw(editor, ui, &mut self.inspector);
             sound::draw(editor, ui, &mut self.sound);
@@ -199,9 +204,9 @@ impl Ui {
                 ui,
                 &mut self.timeline,
                 !self.code.focused,
-                &mut self.audio_volume,
                 self.code.dragged_audio(),
-            )
+            );
+            fullscreen_button
         };
 
         if initial_layout && !self.code.focused {
@@ -259,11 +264,12 @@ impl Ui {
     }
 
     pub(crate) fn restore_project_view(&mut self, editor: &Editor) {
-        let (mode, fullscreen) = editor.cached_view();
+        let (mode, fullscreen, pan, zoom) = editor.cached_view();
 
         self.code.projects_open = false;
         self.settings = settings::State::default();
         self.preview = preview::State::new(mode);
+        self.preview.view = kinematic_ui::canvas::View { pan, zoom };
         self.is_fullscreen = fullscreen;
     }
 
@@ -273,6 +279,10 @@ impl Ui {
 
     pub fn apply_scale(&self, context: &mut dear_imgui_rs::Context) {
         self.appearance.apply_scale(context);
+    }
+
+    pub(crate) fn preview_view(&self) -> ([f32; 2], f32) {
+        (self.preview.view.pan, self.preview.view.zoom)
     }
 
     pub(crate) fn editor_mode(&self) -> crate::editor::EditorMode {

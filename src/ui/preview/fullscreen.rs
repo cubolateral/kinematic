@@ -1,5 +1,5 @@
 use crate::ui::inputs::{self, Action as InputAction};
-use crate::{editor::Editor, ui::timeline};
+use crate::{editor::Editor, ui::preview::playback};
 
 use super::image;
 
@@ -19,31 +19,20 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, volume: &mut i32
 
     let margin = editor.margin_visible().then(|| editor.margin_size());
     let preview = image::preview(editor);
-    let window_flags = dear_imgui_rs::WindowFlags::NO_DECORATION
-        | dear_imgui_rs::WindowFlags::NO_MOVE
-        | dear_imgui_rs::WindowFlags::NO_DOCKING
-        | dear_imgui_rs::WindowFlags::NO_SAVED_SETTINGS
-        | dear_imgui_rs::WindowFlags::NO_NAV_FOCUS;
-
-    {
-        let _padding = ui.push_style_var(dear_imgui_rs::StyleVar::WindowPadding([0.0; 2]));
-        let _window_border = ui.push_style_var(dear_imgui_rs::StyleVar::WindowBorderSize(0.0));
-        let _image_border = ui.push_style_var(dear_imgui_rs::StyleVar::ImageBorderSize(0.0));
-        let _background =
-            ui.push_style_color(dear_imgui_rs::StyleColor::WindowBg, [0.0, 0.0, 0.0, 1.0]);
-
-        ui.window("Fullscreen preview.")
-            .position(viewport_pos, dear_imgui_rs::Condition::Always)
-            .size(viewport_size, dear_imgui_rs::Condition::Always)
-            .flags(window_flags | dear_imgui_rs::WindowFlags::NO_INPUTS)
-            .build(|| {
-                image::draw(ui, preview, viewport_size, margin);
-            });
-    }
+    kinematic_ui::windows::fullscreen(
+        ui,
+        "Fullscreen preview.",
+        viewport_pos,
+        viewport_size,
+        false,
+        || {
+            image::draw(ui, preview, viewport_size, margin);
+        },
+    );
 
     let fps = editor.preview_fps();
 
-    timeline::shortcuts(editor.timeline_mut(), ui, !is_exporting);
+    playback::shortcuts(editor.timeline_mut(), ui, !is_exporting);
 
     let is_controlling = editor.timeline_mut().is_controlling;
 
@@ -66,19 +55,22 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, volume: &mut i32
     let controls_size = [viewport_size[0], CONTROLS_HEIGHT.min(viewport_size[1])];
     let mut toggle_fullscreen = false;
 
-    ui.window("Fullscreen controls.")
-        .position(controls_pos, dear_imgui_rs::Condition::Always)
-        .size(controls_size, dear_imgui_rs::Condition::Always)
-        .flags(window_flags)
-        .build(|| {
-            toggle_fullscreen = timeline::fullscreen_controls(
+    kinematic_ui::windows::fullscreen(
+        ui,
+        "Fullscreen controls.",
+        controls_pos,
+        controls_size,
+        true,
+        || {
+            toggle_fullscreen = playback::fullscreen_controls(
                 editor.timeline_mut(),
                 ui,
                 fps,
                 !is_exporting,
                 volume,
             );
-        });
+        },
+    );
 
     toggle_fullscreen
 }

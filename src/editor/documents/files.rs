@@ -59,14 +59,24 @@ impl Documents {
         let original =
             std::fs::read(self.context.root().join(MANIFEST)).map_err(|e| e.to_string())?;
         let mut manifest: Manifest = ron::de::from_bytes(&original).map_err(|e| e.to_string())?;
-        let previous = (manifest.scenes.clone(), manifest.audio.clone());
+        let previous = (
+            manifest.scenes.clone(),
+            manifest.audio.clone(),
+            manifest.legacy_audio.clone(),
+        );
 
         change(&mut manifest);
         manifest
-            .audio
+            .legacy_audio
             .retain(|path, _| manifest.scenes.contains(path));
 
-        if previous == (manifest.scenes.clone(), manifest.audio.clone()) {
+        if previous
+            == (
+                manifest.scenes.clone(),
+                manifest.audio.clone(),
+                manifest.legacy_audio.clone(),
+            )
+        {
             return Ok(None);
         }
 
@@ -417,18 +427,16 @@ mod audio_tests {
         let _ = std::fs::remove_dir_all(&root);
         let mut project = LuaProject::create(&root, "Audio files", false).unwrap();
         std::fs::write(root.join("assets/a.wav"), b"Audio fixture.").unwrap();
-        project.manifest.audio.insert(
-            "scenes/intro.lua".into(),
-            vec![AudioClip {
-                id: 1,
-                file: "assets/a.wav".into(),
-                at: 0.0,
-                offset: 0.0,
-                duration: 0.1,
-                gain: 1.0,
-                pan: 0.0,
-            }],
-        );
+        project.manifest.audio.extend([AudioClip {
+            id: 1,
+            lane: 0,
+            file: "assets/a.wav".into(),
+            at: 0.0,
+            offset: 0.0,
+            duration: 0.1,
+            gain: 1.0,
+            pan: 0.0,
+        }]);
         project.save().unwrap();
         let mut docs = Documents::new(project.context.clone(), "").unwrap();
         docs.lsp = None;
@@ -437,12 +445,12 @@ mod audio_tests {
         docs.rename(Path::new("scenes/intro.lua"), Path::new("scenes/main.lua"))
             .unwrap();
         let project = LuaProject::open(&root).unwrap();
-        let clips = &project.manifest.audio[Path::new("scenes/main.lua")];
+        let clips = &project.manifest.audio;
         assert_eq!(clips[0].file, Path::new("assets/b.wav"));
         docs.create_scene(Path::new("other.lua"), SceneTemplate::None)
             .unwrap();
         docs.delete(Path::new("scenes/main.lua")).unwrap();
-        assert!(LuaProject::open(&root).unwrap().manifest.audio.is_empty());
+        assert_eq!(LuaProject::open(&root).unwrap().manifest.audio, *clips);
         std::fs::remove_dir_all(root).unwrap();
     }
 }
