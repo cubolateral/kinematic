@@ -325,7 +325,7 @@ fn edit_value_input(
             }
 
             if ui.is_item_hovered() {
-                ui.tooltip_text("Euler angles use degrees and XYZ rotation order.");
+                widgets::tooltip(ui, "Euler angles use degrees and XYZ rotation order");
             }
 
             changed

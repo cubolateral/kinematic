@@ -18,12 +18,28 @@ pub fn muted(ui: &dear_imgui_rs::Ui, text: impl AsRef<str>) {
     ui.text_disabled(text);
 }
 
+pub fn tooltip(ui: &dear_imgui_rs::Ui, text: impl AsRef<str>) {
+    ui.tooltip_text(text.as_ref().trim_end().trim_end_matches('.'));
+}
+
 pub fn message(ui: &dear_imgui_rs::Ui, text: impl AsRef<str>) {
     ui.text_wrapped(text);
 }
 
 pub fn separator(ui: &dear_imgui_rs::Ui) {
     ui.separator();
+}
+
+pub fn horizontal_border(ui: &dear_imgui_rs::Ui, y: f32) {
+    let x = ui.window_pos()[0];
+    ui.get_window_draw_list()
+        .add_line(
+            [x, y],
+            [x + ui.window_size()[0], y],
+            ui.get_color_u32(dear_imgui_rs::StyleColor::Border),
+        )
+        .thickness(crate::theme::BORDER_WIDTH)
+        .build();
 }
 
 pub fn error(ui: &dear_imgui_rs::Ui, text: impl AsRef<str>) {

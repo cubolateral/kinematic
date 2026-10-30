@@ -13,7 +13,7 @@ pub fn label(action: &str, shortcut: &str) -> String {
 
 pub fn tooltip(ui: &Ui, action: &str, shortcut: &str) {
     if ui.is_item_hovered() {
-        ui.tooltip_text(label(action, shortcut));
+        crate::widgets::tooltip(ui, label(action, shortcut));
     }
 }
 

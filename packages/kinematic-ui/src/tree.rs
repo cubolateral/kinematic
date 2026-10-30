@@ -124,7 +124,7 @@ pub fn row(ui: &dear_imgui_rs::Ui, row: Row<'_>) -> Response {
 
     let edit = crate::controls::text_button(ui, crate::icons::PENCIL, [ROW_HEIGHT; 2]);
     if ui.is_item_hovered() {
-        ui.tooltip_text("Edit in the matching canvas.");
+        crate::widgets::tooltip(ui, "Edit in the matching canvas");
     }
     let mut visibility_clicked = false;
     if let Some(visible) = visibility {
@@ -144,7 +144,7 @@ pub fn row(ui: &dear_imgui_rs::Ui, row: Row<'_>) -> Response {
             },
         );
         if ui.is_item_hovered() {
-            ui.tooltip_text(if visible { "Hide." } else { "Show." });
+            crate::widgets::tooltip(ui, if visible { "Hide" } else { "Show" });
         }
     }
     Response {

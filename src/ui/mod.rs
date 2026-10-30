@@ -58,6 +58,10 @@ fn draw_project_menu(
     settings: &mut settings::State,
     ui: &dear_imgui_rs::Ui,
 ) {
+    widgets::horizontal_border(
+        ui,
+        ui.window_pos()[1] + ui.window_size()[1] - kinematic_ui::theme::BORDER_WIDTH,
+    );
     if let Some(_menu) = controls::menu(ui, "Projects") {
         if controls::menu_item(ui, "Open / Create Project") {
             code.projects_open = true;
@@ -208,6 +212,19 @@ impl Ui {
             );
             fullscreen_button
         };
+
+        if kinematic_ui::status_bar::draw(
+            ui,
+            editor
+                .documents
+                .as_ref()
+                .map_or("Ready.", |documents| documents.status.as_str()),
+            env!("CARGO_PKG_VERSION"),
+        ) {
+            if let Err(error) = sdl3::url::open_url("https://github.com/cubolateral/kinematic") {
+                self.code.error = Some(format!("Could not open the repository: {error}."));
+            }
+        }
 
         if initial_layout && !self.code.focused {
             ui.set_window_focus(Some(inspector::WINDOW_NAME));

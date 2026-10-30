@@ -112,7 +112,7 @@ pub fn anchored<R>(
 ) -> Option<R> {
     let _rounding = ui.push_style_var(StyleVar::WindowRounding(crate::theme::CORNER_RADIUS));
     let _padding = ui.push_style_var(StyleVar::WindowPadding([12.0, 12.0]));
-    let _border = ui.push_style_var(StyleVar::WindowBorderSize(1.0));
+    let _border = ui.push_style_var(StyleVar::WindowBorderSize(crate::theme::BORDER_WIDTH));
     let background = ui.clone_style().color(StyleColor::WindowBg);
     let _background = ui.push_style_color(StyleColor::WindowBg, background);
     let _child = ui.push_style_color(StyleColor::ChildBg, background);

@@ -81,7 +81,7 @@ pub fn row(
             reset = controls::text_button(ui, icons::RESET, [ui.frame_height(); 2]);
 
             if ui.is_item_hovered() {
-                ui.tooltip_text("Reset to the default value.");
+                crate::widgets::tooltip(ui, "Reset to the default value");
             }
         }
 

@@ -9,6 +9,7 @@ pub mod lists;
 pub mod numbers;
 pub mod properties;
 pub mod shortcut;
+pub mod status_bar;
 pub mod theme;
 pub mod timeline;
 pub mod tree;

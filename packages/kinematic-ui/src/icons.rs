@@ -20,5 +20,6 @@ pub const RESET: &str = "\u{f2f1}";
 
 pub const FOLDER: &str = "\u{f07b}";
 pub const FILE: &str = "\u{f15b}";
+pub const REPOSITORY: &str = "\u{f401}";
 
 pub const VOLUME_HIGH: &str = "\u{f028}";

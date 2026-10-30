@@ -391,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn browser_uses_the_shared_borderless_style() {
+    fn browser_uses_shared_window_borders_and_borderless_controls() {
         let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
 
@@ -423,6 +423,14 @@ mod tests {
             let _font = ui.push_font(font);
 
             assert!(state.draw(ui).is_none());
+            assert_eq!(
+                ui.clone_style().window_border_size(),
+                kinematic_ui::theme::BORDER_WIDTH
+            );
+            assert_eq!(
+                ui.clone_style().popup_border_size(),
+                kinematic_ui::theme::BORDER_WIDTH
+            );
             assert_eq!(ui.clone_style().frame_border_size(), 0.0);
             assert_eq!(ui.clone_style().child_border_size(), 0.0);
 

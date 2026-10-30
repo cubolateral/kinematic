@@ -646,7 +646,7 @@ pub fn tools(
         ui.open_popup("View options");
     }
     if ui.is_item_hovered() {
-        ui.tooltip_text("View options");
+        crate::widgets::tooltip(ui, "View options");
     }
     let mut axis = None;
     let mut option = None;

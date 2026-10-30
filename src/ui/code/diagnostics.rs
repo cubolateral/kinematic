@@ -13,12 +13,11 @@ impl Footer {
         &mut self,
         ui: &dear_imgui_rs::Ui,
         messages: &[String],
-        status: &str,
         position: &str,
         height: f32,
     ) -> Option<String> {
         self.0
-            .draw(ui, &presentation(messages), status, position, height)
+            .draw(ui, &presentation(messages), "", position, height)
             .and_then(|index| messages.get(index).cloned())
     }
 }

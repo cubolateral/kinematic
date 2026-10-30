@@ -1417,13 +1417,10 @@ impl State {
                                 settings.tab_size.clamp(1, 8),
                             );
 
-                            if let Some(message) = self.diagnostics.draw(
-                                ui,
-                                &messages,
-                                &documents.status,
-                                &position,
-                                footer_height,
-                            ) {
+                            if let Some(message) =
+                                self.diagnostics
+                                    .draw(ui, &messages, &position, footer_height)
+                            {
                                 self.navigate_diagnostic(documents, &message);
                             }
                         }
@@ -1450,10 +1447,7 @@ impl State {
                     position[1] + (ui.content_region_avail()[1] - height).max(0.0),
                 ]);
 
-                if let Some(message) =
-                    self.diagnostics
-                        .draw(ui, &messages, &documents.status, "Lua", height)
-                {
+                if let Some(message) = self.diagnostics.draw(ui, &messages, "Lua", height) {
                     self.navigate_diagnostic(documents, &message);
                 }
             }

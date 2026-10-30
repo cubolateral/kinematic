@@ -171,7 +171,7 @@ fn draw_row(
     );
     if response.hovered {
         if let Ok(inspection) = world.get::<&Inspection>(entity) {
-            ui.tooltip_text(format!("Type: {}", inspection.object_name));
+            widgets::tooltip(ui, format!("Type: {}", inspection.object_name));
         }
     }
     if response.toggled {

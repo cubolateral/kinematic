@@ -112,7 +112,7 @@ fn volume_button(ui: &dear_imgui_rs::Ui, volume: &mut i32) {
         ui.open_popup("Preview volume");
     }
     if ui.is_item_hovered() {
-        ui.tooltip_text(format!("Volume: {volume}%."));
+        widgets::tooltip(ui, format!("Volume: {volume}%"));
     }
     if let Some(_popup) = ui.begin_popup("Preview volume") {
         ui.set_next_item_width(140.0);

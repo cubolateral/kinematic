@@ -4,7 +4,7 @@ Shared ImGui components and the minimal visual style used by Kinematic. The crat
 dependency on the application, its editor, scene model, Lua runtime, SDL,
 OpenGL, or export loop.
 
-- `theme`: Palette, 2 px corners, borderless controls, scale, and font setup. The caller owns
+- `theme`: Palette, 2 px corners, shared window outlines, borderless controls, scale, and font setup. The caller owns
   font assets and serialized preferences.
 - `windows`: Docked panels, centered floating windows, tabs, and dialogs.
 - `controls`: Buttons, choices, text and color inputs, sliders, menus, and progress.

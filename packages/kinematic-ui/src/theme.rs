@@ -1,8 +1,9 @@
-//! Minimal, borderless editor style and shared font setup.
+//! Shared editor style and font setup.
 
 use dear_imgui_rs::{ColorStackToken, Context, FontId, StyleColor, Ui};
 
 pub const CORNER_RADIUS: f32 = 2.0;
+pub const BORDER_WIDTH: f32 = 1.0;
 pub const ERROR: [f32; 4] = [0.95, 0.33, 0.33, 1.0];
 pub const WARNING: [f32; 4] = [0.89, 0.80, 0.33, 1.0];
 
@@ -178,9 +179,9 @@ fn apply_geometry(context: &mut Context) {
     style.set_image_rounding(CORNER_RADIUS);
     style.set_drag_drop_target_rounding(CORNER_RADIUS);
 
-    style.set_window_border_size(0.0);
+    style.set_window_border_size(BORDER_WIDTH);
     style.set_child_border_size(0.0);
-    style.set_popup_border_size(1.0);
+    style.set_popup_border_size(BORDER_WIDTH);
     style.set_frame_border_size(0.0);
 
     style.set_window_padding([8.0, 8.0]);
@@ -208,12 +209,13 @@ mod tests {
     }
 
     #[test]
-    fn the_shared_theme_is_borderless_and_supports_dark_and_light_backgrounds() {
+    fn the_shared_theme_has_consistent_borders_and_supports_dark_and_light_backgrounds() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = Context::create();
         apply_geometry(&mut context);
         assert_eq!(context.style().frame_border_size(), 0.0);
-        assert_eq!(context.style().window_border_size(), 0.0);
+        assert_eq!(context.style().window_border_size(), BORDER_WIDTH);
+        assert_eq!(context.style().popup_border_size(), BORDER_WIDTH);
         assert_eq!(context.style().frame_rounding(), CORNER_RADIUS);
         context.set_ini_filename(None::<&str>).unwrap();
         context
@@ -232,6 +234,10 @@ mod tests {
             {
                 let _colors = theme.push(ui);
                 let border = ui.style_color(StyleColor::Border)[0];
+                assert_eq!(
+                    ui.style_color(StyleColor::Border),
+                    ui.style_color(StyleColor::Separator)
+                );
                 let frame = ui.style_color(StyleColor::FrameBg)[0];
                 assert!((border - background[0]).abs() <= 0.121);
                 assert_ne!(frame, background[0]);
