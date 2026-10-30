@@ -138,16 +138,19 @@ pub(crate) enum SelectedCanvas {
 struct EditorView2D {
     pan: [f32; 2],
     zoom: f32,
+    rotation: f32,
     correction: [f32; 2],
     canvas_view: bool,
     axes: [bool; 2],
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct EditorView3D {
     position: glam::Vec3,
     yaw: f32,
     pitch: f32,
+    roll: f32,
+    projection: crate::core::components::Camera3D,
     canvas_view: bool,
     axes: [bool; 3],
 }
@@ -158,6 +161,8 @@ impl Default for EditorView3D {
             position: glam::vec3(4.0, 3.0, 6.0),
             yaw: 0.588,
             pitch: -0.395,
+            roll: 0.0,
+            projection: Default::default(),
             canvas_view: false,
             axes: [true; 3],
         }
@@ -169,6 +174,7 @@ impl Default for EditorView2D {
         Self {
             pan: [0.0; 2],
             zoom: 1.0,
+            rotation: 0.0,
             correction: [1.0; 2],
             canvas_view: false,
             axes: [true; 2],
@@ -200,7 +206,7 @@ pub(crate) struct Editor {
     preview: Canvas,
     editor_2d: Canvas,
     editor_view_2d: EditorView2D,
-    editor_rendered: Option<((u64, u64), hecs::Entity, [u32; 6])>,
+    editor_rendered: Option<((u64, u64), hecs::Entity, [u32; 7])>,
     editor_3d: Canvas,
     editor_view_3d: EditorView3D,
     editor_3d_rendered: Option<((u64, u64), hecs::Entity, Option<hecs::Entity>, [u32; 11])>,
@@ -406,6 +412,7 @@ impl Editor {
             editor_view_2d: EditorView2D {
                 pan: cache.camera_2d.pan,
                 zoom: cache.camera_2d.zoom,
+                rotation: cache.camera_2d.rotation,
                 canvas_view: cache.camera_2d.camera_view,
                 axes: cache.camera_2d.axes,
                 ..EditorView2D::default()
@@ -416,6 +423,8 @@ impl Editor {
                 position: glam::Vec3::from_array(cache.camera_3d.position),
                 yaw: cache.camera_3d.yaw,
                 pitch: cache.camera_3d.pitch,
+                roll: cache.camera_3d.roll,
+                projection: cache.camera_3d.projection(),
                 canvas_view: cache.camera_3d.camera_view,
                 axes: cache.camera_3d.axes,
                 ..EditorView3D::default()
@@ -1121,6 +1130,7 @@ impl Editor {
             camera_2d: Camera2DCache {
                 pan: self.editor_view_2d.pan,
                 zoom: self.editor_view_2d.zoom,
+                rotation: self.editor_view_2d.rotation,
                 camera_view: self.editor_view_2d.canvas_view,
                 axes: self.editor_view_2d.axes,
             },
@@ -1128,6 +1138,11 @@ impl Editor {
                 position: self.editor_view_3d.position.to_array(),
                 yaw: self.editor_view_3d.yaw,
                 pitch: self.editor_view_3d.pitch,
+                roll: self.editor_view_3d.roll,
+                mode: self.editor_view_3d.projection.camera_mode,
+                fov: self.editor_view_3d.projection.camera_fov,
+                near: self.editor_view_3d.projection.camera_near,
+                far: self.editor_view_3d.projection.camera_far,
                 camera_view: self.editor_view_3d.canvas_view,
                 axes: self.editor_view_3d.axes,
             },
@@ -1520,6 +1535,8 @@ impl Editor {
         self.editor_view_3d.position = default.position;
         self.editor_view_3d.yaw = default.yaw;
         self.editor_view_3d.pitch = default.pitch;
+        self.editor_view_3d.roll = default.roll;
+        self.editor_view_3d.projection = default.projection;
         self.editor_3d_rendered = None;
     }
 
@@ -1548,8 +1565,18 @@ impl Editor {
         delta: f32,
         fast: bool,
     ) {
-        if self.editor_view_3d.canvas_view {
+        if look == [0.0; 2] && (movement == [0.0; 3] || delta <= 0.0) {
             return;
+        }
+        if self.editor_view_3d.canvas_view {
+            let camera = self.editor_3d_camera();
+            let (yaw, pitch, roll) = camera.camera_rotation.to_euler(glam::EulerRot::YXZ);
+            self.editor_view_3d.position = camera.camera_position;
+            self.editor_view_3d.yaw = yaw;
+            self.editor_view_3d.pitch = pitch;
+            self.editor_view_3d.roll = roll;
+            self.editor_view_3d.projection = camera;
+            self.editor_view_3d.canvas_view = false;
         }
 
         let view = &mut self.editor_view_3d;
@@ -1558,8 +1585,7 @@ impl Editor {
 
         view.pitch = (view.pitch - look[1] * 0.003).clamp(-1.55, 1.55);
 
-        let rotation =
-            glam::Quat::from_rotation_y(view.yaw) * glam::Quat::from_rotation_x(view.pitch);
+        let rotation = glam::Quat::from_euler(glam::EulerRot::YXZ, view.yaw, view.pitch, view.roll);
         let speed = if fast { 12.0 } else { 3.0 } * delta.min(0.1);
 
         view.position += rotation
@@ -1601,9 +1627,13 @@ impl Editor {
 
         crate::core::components::Camera3D {
             camera_position: self.editor_view_3d.position,
-            camera_rotation: glam::Quat::from_rotation_y(self.editor_view_3d.yaw)
-                * glam::Quat::from_rotation_x(self.editor_view_3d.pitch),
-            ..Default::default()
+            camera_rotation: glam::Quat::from_euler(
+                glam::EulerRot::YXZ,
+                self.editor_view_3d.yaw,
+                self.editor_view_3d.pitch,
+                self.editor_view_3d.roll,
+            ),
+            ..self.editor_view_3d.projection.clone()
         }
     }
 
@@ -1641,6 +1671,7 @@ impl Editor {
     pub(crate) fn reset_editor_2d_view(&mut self) {
         self.editor_view_2d.pan = [0.0; 2];
         self.editor_view_2d.zoom = 1.0;
+        self.editor_view_2d.rotation = 0.0;
         self.editor_view_2d.canvas_view = false;
         self.editor_rendered = None;
     }
@@ -1648,6 +1679,7 @@ impl Editor {
     pub(crate) fn reset_editor_2d_camera_transform(&mut self) {
         self.editor_view_2d.pan = [0.0; 2];
         self.editor_view_2d.zoom = 1.0;
+        self.editor_view_2d.rotation = 0.0;
         self.editor_rendered = None;
     }
 
@@ -1699,7 +1731,7 @@ impl Editor {
     }
 
     pub(crate) fn pan_editor_2d(&mut self, delta: [f32; 2]) {
-        if self.editor_view_2d.canvas_view {
+        if delta == [0.0; 2] {
             return;
         }
 
@@ -1710,7 +1742,7 @@ impl Editor {
     }
 
     pub(crate) fn zoom_editor_2d_at(&mut self, wheel: f32, anchor: [f32; 2]) {
-        if wheel == 0.0 || self.editor_view_2d.canvas_view {
+        if wheel == 0.0 {
             return;
         }
 
@@ -1727,8 +1759,33 @@ impl Editor {
         self.editor_rendered = None;
     }
 
-    pub(crate) fn editor_2d_view(&self) -> ([f32; 2], f32) {
-        (self.editor_view_2d.pan, self.editor_view_2d.zoom)
+    pub(crate) fn editor_2d_view(&self) -> ([f32; 2], f32, f32) {
+        (
+            self.editor_view_2d.pan,
+            self.editor_view_2d.zoom,
+            self.editor_view_2d.rotation,
+        )
+    }
+
+    pub(crate) fn release_editor_2d_camera(&mut self, scale: f32) {
+        if !self.editor_view_2d.canvas_view {
+            return;
+        }
+        let canvas = self.editor_2d_canvas();
+        let camera = self.scenes[self.active_scene]
+            .scene
+            .world()
+            .get::<&crate::core::components::Camera2D>(canvas)
+            .map(|camera| (*camera).clone())
+            .unwrap_or_default();
+        let rotation = -camera.camera_rotation;
+        let zoom = camera.camera_zoom * scale;
+        let position = glam::Mat2::from_angle(rotation) * camera.camera_position;
+        self.editor_view_2d.pan = (-position * zoom).to_array();
+        self.editor_view_2d.zoom = zoom;
+        self.editor_view_2d.rotation = rotation;
+        self.editor_view_2d.canvas_view = false;
+        self.editor_rendered = None;
     }
 
     pub(crate) fn select_at_editor_2d(&mut self, point: Vector2) {
@@ -1977,6 +2034,7 @@ impl Editor {
                 view.pan[0].to_bits(),
                 view.pan[1].to_bits(),
                 view.zoom.to_bits(),
+                view.rotation.to_bits(),
                 view.correction[0].to_bits(),
                 view.correction[1].to_bits(),
                 u32::from(view.canvas_view),
@@ -1996,6 +2054,7 @@ impl Editor {
             skia_context,
             view.pan,
             view.zoom,
+            view.rotation,
             view.correction,
             view.canvas_view,
         ) {
@@ -2020,7 +2079,7 @@ impl Editor {
         let canvas = self.editor_3d_canvas();
         let camera = self.editor_3d_camera();
         let size = self.editor_3d.size();
-        let view = self.editor_view_3d;
+        let view = self.editor_view_3d.clone();
         let selection = self.selected_entity();
         let key = (
             scene_key,

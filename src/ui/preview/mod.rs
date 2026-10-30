@@ -205,13 +205,17 @@ fn draw_editor_3d(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
     }
 
     let right = dear_imgui_rs::MouseButton::Right;
-    let looking = viewport_active && ui.is_mouse_down(right) && !editor.editor_3d_camera_view();
+    let looking = viewport_active && ui.is_mouse_down(right);
 
     if looking {
         let axis = |positive: InputAction, negative: InputAction| {
             f32::from(inputs::active(ui, positive)) - f32::from(inputs::active(ui, negative))
         };
-        let mouse_delta = editor.editor_mouse_delta(ui.io().mouse_delta());
+        let mouse_delta = if ui.is_mouse_clicked(right) {
+            [0.0; 2]
+        } else {
+            editor.editor_mouse_delta(ui.io().mouse_delta())
+        };
 
         editor.control_editor_3d(
             mouse_delta,

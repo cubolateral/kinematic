@@ -167,6 +167,7 @@ impl Canvases {
         skia: &mut skia_safe::gpu::DirectContext,
         pan: [f32; 2],
         zoom: f32,
+        rotation: f32,
         correction: [f32; 2],
         camera_view: bool,
     ) -> Result<(), String> {
@@ -223,6 +224,7 @@ impl Canvases {
                 target_size,
                 pan,
                 zoom,
+                rotation,
                 correction,
                 camera_view,
             )

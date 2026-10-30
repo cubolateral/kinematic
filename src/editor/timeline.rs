@@ -109,7 +109,7 @@ impl Timeline {
     }
 
     pub fn is_playing(&self) -> bool {
-        self.is_playing && !self.is_controlling
+        self.is_playing
     }
 
     pub fn time(&self) -> f32 {
@@ -132,6 +132,22 @@ impl Timeline {
 #[cfg(test)]
 mod tests {
     use super::Timeline;
+
+    #[test]
+    fn scrubbing_preserves_the_playback_state() {
+        let mut timeline = Timeline::new(2.0, 60);
+        timeline.play();
+        timeline.is_controlling = true;
+        timeline.go_to(0.5);
+        assert!(timeline.is_playing());
+        assert_eq!(timeline.update(0.1), Some(0.6));
+        timeline.is_controlling = false;
+        assert!(timeline.is_playing());
+        timeline.pause();
+        timeline.is_controlling = true;
+        timeline.go_to(1.0);
+        assert!(!timeline.is_playing());
+    }
 
     #[test]
     fn playback_restarts_or_stops_at_the_end() {

@@ -6,7 +6,9 @@ use crate::core::{
 };
 
 /// Projection used by a three-dimensional camera.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, TrackEnum)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, TrackEnum, serde::Serialize, serde::Deserialize,
+)]
 pub enum Camera3DMode {
     #[default]
     Perspective,

@@ -43,17 +43,9 @@ pub(super) fn draw_editor(
     let max = [min[0] + size[0], min[1] + size[1]];
     let center = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
 
-    editor.set_editor_2d_viewport(size);
-
-    let camera_view = editor.editor_2d_camera_view();
-    let display_source = if camera_view {
-        let (width, height) = editor.editor_2d_canvas_size();
-
-        [width.max(1) as f32, height.max(1) as f32]
-    } else {
-        preview.size
-    };
-    let display_scale = (size[0] / display_source[0]).min(size[1] / display_source[1]);
+    let free_scale = (size[0] / preview.size[0]).min(size[1] / preview.size[1]);
+    let (width, height) = editor.editor_2d_canvas_size();
+    let camera_scale = (size[0] / width.max(1) as f32).min(size[1] / height.max(1) as f32);
 
     ui.invisible_button_options(
         "Editor 2D canvas.",
@@ -68,26 +60,36 @@ pub(super) fn draw_editor(
     let mouse = ui.io().mouse_pos();
     let middle = dear_imgui_rs::MouseButton::Middle;
 
-    if active && !camera_view && ui.is_mouse_dragging(middle) {
+    if active && ui.is_mouse_dragging(middle) {
         let delta = editor.editor_mouse_delta(ui.io().mouse_delta());
-
-        editor.pan_editor_2d([delta[0] / display_scale, delta[1] / display_scale]);
+        if delta != [0.0; 2] {
+            editor.release_editor_2d_camera(camera_scale / free_scale);
+            editor.pan_editor_2d([delta[0] / free_scale, delta[1] / free_scale]);
+        }
 
         wrap_pointer(ui, editor, min, max);
         ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeAll));
     }
 
-    if hovered && !camera_view {
+    if hovered && ui.io().mouse_wheel() != 0.0 {
+        editor.release_editor_2d_camera(camera_scale / free_scale);
         let anchor = [
-            (mouse[0] - center[0]) / display_scale,
-            (mouse[1] - center[1]) / display_scale,
+            (mouse[0] - center[0]) / free_scale,
+            (mouse[1] - center[1]) / free_scale,
         ];
 
         editor.zoom_editor_2d_at(ui.io().mouse_wheel(), anchor);
     }
 
-    let (pan, zoom) = if camera_view {
-        ([0.0; 2], 1.0)
+    editor.set_editor_2d_viewport(size);
+    let camera_view = editor.editor_2d_camera_view();
+    let display_scale = if camera_view {
+        camera_scale
+    } else {
+        free_scale
+    };
+    let (pan, zoom, rotation) = if camera_view {
+        ([0.0; 2], 1.0, 0.0)
     } else {
         editor.editor_2d_view()
     };
@@ -98,6 +100,7 @@ pub(super) fn draw_editor(
             bounds: [min, max],
             display_scale,
             view: kinematic_ui::canvas::View { pan, zoom },
+            rotation,
             background,
             axes: editor.editor_2d_axes(),
             project: points(editor.editor_2d_project_outline()),
@@ -119,10 +122,12 @@ pub(super) fn draw_editor(
         return None;
     }
 
-    Some(vec2(
-        ((mouse[0] - center[0]) / display_scale - pan[0]) / zoom,
-        ((mouse[1] - center[1]) / display_scale - pan[1]) / zoom,
-    ))
+    let point = glam::Mat2::from_angle(-rotation)
+        * vec2(
+            ((mouse[0] - center[0]) / display_scale - pan[0]) / zoom,
+            ((mouse[1] - center[1]) / display_scale - pan[1]) / zoom,
+        );
+    Some(point)
 }
 
 pub(super) fn draw_editor_3d(

@@ -684,6 +684,7 @@ pub(crate) fn draw_canvas2d_editor_with_images(
     target_size: (u32, u32),
     pan: [f32; 2],
     zoom: f32,
+    rotation: f32,
     correction: [f32; 2],
     camera_view: bool,
 ) {
@@ -713,6 +714,7 @@ pub(crate) fn draw_canvas2d_editor_with_images(
     } else {
         canvas.translate((pan[0] * correction[0], pan[1] * correction[1]));
         canvas.scale((zoom * correction[0], zoom * correction[1]));
+        canvas.rotate(rotation.to_degrees(), None);
     }
 
     for child in children_by_z_index(world, entity) {

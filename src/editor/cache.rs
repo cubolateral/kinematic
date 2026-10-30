@@ -109,6 +109,7 @@ impl EditorCache {
             && cache.camera_2d.pan.iter().all(|value| value.is_finite())
             && cache.camera_2d.zoom.is_finite()
             && cache.camera_2d.zoom > 0.0
+            && cache.camera_2d.rotation.is_finite()
             && cache
                 .camera_3d
                 .position
@@ -116,6 +117,8 @@ impl EditorCache {
                 .all(|value| value.is_finite())
             && cache.camera_3d.yaw.is_finite()
             && cache.camera_3d.pitch.is_finite()
+            && cache.camera_3d.roll.is_finite()
+            && cache.camera_3d.projection().validate().is_ok()
             && cache.timeline_time.is_finite()
             && cache.timeline_time >= 0.0
     }
@@ -126,6 +129,7 @@ impl EditorCache {
 pub(super) struct Camera2DCache {
     pub(super) pan: [f32; 2],
     pub(super) zoom: f32,
+    pub(super) rotation: f32,
     pub(super) camera_view: bool,
     #[serde(default = "default_axes_2d")]
     pub(super) axes: [bool; 2],
@@ -136,6 +140,7 @@ impl Default for Camera2DCache {
         Self {
             pan: [0.0; 2],
             zoom: 1.0,
+            rotation: 0.0,
             camera_view: false,
             axes: default_axes_2d(),
         }
@@ -148,6 +153,11 @@ pub(super) struct Camera3DCache {
     pub(super) position: [f32; 3],
     pub(super) yaw: f32,
     pub(super) pitch: f32,
+    pub(super) roll: f32,
+    pub(super) mode: crate::core::components::Camera3DMode,
+    pub(super) fov: f32,
+    pub(super) near: f32,
+    pub(super) far: f32,
     pub(super) camera_view: bool,
     #[serde(default = "default_axes_3d")]
     pub(super) axes: [bool; 3],
@@ -155,12 +165,30 @@ pub(super) struct Camera3DCache {
 
 impl Default for Camera3DCache {
     fn default() -> Self {
+        let camera = crate::core::components::Camera3D::default();
         Self {
             position: [4.0, 3.0, 6.0],
             yaw: 0.588,
             pitch: -0.395,
+            roll: 0.0,
+            mode: camera.camera_mode,
+            fov: camera.camera_fov,
+            near: camera.camera_near,
+            far: camera.camera_far,
             camera_view: false,
             axes: default_axes_3d(),
+        }
+    }
+}
+
+impl Camera3DCache {
+    pub(super) fn projection(&self) -> crate::core::components::Camera3D {
+        crate::core::components::Camera3D {
+            camera_mode: self.mode,
+            camera_fov: self.fov,
+            camera_near: self.near,
+            camera_far: self.far,
+            ..Default::default()
         }
     }
 }
@@ -235,6 +263,7 @@ mod tests {
             camera_2d: Camera2DCache {
                 pan: [12.0, -8.0],
                 zoom: 2.0,
+                rotation: 0.3,
                 camera_view: true,
                 axes: [true, false],
             },
@@ -242,8 +271,12 @@ mod tests {
                 position: [1.0, 2.0, 3.0],
                 yaw: 0.5,
                 pitch: -0.25,
+                roll: 0.3,
+                mode: crate::core::components::Camera3DMode::Orthogonal,
+                fov: 10.0,
                 camera_view: true,
                 axes: [true, false, true],
+                ..Default::default()
             },
             timeline_time: 1.5,
             mode: EditorMode::Three,

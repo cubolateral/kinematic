@@ -341,7 +341,6 @@ pub(super) fn draw(
             }));
             if activated {
                 editor.select_audio(clip.id);
-                editor.timeline_mut().pause();
                 state.audio_drag = Some(ClipDrag {
                     draft: clip.clone(),
                     original: clip.clone(),

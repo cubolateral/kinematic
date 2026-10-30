@@ -498,6 +498,66 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         three,
     )
     .unwrap();
+    // Navigation releases camera following from its current transform.
+    let canvas_2d = editor.editor_2d_canvas();
+    let canvas_3d = editor.editor_3d_canvas();
+    let camera_2d = crate::core::components::Camera2D {
+        camera_position: crate::core::types::vec2(10.0, 20.0),
+        camera_zoom: 1.5,
+        camera_rotation: 0.3,
+    };
+    let camera_3d = crate::core::components::Camera3D {
+        camera_position: glam::vec3(3.0, 4.0, 5.0),
+        camera_rotation: glam::Quat::from_euler(glam::EulerRot::YXZ, 0.4, -0.2, 0.3),
+        camera_mode: crate::core::components::Camera3DMode::Orthogonal,
+        camera_fov: 10.0,
+        ..Default::default()
+    };
+    {
+        let world = editor.scene(0).world();
+        *world
+            .get::<&mut crate::core::components::Camera2D>(canvas_2d)
+            .unwrap() = camera_2d.clone();
+        *world
+            .get::<&mut crate::core::components::Camera3D>(canvas_3d)
+            .unwrap() = camera_3d.clone();
+    }
+    editor.toggle_editor_2d_camera_view();
+    editor.pan_editor_2d([0.0; 2]);
+    editor.zoom_editor_2d_at(0.0, [0.0; 2]);
+    assert!(editor.editor_2d_camera_view());
+    editor.release_editor_2d_camera(2.0);
+    editor.pan_editor_2d([5.0, -3.0]);
+    assert!(!editor.editor_2d_camera_view());
+    let (pan, zoom, rotation) = editor.editor_2d_view();
+    let expected =
+        -(glam::Mat2::from_angle(-0.3) * camera_2d.camera_position) * 3.0 + glam::vec2(5.0, -3.0);
+    assert!((glam::Vec2::from_array(pan) - expected).length() < 1e-4);
+    assert_eq!(zoom, 3.0);
+    assert_eq!(rotation, -0.3);
+    editor.toggle_editor_3d_camera_view();
+    let followed = editor.editor_3d_camera();
+    editor.control_editor_3d([0.0; 2], [0.0; 3], 0.1, false);
+    assert!(editor.editor_3d_camera_view());
+    editor.control_editor_3d([2.0, 0.0], [0.0; 3], 0.1, false);
+    assert!(!editor.editor_3d_camera_view());
+    let released = editor.editor_3d_camera();
+    assert_eq!(released.camera_position, followed.camera_position);
+    assert_eq!(released.camera_mode, followed.camera_mode);
+    assert_eq!(released.camera_fov, followed.camera_fov);
+    let expected = glam::Quat::from_euler(glam::EulerRot::YXZ, 0.394, -0.2, 0.3);
+    assert!(released.camera_rotation.abs_diff_eq(expected, 1e-5));
+    {
+        let world = editor.scene(0).world();
+        *world
+            .get::<&mut crate::core::components::Camera2D>(canvas_2d)
+            .unwrap() = Default::default();
+        *world
+            .get::<&mut crate::core::components::Camera3D>(canvas_3d)
+            .unwrap() = Default::default();
+    }
+    editor.reset_editor_2d_view();
+    editor.reset_editor_3d_view();
     let migrated = LuaProject::open(&root).unwrap();
     assert!(migrated.manifest.legacy_audio.is_empty());
     assert!((migrated.manifest.audio[0].at - 0.07).abs() < 1e-6);
@@ -686,15 +746,23 @@ fn ui_audio_clips_save_mix_and_rebuild() {
     frame(&mut app, &mut editor);
     assert!(app.ui.selected_audio_rect().is_some());
     let blank = [(min[0] + max[0]) * 0.5, max[1] + 1.0];
+    for point in [blank, body] {
+        pointer(&mut app, &mut editor, point, left, false);
+        editor.timeline_mut().play();
+        pointer(&mut app, &mut editor, point, left, true);
+        assert!(editor.timeline_mut().is_playing());
+        pointer(&mut app, &mut editor, point, left, false);
+        assert!(editor.timeline_mut().is_playing());
+        editor.timeline_mut().pause();
+    }
     pointer(&mut app, &mut editor, blank, right, false);
     editor.timeline_mut().play();
     pointer(&mut app, &mut editor, blank, right, true);
     assert!(!editor.timeline_mut().is_controlling);
-    assert!(!editor.timeline_mut().is_playing());
+    assert!(editor.timeline_mut().is_playing());
     assert!(editor.selected_audio().is_none());
-    let paused = editor.timeline_mut().time();
     pointer(&mut app, &mut editor, blank, right, true);
-    assert_eq!(editor.timeline_mut().time(), paused);
+    assert!(editor.timeline_mut().is_playing());
     pointer(
         &mut app,
         &mut editor,
@@ -703,7 +771,10 @@ fn ui_audio_clips_save_mix_and_rebuild() {
         true,
     );
     assert!(editor.timeline_mut().is_controlling);
+    assert!(editor.timeline_mut().is_playing());
     pointer(&mut app, &mut editor, blank, right, false);
+    assert!(editor.timeline_mut().is_playing());
+    editor.timeline_mut().pause();
     editor.timeline_mut().go_to(time);
 
     let expected = editor.mix_audio(0, 48_000);

@@ -22,9 +22,6 @@ pub(super) fn update(
     let left_pressed = ui.is_mouse_clicked(left);
     let right_pressed = ui.is_mouse_clicked(right);
 
-    if timeline_hovered && (left_pressed || right_pressed) {
-        timeline.pause();
-    }
     if matches!(state.interaction, Interaction::Event | Interaction::Audio) {
         timeline.is_controlling = false;
 

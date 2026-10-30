@@ -281,6 +281,7 @@ pub struct Editor2D {
     pub bounds: [[f32; 2]; 2],
     pub display_scale: f32,
     pub view: View,
+    pub rotation: f32,
     pub background: [f32; 4],
     pub axes: [bool; 2],
     pub project: Quad,
@@ -313,22 +314,28 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
         center[1] + pan[1] * display_scale,
     ];
 
-    for (enabled, from, to, color) in [
-        (
-            props.axes[0],
-            [min[0], origin[1]],
-            [max[0], origin[1]],
-            [1.0, 0.3, 0.3, 1.0],
-        ),
-        (
-            props.axes[1],
-            [origin[0], min[1]],
-            [origin[0], max[1]],
-            [0.3, 1.0, 0.3, 1.0],
-        ),
+    let length = (max[0] - min[0]).hypot(max[1] - min[1])
+        + (origin[0] - center[0]).hypot(origin[1] - center[1]);
+    let (sin, cos) = props.rotation.sin_cos();
+    for (enabled, direction, color) in [
+        (props.axes[0], [cos, sin], [1.0, 0.3, 0.3, 1.0]),
+        (props.axes[1], [-sin, cos], [0.3, 1.0, 0.3, 1.0]),
     ] {
         if enabled {
-            draw_list.add_line(from, to, color).thickness(1.0).build();
+            draw_list
+                .add_line(
+                    [
+                        origin[0] - direction[0] * length,
+                        origin[1] - direction[1] * length,
+                    ],
+                    [
+                        origin[0] + direction[0] * length,
+                        origin[1] + direction[1] * length,
+                    ],
+                    color,
+                )
+                .thickness(1.0)
+                .build();
         }
     }
 
@@ -339,6 +346,7 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
         display_scale,
         pan,
         zoom,
+        props.rotation,
         ui.style_color(dear_imgui_rs::StyleColor::Border),
         1.0,
     );
@@ -369,6 +377,7 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
             display_scale,
             pan,
             zoom,
+            props.rotation,
             [0.0, 0.0, 0.0, 0.7],
             3.0,
         );
@@ -380,6 +389,7 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
             display_scale,
             pan,
             zoom,
+            props.rotation,
             accent,
             1.0,
         );
@@ -393,6 +403,7 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
             display_scale,
             pan,
             zoom,
+            props.rotation,
             ui.style_color(dear_imgui_rs::StyleColor::Border),
             1.0,
         );
@@ -407,6 +418,7 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
         display_scale,
         pan,
         zoom,
+        props.rotation,
         [0.0, 0.0, 0.0, 1.0],
         3.0,
     );
@@ -418,6 +430,7 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
         display_scale,
         pan,
         zoom,
+        props.rotation,
         [1.0, 1.0, 1.0, 1.0],
         1.0,
     );
@@ -485,6 +498,7 @@ fn draw_world_outline(
     display_scale: f32,
     pan: [f32; 2],
     zoom: f32,
+    rotation: f32,
     color: [f32; 4],
     thickness: f32,
 ) {
@@ -493,6 +507,11 @@ fn draw_world_outline(
     };
 
     let project = |point: [f32; 2]| {
+        let (sin, cos) = rotation.sin_cos();
+        let point = [
+            point[0] * cos - point[1] * sin,
+            point[0] * sin + point[1] * cos,
+        ];
         [
             center[0] + (pan[0] + point[0] * zoom) * display_scale,
             center[1] + (pan[1] + point[1] * zoom) * display_scale,

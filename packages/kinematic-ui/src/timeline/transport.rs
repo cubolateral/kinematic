@@ -33,7 +33,8 @@ pub struct State<'a> {
 pub fn draw(ui: &dear_imgui_rs::Ui, state: State<'_>, volume: &mut i32) -> Option<Action> {
     let _disabled = ui.begin_disabled_with_cond(!state.interactive);
     let spacing = ui.clone_style().item_spacing()[0];
-    let width = BUTTON_SIZE * 8.0 + spacing * 8.0 + text_size(ui, state.status)[0];
+    let status_width = text_size(ui, "FPS: 99999.99")[0];
+    let width = BUTTON_SIZE * 8.0 + spacing * 8.0 + status_width;
     ui.set_cursor_pos_x(
         ui.cursor_pos_x() + ((ui.content_region_avail_width() - width) * 0.5).max(0.0),
     );
@@ -197,6 +198,43 @@ pub fn time_at_position(position: f32, start: f32, width: f32, duration: f32) ->
 #[cfg(test)]
 mod tests {
     use super::time_at_position;
+
+    #[test]
+    fn playback_status_does_not_move_controls() {
+        let _lock = crate::TEST_LOCK.lock().unwrap();
+        let mut context = dear_imgui_rs::Context::create();
+        context.set_ini_filename(None::<&str>).unwrap();
+        context
+            .font_atlas()
+            .try_claim_legacy_renderer()
+            .unwrap()
+            .build();
+        context.io_mut().set_display_size([1280.0, 720.0]);
+        context.io_mut().set_delta_time(1.0 / 60.0);
+        let mut positions = Vec::new();
+        for status in ["PAUSED", "FPS: 9.00", "FPS: 144.00", "EXPORTING"] {
+            let ui = context.frame();
+            ui.window("Transport")
+                .size([800.0, 100.0], dear_imgui_rs::Condition::Always)
+                .build(|| {
+                    super::draw(
+                        ui,
+                        super::State {
+                            playing: status.starts_with("FPS"),
+                            looping: false,
+                            fullscreen: false,
+                            interactive: true,
+                            status,
+                            shortcuts: [""; 7],
+                        },
+                        &mut 100,
+                    );
+                    positions.push(ui.item_rect_min());
+                });
+            context.end_frame();
+        }
+        assert!(positions.windows(2).all(|pair| pair[0] == pair[1]));
+    }
 
     #[test]
     fn time_position_is_clamped_to_the_duration() {
