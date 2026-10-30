@@ -537,9 +537,9 @@ fn ui_audio_clips_save_mix_and_rebuild() {
     assert_eq!(rotation, -0.3);
     editor.toggle_editor_3d_camera_view();
     let followed = editor.editor_3d_camera();
-    editor.control_editor_3d([0.0; 2], [0.0; 3], 0.1, false);
+    editor.control_editor_3d([0.0; 2], [0.0; 3], 0.1, false, false);
     assert!(editor.editor_3d_camera_view());
-    editor.control_editor_3d([2.0, 0.0], [0.0; 3], 0.1, false);
+    editor.control_editor_3d([2.0, 0.0], [0.0; 3], 0.1, false, false);
     assert!(!editor.editor_3d_camera_view());
     let released = editor.editor_3d_camera();
     assert_eq!(released.camera_position, followed.camera_position);

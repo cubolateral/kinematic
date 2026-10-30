@@ -1,5 +1,7 @@
 //! Image placement, preview navigation, and editor overlays.
 
+pub mod orientation;
+
 #[derive(Clone, Copy)]
 pub struct Image {
     pub size: [f32; 2],
@@ -440,7 +442,7 @@ pub fn draw_editor_3d(
     ui: &dear_imgui_rs::Ui,
     preview: Image,
     available: [f32; 2],
-) -> (bool, Option<[f32; 2]>) {
+) -> (bool, bool, Option<[f32; 2]>) {
     let size = [available[0].max(1.0), available[1].max(1.0)];
 
     ui.invisible_button_options(
@@ -448,7 +450,10 @@ pub fn draw_editor_3d(
         size,
         dear_imgui_rs::InvisibleButtonOptions::new()
             .flags(dear_imgui_rs::ButtonFlags::ALLOW_OVERLAP)
-            .mouse_buttons(dear_imgui_rs::InvisibleButtonMouseButtons::RIGHT),
+            .mouse_buttons(
+                dear_imgui_rs::InvisibleButtonMouseButtons::RIGHT
+                    | dear_imgui_rs::InvisibleButtonMouseButtons::MIDDLE,
+            ),
     );
 
     let hovered = ui.is_item_hovered();
@@ -468,26 +473,18 @@ pub fn draw_editor_3d(
     ui.get_window_draw_list().set_sampler_linear();
 
     let mouse = ui.io().mouse_pos();
-    let over_camera = mouse[0] >= min[0] + 8.0
-        && mouse[0] <= min[0] + 24.0 + ui.frame_height() * 3.0
-        && mouse[1] >= min[1] + 8.0
-        && mouse[1] <= min[1] + 8.0 + ui.frame_height();
-    let over_controls = mouse[0] >= max[0] - 112.0
-        && mouse[0] <= max[0]
-        && mouse[1] >= min[1] + 8.0
-        && mouse[1] <= min[1] + 8.0 + ui.frame_height();
-    let clicked = (hovered
-        && !over_camera
-        && !over_controls
-        && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left))
-    .then(|| {
+    let over_tools = tools_contains(ui, min);
+    let [gizmo_min, gizmo_max] = orientation::bounds(min, size);
+    let over_gizmo = ui.is_mouse_hovering_rect(gizmo_min, gizmo_max);
+    let hovered = hovered && !over_tools && !over_gizmo;
+    let clicked = (hovered && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)).then(|| {
         [
             mouse[0] - (min[0] + max[0]) * 0.5,
             mouse[1] - (min[1] + max[1]) * 0.5,
         ]
     });
 
-    (active, clicked)
+    (active && !over_tools && !over_gizmo, hovered, clicked)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -530,11 +527,8 @@ fn draw_world_outline(
     }
 }
 
-fn axes(ui: &dear_imgui_rs::Ui, min: [f32; 2], size: [f32; 2], enabled: &[bool]) -> Option<usize> {
-    ui.set_cursor_screen_pos([
-        min[0] + size[0] - (32.0 * enabled.len() as f32 + 16.0),
-        min[1] + 8.0,
-    ]);
+fn axes(ui: &dear_imgui_rs::Ui, enabled: &[bool]) -> Option<usize> {
+    crate::widgets::muted(ui, "Axes");
     let mut clicked = None;
     for (axis, (&enabled, (label, color))) in enabled
         .iter()
@@ -601,51 +595,89 @@ pub struct Tools {
     pub reset: bool,
     pub margin: bool,
     pub axis: Option<usize>,
+    pub option: Option<usize>,
+}
+
+pub fn tools_contains(ui: &dear_imgui_rs::Ui, min: [f32; 2]) -> bool {
+    let spacing = ui.clone_style().item_spacing()[0];
+    ui.is_mouse_hovering_rect(
+        [min[0] + 8.0, min[1] + 8.0],
+        [
+            min[0] + 8.0 + ui.frame_height() * 4.0 + spacing * 3.0,
+            min[1] + 8.0 + ui.frame_height(),
+        ],
+    )
 }
 
 pub fn margin_button(ui: &dear_imgui_rs::Ui, visible: bool, shortcut: &str) -> bool {
     let clicked = crate::controls::icon_toggle(ui, "M", visible);
-    if ui.is_item_hovered() {
-        ui.tooltip_text(format!("Toggle margin [{shortcut}]"));
-    }
+    crate::shortcut::tooltip(ui, "Toggle margin", shortcut);
     clicked
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn tools(
     ui: &dear_imgui_rs::Ui,
     min: [f32; 2],
-    size: [f32; 2],
     camera_view: bool,
     margin: bool,
     enabled_axes: &[bool],
     shortcuts: [&str; 3],
+    entries: &[(&str, &str)],
 ) -> Tools {
     ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + 8.0]);
     let camera = crate::controls::icon_toggle(ui, crate::icons::VIDEO_CAMERA, camera_view);
-    if ui.is_item_hovered() {
-        ui.tooltip_text(format!(
-            "{} [{}]",
-            if camera_view {
-                "Use the free editor camera"
-            } else {
-                "Use the canvas camera"
-            },
-            shortcuts[0]
-        ));
-    }
+    crate::shortcut::tooltip(
+        ui,
+        if camera_view {
+            "Use the free editor camera"
+        } else {
+            "Use the canvas camera"
+        },
+        shortcuts[0],
+    );
     ui.same_line();
     let reset = crate::controls::text_button(ui, crate::icons::RESET, [ui.frame_height(); 2]);
-    if ui.is_item_hovered() {
-        ui.tooltip_text(format!("Reset camera transform [{}]", shortcuts[1]));
-    }
+    crate::shortcut::tooltip(ui, "Reset camera transform", shortcuts[1]);
     ui.same_line();
     let margin = margin_button(ui, margin, shortcuts[2]);
-    let axis = axes(ui, min, size, enabled_axes);
+    ui.same_line();
+    if crate::controls::icon_toggle(ui, crate::icons::EYE, ui.is_popup_open("View options")) {
+        ui.open_popup("View options");
+    }
+    if ui.is_item_hovered() {
+        ui.tooltip_text("View options");
+    }
+    let mut axis = None;
+    let mut option = None;
+    if let Some(_popup) = ui.begin_popup("View options") {
+        axis = axes(ui, enabled_axes);
+        if !entries.is_empty() {
+            crate::widgets::separator(ui);
+            for (index, (action, shortcut)) in entries.iter().enumerate() {
+                if crate::shortcut::menu_item(ui, action, shortcut) {
+                    option = Some(index);
+                }
+            }
+            crate::widgets::separator(ui);
+            for (action, shortcut) in [
+                ("Orbit", "Middle mouse"),
+                ("Pan", "Shift + Middle mouse"),
+                ("Zoom", "Mouse wheel"),
+                ("Fly", "Right mouse + WASD / QE"),
+                ("Fast", "Shift"),
+                ("Precise", "Alt"),
+            ] {
+                crate::widgets::muted(ui, crate::shortcut::label(action, shortcut));
+            }
+        }
+    }
     Tools {
         camera,
         reset,
         margin,
         axis,
+        option,
     }
 }
 
@@ -661,9 +693,7 @@ pub fn preview_tools(
     if crate::controls::text_button(ui, crate::icons::RESET, [ui.frame_height(); 2]) {
         *view = View::default();
     }
-    if ui.is_item_hovered() {
-        ui.tooltip_text(format!("Fit canvas [{}]", shortcuts[0]));
-    }
+    crate::shortcut::tooltip(ui, "Fit canvas", shortcuts[0]);
     ui.same_line();
     margin_button(ui, margin, shortcuts[1])
 }

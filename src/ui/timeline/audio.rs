@@ -396,10 +396,22 @@ fn context_menu(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State, 
         state.interaction = Interaction::Audio;
         let _disabled = ui.begin_disabled_with_cond(!editor.audio_editable());
         if clip.is_some() {
-            if controls::menu_item(ui, "Split at playhead (Ctrl+B)") {
+            if kinematic_ui::shortcut::menu_item(
+                ui,
+                "Split at playhead",
+                &crate::ui::inputs::map()
+                    .binding(crate::ui::inputs::Action::SplitAudio)
+                    .display,
+            ) {
                 editor.split_audio();
             }
-            if controls::menu_item(ui, "Delete clip (Delete)") {
+            if kinematic_ui::shortcut::menu_item(
+                ui,
+                "Delete clip",
+                &crate::ui::inputs::map()
+                    .binding(crate::ui::inputs::Action::DeleteAudio)
+                    .display,
+            ) {
                 editor.delete_audio();
             }
             widgets::separator(ui);

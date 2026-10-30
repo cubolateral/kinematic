@@ -32,6 +32,21 @@ pub(super) enum Action {
     MoveForward,
     MoveBackward,
     CameraFast,
+    CameraSlow,
+    FocusSelection,
+    FrameAll,
+    ViewFront,
+    ViewBack,
+    ViewRight,
+    ViewLeft,
+    ViewTop,
+    ViewBottom,
+    ToggleProjection,
+    OrbitLeft,
+    OrbitRight,
+    OrbitUp,
+    OrbitDown,
+    ViewOpposite,
     IncreaseValue,
     DecreaseValue,
     Confirm,
@@ -120,7 +135,7 @@ impl Binding {
         Self {
             action,
             category,
-            name,
+            name: name.trim_end_matches('.'),
             display: display.to_owned(),
             keys: keys.to_vec(),
             mouse: None,
@@ -188,27 +203,9 @@ impl Default for InputMap {
                     &[Key::F],
                 ),
                 Binding::new(ToggleMargin, Editor, "Toggle margins", "M", &[Key::M]),
-                Binding::new(
-                    Preview,
-                    Editor,
-                    "Preview mode",
-                    "1 / Keypad 1",
-                    &[Key::Key1, Key::Keypad1],
-                ),
-                Binding::new(
-                    Edit2d,
-                    Editor,
-                    "2D editor mode",
-                    "2 / Keypad 2",
-                    &[Key::Key2, Key::Keypad2],
-                ),
-                Binding::new(
-                    Edit3d,
-                    Editor,
-                    "3D editor mode",
-                    "3 / Keypad 3",
-                    &[Key::Key3, Key::Keypad3],
-                ),
+                Binding::new(Preview, Editor, "Preview mode", "F1", &[Key::F1]),
+                Binding::new(Edit2d, Editor, "2D editor mode", "F2", &[Key::F2]),
+                Binding::new(Edit3d, Editor, "3D editor mode", "F3", &[Key::F3]),
                 Binding::new(
                     ToggleCamera,
                     Editor,
@@ -449,6 +446,140 @@ impl Default for InputMap {
                 .trigger(Repeat),
             ],
         };
+
+        for (action, name, display, key, modifiers) in [
+            (
+                FocusSelection,
+                "Focus selection.",
+                "Ctrl + Space",
+                Key::Space,
+                KeyMods::CTRL,
+            ),
+            (
+                FocusSelection,
+                "Focus selection.",
+                "Keypad .",
+                Key::KeypadDecimal,
+                KeyMods::empty(),
+            ),
+            (FrameAll, "Frame all.", "Home", Key::Home, KeyMods::empty()),
+            (
+                ViewFront,
+                "Front view.",
+                "Keypad 1",
+                Key::Keypad1,
+                KeyMods::empty(),
+            ),
+            (
+                ViewBack,
+                "Back view.",
+                "Ctrl + Keypad 1",
+                Key::Keypad1,
+                KeyMods::CTRL,
+            ),
+            (
+                ViewRight,
+                "Right view.",
+                "Keypad 3",
+                Key::Keypad3,
+                KeyMods::empty(),
+            ),
+            (
+                ViewLeft,
+                "Left view.",
+                "Ctrl + Keypad 3",
+                Key::Keypad3,
+                KeyMods::CTRL,
+            ),
+            (
+                ViewTop,
+                "Top view.",
+                "Keypad 7",
+                Key::Keypad7,
+                KeyMods::empty(),
+            ),
+            (
+                ViewBottom,
+                "Bottom view.",
+                "Ctrl + Keypad 7",
+                Key::Keypad7,
+                KeyMods::CTRL,
+            ),
+            (
+                ToggleProjection,
+                "Toggle perspective / orthographic.",
+                "Keypad 5",
+                Key::Keypad5,
+                KeyMods::empty(),
+            ),
+            (
+                OrbitLeft,
+                "Orbit left.",
+                "Keypad 4",
+                Key::Keypad4,
+                KeyMods::empty(),
+            ),
+            (
+                OrbitRight,
+                "Orbit right.",
+                "Keypad 6",
+                Key::Keypad6,
+                KeyMods::empty(),
+            ),
+            (
+                OrbitUp,
+                "Orbit up.",
+                "Keypad 8",
+                Key::Keypad8,
+                KeyMods::empty(),
+            ),
+            (
+                OrbitDown,
+                "Orbit down.",
+                "Keypad 2",
+                Key::Keypad2,
+                KeyMods::empty(),
+            ),
+            (
+                ViewOpposite,
+                "Opposite view.",
+                "Keypad 9",
+                Key::Keypad9,
+                KeyMods::empty(),
+            ),
+        ] {
+            let number = match key {
+                Key::Keypad1 => Some(Key::Key1),
+                Key::Keypad2 => Some(Key::Key2),
+                Key::Keypad3 => Some(Key::Key3),
+                Key::Keypad4 => Some(Key::Key4),
+                Key::Keypad5 => Some(Key::Key5),
+                Key::Keypad6 => Some(Key::Key6),
+                Key::Keypad7 => Some(Key::Key7),
+                Key::Keypad8 => Some(Key::Key8),
+                Key::Keypad9 => Some(Key::Key9),
+                _ => None,
+            };
+            let mut binding =
+                Binding::new(action, Editor, name.trim_end_matches('.'), display, &[key])
+                    .modifiers(modifiers, modifiers);
+            if let Some(number) = number {
+                binding.keys.push(number);
+                binding.display = format!("{} / {display}", display.replace("Keypad ", ""));
+            }
+            map.bindings.push(binding);
+        }
+        map.bindings.push(
+            Binding::new(
+                CameraSlow,
+                Editor,
+                "Precise camera movement.",
+                "Alt",
+                &[Key::ModAlt],
+            )
+            .modifiers(KeyMods::empty(), KeyMods::all())
+            .trigger(Down),
+        );
 
         for (action, name, display, key, modifiers) in [
             (
@@ -888,7 +1019,7 @@ pub(super) fn active(ui: &Ui, action: Action) -> bool {
 }
 
 pub(super) fn tooltip(ui: &Ui, action: Action, text: &str) {
-    ui.tooltip_text(format!("{text} [{}]", map().binding(action).display));
+    kinematic_ui::shortcut::tooltip(ui, text, &map().binding(action).display);
 }
 
 #[cfg(test)]
@@ -900,6 +1031,26 @@ mod tests {
         let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
 
         for (action, key, modifiers, expected) in [
+            (Action::Preview, Key::F1, KeyMods::empty(), true),
+            (Action::Edit2d, Key::F2, KeyMods::empty(), true),
+            (Action::Edit3d, Key::F3, KeyMods::empty(), true),
+            (Action::Preview, Key::Keypad1, KeyMods::empty(), false),
+            (Action::ViewFront, Key::Keypad1, KeyMods::empty(), true),
+            (Action::ViewFront, Key::Key1, KeyMods::empty(), true),
+            (Action::ViewBack, Key::Key1, KeyMods::CTRL, true),
+            (Action::ToggleProjection, Key::Key5, KeyMods::empty(), true),
+            (Action::OrbitDown, Key::Key2, KeyMods::empty(), true),
+            (Action::Edit2d, Key::Key2, KeyMods::empty(), false),
+            (Action::ViewFront, Key::Keypad1, KeyMods::CTRL, false),
+            (Action::ViewBack, Key::Keypad1, KeyMods::CTRL, true),
+            (Action::FocusSelection, Key::Space, KeyMods::CTRL, true),
+            (
+                Action::FocusSelection,
+                Key::KeypadDecimal,
+                KeyMods::empty(),
+                true,
+            ),
+            (Action::PlayPause, Key::Space, KeyMods::CTRL, false),
             (Action::ToggleCamera, Key::Keypad0, KeyMods::empty(), true),
             (Action::ToggleCamera, Key::Keypad0, KeyMods::CTRL, false),
             (Action::GoToStart, Key::LeftArrow, KeyMods::SHIFT, true),

@@ -55,8 +55,9 @@ pub(super) fn draw_editor(
             .mouse_buttons(dear_imgui_rs::InvisibleButtonMouseButtons::MIDDLE),
     );
 
-    let hovered = ui.is_item_hovered();
-    let active = ui.is_item_active();
+    let over_tools = kinematic_ui::canvas::tools_contains(ui, min);
+    let hovered = ui.is_item_hovered() && !over_tools;
+    let active = ui.is_item_active() && !over_tools;
     let mouse = ui.io().mouse_pos();
     let middle = dear_imgui_rs::MouseButton::Middle;
 
@@ -113,12 +114,7 @@ pub(super) fn draw_editor(
         },
     );
 
-    let over_camera = mouse[0] >= min[0] + 8.0
-        && mouse[0] <= min[0] + 24.0 + ui.frame_height() * 3.0
-        && mouse[1] >= min[1] + 8.0
-        && mouse[1] <= min[1] + 8.0 + ui.frame_height();
-
-    if !hovered || over_camera || !ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left) {
+    if !hovered || !ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left) {
         return None;
     }
 
@@ -135,10 +131,10 @@ pub(super) fn draw_editor_3d(
     preview: PreviewImage,
     available: [f32; 2],
     editor: &mut Editor,
-) -> (bool, Option<Vector2>) {
+) -> (bool, bool, Option<Vector2>) {
     editor.request_editor_3d_size([available[0].max(1.0), available[1].max(1.0)]);
-    let (active, clicked) = kinematic_ui::canvas::draw_editor_3d(ui, preview, available);
-    (active, clicked.map(|[x, y]| vec2(x, y)))
+    let (active, hovered, clicked) = kinematic_ui::canvas::draw_editor_3d(ui, preview, available);
+    (active, hovered, clicked.map(|[x, y]| vec2(x, y)))
 }
 
 pub(super) fn wrap_pointer(

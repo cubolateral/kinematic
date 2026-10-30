@@ -1,5 +1,7 @@
 #[path = "audio.rs"]
 mod audio;
+#[path = "navigation_3d.rs"]
+mod navigation_3d;
 
 use crate::{
     core::{
@@ -153,6 +155,9 @@ struct EditorView3D {
     projection: crate::core::components::Camera3D,
     canvas_view: bool,
     axes: [bool; 3],
+    orbit_distance: f32,
+    speed: f32,
+    perspective_fov: f32,
 }
 
 impl Default for EditorView3D {
@@ -165,6 +170,9 @@ impl Default for EditorView3D {
             projection: Default::default(),
             canvas_view: false,
             axes: [true; 3],
+            orbit_distance: glam::vec3(4.0, 3.0, 6.0).length(),
+            speed: 3.0,
+            perspective_fov: 45.0_f32.to_radians(),
         }
     }
 }
@@ -424,10 +432,12 @@ impl Editor {
                 yaw: cache.camera_3d.yaw,
                 pitch: cache.camera_3d.pitch,
                 roll: cache.camera_3d.roll,
+                orbit_distance: cache.camera_3d.orbit_distance,
+                speed: cache.camera_3d.speed,
+                perspective_fov: cache.camera_3d.perspective_fov,
                 projection: cache.camera_3d.projection(),
                 canvas_view: cache.camera_3d.camera_view,
                 axes: cache.camera_3d.axes,
-                ..EditorView3D::default()
             },
             editor_3d_rendered: None,
             pending_editor_3d_size: None,
@@ -1139,6 +1149,9 @@ impl Editor {
                 yaw: self.editor_view_3d.yaw,
                 pitch: self.editor_view_3d.pitch,
                 roll: self.editor_view_3d.roll,
+                orbit_distance: self.editor_view_3d.orbit_distance,
+                speed: self.editor_view_3d.speed,
+                perspective_fov: self.editor_view_3d.perspective_fov,
                 mode: self.editor_view_3d.projection.camera_mode,
                 fov: self.editor_view_3d.projection.camera_fov,
                 near: self.editor_view_3d.projection.camera_near,
@@ -1532,11 +1545,10 @@ impl Editor {
     pub(crate) fn reset_editor_3d_camera_transform(&mut self) {
         let default = EditorView3D::default();
 
-        self.editor_view_3d.position = default.position;
-        self.editor_view_3d.yaw = default.yaw;
-        self.editor_view_3d.pitch = default.pitch;
-        self.editor_view_3d.roll = default.roll;
-        self.editor_view_3d.projection = default.projection;
+        self.editor_view_3d = EditorView3D {
+            axes: self.editor_view_3d.axes,
+            ..default
+        };
         self.editor_3d_rendered = None;
     }
 
@@ -1556,43 +1568,6 @@ impl Editor {
 
     pub(crate) fn editor_3d_axes(&self) -> [bool; 3] {
         self.editor_view_3d.axes
-    }
-
-    pub(crate) fn control_editor_3d(
-        &mut self,
-        look: [f32; 2],
-        movement: [f32; 3],
-        delta: f32,
-        fast: bool,
-    ) {
-        if look == [0.0; 2] && (movement == [0.0; 3] || delta <= 0.0) {
-            return;
-        }
-        if self.editor_view_3d.canvas_view {
-            let camera = self.editor_3d_camera();
-            let (yaw, pitch, roll) = camera.camera_rotation.to_euler(glam::EulerRot::YXZ);
-            self.editor_view_3d.position = camera.camera_position;
-            self.editor_view_3d.yaw = yaw;
-            self.editor_view_3d.pitch = pitch;
-            self.editor_view_3d.roll = roll;
-            self.editor_view_3d.projection = camera;
-            self.editor_view_3d.canvas_view = false;
-        }
-
-        let view = &mut self.editor_view_3d;
-
-        view.yaw -= look[0] * 0.003;
-
-        view.pitch = (view.pitch - look[1] * 0.003).clamp(-1.55, 1.55);
-
-        let rotation = glam::Quat::from_euler(glam::EulerRot::YXZ, view.yaw, view.pitch, view.roll);
-        let speed = if fast { 12.0 } else { 3.0 } * delta.min(0.1);
-
-        view.position += rotation
-            * glam::vec3(movement[0], movement[1], -movement[2]).normalize_or_zero()
-            * speed;
-
-        self.editor_3d_rendered = None;
     }
 
     pub(crate) fn editor_3d_camera(&self) -> crate::core::components::Camera3D {

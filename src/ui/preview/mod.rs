@@ -2,6 +2,7 @@ use crate::ui::inputs::{self, Action as InputAction};
 use kinematic_ui::widgets;
 mod fullscreen;
 mod image;
+mod navigation;
 mod playback;
 mod state;
 
@@ -32,7 +33,8 @@ pub(super) fn draw(
         let plain_keyboard_input = keyboard_enabled
             && !is_exporting
             && !ui.io().want_text_input()
-            && !ui.is_any_item_active();
+            && !ui.is_any_item_active()
+            && !ui.is_popup_open_with_flags("", dear_imgui_rs::PopupQueryFlags::ANY_POPUP);
         let requested =
             shortcut_mode(ui, plain_keyboard_input).or_else(|| state.take_requested_mode());
 
@@ -160,7 +162,7 @@ pub(super) fn draw(
                     editor.reset_editor_3d_view();
                 }
 
-                draw_editor_3d(editor, ui, plain_keyboard_input);
+                draw_editor_3d(editor, ui, plain_keyboard_input, &mut state.orientation);
             }
         });
         kinematic_ui::timeline::ruler::duration_bar(
@@ -175,11 +177,17 @@ pub(super) fn draw(
     toggle_fullscreen
 }
 
-fn draw_editor_3d(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
+fn draw_editor_3d(
+    editor: &mut Editor,
+    ui: &dear_imgui_rs::Ui,
+    keyboard: bool,
+    orientation: &mut kinematic_ui::canvas::orientation::State,
+) {
     let min = ui.cursor_screen_pos();
     let available = ui.content_region_avail();
     let editor_image = image::editor_3d(editor);
-    let (viewport_active, clicked) = image::draw_editor_3d(ui, editor_image, available, editor);
+    let (viewport_active, hovered, clicked) =
+        image::draw_editor_3d(ui, editor_image, available, editor);
 
     if let Some(point) = clicked {
         editor.select_at_editor_3d(point);
@@ -204,63 +212,18 @@ fn draw_editor_3d(editor: &mut Editor, ui: &dear_imgui_rs::Ui, keyboard: bool) {
         }
     }
 
-    let right = dear_imgui_rs::MouseButton::Right;
-    let looking = viewport_active && ui.is_mouse_down(right);
-
-    if looking {
-        let axis = |positive: InputAction, negative: InputAction| {
-            f32::from(inputs::active(ui, positive)) - f32::from(inputs::active(ui, negative))
-        };
-        let mouse_delta = if ui.is_mouse_clicked(right) {
-            [0.0; 2]
-        } else {
-            editor.editor_mouse_delta(ui.io().mouse_delta())
-        };
-
-        editor.control_editor_3d(
-            mouse_delta,
-            [
-                axis(InputAction::MoveRight, InputAction::MoveLeft),
-                axis(InputAction::MoveUp, InputAction::MoveDown),
-                axis(InputAction::MoveForward, InputAction::MoveBackward),
-            ],
-            ui.io().delta_time(),
-            inputs::active(ui, InputAction::CameraFast),
-        );
-
-        image::wrap_pointer(
-            ui,
-            editor,
-            min,
-            [min[0] + available[0], min[1] + available[1]],
-        );
-
-        ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeAll));
-    } else if keyboard {
-        editor.control_editor_3d([0.0; 2], [0.0; 3], 0.0, false);
-    }
-
-    let tools = kinematic_ui::canvas::tools(
+    navigation::control(
+        editor,
         ui,
+        keyboard,
+        viewport_active,
+        hovered,
         min,
         available,
-        editor.editor_3d_camera_view(),
-        editor.margin_visible(),
-        &editor.editor_3d_axes(),
-        camera_shortcuts(),
     );
-    if tools.camera {
-        editor.toggle_editor_3d_camera_view();
-    }
-    if tools.reset {
-        editor.reset_editor_3d_camera_transform();
-    }
-    if tools.margin {
-        editor.toggle_margin();
-    }
-    if let Some(axis) = tools.axis {
-        editor.toggle_editor_3d_axis(axis);
-    }
+
+    navigation::tools(editor, ui, min);
+    navigation::gizmo(editor, ui, min, available, orientation);
 }
 
 fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
@@ -285,11 +248,11 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     let tools = kinematic_ui::canvas::tools(
         ui,
         min,
-        available,
         editor.editor_2d_camera_view(),
         editor.margin_visible(),
         &editor.editor_2d_axes(),
         camera_shortcuts(),
+        &[],
     );
     if tools.camera {
         editor.toggle_editor_2d_camera_view();

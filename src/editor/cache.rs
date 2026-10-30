@@ -118,6 +118,12 @@ impl EditorCache {
             && cache.camera_3d.yaw.is_finite()
             && cache.camera_3d.pitch.is_finite()
             && cache.camera_3d.roll.is_finite()
+            && cache.camera_3d.orbit_distance.is_finite()
+            && cache.camera_3d.orbit_distance > 0.0
+            && (0.01..=10000.0).contains(&cache.camera_3d.speed)
+            && cache.camera_3d.perspective_fov.is_finite()
+            && (0.0..std::f32::consts::PI).contains(&cache.camera_3d.perspective_fov)
+            && cache.camera_3d.perspective_fov > 0.0
             && cache.camera_3d.projection().validate().is_ok()
             && cache.timeline_time.is_finite()
             && cache.timeline_time >= 0.0
@@ -154,6 +160,9 @@ pub(super) struct Camera3DCache {
     pub(super) yaw: f32,
     pub(super) pitch: f32,
     pub(super) roll: f32,
+    pub(super) orbit_distance: f32,
+    pub(super) speed: f32,
+    pub(super) perspective_fov: f32,
     pub(super) mode: crate::core::components::Camera3DMode,
     pub(super) fov: f32,
     pub(super) near: f32,
@@ -171,6 +180,9 @@ impl Default for Camera3DCache {
             yaw: 0.588,
             pitch: -0.395,
             roll: 0.0,
+            orbit_distance: glam::vec3(4.0, 3.0, 6.0).length(),
+            speed: 3.0,
+            perspective_fov: camera.camera_fov,
             mode: camera.camera_mode,
             fov: camera.camera_fov,
             near: camera.camera_near,

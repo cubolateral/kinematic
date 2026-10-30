@@ -63,9 +63,7 @@ pub fn draw(ui: &dear_imgui_rs::Ui, state: State<'_>, volume: &mut i32) -> Optio
         if controls::text_button(ui, icon, [BUTTON_SIZE; 2]) {
             clicked = Some(action);
         }
-        if ui.is_item_hovered() {
-            ui.tooltip_text(format!("{label} [{}]", state.shortcuts[index]));
-        }
+        crate::shortcut::tooltip(ui, label, state.shortcuts[index]);
     }
     ui.same_line();
     volume_button(ui, volume);
@@ -82,9 +80,7 @@ pub fn draw(ui: &dear_imgui_rs::Ui, state: State<'_>, volume: &mut i32) -> Optio
     ) {
         clicked = Some(Action::Loop);
     }
-    if ui.is_item_hovered() {
-        ui.tooltip_text(format!("Toggle loop [{}]", state.shortcuts[5]));
-    }
+    crate::shortcut::tooltip(ui, "Toggle loop", state.shortcuts[5]);
     ui.same_line();
     if controls::text_button(
         ui,
@@ -97,17 +93,15 @@ pub fn draw(ui: &dear_imgui_rs::Ui, state: State<'_>, volume: &mut i32) -> Optio
     ) {
         clicked = Some(Action::Fullscreen);
     }
-    if ui.is_item_hovered() {
-        ui.tooltip_text(format!(
-            "{} [{}]",
-            if state.fullscreen {
-                "Exit fullscreen"
-            } else {
-                "Enter fullscreen"
-            },
-            state.shortcuts[6]
-        ));
-    }
+    crate::shortcut::tooltip(
+        ui,
+        if state.fullscreen {
+            "Exit fullscreen"
+        } else {
+            "Enter fullscreen"
+        },
+        state.shortcuts[6],
+    );
     ui.same_line();
     widgets::text(ui, state.status);
     clicked.filter(|_| state.interactive)
