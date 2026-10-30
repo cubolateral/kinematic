@@ -23,7 +23,7 @@ pub(super) fn update(
     let right_pressed = ui.is_mouse_clicked(right);
 
     if matches!(state.interaction, Interaction::Event | Interaction::Audio) {
-        timeline.is_controlling = false;
+        timeline.is_controlling = state.interaction == Interaction::Event;
 
         return;
     }
