@@ -1,4 +1,4 @@
-use super::{code, inspector, preview, scene_tree, sound, timeline};
+use super::{code, inspector, preview, scene_tree, timeline};
 use dear_imgui_rs::{Condition, DockLayout, DockLayoutApply, DockSplit, StyleVar, WindowFlags};
 
 pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
@@ -20,11 +20,7 @@ pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
                 tabs([code::WINDOW_NAME]),
                 tabs([preview::WINDOW_NAME]),
             ),
-            tabs([
-                scene_tree::WINDOW_NAME,
-                inspector::WINDOW_NAME,
-                sound::WINDOW_NAME,
-            ]),
+            tabs([scene_tree::WINDOW_NAME, inspector::WINDOW_NAME]),
         ),
     );
 

@@ -12,7 +12,6 @@ mod inspector;
 mod preview;
 mod scene_tree;
 mod settings;
-mod sound;
 mod theme;
 mod timeline;
 mod workspace;
@@ -32,7 +31,6 @@ pub(crate) struct Ui {
     audio_volume: i32,
     preview: preview::State,
     inspector: inspector::State,
-    sound: sound::State,
     settings: settings::State,
     timeline: timeline::State,
     scene_tree: scene_tree::State,
@@ -116,7 +114,6 @@ impl Ui {
             audio_volume: cache.audio_volume,
             preview: preview::State::new(crate::editor::EditorMode::default()),
             inspector: inspector::State::default(),
-            sound: sound::State::default(),
             settings: settings::State::default(),
             timeline: timeline::State::default(),
             scene_tree: scene_tree::State::default(),
@@ -201,7 +198,6 @@ impl Ui {
             );
 
             inspector::draw(editor, ui, &mut self.inspector);
-            sound::draw(editor, ui, &mut self.sound);
 
             timeline::draw(
                 editor,

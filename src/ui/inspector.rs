@@ -1,7 +1,9 @@
+mod audio;
+
 use crate::{
     core::{
         TrackChoices, TrackInfo, TrackLimits, TrackTarget, TrackValue,
-        components::{Inspection, Name, TreeNode},
+        components::{Inspection, Name},
         normalized_quaternion,
         objects::{CanvasSettings, ProjectionSource},
     },
@@ -15,6 +17,7 @@ use kinematic_ui::{controls, numbers, properties, windows};
 pub(super) const WINDOW_NAME: &str = "Inspector";
 #[derive(Default)]
 pub(super) struct State {
+    audio: audio::State,
     numeric: numbers::State,
     rotations: HashMap<dear_imgui_rs::Id, RotationEdit>,
 }
@@ -48,8 +51,16 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
     let is_playing = editor.timeline_mut().is_playing();
 
     windows::panel(ui, WINDOW_NAME, || {
+        super::timeline::audio_shortcuts(editor, ui, true);
+        if let Some(clip) = editor.selected_audio() {
+            audio::draw(editor, ui, &mut state.audio, clip);
+
+            return;
+        }
+        state.audio = audio::State::default();
+
         let Some((scene_index, entity)) = selected else {
-            widgets::message(ui, "Select an object from the Scene Tree or Timeline.");
+            widgets::muted(ui, "Nothing to inspect.");
 
             return;
         };
@@ -68,25 +79,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         let name = world
             .get::<&Name>(entity)
             .expect("Inspected object must contain a Name component.");
-        let node = world
-            .get::<&TreeNode>(entity)
-            .expect("Inspected object must contain a Node component.");
-
-        widgets::text(ui, name.get());
-        ui.same_line();
-
-        widgets::muted(
-            ui,
-            if node.is_activated {
-                "Active."
-            } else {
-                "Inactive."
-            },
-        );
-
-        widgets::muted(ui, format!("Entity ID: {}.", entity.to_bits()));
-        widgets::muted(ui, format!("Object type: {}.", inspection.object_name));
-        widgets::separator(ui);
+        header(ui, name.get(), &format!("Type: {}", inspection.object_name));
 
         if let Ok(settings) = world.get::<&CanvasSettings>(entity) {
             properties::read_only(
@@ -106,7 +99,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             );
         }
 
-        widgets::muted(ui, "Temporary edits. Reset when playback resumes.");
         let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing);
 
         for (index, target) in inspection
@@ -151,6 +143,14 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             }
         }
     });
+}
+
+fn header(ui: &dear_imgui_rs::Ui, name: &str, details: &str) {
+    widgets::text(ui, name);
+    ui.same_line();
+    widgets::muted(ui, details);
+    widgets::separator(ui);
+    ui.spacing();
 }
 
 fn edit_value(
