@@ -1184,8 +1184,11 @@ impl Editor {
         self.margin_visible = !self.margin_visible;
     }
 
-    pub(crate) fn margin_size(&self) -> (u32, u32) {
-        self.project.settings.margin
+    pub(crate) fn margin_size(&self) -> [f32; 4] {
+        self.project
+            .settings
+            .margin
+            .pixels(self.project.settings.resolution)
     }
 
     pub(crate) fn context(&self) -> &crate::core::ProjectContext {

@@ -18,7 +18,7 @@ fn load(text: &str) -> LuaScene {
         sources(text),
         (640, 480),
         60,
-        (0, 0),
+        crate::core::Margin::default(),
     )
     .unwrap()
 }
@@ -194,7 +194,7 @@ fn duplicate_ids_and_infinite_loops_are_diagnostics() {
             sources(&SCENE.replace("s:wait(1)", "s:circle {id='ball'}")),
             (640, 480),
             60,
-            (0, 0)
+            crate::core::Margin::default()
         )
         .is_err()
     );
@@ -206,7 +206,7 @@ fn duplicate_ids_and_infinite_loops_are_diagnostics() {
             sources("while true do end"),
             (640, 480),
             60,
-            (0, 0)
+            crate::core::Margin::default()
         )
         .is_err()
     );
@@ -387,7 +387,7 @@ fn try_load(text: &str) -> mlua::Result<LuaScene> {
         sources(text),
         (640, 480),
         60,
-        (0, 0),
+        crate::core::Margin::default(),
     )
 }
 
@@ -896,7 +896,7 @@ return k.object{
         sources.clone(),
         (640, 480),
         60,
-        (0, 0),
+        crate::core::Margin::default(),
     )
     .unwrap();
 
@@ -1322,7 +1322,7 @@ fn sound_validation_and_failed_simulation_leave_no_partial_events() {
                 sources(&format!("return function(s) k.audio_synth{options} end")),
                 (640, 480),
                 60,
-                (0, 0)
+                crate::core::Margin::default()
             )
             .is_err()
         );
@@ -1413,7 +1413,7 @@ end
                 sources(script),
                 (640, 480),
                 60,
-                (0, 0)
+                crate::core::Margin::default()
             )
             .is_err()
         );
@@ -1448,7 +1448,7 @@ end
         Sources::default(),
         (640, 480),
         60,
-        (0, 0),
+        crate::core::Margin::default(),
     )
     .unwrap();
     assert!(

@@ -1,5 +1,5 @@
 use super::{LuaScene, Sources};
-use crate::core::{ProjectContext, ProjectSettings, atomic_write};
+use crate::core::{Margin, ProjectContext, ProjectSettings, atomic_write};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -19,7 +19,7 @@ pub struct Manifest {
     pub(crate) legacy_audio: BTreeMap<PathBuf, Vec<AudioClip>>,
     pub resolution: (u32, u32),
     pub fps: u32,
-    pub margin: (u32, u32),
+    pub margin: Margin,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -90,7 +90,8 @@ struct ManifestData {
     audio: Vec<AudioClip>,
     resolution: (u32, u32),
     fps: u32,
-    margin: (u32, u32),
+    #[serde(default)]
+    margin: Margin,
 }
 
 #[derive(Clone, Serialize)]
@@ -327,7 +328,7 @@ impl LuaProject {
             legacy_audio: BTreeMap::new(),
             resolution: (1280, 720),
             fps: 60,
-            margin: (0, 0),
+            margin: Margin::default(),
         };
 
         manifest.validate(&context)?;
@@ -421,6 +422,19 @@ impl LuaProject {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manifests_default_to_five_percent_and_preserve_legacy_margins() {
+        let legacy = include_str!("../../examples/lua/2d/kinematic/project.ron");
+        let manifest: Manifest = ron::from_str(legacy).unwrap();
+        assert_eq!(manifest.margin.pixels(manifest.resolution), [0.0; 4]);
+        let text = legacy.replace(", margin: (0, 0)", "");
+        let manifest: Manifest = ron::from_str(&text).unwrap();
+        assert_eq!(manifest.margin, Margin::default());
+        let saved = ron::to_string(&manifest).unwrap();
+        let restored: Manifest = ron::from_str(&saved).unwrap();
+        assert_eq!(restored.margin, manifest.margin);
+    }
 
     #[test]
     fn old_audio_clips_default_to_the_first_lane() {

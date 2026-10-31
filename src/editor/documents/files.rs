@@ -278,7 +278,7 @@ mod tests {
                 Sources::default(),
                 (1280, 720),
                 60,
-                (0, 0),
+                crate::core::Margin::default(),
             )
             .unwrap();
 

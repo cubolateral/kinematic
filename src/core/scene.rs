@@ -1,6 +1,6 @@
 use crate::core::scene_file::{SceneFile, ScheduledEvent, TimeEvent};
 use crate::core::{
-    Animator, Scheduling, Task, TrackHandle, TrackValueType, TrackableInfo, Tween,
+    Animator, Margin, Scheduling, Task, TrackHandle, TrackValueType, TrackableInfo, Tween,
     components::{Animation, Draw2D, Inspection, Name, Simulation, TreeNode, View},
     objects::{
         Canvas2D, Canvas2DBuilder, Canvas2DHandler, Canvas3D, Canvas3DBuilder, Canvas3DHandler,
@@ -51,7 +51,7 @@ pub struct Scene {
     plan_revision: std::cell::Cell<u64>,
     runtime: std::cell::RefCell<Option<Runtime>>,
     fps: u32,
-    margin: (u32, u32),
+    margin: Margin,
 }
 
 #[derive(Default)]
@@ -132,7 +132,7 @@ impl Scene {
             plan_revision: std::cell::Cell::new(0),
             runtime: std::cell::RefCell::new(None),
             fps: 60,
-            margin: (0, 0),
+            margin: Margin::default(),
         };
 
         let (world_2d, world_3d) = canvases.unwrap_or_else(|| {
@@ -506,7 +506,7 @@ impl Scene {
     }
 
     #[doc(hidden)]
-    pub fn set_margin(&mut self, margin: (u32, u32)) {
+    pub(crate) fn set_margin(&mut self, margin: Margin) {
         self.margin = margin;
     }
 
@@ -517,13 +517,13 @@ impl Scene {
             .get::<&crate::core::objects::CanvasSettings>(self.world_2d)
             .unwrap()
             .resolution();
-        let (mx, my) = self.margin;
+        let [left, right, top, bottom] = self.margin.pixels((width, height));
 
         Rect::new(
-            -(width as f32) / 2.0 + mx as f32,
-            -(height as f32) / 2.0 + my as f32,
-            (width as f32 - 2.0 * mx as f32).max(0.0),
-            (height as f32 - 2.0 * my as f32).max(0.0),
+            -(width as f32) / 2.0 + left,
+            -(height as f32) / 2.0 + top,
+            (width as f32 - left - right).max(0.0),
+            (height as f32 - top - bottom).max(0.0),
         )
     }
 

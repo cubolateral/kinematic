@@ -39,12 +39,7 @@ impl View {
     }
 }
 
-pub fn draw(
-    ui: &dear_imgui_rs::Ui,
-    preview: Image,
-    available: [f32; 2],
-    margin: Option<(u32, u32)>,
-) {
+pub fn draw(ui: &dear_imgui_rs::Ui, preview: Image, available: [f32; 2], margin: Option<[f32; 4]>) {
     let (_, size, min, max) = placement(ui.cursor_screen_pos(), available, preview.size);
 
     ui.set_cursor_screen_pos(min);
@@ -78,7 +73,7 @@ pub fn draw_navigable(
     ui: &dear_imgui_rs::Ui,
     preview: Image,
     available: [f32; 2],
-    margin: Option<(u32, u32)>,
+    margin: Option<[f32; 4]>,
     view: &mut View,
 ) -> bool {
     let origin = ui.cursor_screen_pos();
@@ -235,14 +230,14 @@ fn draw_margin(
     min: [f32; 2],
     max: [f32; 2],
     source: [f32; 2],
-    margin: (u32, u32),
+    margin: [f32; 4],
 ) {
-    let inset = [
-        (max[0] - min[0]) * margin.0 as f32 / source[0].max(1.0),
-        (max[1] - min[1]) * margin.1 as f32 / source[1].max(1.0),
+    let scale = [
+        (max[0] - min[0]) / source[0].max(1.0),
+        (max[1] - min[1]) / source[1].max(1.0),
     ];
-    let a = [min[0] + inset[0], min[1] + inset[1]];
-    let b = [max[0] - inset[0], max[1] - inset[1]];
+    let a = [min[0] + margin[0] * scale[0], min[1] + margin[2] * scale[1]];
+    let b = [max[0] - margin[1] * scale[0], max[1] - margin[3] * scale[1]];
 
     draw.add_rect(a, b, [0.0, 0.0, 0.0, 0.7])
         .thickness(3.0)
@@ -289,7 +284,7 @@ pub struct Editor2D {
     pub project: Quad,
     pub camera: Option<Quad>,
     pub selection: Option<Quad>,
-    pub margin: Option<(u32, u32)>,
+    pub margin: Option<[f32; 4]>,
 }
 
 pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
@@ -358,15 +353,15 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
 
         for point in &mut points {
             point[0] += if point[0] < 0.0 {
-                margin.0 as f32
+                margin[0]
             } else {
-                -(margin.0 as f32)
+                -margin[1]
             };
 
             point[1] += if point[1] < 0.0 {
-                margin.1 as f32
+                margin[2]
             } else {
-                -(margin.1 as f32)
+                -margin[3]
             };
         }
 
@@ -556,7 +551,7 @@ fn axes(ui: &dear_imgui_rs::Ui, enabled: &[bool]) -> Option<usize> {
     clicked
 }
 
-pub fn margin(ui: &dear_imgui_rs::Ui, bounds: [[f32; 2]; 2], source: [f32; 2], margin: (u32, u32)) {
+pub fn margin(ui: &dear_imgui_rs::Ui, bounds: [[f32; 2]; 2], source: [f32; 2], margin: [f32; 4]) {
     draw_margin(
         ui,
         &ui.get_window_draw_list(),

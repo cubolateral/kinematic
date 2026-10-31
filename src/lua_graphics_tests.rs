@@ -803,7 +803,7 @@ fn ui_audio_clips_save_mix_and_rebuild() {
     let persisted = LuaProject::open(&root).unwrap().manifest.audio;
     let draft = editor.audio_clips().to_vec();
     let mut settings = editor.project_info().1;
-    settings.margin = (1, 1);
+    settings.margin.left = 1.0;
     editor.apply_project_settings(settings);
     settle(&mut app, &mut editor);
     assert_eq!(LuaProject::open(&root).unwrap().manifest.audio, persisted);

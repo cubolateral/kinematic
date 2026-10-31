@@ -650,7 +650,7 @@ mod tests {
             Sources::from([(PathBuf::from("code.lua"), source.to_owned())]),
             (1280, 720),
             60,
-            (0, 0),
+            crate::core::Margin::default(),
         )
     }
 

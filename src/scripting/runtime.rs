@@ -1,8 +1,8 @@
 use super::{Sources, extension, native, value};
 use crate::core::objects::Object;
 use crate::core::{
-    AnimatorHandle, Easing, ProjectContext, Scene, SceneWorld, Task, TrackChoices, TrackTarget,
-    TrackValue,
+    AnimatorHandle, Easing, Margin, ProjectContext, Scene, SceneWorld, Task, TrackChoices,
+    TrackTarget, TrackValue,
     components::{Name, TreeNode},
     objects::{ObjectHandler, attach_child, deactivate_subtree},
 };
@@ -59,7 +59,7 @@ pub struct LuaScene {
     path: PathBuf,
     resolution: (u32, u32),
     fps: u32,
-    margin: (u32, u32),
+    margin: Margin,
     revision: u64,
     pending_write: Option<(PathBuf, Vec<u8>, Option<Vec<u8>>)>,
 }
@@ -92,7 +92,7 @@ impl LuaScene {
         sources: Sources,
         resolution: (u32, u32),
         fps: u32,
-        margin: (u32, u32),
+        margin: Margin,
     ) -> Result<Self> {
         Self::prepare(
             context,
@@ -113,7 +113,7 @@ impl LuaScene {
         sources: Sources,
         resolution: (u32, u32),
         fps: u32,
-        margin: (u32, u32),
+        margin: Margin,
         previous: BTreeMap<String, Definition>,
         allocated: Vec<hecs::Entity>,
         identity: Option<u64>,
@@ -535,7 +535,7 @@ impl LuaScene {
         sources: Sources,
         resolution: (u32, u32),
         fps: u32,
-        margin: (u32, u32),
+        margin: Margin,
     ) -> Result<Self> {
         self.prepare_configured(sources, resolution, fps, margin)
     }
@@ -545,7 +545,7 @@ impl LuaScene {
         sources: Sources,
         resolution: (u32, u32),
         fps: u32,
-        margin: (u32, u32),
+        margin: Margin,
     ) -> Result<Self> {
         let previous = self.runtime.definitions.borrow().clone();
         let allocated = self.scene.world().iter().map(|e| e.entity()).collect();
@@ -1958,7 +1958,7 @@ end
             sources(text),
             (100, 100),
             60,
-            (0, 0),
+            Margin::default(),
         )
         .unwrap()
     }
@@ -2220,7 +2220,7 @@ end
         let mut scene = LuaScene::load(
             ProjectContext::new(&root).unwrap(), "counter.lua",
             sources("return function(s) local a=s:circle{id='ball',radius=4}; s:world_2d():add(a); a:to{radius=8}:play(1,k.ease.linear) end"),
-            (100, 100), 60, (0, 0),
+            (100, 100), 60, Margin::default(),
         ).unwrap();
         scene.update(1.0).unwrap();
         let entity = scene.entity("ball").unwrap();

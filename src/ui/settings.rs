@@ -2,7 +2,10 @@ use kinematic_ui::widgets;
 use std::{fs, path::Path};
 
 use crate::ui::inputs::{self, Category};
-use crate::{core::ProjectSettings, editor::Editor};
+use crate::{
+    core::{Margin, MarginUnit, ProjectSettings},
+    editor::Editor,
+};
 
 use super::{properties::field, theme::Appearance};
 use kinematic_ui::{controls, numbers};
@@ -18,7 +21,7 @@ pub(super) struct State {
     initialized: bool,
     resolution: [i32; 2],
     fps: i32,
-    margin: [i32; 2],
+    margin: Margin,
     numeric: numbers::State,
 }
 
@@ -91,7 +94,7 @@ pub(super) fn draw(
                             [settings.resolution.0 as i32, settings.resolution.1 as i32];
 
                         state.fps = settings.fps as i32;
-                        state.margin = [settings.margin.0 as i32, settings.margin.1 as i32];
+                        state.margin = settings.margin;
                         state.initialized = true;
                     }
 
@@ -109,13 +112,49 @@ pub(super) fn draw(
                             field(ui, "FPS", &mut state.fps, defaults.fps as i32, |value| {
                                 input_int(ui, &mut state.numeric, "##value", value)
                             });
-                        let margin_changed = field(
+                        super::properties::section(ui, "Margin");
+                        let mut margin_changed = field(
                             ui,
-                            "Margin (px)",
-                            &mut state.margin,
-                            [defaults.margin.0 as i32, defaults.margin.1 as i32],
-                            |value| input_int_components(ui, &mut state.numeric, value),
+                            "Unit",
+                            &mut state.margin.unit,
+                            defaults.margin.unit,
+                            |value| {
+                                let mut index = usize::from(*value == MarginUnit::Pixels);
+                                let changed = controls::choice(
+                                    ui,
+                                    "##value",
+                                    &mut index,
+                                    &["Percentage (%)", "Pixels (px)"],
+                                );
+                                if changed {
+                                    *value = if index == 0 {
+                                        MarginUnit::Percentage
+                                    } else {
+                                        MarginUnit::Pixels
+                                    };
+                                }
+                                changed
+                            },
                         );
+                        for (label, value) in [
+                            ("Left", &mut state.margin.left),
+                            ("Right", &mut state.margin.right),
+                            ("Top", &mut state.margin.top),
+                            ("Bottom", &mut state.margin.bottom),
+                        ] {
+                            margin_changed |= field(ui, label, value, 5.0, |value| {
+                                numbers::drag(
+                                    ui,
+                                    &mut state.numeric,
+                                    "##value",
+                                    value,
+                                    0.1,
+                                    &numbers::float_format(*value),
+                                    None,
+                                    None,
+                                )
+                            });
+                        }
 
                         resolution_changed || fps_changed || margin_changed
                     };
@@ -124,10 +163,10 @@ pub(super) fn draw(
                         .iter()
                         .all(|value| *value > 0 && *value <= 8192 && value % 2 == 0);
                     let valid_fps = state.fps > 0 && state.fps <= 1000;
-                    let valid_margin = state.margin[0] >= 0
-                        && state.margin[1] >= 0
-                        && state.margin[0] < state.resolution[0] / 2
-                        && state.margin[1] < state.resolution[1] / 2;
+                    let valid_margin = state.margin.is_valid((
+                        state.resolution[0].max(0) as u32,
+                        state.resolution[1].max(0) as u32,
+                    ));
 
                     if !valid_resolution {
                         widgets::message(
@@ -148,7 +187,7 @@ pub(super) fn draw(
                         let settings = ProjectSettings {
                             resolution: (state.resolution[0] as u32, state.resolution[1] as u32),
                             fps: state.fps as u32,
-                            margin: (state.margin[0] as u32, state.margin[1] as u32),
+                            margin: state.margin,
                         };
 
                         if editor.project_info().1 != settings {
