@@ -2,31 +2,65 @@
 
 use dear_imgui_rs::{StyleColor, Ui};
 
-fn file_icon(directory: bool) -> (&'static str, [f32; 4]) {
-    if directory {
-        (crate::icons::FOLDER, [0.95, 0.72, 0.3, 1.0])
+fn file_icon(ui: &Ui, label: &str, directory: bool) -> (&'static str, [f32; 4]) {
+    let icon = if directory {
+        crate::icons::FOLDER
     } else {
-        (crate::icons::FILE, [0.4, 0.7, 0.95, 1.0])
-    }
+        match label
+            .rsplit('.')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "lua" => crate::icons::SCRIPT,
+            "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tga" | "tif" | "tiff" | "svg"
+            | "ico" | "avif" => crate::icons::IMAGE,
+            "msc" | "wav" | "mp3" | "ogg" | "flac" | "m4a" | "aac" => crate::icons::MUSIC,
+            _ => crate::icons::FILE,
+        }
+    };
+    (
+        icon,
+        ui.style_color(if directory {
+            StyleColor::CheckMark
+        } else {
+            StyleColor::Text
+        }),
+    )
 }
 
 pub fn file_label(ui: &Ui, position: [f32; 2], label: &str, directory: bool) {
-    let (icon, color) = file_icon(directory);
+    let (icon, color) = file_icon(ui, label, directory);
     let x = position[0] + ui.tree_node_to_label_spacing();
     let y = position[1] + ui.clone_style().frame_padding()[1];
     let draw = ui.get_window_draw_list();
     draw.add_text([x, y], color, icon);
     draw.add_text(
-        [x + ui.calc_text_size(icon)[0] + 6.0, y],
+        [
+            x + ui.calc_text_size(icon)[0] + ui.clone_style().item_spacing()[0].max(10.0),
+            y,
+        ],
         ui.get_color_u32(StyleColor::Text),
         label,
     );
 }
 
+pub fn file_branch(ui: &Ui, parent: [f32; 2], previous: [f32; 2], child: [f32; 2]) {
+    let middle = ui.frame_height() * 0.5;
+    let x = parent[0] + ui.tree_node_to_label_spacing() * 0.5;
+    let color = ui.get_color_u32(StyleColor::TreeLines);
+    let draw = ui.get_window_draw_list();
+    draw.add_line([x, previous[1] + middle], [x, child[1] + middle], color)
+        .build();
+    draw.add_line([x, child[1] + middle], [child[0], child[1] + middle], color)
+        .build();
+}
+
 pub fn file_row(ui: &Ui, label: &str, directory: bool, selected: bool) -> bool {
-    let (icon, color) = file_icon(directory);
+    let (icon, color) = file_icon(ui, label, directory);
     ui.text_colored(color, icon);
-    ui.same_line();
+    ui.same_line_with_spacing(0.0, ui.clone_style().item_spacing()[0].max(10.0));
     let position = ui.cursor_screen_pos();
     let clicked = ui
         .selectable_config("##Entry")

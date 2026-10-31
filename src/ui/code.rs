@@ -334,6 +334,7 @@ impl Tab {
             }
         }
 
+        let menu_style = kinematic_ui::menu::Style::capture(ui);
         let _font = ui.push_font_with_size(bold_font, font_size);
         let signature_active = self.signature_position.is_some();
         let before = self.editor.main_cursor_position();
@@ -487,7 +488,9 @@ impl Tab {
             settings.colors.values[PaletteColor::Selection as usize],
         );
 
-        if let Err(error) = self.context_menu(ui, mouse_on_source && !mouse_on_assistance) {
+        if let Err(error) =
+            self.context_menu(ui, mouse_on_source && !mouse_on_assistance, &menu_style)
+        {
             *output_error = Some(error.to_string());
         }
 
@@ -841,8 +844,13 @@ pub(super) struct State {
     diagnostics: diagnostics::Footer,
     pub focused: bool,
     pub error: Option<String>,
+    pub(super) project_error: Option<String>,
 }
 impl State {
+    pub(super) fn files_focused(&self) -> bool {
+        self.files.focused
+    }
+
     pub(super) fn dragged_audio(&self) -> Option<&std::path::Path> {
         self.files.dragged_audio.as_deref()
     }
@@ -853,6 +861,9 @@ impl State {
         documents: Option<&Documents>,
         settings: &Settings,
     ) {
+        if let Some(text) = self.files.copy_path.take() {
+            context.set_clipboard_text(text);
+        }
         if let Some(text) = self.diagnostics.take_copy() {
             context.set_clipboard_text(text);
         }
@@ -1029,10 +1040,6 @@ impl State {
                             self.pending = Some(Pending::Project(ProjectAction::Close));
                         }
                     }
-
-                    if let Some(error) = &self.error {
-                        widgets::message(ui, error);
-                    }
                 });
 
             self.projects_open = open;
@@ -1055,7 +1062,8 @@ impl State {
             let exporting = editor.as_ref().is_some_and(|e| e.is_exporting());
 
             if exporting {
-                self.error = Some("Finish or cancel export before closing the project.".into());
+                self.project_error =
+                    Some("Finish or cancel export before closing the project.".into());
                 self.pending = None;
 
                 return;
@@ -1096,7 +1104,7 @@ impl State {
                             ui.close_current_popup();
                         }
 
-                        Err(error) => self.error = Some(error),
+                        Err(error) => self.project_error = Some(error),
                     }
                 }
 
@@ -1114,10 +1122,6 @@ impl State {
 
                     ui.close_current_popup();
                 }
-
-                if let Some(error) = &self.error {
-                    widgets::message(ui, error);
-                }
             }
 
             if !open {
@@ -1129,7 +1133,9 @@ impl State {
     fn browse(&mut self) {
         match browser::State::new(&self.root) {
             Ok(browser) => self.browser = Some(browser),
-            Err(error) => self.error = Some(format!("Could not browse directories: {error}.")),
+            Err(error) => {
+                self.project_error = Some(format!("Could not browse directories: {error}."))
+            }
         }
     }
 
@@ -1139,9 +1145,9 @@ impl State {
         if let Some(path) = path {
             if let Some(path) = path.to_str() {
                 self.root = path.to_owned();
-                self.error = None;
+                self.project_error = None;
             } else {
-                self.error = Some("Directory path must be valid UTF-8.".into());
+                self.project_error = Some("Directory path must be valid UTF-8.".into());
             }
         }
     }
@@ -1329,7 +1335,11 @@ impl State {
         }
 
         super::windows::panel(ui, FILES_WINDOW, || {
-            self.focus_requested |= self.files.draw(documents, ui, &mut self.error);
+            let mut error = None;
+            self.focus_requested |= self.files.draw(documents, ui, &mut error);
+            if let Some(error) = error {
+                documents.status = format!("Error: {error}");
+            }
         });
 
         if self.focus_requested {

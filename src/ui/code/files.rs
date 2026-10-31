@@ -1,10 +1,10 @@
 use crate::editor::documents::{Documents, FileEntry, SceneTemplate};
 use crate::ui::inputs::{self, Action as InputAction};
 use dear_imgui_rs::{Condition, MouseButton, Ui};
-use kinematic_ui::controls;
 use kinematic_ui::widgets;
+use kinematic_ui::{controls, icons, menu};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 
@@ -12,9 +12,15 @@ use std::{
 enum Action {
     File,
     Folder,
+    Script,
+    Duplicate,
     Scene,
     Rename,
     Delete,
+    Open,
+    CopyPath,
+    CopyAbsolutePath,
+    Terminal,
 }
 
 impl Action {
@@ -22,10 +28,35 @@ impl Action {
         match self {
             Self::File => "Add File",
             Self::Folder => "Add Folder",
+            Self::Script => "Add Script",
             Self::Scene => "Add Scene",
+            Self::Duplicate => "Duplicate",
             Self::Rename => "Rename",
             Self::Delete => "Delete",
+            Self::Open => "Open",
+            Self::CopyPath => "Copy Path",
+            Self::CopyAbsolutePath => "Copy Absolute Path",
+            Self::Terminal => "Open in Terminal",
         }
+    }
+    fn binding(self) -> Option<InputAction> {
+        Some(match self {
+            Self::CopyPath => InputAction::FileCopyPath,
+            Self::CopyAbsolutePath => InputAction::FileCopyAbsolutePath,
+            Self::Rename => InputAction::FileRename,
+            Self::Duplicate => InputAction::FileDuplicate,
+            Self::Delete => InputAction::FileDelete,
+            Self::Terminal => InputAction::FileTerminal,
+            _ => return None,
+        })
+    }
+
+    fn menu(self, ui: &Ui) -> bool {
+        let shortcut = self
+            .binding()
+            .map(|binding| inputs::map().binding(binding).display.as_str())
+            .unwrap_or("");
+        menu::item(ui, self.title(), shortcut)
     }
 }
 
@@ -34,16 +65,26 @@ struct Dialog {
     target: PathBuf,
     name: String,
     template: SceneTemplate,
-    error: Option<String>,
     opening: bool,
+    targets: Vec<PathBuf>,
 }
 
 #[derive(Default)]
 pub(super) struct State {
+    pub(super) focused: bool,
     pub(super) dragged_audio: Option<PathBuf>,
-    selected: Option<PathBuf>,
+    selected: BTreeSet<PathBuf>,
+    anchor: Option<PathBuf>,
+    visible: Vec<PathBuf>,
+    pending_click: Option<PathBuf>,
+    dragged: Vec<PathBuf>,
+    drop_folder: Option<PathBuf>,
     context: Option<(PathBuf, bool)>,
     dialog: Option<Dialog>,
+    expansion: Option<(PathBuf, bool, bool)>,
+    pending_expansion: BTreeMap<PathBuf, bool>,
+    terminal_result: Option<std::sync::mpsc::Receiver<String>>,
+    pub(super) copy_path: Option<String>,
 }
 
 impl State {
@@ -54,14 +95,37 @@ impl State {
         error: &mut Option<String>,
     ) -> bool {
         let mut focus = false;
+        if let Some(receiver) = &self.terminal_result {
+            match receiver.try_recv() {
+                Ok(message) => {
+                    *error = Some(message);
+                    self.terminal_result = None;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.terminal_result = None,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+        }
+        self.focused =
+            ui.is_window_focused_with_flags(dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS);
+        let menu_style = menu::Style::capture(ui);
         let files = match documents.files() {
             Ok(files) => files,
             Err(message) => {
-                widgets::message(ui, &message);
+                *error = Some(message);
 
                 return false;
             }
         };
+        if let Some((target, expanded, recursive)) = self.expansion.take() {
+            self.pending_expansion.insert(target.clone(), expanded);
+            if recursive {
+                for entry in &files {
+                    if entry.directory && entry.path.starts_with(&target) {
+                        self.pending_expansion.insert(entry.path.clone(), expanded);
+                    }
+                }
+            }
+        }
         let mut children = BTreeMap::<&Path, Vec<&FileEntry>>::new();
 
         for entry in &files {
@@ -75,6 +139,10 @@ impl State {
             path: PathBuf::new(),
             directory: true,
         };
+        self.selected.retain(|path| {
+            path.as_os_str().is_empty() || files.iter().any(|entry| entry.path == *path)
+        });
+        let mut visible = Vec::new();
         let mut context_clicked = false;
         let name = documents
             .context
@@ -90,16 +158,36 @@ impl State {
             &root,
             &name,
             &children,
+            &mut visible,
             &mut focus,
             &mut context_clicked,
             error,
         );
 
+        self.visible = visible;
+        if let Some(folder) = self.drop_folder.take() {
+            match documents.move_files(&self.dragged, &folder) {
+                Ok(paths) => {
+                    self.selected = paths.into_iter().collect();
+                    self.anchor = self.selected.first().cloned();
+                    self.pending_expansion.insert(folder, true);
+                    documents.status = "Files moved.".into();
+                }
+                Err(message) => *error = Some(message),
+            }
+        }
+
         if ui.is_window_hovered()
             && !ui.is_any_item_hovered()
             && ui.is_mouse_clicked(MouseButton::Right)
         {
-            self.context = Some((PathBuf::new(), true));
+            if self.selected.len() <= 1 {
+                self.select(Path::new(""), false);
+                self.context = Some((PathBuf::new(), true));
+            }
+            if self.selected.len() > 1 {
+                self.context = Some((self.selected.first().unwrap().clone(), false));
+            }
             context_clicked = true;
         }
 
@@ -109,41 +197,157 @@ impl State {
 
         let mut action = None;
 
+        if self.focused
+            && self.dialog.is_none()
+            && !ui.io().want_text_input()
+            && !ui.is_popup_open("File context")
+        {
+            for kind in [
+                Action::CopyPath,
+                Action::CopyAbsolutePath,
+                Action::Rename,
+                Action::Duplicate,
+                Action::Delete,
+                Action::Terminal,
+            ] {
+                if (self.selected.len() <= 1 || matches!(kind, Action::Delete))
+                    && inputs::active(ui, kind.binding().unwrap())
+                {
+                    let target = self
+                        .selected
+                        .first()
+                        .or(documents.active.as_ref())
+                        .cloned()
+                        .unwrap_or_default();
+                    let directory = target.as_os_str().is_empty()
+                        || files
+                            .iter()
+                            .any(|entry| entry.path == target && entry.directory);
+                    self.context = Some((target, directory));
+                    action = Some(kind);
+                }
+            }
+        }
+        let _menu_style = menu_style.push(ui);
         if let Some(_popup) = ui.begin_popup("File context") {
-            if let Some((target, directory)) = &self.context {
-                if *directory {
-                    for kind in [Action::Folder, Action::File, Action::Scene] {
-                        if controls::menu_item(ui, kind.title()) {
+            if self.selected.len() > 1 {
+                let _disabled =
+                    ui.begin_disabled_with_cond(self.selected.iter().any(|path| protected(path)));
+                if Action::Delete.menu(ui) {
+                    action = Some(Action::Delete);
+                }
+            } else if let Some((target, directory)) = &self.context {
+                if let Some(_menu) = controls::menu(ui, "Create New") {
+                    for (kind, icon, label) in [
+                        (Action::Folder, icons::FOLDER, "Folder"),
+                        (Action::Scene, icons::SCENE, "Scene"),
+                        (Action::Script, icons::SCRIPT, "Script"),
+                        (Action::File, icons::FILE, "File"),
+                    ] {
+                        if menu::item(ui, &format!("{icon}   {label}"), "") {
                             action = Some(kind);
                         }
                     }
-
-                    widgets::separator(ui);
-                } else if controls::menu_item(ui, "Open") {
-                    match documents.open(target) {
-                        Ok(()) => focus = true,
-                        Err(message) => *error = Some(message),
+                }
+                if *directory {
+                    for (label, expanded, recursive) in [
+                        ("Expand Folder", true, false),
+                        ("Expand Hierarchy", true, true),
+                        ("Collapse Hierarchy", false, true),
+                    ] {
+                        if menu::item(ui, label, "") {
+                            self.expansion = Some((target.clone(), expanded, recursive));
+                        }
+                    }
+                } else if Action::Open.menu(ui) {
+                    action = Some(Action::Open);
+                }
+                widgets::separator(ui);
+                for kind in [Action::CopyPath, Action::CopyAbsolutePath] {
+                    if kind.menu(ui) {
+                        action = Some(kind);
                     }
                 }
-
-                if !target.as_os_str().is_empty() {
+                {
                     let _disabled = ui.begin_disabled_with_cond(
-                        Path::new(crate::scripting::MANIFEST).starts_with(target),
+                        target.as_os_str().is_empty()
+                            || Path::new(crate::scripting::MANIFEST).starts_with(target),
                     );
-
-                    if controls::menu_item(ui, "Rename...") {
-                        action = Some(Action::Rename);
+                    for kind in [Action::Rename, Action::Duplicate, Action::Delete] {
+                        if kind.menu(ui) {
+                            action = Some(kind);
+                        }
                     }
-
-                    if controls::menu_item(ui, "Delete...") {
-                        action = Some(Action::Delete);
-                    }
+                }
+                widgets::separator(ui);
+                if Action::Terminal.menu(ui) {
+                    action = Some(Action::Terminal);
                 }
             }
         }
 
         if let Some(action) = action {
-            let target = self.context.as_ref().unwrap().0.clone();
+            let (target, directory) = self.context.as_ref().unwrap();
+            let immediate = match action {
+                Action::Open => {
+                    match documents.open(target) {
+                        Ok(()) => focus = true,
+                        Err(message) => *error = Some(message),
+                    }
+                    true
+                }
+                Action::CopyPath | Action::CopyAbsolutePath => {
+                    self.copy_path = Some(if matches!(action, Action::CopyAbsolutePath) {
+                        documents
+                            .context
+                            .root()
+                            .join(target)
+                            .to_string_lossy()
+                            .into_owned()
+                    } else if target.as_os_str().is_empty() {
+                        ".".into()
+                    } else {
+                        target.to_string_lossy().into_owned()
+                    });
+                    documents.status = "Path copied.".into();
+                    true
+                }
+                Action::Terminal => {
+                    let path = documents.context.root().join(target);
+                    let folder = if *directory {
+                        path.as_path()
+                    } else {
+                        path.parent().unwrap()
+                    };
+                    match open_terminal(folder) {
+                        Ok(result) => {
+                            self.terminal_result = Some(result);
+                            documents.status = "Terminal opened.".into();
+                        }
+                        Err(message) => *error = Some(message),
+                    }
+                    true
+                }
+                _ => false,
+            };
+            if immediate {
+                return focus | self.dialog(documents, ui, error);
+            }
+            if matches!(action, Action::Rename | Action::Duplicate | Action::Delete)
+                && (target.as_os_str().is_empty()
+                    || Path::new(crate::scripting::MANIFEST).starts_with(target))
+            {
+                return focus;
+            }
+            let target = if !directory
+                && matches!(
+                    action,
+                    Action::Folder | Action::Scene | Action::Script | Action::File
+                ) {
+                target.parent().unwrap_or(Path::new("")).to_owned()
+            } else {
+                target.clone()
+            };
             let name = if matches!(action, Action::Rename) {
                 target
                     .file_name()
@@ -154,19 +358,65 @@ impl State {
                 String::new()
             };
 
+            let targets = if matches!(action, Action::Delete) {
+                let targets = if self.selected.is_empty() {
+                    vec![target.clone()]
+                } else {
+                    self.selection_roots()
+                };
+                if targets.iter().any(|path| protected(path)) {
+                    return focus;
+                }
+                targets
+            } else {
+                Vec::new()
+            };
             self.dialog = Some(Dialog {
                 action,
                 target,
                 name,
                 template: SceneTemplate::None,
-                error: None,
                 opening: true,
+                targets,
             });
         }
 
-        focus |= self.dialog(documents, ui);
+        focus |= self.dialog(documents, ui, error);
 
         focus
+    }
+
+    fn select(&mut self, path: &Path, range: bool) {
+        self.pending_click = None;
+        if range {
+            if let Some((start, end)) = self.anchor.as_ref().and_then(|anchor| {
+                Some((
+                    self.visible.iter().position(|entry| entry == anchor)?,
+                    self.visible.iter().position(|entry| entry == path)?,
+                ))
+            }) {
+                self.selected = self.visible[start.min(end)..=start.max(end)]
+                    .iter()
+                    .cloned()
+                    .collect();
+                return;
+            }
+        }
+        self.selected = [path.to_owned()].into();
+        self.anchor = Some(path.to_owned());
+    }
+
+    fn selection_roots(&self) -> Vec<PathBuf> {
+        self.selected
+            .iter()
+            .filter(|path| {
+                !self
+                    .selected
+                    .iter()
+                    .any(|parent| parent != *path && path.starts_with(parent))
+            })
+            .cloned()
+            .collect()
     }
 
     fn row(
@@ -176,56 +426,116 @@ impl State {
         entry: &FileEntry,
         name: &str,
         children: &BTreeMap<&Path, Vec<&FileEntry>>,
+        visible: &mut Vec<PathBuf>,
         focus: &mut bool,
         context_clicked: &mut bool,
         error: &mut Option<String>,
     ) {
         let path = &entry.path;
+        visible.push(path.clone());
         let _id = ui.push_id(path.to_string_lossy().as_ref());
         let position = ui.cursor_screen_pos();
+        let forced = self.pending_expansion.remove(path);
         let node = ui
             .tree_node_config("##Entry")
-            .selected(self.selected.as_ref().or(documents.active.as_ref()) == Some(path))
+            .selected(
+                self.selected.contains(path)
+                    || (self.selected.is_empty() && documents.active.as_ref() == Some(path)),
+            )
             .leaf(!entry.directory)
             .span_avail_width(true)
             .frame_padding(true)
             .open_on_arrow(true)
             .open_on_double_click(true)
-            .opened(path.as_os_str().is_empty(), Condition::Once)
+            .opened(
+                forced.unwrap_or(path.as_os_str().is_empty()),
+                if forced.is_some() {
+                    Condition::Always
+                } else {
+                    Condition::Once
+                },
+            )
             .push();
-        let clicked = ui.is_item_clicked()
-            || (ui.is_item_focused() && inputs::active(ui, InputAction::Confirm));
-
-        if ui.is_item_hovered() && ui.is_mouse_clicked(MouseButton::Right) {
-            self.selected = Some(path.clone());
+        let clicked = ui.is_item_clicked();
+        let confirmed = ui.is_item_focused() && inputs::active(ui, InputAction::Confirm);
+        let hovered = ui.is_item_hovered();
+        let open = confirmed
+            || (hovered && ui.is_mouse_double_clicked(MouseButton::Left) && !ui.io().key_shift());
+        if hovered && ui.is_mouse_clicked(MouseButton::Right) {
+            if !self.selected.contains(path) {
+                self.select(path, false);
+            }
             self.context = Some((path.clone(), entry.directory));
             *context_clicked = true;
         }
-
-        if !entry.directory && crate::ui::timeline::is_audio_file(path) {
-            if let Some(_source) = ui.drag_drop_source_config("KINEMATIC_AUDIO").begin() {
-                self.dragged_audio = Some(path.clone());
-                widgets::text(ui, path.to_string_lossy());
+        if clicked {
+            if ui.io().key_shift() || !self.selected.contains(path) || self.selected.len() <= 1 {
+                self.select(path, ui.io().key_shift());
+            } else {
+                self.pending_click = Some(path.clone());
             }
         }
-
-        kinematic_ui::lists::file_label(ui, position, name, entry.directory);
-
-        if clicked {
-            self.selected = Some(path.clone());
-
-            if !entry.directory && !crate::ui::timeline::is_audio_file(path) {
-                match documents.open(path) {
-                    Ok(()) => *focus = true,
-                    Err(message) => *error = Some(message),
+        if hovered
+            && ui.is_mouse_released(MouseButton::Left)
+            && self.pending_click.as_ref() == Some(path)
+        {
+            self.select(path, false);
+            self.pending_click = None;
+        }
+        if entry.directory {
+            if let Some(target) = ui.drag_drop_target() {
+                for payload in ["KINEMATIC_FILES", "KINEMATIC_AUDIO"] {
+                    if target
+                        .accept_payload_empty(payload, dear_imgui_rs::DragDropTargetFlags::NONE)
+                        .is_some_and(|payload| payload.delivery)
+                    {
+                        self.drop_folder = Some(path.clone());
+                    }
                 }
+            }
+        }
+        if !protected(path) && !self.selected.iter().any(|path| protected(path)) {
+            let audio = self.selected.len() <= 1
+                && !entry.directory
+                && crate::ui::timeline::is_audio_file(path);
+            if let Some(_source) = ui
+                .drag_drop_source_config(if audio {
+                    "KINEMATIC_AUDIO"
+                } else {
+                    "KINEMATIC_FILES"
+                })
+                .begin()
+            {
+                self.pending_click = None;
+                self.dragged = self.selection_roots();
+                if audio {
+                    self.dragged_audio = Some(path.clone());
+                }
+                for path in &self.dragged {
+                    widgets::text(ui, path.to_string_lossy());
+                }
+            }
+        }
+        kinematic_ui::lists::file_label(ui, position, name, entry.directory);
+        if open
+            && !entry.directory
+            && self.selected.len() <= 1
+            && !crate::ui::timeline::is_audio_file(path)
+        {
+            match documents.open(path) {
+                Ok(()) => *focus = true,
+                Err(message) => *error = Some(message),
             }
         }
 
         if let Some(_node) = node {
             if entry.directory {
                 if let Some(entries) = children.get(path.as_path()) {
+                    let mut previous = position;
                     for child in entries {
+                        let child_position = ui.cursor_screen_pos();
+                        kinematic_ui::lists::file_branch(ui, position, previous, child_position);
+                        previous = child_position;
                         let name = child.path.file_name().unwrap_or_default().to_string_lossy();
 
                         self.row(
@@ -234,6 +544,7 @@ impl State {
                             child,
                             &name,
                             children,
+                            visible,
                             focus,
                             context_clicked,
                             error,
@@ -244,7 +555,7 @@ impl State {
         }
     }
 
-    fn dialog(&mut self, documents: &mut Documents, ui: &Ui) -> bool {
+    fn dialog(&mut self, documents: &mut Documents, ui: &Ui, error: &mut Option<String>) -> bool {
         let Some(dialog) = &mut self.dialog else {
             return false;
         };
@@ -265,7 +576,9 @@ impl State {
 
             widgets::message(
                 ui,
-                if dialog.target.as_os_str().is_empty() {
+                if dialog.targets.len() > 1 {
+                    format!("{} selected items.", dialog.targets.len())
+                } else if dialog.target.as_os_str().is_empty() {
                     "Project root".into()
                 } else {
                     dialog.target.to_string_lossy().into_owned()
@@ -286,13 +599,10 @@ impl State {
             } else {
                 widgets::text(ui, "Name");
                 ui.set_next_item_width(width);
-
                 if ui.is_window_appearing() {
                     ui.set_keyboard_focus_here();
                 }
-
                 submit = controls::text_submit(ui, "##Name", &mut dialog.name);
-
                 submit |= inputs::active(ui, InputAction::Confirm);
 
                 if matches!(dialog.action, Action::Scene) {
@@ -321,10 +631,13 @@ impl State {
                     );
                 }
 
-                filename(&dialog.name, matches!(dialog.action, Action::Scene)).err()
+                dialog_name(&dialog.name, dialog.action).err()
             };
 
             dialog.opening = false;
+            if deleting {
+                submit |= inputs::active(ui, InputAction::Confirm);
+            }
 
             if !dialog.name.is_empty() {
                 if let Some(message) = &validation {
@@ -332,15 +645,12 @@ impl State {
                 }
             }
 
-            if let Some(message) = &dialog.error {
-                widgets::error(ui, message);
-            }
-
             widgets::separator(ui);
 
             let label = match dialog.action {
                 Action::Delete => "Delete",
                 Action::Rename => "Rename",
+                Action::Duplicate => "Duplicate",
                 _ => "Create",
             };
 
@@ -361,8 +671,9 @@ impl State {
                     let path = if deleting {
                         dialog.target.clone()
                     } else {
-                        let name = filename(&dialog.name, matches!(dialog.action, Action::Scene))?;
-                        let parent = if matches!(dialog.action, Action::Rename) {
+                        let name = dialog_name(&dialog.name, dialog.action)?;
+                        let parent = if matches!(dialog.action, Action::Rename | Action::Duplicate)
+                        {
                             dialog.target.parent().unwrap_or(Path::new(""))
                         } else {
                             &dialog.target
@@ -373,26 +684,35 @@ impl State {
 
                     match dialog.action {
                         Action::Folder => documents.create(&path, true)?,
-                        Action::File => documents.create(&path, false)?,
+                        Action::File | Action::Script => documents.create(&path, false)?,
+                        Action::Duplicate => documents.duplicate(&dialog.target, &path)?,
                         Action::Scene => documents.create_scene(&path, dialog.template)?,
                         Action::Rename => documents.rename(&dialog.target, &path)?,
-                        Action::Delete => documents.delete(&path)?,
+                        Action::Delete => documents.delete_files(&dialog.targets)?,
+                        _ => unreachable!("Only file dialogs reach submission."),
                     }
 
-                    self.selected = if deleting { None } else { Some(path) };
+                    self.selected = if deleting {
+                        BTreeSet::new()
+                    } else {
+                        [path].into()
+                    };
+                    self.anchor = self.selected.first().cloned();
 
                     Ok::<_, String>(())
                 })();
 
                 match result {
                     Ok(()) => {
-                        focus = matches!(dialog.action, Action::File | Action::Scene);
+                        focus =
+                            matches!(dialog.action, Action::File | Action::Scene | Action::Script);
+                        documents.status = format!("{} completed.", dialog.action.title());
                         finished = true;
 
                         ui.close_current_popup();
                     }
 
-                    Err(message) => dialog.error = Some(message),
+                    Err(message) => *error = Some(message),
                 }
             }
         }
@@ -403,6 +723,105 @@ impl State {
 
         focus
     }
+}
+
+fn protected(path: &Path) -> bool {
+    path.as_os_str().is_empty() || Path::new(crate::scripting::MANIFEST).starts_with(path)
+}
+
+fn dialog_name(name: &str, action: Action) -> Result<String, String> {
+    filename(name, matches!(action, Action::Scene | Action::Script))
+}
+
+fn open_terminal(folder: &Path) -> Result<std::sync::mpsc::Receiver<String>, String> {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    use std::process::Command;
+    #[cfg(target_os = "windows")]
+    let result = Command::new("cmd.exe")
+        .args(["/C", "start", "cmd.exe", "/K"])
+        .current_dir(folder)
+        .spawn();
+    #[cfg(target_os = "macos")]
+    let result = Command::new("open")
+        .args(["-a", "Terminal"])
+        .arg(folder)
+        .spawn();
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let result = [
+        "xdg-terminal-exec",
+        "x-terminal-emulator",
+        "kitty",
+        "alacritty",
+        "ghostty",
+        "foot",
+        "wezterm",
+        "kgx",
+        "ptyxis",
+        "gnome-terminal",
+        "konsole",
+        "xfce4-terminal",
+        "xterm",
+    ]
+    .iter()
+    .find_map(|program| {
+        let mut command = terminal_command(program, folder);
+        command.spawn().ok()
+    })
+    .ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "No supported terminal emulator found in PATH.",
+        )
+    });
+    let child = result.map_err(|error| {
+        format!(
+            "Could not open terminal: {}.",
+            error.to_string().trim_end_matches('.')
+        )
+    })?;
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || match child.wait_with_output() {
+        Ok(output) if !output.status.success() => {
+            let details = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            let _ = sender.send(if details.is_empty() {
+                format!("Terminal exited with {}.", output.status)
+            } else {
+                format!("Could not open terminal: {details}")
+            });
+        }
+        Err(error) => {
+            let _ = sender.send(format!("Could not wait for terminal: {error}."));
+        }
+        _ => {}
+    });
+    Ok(receiver)
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn terminal_command(program: &str, folder: &Path) -> std::process::Command {
+    let mut command = std::process::Command::new(program);
+    command
+        .current_dir(folder)
+        .stderr(std::process::Stdio::piped());
+    match program {
+        "kitty" => {
+            command.arg("--directory").arg(folder);
+        }
+        "alacritty" | "gnome-terminal" | "xfce4-terminal" | "ghostty" => {
+            command.arg("--working-directory").arg(folder);
+        }
+        "konsole" => {
+            command.arg("--workdir").arg(folder);
+        }
+        "wezterm" => {
+            command.args(["start", "--cwd"]).arg(folder);
+        }
+        "foot" | "kgx" | "ptyxis" => {
+            command.arg("--working-directory").arg(folder);
+        }
+        _ => {}
+    }
+    command
 }
 
 fn filename(name: &str, scene: bool) -> Result<String, String> {
@@ -435,6 +854,188 @@ fn filename(name: &str, scene: bool) -> Result<String, String> {
 mod tests {
     use super::*;
     use dear_imgui_rs::Key;
+
+    #[test]
+    fn double_click_shift_selection_drag_and_batch_delete_work_together() {
+        fn frame(
+            context: &mut dear_imgui_rs::Context,
+            font: dear_imgui_rs::FontId,
+            state: &mut State,
+            documents: &mut Documents,
+            error: &mut Option<String>,
+        ) -> BTreeMap<PathBuf, [f32; 2]> {
+            let ui = context.frame();
+            let _font = ui.push_font(font);
+            let mut origin = [0.0; 2];
+            let height = ui.frame_height_with_spacing();
+            ui.window("Files")
+                .position([20.0, 20.0], Condition::Always)
+                .size([340.0, 600.0], Condition::Always)
+                .build(|| {
+                    origin = ui.cursor_screen_pos();
+                    state.draw(documents, ui, error);
+                });
+            let positions = state
+                .visible
+                .iter()
+                .enumerate()
+                .map(|(index, path)| {
+                    (
+                        path.clone(),
+                        [
+                            origin[0] + 160.0,
+                            origin[1] + index as f32 * height + height * 0.4,
+                        ],
+                    )
+                })
+                .collect();
+            drop(_font);
+            context.end_frame();
+            positions
+        }
+        let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
+        let mut context = dear_imgui_rs::Context::create();
+        context.set_ini_filename(None::<&str>).unwrap();
+        let font = crate::ui::theme::initialize(&mut context);
+        context
+            .font_atlas()
+            .try_claim_legacy_renderer()
+            .unwrap()
+            .build();
+        context.io_mut().set_display_size([900.0, 700.0]);
+        context.io_mut().set_delta_time(1.0 / 60.0);
+        let root =
+            std::env::temp_dir().join(format!("kinematic-files-drag-{}", std::process::id()));
+        let project = crate::scripting::LuaProject::create(&root, "Drag", false).unwrap();
+        std::fs::write(root.join("a.txt"), "A").unwrap();
+        std::fs::write(root.join("b.txt"), "B").unwrap();
+        std::fs::create_dir(root.join("destination")).unwrap();
+        let mut documents = Documents::new(project.context, "").unwrap();
+        documents.lsp = None;
+        let mut state = State::default();
+        let mut error = None;
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        let positions = frame(&mut context, font, &mut state, &mut documents, &mut error);
+        let a = Path::new("a.txt");
+        let b = Path::new("b.txt");
+        context.io_mut().add_mouse_pos_event(positions[a]);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        for down in [true, false] {
+            context
+                .io_mut()
+                .add_mouse_button_event(MouseButton::Left, down);
+            frame(&mut context, font, &mut state, &mut documents, &mut error);
+        }
+        assert!(
+            documents.active.is_none(),
+            "A single click must only select."
+        );
+        assert_eq!(state.selected, [a.to_owned()].into());
+        for down in [true, false] {
+            context
+                .io_mut()
+                .add_mouse_button_event(MouseButton::Left, down);
+            frame(&mut context, font, &mut state, &mut documents, &mut error);
+        }
+        assert_eq!(documents.active.as_deref(), Some(a));
+        context.io_mut().add_key_event(Key::ModShift, true);
+        context.io_mut().add_mouse_pos_event(positions[b]);
+        for down in [true, false] {
+            context
+                .io_mut()
+                .add_mouse_button_event(MouseButton::Left, down);
+            frame(&mut context, font, &mut state, &mut documents, &mut error);
+        }
+        context.io_mut().add_key_event(Key::ModShift, false);
+        assert_eq!(state.selected, [a.to_owned(), b.to_owned()].into());
+        context.io_mut().add_mouse_pos_event(positions[a]);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        context
+            .io_mut()
+            .add_mouse_button_event(MouseButton::Left, true);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        context
+            .io_mut()
+            .add_mouse_pos_event([positions[a][0] + 16.0, positions[a][1]]);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        assert_eq!(
+            state.dragged,
+            vec![a.to_owned(), b.to_owned()],
+            "Selected: {:?}, pending: {:?}, shift: {}",
+            state.selected,
+            state.pending_click,
+            context.io().key_shift()
+        );
+        context
+            .io_mut()
+            .add_mouse_pos_event(positions[Path::new("destination")]);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        context
+            .io_mut()
+            .add_mouse_button_event(MouseButton::Left, false);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        assert!(error.is_none(), "{error:?}");
+        assert!(root.join("destination/a.txt").exists());
+        assert!(root.join("destination/b.txt").exists());
+        assert_eq!(
+            documents.active.as_deref(),
+            Some(Path::new("destination/a.txt"))
+        );
+        context.io_mut().add_key_event(Key::Delete, true);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        assert_eq!(state.dialog.as_ref().unwrap().targets.len(), 2);
+        context.io_mut().add_key_event(Key::Delete, false);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        context.io_mut().add_key_event(Key::Enter, true);
+        frame(&mut context, font, &mut state, &mut documents, &mut error);
+        assert!(error.is_none(), "{error:?}");
+        assert!(!root.join("destination/a.txt").exists());
+        assert!(!root.join("destination/b.txt").exists());
+        drop(documents);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[test]
+    fn terminal_launch_preserves_folder_arguments_and_working_directory() {
+        let folder =
+            std::env::temp_dir().join(format!("kinematic terminal {}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let kitty = terminal_command("kitty", &folder);
+        assert_eq!(
+            kitty.get_args().collect::<Vec<_>>(),
+            vec![std::ffi::OsStr::new("--directory"), folder.as_os_str()]
+        );
+        let output = terminal_command("sh", &folder)
+            .args(["-c", "pwd"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(
+            Path::new(String::from_utf8(output.stdout).unwrap().trim()),
+            folder
+        );
+        std::fs::remove_dir(folder).unwrap();
+    }
+
+    #[test]
+    fn generic_files_keep_their_extensions_and_reject_paths() {
+        assert_eq!(dialog_name("notes.txt", Action::File).unwrap(), "notes.txt");
+        assert_eq!(dialog_name("module", Action::Script).unwrap(), "module.lua");
+        assert_eq!(
+            dialog_name("module.lua", Action::Script).unwrap(),
+            "module.lua"
+        );
+        assert!(dialog_name("module.txt", Action::Script).is_err());
+        assert_eq!(
+            dialog_name("module.lua", Action::File).unwrap(),
+            "module.lua"
+        );
+        assert!(dialog_name("../outside", Action::File).is_err());
+        assert!(dialog_name("/outside", Action::File).is_err());
+    }
 
     #[test]
     fn filenames_keep_literal_labels_and_reject_paths_and_wrong_scene_extensions() {
@@ -545,6 +1146,37 @@ mod tests {
             context.end_frame();
         }
 
+        state.select(Path::new("scenes/intro.lua"), false);
+        for down in [true, false] {
+            for key in [Key::ModCtrl, Key::ModShift, Key::C] {
+                context.io_mut().add_key_event(key, down);
+            }
+            let ui = context.frame();
+            let _font = ui.push_font(font);
+            ui.window("Files").build(|| {
+                ui.set_window_focus(Some("Files"));
+                state.draw(&mut documents, ui, &mut error);
+            });
+            drop(_font);
+            context.end_frame();
+        }
+        assert_eq!(state.copy_path.as_deref(), Some("scenes/intro.lua"));
+        assert_eq!(documents.status, "Path copied.");
+
+        let (sender, receiver) = std::sync::mpsc::channel();
+        sender.send("Terminal failed.".into()).unwrap();
+        state.terminal_result = Some(receiver);
+        {
+            let ui = context.frame();
+            let _font = ui.push_font(font);
+            ui.window("Files").build(|| {
+                state.draw(&mut documents, ui, &mut error);
+            });
+            drop(_font);
+            context.end_frame();
+        }
+        assert_eq!(error.take().as_deref(), Some("Terminal failed."));
+
         for (action, target, name, title, expected_path) in [
             (
                 Action::Scene,
@@ -566,8 +1198,8 @@ mod tests {
                 target: target.into(),
                 name: name.into(),
                 template: SceneTemplate::ThreeD,
-                error: None,
                 opening: true,
+                targets: Vec::new(),
             });
 
             let mut visible_frames = 0;

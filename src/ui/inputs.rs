@@ -10,6 +10,12 @@ pub(super) enum Category {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Action {
+    FileCopyPath,
+    FileCopyAbsolutePath,
+    FileRename,
+    FileDuplicate,
+    FileDelete,
+    FileTerminal,
     ToggleFullscreen,
     ToggleMargin,
     Preview,
@@ -790,6 +796,49 @@ impl Default for InputMap {
             );
         }
 
+        for (action, name, display, key, modifiers) in [
+            (
+                FileCopyPath,
+                "Copy file path",
+                "Ctrl + Shift + C",
+                Key::C,
+                KeyMods::CTRL | KeyMods::SHIFT,
+            ),
+            (
+                FileCopyAbsolutePath,
+                "Copy absolute file path",
+                "Ctrl + Alt + C",
+                Key::C,
+                KeyMods::CTRL | KeyMods::ALT,
+            ),
+            (FileRename, "Rename file", "F2", Key::F2, KeyMods::empty()),
+            (
+                FileDuplicate,
+                "Duplicate file",
+                "Ctrl + D",
+                Key::D,
+                KeyMods::CTRL,
+            ),
+            (
+                FileDelete,
+                "Delete file",
+                "Delete",
+                Key::Delete,
+                KeyMods::empty(),
+            ),
+            (
+                FileTerminal,
+                "Open file folder in terminal",
+                "Ctrl + Alt + T",
+                Key::T,
+                KeyMods::CTRL | KeyMods::ALT,
+            ),
+        ] {
+            map.bindings.push(
+                Binding::new(action, Editor, name, display, &[key]).modifiers(modifiers, modifiers),
+            );
+        }
+
         for binding in &mut map.bindings {
             if matches!(binding.action, InsertAbove | InsertBelow | SoftNewline) {
                 binding.keys.push(Key::KeypadEnter);
@@ -1040,6 +1089,28 @@ mod tests {
         let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
 
         for (action, key, modifiers, expected) in [
+            (Action::FileRename, Key::F2, KeyMods::empty(), true),
+            (Action::FileDuplicate, Key::D, KeyMods::CTRL, true),
+            (Action::FileDelete, Key::Delete, KeyMods::empty(), true),
+            (
+                Action::FileCopyPath,
+                Key::C,
+                KeyMods::CTRL | KeyMods::SHIFT,
+                true,
+            ),
+            (
+                Action::FileCopyAbsolutePath,
+                Key::C,
+                KeyMods::CTRL | KeyMods::ALT,
+                true,
+            ),
+            (
+                Action::FileTerminal,
+                Key::T,
+                KeyMods::CTRL | KeyMods::ALT,
+                true,
+            ),
+            (Action::FileCopyPath, Key::C, KeyMods::CTRL, false),
             (Action::Preview, Key::F1, KeyMods::empty(), true),
             (Action::Edit2d, Key::F2, KeyMods::empty(), true),
             (Action::Edit3d, Key::F3, KeyMods::empty(), true),
@@ -1098,6 +1169,7 @@ mod tests {
             for (modifier, key) in [
                 (KeyMods::CTRL, Key::ModCtrl),
                 (KeyMods::SHIFT, Key::ModShift),
+                (KeyMods::ALT, Key::ModAlt),
             ] {
                 context
                     .io_mut()

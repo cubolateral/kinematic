@@ -23,3 +23,9 @@ pub const FILE: &str = "\u{f15b}";
 pub const REPOSITORY: &str = "\u{f401}";
 
 pub const VOLUME_HIGH: &str = "\u{f028}";
+
+pub const SCRIPT: &str = "\u{e620}";
+pub const SCENE: &str = "\u{f008}";
+pub const MUSIC: &str = "\u{f001}";
+
+pub const IMAGE: &str = "\u{f03e}";

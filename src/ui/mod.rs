@@ -24,6 +24,7 @@ static IMGUI_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub(crate) struct Ui {
     needs_initial_layout: bool,
+    status: Option<String>,
     code: code::State,
     font: dear_imgui_rs::FontId,
     appearance: theme::Appearance,
@@ -107,6 +108,7 @@ impl Ui {
 
         Self {
             needs_initial_layout: true,
+            status: None,
             code,
             font,
             appearance: settings::load(),
@@ -135,14 +137,21 @@ impl Ui {
     pub fn draw(&mut self, editor: &mut Editor, ui: &mut dear_imgui_rs::Ui) {
         let _theme = self.appearance.push(ui);
         let _font = ui.push_font(self.font);
+        if let Some(documents) = &mut editor.documents {
+            if let Some(message) = self.status.take() {
+                documents.status = message;
+            }
+        }
         let io = ui.io();
         if !editor.is_exporting() && inputs::active(ui, InputAction::SaveProject) {
             if let Err(error) = editor.save_project() {
-                self.code.error = Some(error);
+                self.status = Some(format!("Error: {error}"));
             }
         }
-        let plain_keyboard_input =
-            !self.code.focused && !io.want_text_input() && !ui.is_any_item_active();
+        let plain_keyboard_input = !self.code.focused
+            && !self.code.files_focused()
+            && !io.want_text_input()
+            && !ui.is_any_item_active();
         let fullscreen_shortcut = plain_keyboard_input
             && (self.is_fullscreen || !editor.is_exporting())
             && inputs::active(ui, InputAction::ToggleFullscreen);
@@ -193,7 +202,7 @@ impl Ui {
                 editor,
                 ui,
                 &mut self.preview,
-                !self.code.focused,
+                !self.code.focused && !self.code.files_focused(),
                 &mut self.audio_volume,
             );
 
@@ -203,7 +212,7 @@ impl Ui {
                 editor,
                 ui,
                 &mut self.timeline,
-                !self.code.focused,
+                !self.code.focused && !self.code.files_focused(),
                 self.code.dragged_audio(),
             );
             fullscreen_button
@@ -218,7 +227,7 @@ impl Ui {
             env!("CARGO_PKG_VERSION"),
         ) {
             if let Err(error) = sdl3::url::open_url("https://github.com/cubolateral/kinematic") {
-                self.code.error = Some(format!("Could not open the repository: {error}."));
+                self.status = Some(format!("Could not open the repository: {error}."));
             }
         }
 
@@ -257,7 +266,18 @@ impl Ui {
             settings::save(&self.appearance);
         }
 
+        let has_editor = editor.is_some();
         self.code.projects(editor, ui);
+        if let Some(message) = self.code.project_error.take() {
+            self.status = Some(format!("Error: {message}"));
+        }
+        if !has_editor {
+            kinematic_ui::status_bar::draw(
+                ui,
+                self.status.as_deref().unwrap_or("Ready."),
+                env!("CARGO_PKG_VERSION"),
+            );
+        }
     }
 
     pub(crate) fn request_exit(&mut self) {
@@ -269,7 +289,7 @@ impl Ui {
     }
 
     pub(crate) fn project_error(&mut self, error: String) {
-        self.code.error = Some(error);
+        self.status = Some(format!("Error: {error}"));
     }
 
     pub(crate) fn reload_appearance(&mut self) {

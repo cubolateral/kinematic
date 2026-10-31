@@ -1,66 +1,59 @@
 use super::{Position, Tab, shortcuts};
 use dear_imgui_cte::{CteResult, TextChange, TextChangeKind};
 use dear_imgui_rs::{MouseButton, Ui};
-use kinematic_ui::shortcut;
+use kinematic_ui::menu;
 use std::collections::BTreeSet;
 
 impl Tab {
-    pub(super) fn context_menu(&mut self, ui: &Ui, hovered: bool) -> CteResult<()> {
+    pub(super) fn context_menu(
+        &mut self,
+        ui: &Ui,
+        hovered: bool,
+        style: &menu::Style,
+    ) -> CteResult<()> {
         if hovered && ui.is_mouse_clicked(MouseButton::Right) {
             self.completions.clear();
             self.documentation_popup = None;
             ui.open_popup("Editor context menu");
         }
+        let _style = style.push(ui);
         let Some(_popup) = ui.begin_popup("Editor context menu") else {
             return Ok(());
         };
 
-        if shortcut::menu_item_enabled_selected(ui, "Undo", "Ctrl+Z", false, self.editor.can_undo())
-        {
+        if menu::item_enabled_selected(ui, "Undo", "Ctrl+Z", false, self.editor.can_undo()) {
             self.editor.undo();
         }
-        if shortcut::menu_item_enabled_selected(
-            ui,
-            "Redo",
-            "Ctrl+Shift+Z",
-            false,
-            self.editor.can_redo(),
-        ) {
+        if menu::item_enabled_selected(ui, "Redo", "Ctrl+Shift+Z", false, self.editor.can_redo()) {
             self.editor.redo();
         }
         ui.separator();
-        if shortcut::menu_item(ui, "Cut", "Ctrl+X") {
+        if menu::item(ui, "Cut", "Ctrl+X") {
             shortcuts::cut(&mut self.editor)?;
         }
-        if shortcut::menu_item(ui, "Copy", "Ctrl+C") {
+        if menu::item(ui, "Copy", "Ctrl+C") {
             self.editor.copy();
         }
-        if shortcut::menu_item(ui, "Paste", "Ctrl+V") {
+        if menu::item(ui, "Paste", "Ctrl+V") {
             self.editor.paste();
         }
         ui.separator();
-        if shortcut::menu_item(ui, "Select All", "Ctrl+A") {
+        if menu::item(ui, "Select All", "Ctrl+A") {
             self.editor.select_all();
         }
         ui.separator();
-        if shortcut::menu_item(ui, "Indent", "Tab") {
+        if menu::item(ui, "Indent", "Tab") {
             self.editor.indent_lines();
         }
-        if shortcut::menu_item(ui, "Unindent", "Shift+Tab") {
+        if menu::item(ui, "Unindent", "Shift+Tab") {
             self.editor.deindent_lines();
         }
-        if shortcut::menu_item(ui, "Toggle Comment", "Ctrl+/") {
+        if menu::item(ui, "Toggle Comment", "Ctrl+/") {
             self.editor.toggle_comments();
         }
         let line = self.editor.main_cursor_position().line;
         let bookmarked = self.assistance.borrow().bookmarks.contains(&line);
-        if shortcut::menu_item_enabled_selected(
-            ui,
-            "Toggle Bookmark",
-            "Ctrl+Alt+B",
-            bookmarked,
-            true,
-        ) {
+        if menu::item_enabled_selected(ui, "Toggle Bookmark", "Ctrl+Alt+B", bookmarked, true) {
             self.toggle_bookmark();
         }
         Ok(())
@@ -188,7 +181,8 @@ mod tests {
                 .position([0.0, 0.0], dear_imgui_rs::Condition::Always)
                 .size([780.0, 580.0], dear_imgui_rs::Condition::Always)
                 .build(|| {
-                    tab.context_menu(ui, true).unwrap();
+                    tab.context_menu(ui, true, &menu::Style::capture(ui))
+                        .unwrap();
                     if let Some(_popup) = ui.begin_popup("Editor context menu") {
                         popup_position = Some(ui.window_pos());
                     }
