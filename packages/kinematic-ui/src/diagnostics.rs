@@ -1,5 +1,8 @@
 use crate::{controls, icons, widgets};
-use dear_imgui_rs::{StyleColor, Ui, WindowFlags};
+use dear_imgui_rs::{
+    InputTextCallback, InputTextCallbackHandler, StyleColor, StyleVar, TextCallbackData, Ui,
+    WindowFlags,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Severity {
@@ -26,8 +29,14 @@ pub struct Message<'a> {
 #[derive(Default)]
 pub struct Footer {
     expanded: Option<Severity>,
+    selection: TextSelection,
+    copy: Option<String>,
 }
 impl Footer {
+    pub fn take_copy(&mut self) -> Option<String> {
+        self.copy.take()
+    }
+
     fn toggle(&mut self, severity: Severity) {
         self.expanded = (self.expanded != Some(severity)).then_some(severity);
     }
@@ -93,7 +102,15 @@ impl Footer {
             .flags(WindowFlags::NO_SCROLLBAR | WindowFlags::NO_SCROLL_WITH_MOUSE)
             .build(ui, || {
                 if let Some(message) = Self::default().visible(messages).last() {
-                    if draw_message(ui, message, [left_width, row_height], true) {
+                    if draw_message(
+                        ui,
+                        message,
+                        [left_width, row_height],
+                        true,
+                        &mut self.selection,
+                        messages,
+                        &mut self.copy,
+                    ) {
                         clicked = Some(message.id);
                     }
                 } else {
@@ -136,11 +153,20 @@ impl Footer {
             ui.child_window("Diagnostic list")
                 .size([0.0, (height - ui.frame_height_with_spacing()).max(1.0)])
                 .build(ui, || {
-                    for (index, message) in self.visible(messages).iter().enumerate() {
+                    let visible = self.visible(messages);
+                    for (index, message) in visible.iter().enumerate() {
                         let _id = ui.push_id(index as i32);
                         let size = [ui.content_region_avail()[0].max(1.0), ui.text_line_height()];
 
-                        if draw_message(ui, message, size, false) {
+                        if draw_message(
+                            ui,
+                            message,
+                            size,
+                            false,
+                            &mut self.selection,
+                            messages,
+                            &mut self.copy,
+                        ) {
                             clicked = Some(message.id);
                         }
                     }
@@ -184,43 +210,91 @@ fn message_parts<'a>(message: &Message<'a>, summary: bool) -> (String, &'a str) 
     };
     (prefix, message.text)
 }
-fn draw_message(ui: &Ui, message: &Message<'_>, size: [f32; 2], summary: bool) -> bool {
-    let clicked = ui.invisible_button("Diagnostic", size);
-    let (min, max) = ui.item_rect();
-    let draw = ui.get_window_draw_list();
-    let _clip = draw.push_clip_rect(min, max, true);
+#[derive(Default)]
+struct TextSelection {
+    source: String,
+    text: String,
+}
 
-    if ui.is_item_hovered() {
-        draw.add_rect(min, max, ui.get_color_u32(StyleColor::HeaderHovered))
-            .filled(true)
-            .build();
+impl InputTextCallbackHandler for &mut TextSelection {
+    fn on_always(&mut self, data: TextCallbackData<'_>) {
+        let start = data.selection_start().min(data.selection_end());
+        let end = data.selection_start().max(data.selection_end());
+        self.source = data.str().to_owned();
+        self.text = data.str()[start..end].to_owned();
     }
+}
 
+fn draw_message(
+    ui: &Ui,
+    message: &Message<'_>,
+    size: [f32; 2],
+    summary: bool,
+    selection: &mut TextSelection,
+    messages: &[Message<'_>],
+    copy: &mut Option<String>,
+) -> bool {
     let (prefix, text) = message_parts(message, summary);
-    let color = {
+    let origin = ui.cursor_screen_pos();
+    let prefix_width = ui.calc_text_size(&prefix)[0].min((size[0] - 1.0).max(0.0));
+    let clicked = {
         let _color = ui.push_style_color(StyleColor::Text, message.severity.color());
-
-        ui.get_color_u32(StyleColor::Text)
+        let _hover_color = ui.push_style_color(StyleColor::TextLink, message.severity.color());
+        let clicked = controls::text_button(ui, &prefix, [prefix_width, size[1]]);
+        if ui.is_item_hovered() {
+            let y = origin[1] + (size[1] + ui.text_line_height()) * 0.5;
+            ui.get_window_draw_list()
+                .add_line(
+                    [origin[0], y],
+                    [origin[0] + prefix_width, y],
+                    ui.get_color_u32(StyleColor::Text),
+                )
+                .build();
+        }
+        clicked
     };
-    let top = min[1] + (size[1] - ui.text_line_height()) * 0.5;
-    let prefix_width = ui.calc_text_size(&prefix)[0];
-
-    draw.add_text([min[0], top], color, &prefix);
-
-    if !summary {
-        draw.add_line(
-            [min[0], top + ui.text_line_height() - 1.0],
-            [min[0] + prefix_width, top + ui.text_line_height() - 1.0],
-            color,
-        )
+    ui.set_cursor_screen_pos([origin[0] + prefix_width, origin[1]]);
+    let _padding = ui.push_style_var(StyleVar::FramePadding([
+        0.0,
+        ((size[1] - ui.text_line_height()) * 0.5).max(0.0),
+    ]));
+    let _border = ui.push_style_var(StyleVar::FrameBorderSize(0.0));
+    let _background = ui.push_style_color(StyleColor::FrameBg, [0.0; 4]);
+    let _width = ui.push_item_width((size[0] - prefix_width).max(1.0));
+    let mut value = text.to_owned();
+    let _id = ui.push_id(text);
+    ui.input_text("##Diagnostic", &mut value)
+        .read_only(true)
+        .callback_flags(InputTextCallback::ALWAYS)
+        .callback(&mut *selection)
         .build();
-    }
 
-    draw.add_text(
-        [min[0] + prefix_width, top],
-        ui.get_color_u32(StyleColor::Text),
-        text.lines().next().unwrap_or(text),
-    );
+    if ui.is_window_hovered()
+        && ui.is_mouse_hovering_rect(origin, [origin[0] + size[0], origin[1] + size[1]])
+        && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Right)
+    {
+        ui.open_popup("Diagnostic actions");
+    }
+    if let Some(_popup) = ui.begin_popup("Diagnostic actions") {
+        if controls::menu_item(ui, "Copy") {
+            *copy = Some(if selection.source == text && !selection.text.is_empty() {
+                selection.text.clone()
+            } else {
+                format!("{prefix}{text}")
+            });
+        }
+        if controls::menu_item(ui, "Copy All") {
+            let all = messages
+                .iter()
+                .map(|message| {
+                    let (prefix, text) = message_parts(message, true);
+                    format!("{prefix}{text}")
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            *copy = Some(all);
+        }
+    }
 
     clicked
 }
@@ -239,6 +313,73 @@ mod tests {
             },
             text,
             location: None,
+        }
+    }
+
+    #[test]
+    fn error_and_warning_text_can_be_selected() {
+        use dear_imgui_rs::{Condition, Key, MouseButton, WindowFlags};
+        let _lock = crate::TEST_LOCK.lock().unwrap();
+        let mut context = dear_imgui_rs::Context::create();
+        context.set_ini_filename(None::<&str>).unwrap();
+        context
+            .font_atlas()
+            .try_claim_legacy_renderer()
+            .unwrap()
+            .build();
+        context.io_mut().set_display_size([640.0, 480.0]);
+        context.io_mut().set_delta_time(1.0 / 60.0);
+        let mut selection = super::TextSelection::default();
+        let mut copy = None;
+        let frame = |context: &mut dear_imgui_rs::Context,
+                     selection: &mut super::TextSelection,
+                     copy: &mut Option<String>,
+                     severity| {
+            let ui = context.frame();
+            let message = Message {
+                severity,
+                ..message(0, "Mensagem com acentuação.")
+            };
+            let mut position = [0.0; 2];
+            ui.window("Selection test")
+                .position([0.0, 0.0], Condition::Always)
+                .size([600.0, 100.0], Condition::Always)
+                .flags(WindowFlags::NO_DECORATION)
+                .build(|| {
+                    super::draw_message(
+                        ui,
+                        &message,
+                        [560.0, ui.frame_height()],
+                        true,
+                        selection,
+                        &[message],
+                        copy,
+                    );
+                    let (min, max) = ui.item_rect();
+                    position = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+                });
+            context.end_frame();
+            position
+        };
+        for severity in [Severity::Error, Severity::Warning] {
+            let position = frame(&mut context, &mut selection, &mut copy, severity);
+            context.io_mut().add_mouse_pos_event(position);
+            frame(&mut context, &mut selection, &mut copy, severity);
+            context
+                .io_mut()
+                .add_mouse_button_event(MouseButton::Left, true);
+            frame(&mut context, &mut selection, &mut copy, severity);
+            context
+                .io_mut()
+                .add_mouse_button_event(MouseButton::Left, false);
+            frame(&mut context, &mut selection, &mut copy, severity);
+            context.io_mut().add_key_event(Key::ModCtrl, true);
+            context.io_mut().add_key_event(Key::A, true);
+            frame(&mut context, &mut selection, &mut copy, severity);
+            assert_eq!(selection.text, "Mensagem com acentuação.");
+            context.io_mut().add_key_event(Key::A, false);
+            context.io_mut().add_key_event(Key::ModCtrl, false);
+            frame(&mut context, &mut selection, &mut copy, severity);
         }
     }
 

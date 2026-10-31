@@ -69,6 +69,7 @@ impl Tab {
             Fold,
             Unfold,
             Replace,
+            ToggleBookmark,
         ] {
             if text_input && !matches!(action, FindNext | FindPrevious) {
                 continue;
@@ -82,6 +83,7 @@ impl Tab {
 
             match action {
                 Cut => cut(&mut self.editor)?,
+                ToggleBookmark => self.toggle_bookmark(),
                 SelectLine => {
                     let selection = self.editor.main_cursor_selection();
                     let line =
@@ -189,7 +191,7 @@ impl Tab {
     }
 }
 
-fn cut(editor: &mut TextEditor) -> CteResult<()> {
+pub(super) fn cut(editor: &mut TextEditor) -> CteResult<()> {
     if editor.any_cursor_has_selection() {
         editor.cut();
 

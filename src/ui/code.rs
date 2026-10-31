@@ -8,10 +8,16 @@ use kinematic_ui::code::{TextActions, documentation, popup, text};
 use kinematic_ui::controls;
 use kinematic_ui::widgets;
 use serde::{Deserialize, Serialize};
-use std::{cell::RefCell, collections::BTreeMap, path::PathBuf, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+    rc::Rc,
+};
 
 pub(super) mod colors;
 mod completion;
+mod context_menu;
 mod diagnostics;
 mod files;
 mod shortcuts;
@@ -81,6 +87,7 @@ struct Assistance {
     hover: Option<Position>,
     hover_position: Option<Position>,
     changed: bool,
+    bookmarks: BTreeSet<usize>,
     available: bool,
     error: Option<String>,
 }
@@ -419,6 +426,7 @@ impl Tab {
             ui.child_window("Source")
                 .size([available[0], height])
                 .build(ui, || {
+                    self.draw_bookmarks(ui);
                     layout = text::Layout::capture(&self.editor, ui);
                     editor_hovered = layout.as_ref().is_some_and(|layout| {
                         ui.is_window_hovered_with_flags(
@@ -478,6 +486,10 @@ impl Tab {
             dear_imgui_rs::StyleColor::Header,
             settings.colors.values[PaletteColor::Selection as usize],
         );
+
+        if let Err(error) = self.context_menu(ui, mouse_on_source && !mouse_on_assistance) {
+            *output_error = Some(error.to_string());
+        }
 
         match rendered {
             Ok(changed) => {
@@ -841,6 +853,10 @@ impl State {
         documents: Option<&Documents>,
         settings: &Settings,
     ) {
+        if let Some(text) = self.diagnostics.take_copy() {
+            context.set_clipboard_text(text);
+        }
+
         let Some(documents) = documents else {
             self.tabs.clear();
 
@@ -875,8 +891,10 @@ impl State {
                     }));
                     let changes = assistance.clone();
 
-                    editor.set_transaction_callback(move |_| {
-                        changes.borrow_mut().changed = true;
+                    editor.set_transaction_callback(move |change| {
+                        let mut assistance = changes.borrow_mut();
+                        assistance.changed = true;
+                        context_menu::move_bookmarks(&mut assistance.bookmarks, change);
                     })?;
 
                     let documentation = popup::editor(context, &editor.palette())?;
@@ -1152,6 +1170,10 @@ impl State {
     }
 
     pub fn draw(&mut self, documents: &mut Documents, settings: &Settings, ui: &dear_imgui_rs::Ui) {
+        let _selection = ui.push_style_color(
+            dear_imgui_rs::StyleColor::TextSelectedBg,
+            settings.colors.values[PaletteColor::Selection as usize],
+        );
         self.focused = false;
 
         let formatting = settings.format_on_save.then(|| {
@@ -1543,7 +1565,10 @@ fn diagnostic_markers(
     editor.clear_markers();
 
     for (line, error) in line_diagnostics(value) {
-        kinematic_ui::code::marker(editor, line, error)?;
+        // LuaLS can report lines removed since the diagnostic was published.
+        if line < editor.line_count() {
+            kinematic_ui::code::marker(editor, line, error)?;
+        }
     }
 
     Ok(())
@@ -2462,6 +2487,21 @@ mod tests {
         drop(documents);
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn diagnostic_markers_ignore_lines_removed_from_the_document() {
+        let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
+        let context = dear_imgui_rs::Context::create();
+        let mut editor = super::TextEditor::create(&context);
+        editor.set_text("First.\nSecond.").unwrap();
+        let diagnostics = serde_json::json!([
+            {"severity": 1, "range": {"start": {"line": 0}}},
+            {"severity": 2, "range": {"start": {"line": 49}}}
+        ]);
+        super::diagnostic_markers(&mut editor, &diagnostics).unwrap();
+        editor.set_text("").unwrap();
+        super::diagnostic_markers(&mut editor, &diagnostics).unwrap();
     }
 
     #[test]

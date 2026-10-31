@@ -105,7 +105,7 @@ pub fn bindings<'a>(ui: &Ui, groups: impl IntoIterator<Item = (&'a str, Vec<(&'a
                 ui.set_cursor_pos_x(ui.cursor_pos_x() + ui.tree_node_to_label_spacing());
                 crate::widgets::text(ui, name);
                 ui.table_next_column();
-                crate::widgets::text(ui, binding);
+                crate::widgets::muted(ui, crate::shortcut::compact(binding));
             }
         }
     }

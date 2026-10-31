@@ -6,6 +6,10 @@ use kinematic_ui::diagnostics::{Message, Severity};
 pub(super) struct Footer(kinematic_ui::diagnostics::Footer);
 
 impl Footer {
+    pub fn take_copy(&mut self) -> Option<String> {
+        self.0.take_copy()
+    }
+
     pub fn height(&self, ui: &dear_imgui_rs::Ui, messages: &[String]) -> f32 {
         self.0.height(ui, &presentation(messages))
     }

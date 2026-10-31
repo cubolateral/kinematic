@@ -94,6 +94,7 @@ pub(super) enum Action {
     SaveAll,
     FormatDocument,
     ToggleWordWrap,
+    ToggleBookmark,
     JumpBracket,
     Fold,
     Unfold,
@@ -604,6 +605,13 @@ impl Default for InputMap {
                 KeyMods::ALT,
             ),
             (Replace, "Replace", "Ctrl + H", Key::H, KeyMods::CTRL),
+            (
+                ToggleBookmark,
+                "Toggle bookmark",
+                "Ctrl + Alt + B",
+                Key::B,
+                KeyMods::CTRL | KeyMods::ALT,
+            ),
             (SelectLine, "Select line", "Ctrl + L", Key::L, KeyMods::CTRL),
             (
                 NextOccurrence,
@@ -765,6 +773,7 @@ impl Default for InputMap {
                     | SaveAll
                     | FormatDocument
                     | ToggleWordWrap
+                    | ToggleBookmark
                     | JumpBracket
                     | Fold
                     | Unfold

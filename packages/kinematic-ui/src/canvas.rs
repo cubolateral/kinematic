@@ -655,16 +655,17 @@ pub fn tools(
                 }
             }
             crate::widgets::separator(ui);
-            for (action, shortcut) in [
-                ("Orbit", "Middle mouse"),
-                ("Pan", "Shift + Middle mouse"),
-                ("Zoom", "Mouse wheel"),
-                ("Fly", "Right mouse + WASD / QE"),
-                ("Fast", "Shift"),
-                ("Precise", "Alt"),
-            ] {
-                crate::widgets::muted(ui, crate::shortcut::label(action, shortcut));
-            }
+            crate::shortcut::hints(
+                ui,
+                &[
+                    ("Orbit", "Middle mouse"),
+                    ("Pan", "Shift + Middle mouse"),
+                    ("Zoom", "Mouse wheel"),
+                    ("Fly", "Right mouse + WASD / QE"),
+                    ("Fast", "Shift"),
+                    ("Precise", "Alt"),
+                ],
+            );
         }
     }
     Tools {
