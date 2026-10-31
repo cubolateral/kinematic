@@ -1824,7 +1824,7 @@ impl Editor {
             .map_or(Color::TRANSPARENT.rgba(), |settings| settings.clear.rgba())
     }
 
-    pub(crate) fn audio_transport(&self) -> (bool, u64, u64) {
+    pub(crate) fn audio_transport(&self) -> (bool, u64, u64, f32) {
         (
             self.timeline.is_playing()
                 && !self.is_exporting
@@ -1832,6 +1832,7 @@ impl Editor {
                 && self.render_error.is_none(),
             self.timeline.transport_revision,
             (self.timeline.time() as f64 * crate::core::audio::SAMPLE_RATE as f64).round() as u64,
+            self.timeline.playback_speed(),
         )
     }
 

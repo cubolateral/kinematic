@@ -170,6 +170,7 @@ pub(super) fn draw(
             editor.absolute_time(),
             editor.project_duration(),
         );
+        ui.set_cursor_screen_pos([ui.cursor_screen_pos()[0], ui.item_rect_max()[1]]);
         let fps = editor.preview_fps();
         toggle_fullscreen =
             playback::draw(editor.timeline_mut(), ui, fps, !is_exporting, false, volume);

@@ -30,14 +30,27 @@ pub struct State<'a> {
     pub shortcuts: [&'a str; 7],
 }
 
-pub fn draw(ui: &dear_imgui_rs::Ui, state: State<'_>, volume: &mut i32) -> Option<Action> {
+pub fn draw(
+    ui: &dear_imgui_rs::Ui,
+    state: State<'_>,
+    volume: &mut i32,
+    speed: &mut f32,
+) -> Option<Action> {
     let _disabled = ui.begin_disabled_with_cond(!state.interactive);
+    let top = ui.cursor_screen_pos();
+    let bottom = ui.window_pos()[1] + ui.window_size()[1];
+    ui.set_cursor_screen_pos([
+        top[0],
+        top[1] + ((bottom - top[1] - BUTTON_SIZE) * 0.5).max(0.0),
+    ]);
     let spacing = ui.clone_style().item_spacing()[0];
     let status_width = text_size(ui, "FPS: 99999.99")[0];
-    let width = BUTTON_SIZE * 8.0 + spacing * 8.0 + status_width;
+    let speed_width = text_size(ui, "1.00x")[0] + ui.clone_style().frame_padding()[0] * 2.0;
+    let width = BUTTON_SIZE * 8.0 + speed_width + spacing * 9.0 + status_width;
     ui.set_cursor_pos_x(
         ui.cursor_pos_x() + ((ui.content_region_avail_width() - width) * 0.5).max(0.0),
     );
+    speed_button(ui, speed, speed_width);
     let mut clicked = None;
     for (index, (action, icon, label)) in [
         (Action::Start, icons::BACKWARD_FAST, "Go to start"),
@@ -57,9 +70,7 @@ pub fn draw(ui: &dear_imgui_rs::Ui, state: State<'_>, volume: &mut i32) -> Optio
     .into_iter()
     .enumerate()
     {
-        if index > 0 {
-            ui.same_line();
-        }
+        ui.same_line();
         if controls::text_button(ui, icon, [BUTTON_SIZE; 2]) {
             clicked = Some(action);
         }
@@ -105,6 +116,53 @@ pub fn draw(ui: &dear_imgui_rs::Ui, state: State<'_>, volume: &mut i32) -> Optio
     ui.same_line();
     widgets::text(ui, state.status);
     clicked.filter(|_| state.interactive)
+}
+
+fn speed_button(ui: &dear_imgui_rs::Ui, speed: &mut f32, width: f32) {
+    if controls::button_sized(ui, &format!("{speed:.2}x"), [width, BUTTON_SIZE]) {
+        ui.open_popup("Playback speed");
+    }
+    if ui.is_item_hovered() {
+        widgets::tooltip(ui, "Playback speed");
+    }
+    if let Some(_popup) = ui.begin_popup("Playback speed") {
+        speed_controls(ui, speed);
+    }
+}
+
+fn speed_controls(ui: &dear_imgui_rs::Ui, speed: &mut f32) {
+    let mut steps = (*speed * 20.0).round() as i32;
+    ui.set_next_item_width(180.0);
+    ui.slider_config("##Speed", 2, 100)
+        .display_format(dear_imgui_rs::NumericFormat::new("").expect("Valid slider format."))
+        .flags(dear_imgui_rs::SliderFlags::NO_INPUT)
+        .build(&mut steps);
+    let (min, max) = ui.item_rect();
+    let text = format!("{:.2}x", steps as f32 / 20.0);
+    let size = text_size(ui, &text);
+    ui.get_window_draw_list().add_text(
+        [
+            (min[0] + max[0] - size[0]) * 0.5,
+            (min[1] + max[1] - size[1]) * 0.5,
+        ],
+        ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+        text,
+    );
+    ui.same_line();
+    {
+        let _disabled = ui.begin_disabled_with_cond(steps <= 2);
+        if controls::button_sized(ui, "-", [BUTTON_SIZE; 2]) {
+            steps -= 1;
+        }
+    }
+    ui.same_line();
+    {
+        let _disabled = ui.begin_disabled_with_cond(steps >= 100);
+        if controls::button_sized(ui, "+", [BUTTON_SIZE; 2]) {
+            steps += 1;
+        }
+    }
+    *speed = steps.clamp(2, 100) as f32 / 20.0;
 }
 
 fn volume_button(ui: &dear_imgui_rs::Ui, volume: &mut i32) {
@@ -194,6 +252,76 @@ mod tests {
     use super::time_at_position;
 
     #[test]
+    fn speed_buttons_and_drag_use_five_hundredth_steps() {
+        use dear_imgui_rs::{Condition, Context, MouseButton};
+        let _lock = crate::TEST_LOCK.lock().unwrap();
+        let mut context = Context::create();
+        context.set_ini_filename(None::<&str>).unwrap();
+        context
+            .font_atlas()
+            .try_claim_legacy_renderer()
+            .unwrap()
+            .build();
+        context.io_mut().set_display_size([640.0, 360.0]);
+        context.io_mut().set_delta_time(1.0 / 60.0);
+        fn frame(
+            context: &mut Context,
+            speed: &mut f32,
+            point: [f32; 2],
+            down: bool,
+        ) -> [[f32; 2]; 3] {
+            context.io_mut().add_mouse_pos_event(point);
+            context
+                .io_mut()
+                .add_mouse_button_event(MouseButton::Left, down);
+            let ui = context.frame();
+            let mut targets = [[0.0; 2]; 3];
+            ui.window("Speed test")
+                .position([0.0; 2], Condition::Always)
+                .size([640.0, 360.0], Condition::Always)
+                .build(|| {
+                    let origin = ui.cursor_screen_pos();
+                    targets[0] = [
+                        origin[0]
+                            + 180.0
+                            + ui.clone_style().item_spacing()[0]
+                            + super::BUTTON_SIZE * 0.5,
+                        origin[1] + super::BUTTON_SIZE * 0.5,
+                    ];
+                    targets[1] = [origin[0], origin[1] + ui.frame_height() * 0.5];
+                    super::speed_controls(ui, speed);
+                    let (min, max) = ui.item_rect();
+                    targets[2] = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+                });
+            context.end_frame();
+            targets
+        }
+        let mut speed = 1.0;
+        let [minus, slider, plus] = frame(&mut context, &mut speed, [0.0; 2], false);
+        for (point, expected) in [(plus, 1.05), (minus, 1.0)] {
+            frame(&mut context, &mut speed, point, false);
+            frame(&mut context, &mut speed, point, true);
+            frame(&mut context, &mut speed, point, false);
+            assert_eq!(speed, expected);
+        }
+        frame(&mut context, &mut speed, slider, false);
+        frame(&mut context, &mut speed, slider, true);
+        assert_eq!(speed, 0.10);
+        for x in 1..180 {
+            let previous = speed;
+            frame(
+                &mut context,
+                &mut speed,
+                [slider[0] + x as f32, slider[1]],
+                true,
+            );
+            assert!((speed * 20.0 - (speed * 20.0).round()).abs() < 0.0001);
+            assert!(speed >= previous && speed - previous < 0.0501);
+        }
+        assert_eq!(speed, 5.0);
+    }
+
+    #[test]
     fn playback_status_does_not_move_controls() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
@@ -222,6 +350,7 @@ mod tests {
                             shortcuts: [""; 7],
                         },
                         &mut 100,
+                        &mut 1.0,
                     );
                     positions.push(ui.item_rect_min());
                 });

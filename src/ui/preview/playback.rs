@@ -20,6 +20,7 @@ pub(super) fn draw(
         "PAUSED".to_owned()
     };
     let bindings = inputs::map();
+    let mut speed = timeline.playback_speed();
     let action = transport::draw(
         ui,
         transport::State {
@@ -40,7 +41,9 @@ pub(super) fn draw(
             .map(|action| bindings.binding(action).display.as_str()),
         },
         volume,
+        &mut speed,
     );
+    timeline.set_playback_speed(speed);
     match action {
         Some(Action::Start) => timeline.go_to_start(),
         Some(Action::Previous) => timeline.previous_frame(),
@@ -90,7 +93,8 @@ pub(in crate::ui) fn fullscreen_controls(
 ) -> bool {
     let scrubber_min = ui.cursor_screen_pos();
     let scrubber_width = ui.content_region_avail_width().max(1.0);
-    let buttons_y = scrubber_min[1] + FULLSCREEN_SCRUBBER_HEIGHT + 18.0;
+    let buttons_y =
+        scrubber_min[1] + FULLSCREEN_SCRUBBER_HEIGHT * 0.5 + 4.0 + ui.text_line_height();
     let panel_bottom = scrubber_min[1] + ui.content_region_avail_height();
 
     {

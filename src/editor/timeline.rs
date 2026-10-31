@@ -3,6 +3,7 @@ pub(crate) struct Timeline {
     is_playing: bool,
     pub(crate) transport_revision: u64,
     loop_enabled: bool,
+    playback_speed: f32,
     previous_time: f32,
     current_time: f32,
     max_time: f32,
@@ -16,6 +17,7 @@ impl Timeline {
             is_playing: false,
             transport_revision: 0,
             loop_enabled: true,
+            playback_speed: 1.0,
             previous_time: -1.0, // Start by updating.
             current_time: 0.0,
             max_time,
@@ -27,7 +29,8 @@ impl Timeline {
     /// otherwise, it returns None.
     pub fn update(&mut self, dt: f32) -> Option<f32> {
         if self.is_playing() {
-            self.current_time = (self.current_time + dt).clamp(0.0, self.max_time);
+            self.current_time =
+                (self.current_time + dt * self.playback_speed).clamp(0.0, self.max_time);
 
             if self.current_time == self.max_time {
                 if self.loop_enabled && self.max_time > 0.0 {
@@ -46,6 +49,16 @@ impl Timeline {
         }
 
         None
+    }
+
+    pub(crate) fn playback_speed(&self) -> f32 {
+        self.playback_speed
+    }
+
+    pub(crate) fn set_playback_speed(&mut self, speed: f32) {
+        if speed.is_finite() {
+            self.playback_speed = (speed.clamp(0.10, 5.0) * 20.0).round() / 20.0;
+        }
     }
 
     pub fn play(&mut self) {
@@ -132,6 +145,25 @@ impl Timeline {
 #[cfg(test)]
 mod tests {
     use super::Timeline;
+
+    #[test]
+    fn playback_speed_scales_time_with_bounded_steps_and_keeps_frame_steps() {
+        let mut timeline = Timeline::new(10.0, 20);
+        assert_eq!(timeline.playback_speed(), 1.0);
+        timeline.play();
+        assert_eq!(timeline.update(1.0), Some(1.0));
+        for (requested, expected) in [(0.0, 0.10), (1.23, 1.25), (6.0, 5.0)] {
+            timeline.set_playback_speed(requested);
+            assert_eq!(timeline.playback_speed(), expected);
+            timeline.go_to(0.0);
+            assert_eq!(timeline.update(1.0), Some(expected));
+        }
+        timeline.set_playback_speed(f32::NAN);
+        assert_eq!(timeline.playback_speed(), 5.0);
+        timeline.go_to(0.0);
+        timeline.next_frame();
+        assert_eq!(timeline.time(), 0.05);
+    }
 
     #[test]
     fn scrubbing_pauses_and_resumes_playback() {
