@@ -41,6 +41,10 @@ impl Content {
         })
     }
 
+    pub fn set_palette(&mut self, palette: &Palette) -> dear_imgui_cte::CteResult<()> {
+        self.buffer.set_palette(palette)
+    }
+
     pub fn set(&mut self, markdown: &str) -> Result<(), String> {
         if self.source != markdown {
             self.view = Documentation::parse(markdown);

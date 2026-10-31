@@ -323,6 +323,7 @@ pub(super) fn draw(
                         defaults.scale,
                         |value| input_float(ui, &mut state.numeric, value, 0.75, 1.25),
                     );
+                    changed |= appearance.editor.colors.draw(ui);
                 }
             }
         });

@@ -10,6 +10,7 @@ use kinematic_ui::widgets;
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, collections::BTreeMap, path::PathBuf, rc::Rc};
 
+pub(super) mod colors;
 mod completion;
 mod diagnostics;
 mod files;
@@ -34,6 +35,7 @@ enum Pending {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub(super) struct Settings {
+    pub colors: colors::Colors,
     pub font_size: f32,
     pub line_height: f32,
     pub tab_size: usize,
@@ -53,6 +55,7 @@ pub(super) struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            colors: colors::Colors::default(),
             font_size: 14.0,
             line_height: 1.5,
             tab_size: 4,
@@ -122,6 +125,14 @@ impl Tab {
         self.completions.clear();
 
         self.assistance.borrow_mut().completion_position = None;
+
+        let mut palette = settings.colors.palette();
+        self.documentation.set_palette(&palette)?;
+        self.popup_content.set_palette(&palette)?;
+        // Parent backgrounds keep selection overlays behind the native text.
+        palette.set(PaletteColor::Background, 0);
+        palette.set(PaletteColor::Selection, 0);
+        self.editor.set_palette(&palette)?;
 
         self.editor.set_tab_size(settings.tab_size.clamp(1, 8))?;
         self.editor
@@ -382,6 +393,16 @@ impl Tab {
 
         self.editor.set_read_only(completion_key.is_some());
 
+        let palette = settings.colors.palette();
+        ui.get_window_draw_list()
+            .add_rect(
+                origin,
+                [origin[0] + available[0], origin[1] + height],
+                palette.get(PaletteColor::Background),
+            )
+            .filled(true)
+            .build();
+
         let rendered = ui
             .text_editor(&mut self.editor, "Source")
             .size([available[0], height])
@@ -430,7 +451,7 @@ impl Tab {
             }
 
             if let Some(layout) = layout {
-                text::draw(&self.editor, ui, &layout, &settings.rulers);
+                text::draw(&self.editor, ui, &layout, &settings.rulers, &palette);
             }
         }
 
@@ -448,6 +469,15 @@ impl Tab {
         {
             let _ = self.editor.set_cursor(completion_cursor);
         }
+
+        let _popup_text = ui.push_style_color(
+            dear_imgui_rs::StyleColor::Text,
+            settings.colors.values[PaletteColor::Text as usize],
+        );
+        let _popup_selection = ui.push_style_color(
+            dear_imgui_rs::StyleColor::Header,
+            settings.colors.values[PaletteColor::Selection as usize],
+        );
 
         match rendered {
             Ok(changed) => {
@@ -1651,7 +1681,7 @@ mod tests {
         documents.open(b).unwrap();
         documents.open(a).unwrap();
 
-        let settings = Settings {
+        let mut settings = Settings {
             autocomplete: false,
             tab_size: 2,
             ..Settings::default()
@@ -1667,6 +1697,35 @@ mod tests {
         }
 
         assert_eq!(state.tabs[a].editor.tab_size(), 2);
+        settings.colors.apply(super::colors::Theme::GitHubLight);
+        state.prepare(&context, Some(&documents), &settings);
+        let palette = settings.colors.palette();
+        for tab in state.tabs.values() {
+            assert_eq!(
+                tab.editor
+                    .palette()
+                    .get(dear_imgui_cte::PaletteColor::Background),
+                0
+            );
+            assert_eq!(
+                tab.editor
+                    .palette()
+                    .get(dear_imgui_cte::PaletteColor::Selection),
+                0
+            );
+            assert_eq!(
+                tab.editor
+                    .palette()
+                    .get(dear_imgui_cte::PaletteColor::Keyword),
+                palette.get(dear_imgui_cte::PaletteColor::Keyword)
+            );
+            assert_eq!(tab.documentation.palette(), palette);
+            assert_eq!(
+                tab.popup_content
+                    .packed_color(dear_imgui_cte::PaletteColor::Background),
+                palette.get(dear_imgui_cte::PaletteColor::Background)
+            );
+        }
 
         let original_text = documents.open[a].text.clone();
 

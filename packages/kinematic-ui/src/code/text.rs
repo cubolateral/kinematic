@@ -1,5 +1,5 @@
-use dear_imgui_cte::{Position, Selection, TextEditor, VisualPosition};
-use dear_imgui_rs::{StyleColor, Ui};
+use dear_imgui_cte::{Palette, PaletteColor, Position, Selection, TextEditor, VisualPosition};
+use dear_imgui_rs::Ui;
 use std::ops::Range;
 
 pub const SELECTION_COLOR: u32 = 0xff784f26;
@@ -88,7 +88,7 @@ pub fn word_at_mouse(editor: &TextEditor, mouse: [f32; 2]) -> Option<Selection> 
     ))
 }
 
-pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str) {
+pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette: &Palette) {
     let Layout {
         origin,
         min,
@@ -178,7 +178,7 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str) {
                 draw.add_rect(
                     point,
                     [origin[0] + right as f32 * width, point[1] + height],
-                    SELECTION_COLOR,
+                    palette.get(PaletteColor::Selection),
                 )
                 .filled(true)
                 .build();
@@ -211,16 +211,20 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str) {
                             origin[0] + visual.column as f32 * width,
                             origin[1] + visual.row as f32 * height - padding,
                         ];
-                        draw.add_rect(point, [point[0] + width, point[1] + height], 0x20ff_ffff)
-                            .filled(true)
-                            .build();
+                        draw.add_rect(
+                            point,
+                            [point[0] + width, point[1] + height],
+                            (palette.get(PaletteColor::Text) & 0x00ff_ffff) | 0x2000_0000,
+                        )
+                        .filled(true)
+                        .build();
                     }
                 }
             }
         }
     }
 
-    let color = ui.get_color_u32(StyleColor::Header);
+    let color = palette.get(PaletteColor::Whitespace);
     for column in ruler_columns(rulers) {
         let x = origin[0] + column as f32 * width;
         draw.add_line([x, min[1]], [x, max[1]], color).build();
@@ -311,7 +315,9 @@ mod tests {
                         });
                     ui.set_cursor_screen_pos(next);
                     let layout = layout.unwrap();
-                    draw(&editor, ui, &layout, "");
+                    let mut overlay = editor.palette();
+                    overlay.set(PaletteColor::Selection, 0xff654321);
+                    draw(&editor, ui, &layout, "", &overlay);
                     if phase < 3 {
                         return;
                     }
@@ -360,11 +366,7 @@ mod tests {
                 continue;
             }
             let data = frame.draw_data();
-            let color = if selected {
-                SELECTION_COLOR
-            } else {
-                0x20ff_ffff
-            };
+            let color = if selected { 0xff654321 } else { 0x2012_3456 };
             let background = data
                 .draw_lists()
                 .enumerate()

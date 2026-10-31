@@ -157,8 +157,8 @@ pub fn read_only(ui: &dear_imgui_rs::Ui, name: &str, value: &str) {
 
 pub fn section(ui: &dear_imgui_rs::Ui, title: &str) {
     ui.spacing();
-    ui.text_disabled(title);
-    ui.separator();
+    ui.separator_with_text(title);
+    ui.spacing();
 }
 
 pub fn slider(
