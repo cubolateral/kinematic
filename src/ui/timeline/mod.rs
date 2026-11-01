@@ -32,6 +32,7 @@ pub(super) fn draw(
     dragged_audio: Option<&std::path::Path>,
 ) {
     let is_exporting = editor.is_exporting();
+    let fps = editor.project_info().1.fps;
 
     if is_exporting {
         state.cancel_interactions();
@@ -108,13 +109,13 @@ pub(super) fn draw(
         let draw_list = ui.get_window_draw_list();
         let playhead_x = time.x(layout, time.current);
 
-        ruler::draw_scrubber(ui, &draw_list, layout, time);
+        ruler::draw_scrubber(ui, &draw_list, layout, time, fps);
 
         ruler::draw_time_grid_lines(ui, &draw_list, layout, time);
 
-        ruler::draw_time_grid_labels(ui, &draw_list, layout, time);
+        ruler::draw_time_grid_labels(ui, &draw_list, layout, time, fps);
 
-        ruler::draw_time_panel(ui, &draw_list, layout, time, playhead_x);
+        ruler::draw_time_panel(ui, &draw_list, layout, time, playhead_x, fps);
 
         if is_exporting {
             state.interaction = Interaction::None;

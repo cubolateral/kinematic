@@ -7,7 +7,7 @@ pub fn height(ui: &Ui) -> f32 {
     ui.frame_height() + 8.0
 }
 
-pub fn draw(ui: &Ui, version: &str) -> bool {
+pub fn draw(ui: &Ui, version: &str, top_border: bool) -> bool {
     let viewport = ui.main_viewport();
     let position = viewport.pos();
     let size = viewport.size();
@@ -32,8 +32,10 @@ pub fn draw(ui: &Ui, version: &str) -> bool {
                 | WindowFlags::NO_FOCUS_ON_APPEARING,
         )
         .build(|| {
-            widgets::horizontal_border(ui, ui.window_pos()[1]);
-            let version = format!("VERSION {version}");
+            if top_border {
+                widgets::horizontal_border(ui, ui.window_pos()[1]);
+            }
+            let version = format!("v{version}");
             let spacing = ui.clone_style().item_spacing()[0];
             let button_width = ui.frame_height();
             let right_width = button_width + spacing + ui.calc_text_size(&version)[0];

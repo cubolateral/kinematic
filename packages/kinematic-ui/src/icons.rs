@@ -1,6 +1,6 @@
 pub const ARROW_LEFT: &str = "\u{f060}";
 pub const BACKWARD: &str = "\u{f04a}";
-pub const BACKWARD_FAST: &str = "\u{f048}";
+pub const BACKWARD_FAST: &str = "\u{f049}";
 pub const CHEVRON_DOWN: &str = "\u{f078}";
 pub const CHEVRON_RIGHT: &str = "\u{f054}";
 pub const COMPRESS: &str = "\u{f066}";

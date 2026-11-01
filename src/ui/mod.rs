@@ -286,7 +286,7 @@ impl Ui {
             fullscreen_button
         };
 
-        self.draw_status_bar(ui);
+        self.draw_status_bar(ui, true);
 
         if initial_layout && !self.code.focused {
             ui.set_window_focus(Some(inspector::WINDOW_NAME));
@@ -360,13 +360,13 @@ impl Ui {
             self.save_cache();
         }
         if !has_editor {
-            self.draw_status_bar(ui);
+            self.draw_status_bar(ui, false);
         }
         self.messages.draw(ui);
     }
 
-    fn draw_status_bar(&mut self, ui: &dear_imgui_rs::Ui) {
-        if kinematic_ui::status_bar::draw(ui, env!("CARGO_PKG_VERSION")) {
+    fn draw_status_bar(&mut self, ui: &dear_imgui_rs::Ui, top_border: bool) {
+        if kinematic_ui::status_bar::draw(ui, env!("CARGO_PKG_VERSION"), top_border) {
             if let Err(error) = sdl3::url::open_url("https://github.com/cubolateral/kinematic") {
                 self.messages.show(
                     Kind::Error,

@@ -472,7 +472,7 @@ mod tests {
                 let ui = context.frame();
                 if let Some(_bar) = ui.begin_main_menu_bar() {}
                 home.draw(&mut code, ui);
-                kinematic_ui::status_bar::draw(ui, env!("CARGO_PKG_VERSION"));
+                kinematic_ui::status_bar::draw(ui, env!("CARGO_PKG_VERSION"), false);
                 let mut bottom = 0.0;
                 ui.window("Kinematic home").build(|| {
                     assert_eq!(ui.window_pos()[0], 0.0);

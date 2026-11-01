@@ -83,7 +83,7 @@ mod tests {
                 let _menu = ui.begin_main_menu_bar();
                 drop(_menu);
                 super::draw(ui);
-                kinematic_ui::status_bar::draw(ui, env!("CARGO_PKG_VERSION"));
+                kinematic_ui::status_bar::draw(ui, env!("CARGO_PKG_VERSION"), true);
 
                 let mut workspace_bottom = 0.0;
                 ui.window("Workspace host").build(|| {
