@@ -57,7 +57,16 @@ impl App {
         // Initialize imgui.
         let mut imgui = dear_imgui_rs::Context::create();
 
-        imgui.set_ini_filename(None::<std::path::PathBuf>).unwrap();
+        match crate::storage::global_path("cache/imgui.ini").and_then(|path| {
+            std::fs::create_dir_all(path.parent().unwrap())?;
+            Ok(path)
+        }) {
+            Ok(path) => imgui.set_ini_filename(Some(path)).unwrap(),
+            Err(error) => {
+                eprintln!("Could not prepare ImGui cache: {error}.");
+                imgui.set_ini_filename(None::<std::path::PathBuf>).unwrap();
+            }
+        }
 
         let ui = Ui::new(&mut imgui);
 
