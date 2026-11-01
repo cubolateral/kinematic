@@ -114,14 +114,15 @@ Runnable projects are in [examples/lua](examples/lua): 2D, 3D, simulation
 
 Project sources, assets, `kinematic/project.ron`, runtime metadata under `kinematic/`
 and exports under `output/` belong to the project directory. Global settings,
-window layout, preview volume, text editor zoom, recent project details and the
-last opened project stay
-under `.kinematic` in the
+preview volume, text editor zoom, recent project details and the last opened
+project stay under `.kinematic` in the
 platform's user data directory:
 
 - Linux: `$XDG_DATA_HOME`, or `~/.local/share` when unset.
 - macOS: `~/Library/Application Support`.
 - Windows: `%APPDATA%`.
+
+Window position, size and panel layout are not saved.
 
 ## Development
 

@@ -1,6 +1,6 @@
 use glow::HasContext;
 
-use crate::{editor::Editor, ui::Ui, window_cache::WindowCache};
+use crate::{editor::Editor, ui::Ui};
 
 pub struct App {
     ui: Ui,
@@ -13,7 +13,6 @@ pub struct App {
     window: sdl3::video::Window,
     sdl: sdl3::Sdl,
     lua_project: Option<Result<crate::scripting::LuaProject, String>>,
-    window_cache: WindowCache,
     export_only: bool,
     export_result: Option<Result<(), String>>,
 }
@@ -33,21 +32,13 @@ impl App {
         gl_attributes.set_context_version(3, 3);
         gl_attributes.set_context_profile(sdl3::video::GLProfile::Core);
 
-        let window_cache = WindowCache::load();
-        let mut window_builder =
-            video_subsystem.window("Kinematic", window_cache.size.0, window_cache.size.1);
-
-        if let Some((x, y)) = window_cache.position {
-            window_builder.position(x, y);
-        } else {
-            window_builder.position_centered();
-        }
-
-        if window_cache.maximized {
-            window_builder.maximized();
-        }
-
-        let window = window_builder.resizable().opengl().build().unwrap();
+        let window = video_subsystem
+            .window("Kinematic", 1280, 720)
+            .position_centered()
+            .resizable()
+            .opengl()
+            .build()
+            .unwrap();
 
         let gl_context = window.gl_create_context().unwrap();
 
@@ -69,12 +60,6 @@ impl App {
         imgui.set_ini_filename(None::<std::path::PathBuf>).unwrap();
 
         let ui = Ui::new(&mut imgui);
-
-        if let Ok(path) = crate::storage::global_path("cache/layout.ini") {
-            if let Ok(text) = std::fs::read_to_string(path) {
-                imgui.load_ini_settings(&text);
-            }
-        }
 
         // The window and current GL context outlive backend teardown.
         let imgui_sdl = unsafe {
@@ -122,7 +107,6 @@ impl App {
             gl,
             skia_context,
             lua_project: None,
-            window_cache,
             export_only: false,
             export_result: None,
         }
@@ -146,48 +130,6 @@ impl App {
                 self.ui.project_error(error);
             }
         }
-    }
-
-    fn save_layout(&mut self) {
-        self.ui.save_cache();
-        let mut text = String::new();
-
-        self.imgui.save_ini_settings(&mut text);
-
-        if let Ok(path) = crate::storage::global_path("cache/layout.ini") {
-            let expected = std::fs::read(&path).ok();
-            let _ = crate::core::atomic_write(&path, text.as_bytes(), expected.as_deref());
-        }
-    }
-
-    fn restore_window(&mut self, context: &crate::core::ProjectContext) {
-        if let Err(error) = crate::storage::migrate_globals(context) {
-            eprintln!("Could not migrate global settings: {error}.");
-        }
-
-        self.ui.reload_appearance();
-
-        if let Ok(path) = crate::storage::global_path("cache/layout.ini") {
-            if let Ok(text) = std::fs::read_to_string(path) {
-                self.imgui.load_ini_settings(&text);
-            }
-        }
-
-        let cache = WindowCache::load();
-        let _ = self.window.set_size(cache.size.0, cache.size.1);
-
-        if let Some((x, y)) = cache.position {
-            self.window.set_position(
-                sdl3::video::WindowPos::Positioned(x),
-                sdl3::video::WindowPos::Positioned(y),
-            );
-        }
-
-        if cache.maximized {
-            self.window.maximize();
-        }
-
-        self.window_cache = cache;
     }
 
     /// Exports the selected project through the existing application renderer and exits.
@@ -243,7 +185,6 @@ impl App {
 
         if let Some(editor) = &editor {
             self.ui.restore_project_view(editor);
-            self.restore_window(editor.context());
         }
 
         if self.export_only {
@@ -374,7 +315,6 @@ impl App {
 
             self.imgui_renderer.render(frame).unwrap();
             self.window.gl_swap_window();
-            self.window_cache.update(&self.window);
 
             if let Some(action) = self.ui.take_project_action() {
                 let result = match action {
@@ -407,8 +347,7 @@ impl App {
                 match result {
                     Ok(next) => {
                         if let Some(mut previous) = editor.take() {
-                            self.window_cache.save();
-                            self.save_layout();
+                            self.ui.save_cache();
 
                             previous.shutdown(
                                 &self.gl,
@@ -437,7 +376,6 @@ impl App {
 
                         if let Some(editor) = &editor {
                             self.ui.restore_project_view(editor);
-                            self.restore_window(editor.context());
                         }
                     }
 
@@ -464,9 +402,7 @@ impl App {
         }
 
         crate::scripting::release_unused();
-        self.window_cache.update(&self.window);
-        self.window_cache.save();
-        self.save_layout();
+        self.ui.save_cache();
         self.imgui_renderer.shutdown(&mut self.imgui).unwrap();
         self.imgui_sdl.shutdown(&mut self.imgui).unwrap();
     }

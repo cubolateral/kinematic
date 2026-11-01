@@ -516,7 +516,7 @@ pub(crate) fn analyzed_path(root: &ProjectContext, path: &Path) -> bool {
         && !path.components().any(|part| {
             matches!(
                 part.as_os_str().to_str(),
-                Some(".git" | "target" | "output" | "kinematic" | ".kinematic")
+                Some(".git" | "target" | "output" | "kinematic")
             )
         })
         && root.resolve(path).is_ok()
@@ -555,7 +555,7 @@ fn lua_settings(root: &ProjectContext) -> Value {
     json!({
         "runtime": {"version": "Lua 5.4", "plugin": root.root().join("kinematic/cache/luals/components.lua")},
         "workspace": {"library": [root.root().join("kinematic/cache/luals")], "checkThirdParty": false,
-            "ignoreDir": ["kinematic", ".kinematic", "output", "target", ".git"]},
+            "ignoreDir": ["kinematic", "output", "target", ".git"]},
         "completion": {"showWord": "Disable", "workspaceWord": false, "maxSuggestCount": 500, "callSnippet": "Disable"},
         "diagnostics": {"libraryFiles": "Disable", "ignoredFiles": "Disable"},
         "files": {"associations": {"*.lua": "lua"}},

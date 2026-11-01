@@ -316,12 +316,7 @@ impl LuaProject {
         settings: ProjectSettings,
     ) -> Result<Self, String> {
         let root = root.as_ref();
-        for path in [
-            MANIFEST,
-            "kinematic.ron",
-            ".kinematic/project.ron",
-            "scenes/intro.lua",
-        ] {
+        for path in [MANIFEST, "kinematic.ron", "scenes/intro.lua"] {
             if root.join(path).try_exists().map_err(|e| e.to_string())? {
                 return Err(format!(
                     "Project file {path} already exists. Choose another root directory."

@@ -693,7 +693,7 @@ fn watched(path: &Path) -> bool {
 
     !path.components().any(|part| {
         part.as_os_str().to_str().is_some_and(|s| {
-            matches!(s, ".git" | "target" | "output" | ".kinematic" | "kinematic")
+            matches!(s, ".git" | "target" | "output" | "kinematic")
                 || s.starts_with(".kinematic-save-")
                 || s.starts_with(".kinematic-delete-")
                 || s.ends_with('~')

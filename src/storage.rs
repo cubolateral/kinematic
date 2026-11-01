@@ -55,55 +55,11 @@ fn write_current_project(path: &Path, root: Option<&Path>) -> Result<(), String>
 }
 
 pub(crate) fn migrate_project(context: &ProjectContext) -> io::Result<()> {
-    for name in [
-        "project.ron",
-        "scenes",
-        "events",
-        "cache/editor.ron",
-        "cache/luals",
-    ] {
-        migrate(
-            &context.resolve(format!(".kinematic/{name}"))?,
-            &context.resolve(format!("kinematic/{name}"))?,
-        )?;
-    }
-
     for (source, destination) in [
         ("kinematic.ron", crate::scripting::MANIFEST),
         ("kinematic/events", "kinematic/scenes"),
     ] {
         migrate(&context.resolve(source)?, &context.resolve(destination)?)?;
-    }
-
-    Ok(())
-}
-
-pub(crate) fn migrate_globals(context: &ProjectContext) -> io::Result<()> {
-    for name in ["settings.ron", "cache/window.ron"] {
-        migrate(
-            &context.resolve(format!(".kinematic/{name}"))?,
-            &global_path(name)?,
-        )?;
-    }
-
-    // The old docking layout contains the removed panels.
-    let layout = context.resolve(".kinematic/cache/layout.ini")?;
-
-    if layout.try_exists()? {
-        fs::remove_file(layout)?;
-    }
-
-    for name in [".kinematic/cache", ".kinematic"] {
-        match fs::remove_dir(context.resolve(name)?) {
-            Ok(()) => {}
-
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    io::ErrorKind::NotFound | io::ErrorKind::DirectoryNotEmpty
-                ) => {}
-            Err(error) => return Err(error),
-        }
     }
 
     Ok(())

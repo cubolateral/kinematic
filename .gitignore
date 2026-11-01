@@ -3,7 +3,6 @@
 # Ignore example exports.
 /output
 /imgui.ini
-**/.kinematic
 *.log
 
 # Ignore generated project metadata.

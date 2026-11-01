@@ -393,10 +393,6 @@ impl Ui {
         self.messages.show(Kind::Error, error);
     }
 
-    pub(crate) fn reload_appearance(&mut self) {
-        self.appearance = settings::load();
-    }
-
     pub(crate) fn restore_project_view(&mut self, editor: &Editor) {
         let (mode, fullscreen, pan, zoom) = editor.cached_view();
 
