@@ -28,7 +28,6 @@ impl Completion {
             .take(500)
             .cloned()
             .collect();
-
         self.selected = 0;
         self.position = Some(position);
         self.resolve = !self.items.is_empty();
@@ -96,7 +95,6 @@ impl Completion {
         let Some(item) = self.items.get(self.selected) else {
             return Ok(());
         };
-
         let (range, replacement) = edit(item, text, cursor, utf8)?;
 
         editor.select_region(range).map_err(|e| e.to_string())?;
@@ -159,6 +157,7 @@ impl Completion {
 
                             if pressed {
                                 accept = selected;
+
                                 self.selected = index;
                                 self.resolve = !selected;
                             }
@@ -336,6 +335,7 @@ mod tests {
             serde_json::json!({"items":[item]}),
         ] {
             completion.receive(&value, Position::new(0, 3));
+
             assert_eq!(completion.items, vec![item.clone()]);
             assert_eq!(detail(&completion.items[0]), "length(): number");
 
@@ -347,6 +347,7 @@ mod tests {
         }
 
         completion.receive(&Value::Null, Position::new(0, 3));
+
         assert!(completion.items.is_empty());
     }
 
@@ -359,7 +360,6 @@ mod tests {
             range,
             Selection::new(Position::new(0, 5), Position::new(0, 8))
         );
-
         assert_eq!(text, "normalized");
     }
 

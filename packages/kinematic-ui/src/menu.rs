@@ -34,6 +34,7 @@ impl Style {
             .collect();
         // ImGui scopes must drop in reverse order, including colors before the font.
         colors.reverse();
+
         (colors, font)
     }
 }
@@ -46,6 +47,7 @@ mod tests {
     fn menus_restore_interface_typography_and_colors_inside_specialized_panels() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
@@ -54,7 +56,9 @@ mod tests {
             .build();
         context.io_mut().set_display_size([640.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         let ui = context.frame();
+
         ui.window("Menu style").build(|| {
             let style = Style::capture(ui);
             let font = ui.current_font();
@@ -62,15 +66,19 @@ mod tests {
             let color = ui.style_color(StyleColor::Text);
             let _font = ui.push_font_with_size(Some(font), 30.0);
             let _color = ui.push_style_color(StyleColor::Text, [1.0, 0.0, 0.0, 1.0]);
+
             {
                 let _menu = style.push(ui);
+
                 assert_eq!(ui.current_font(), font);
                 assert_eq!(ui.current_font_size(), size);
                 assert_eq!(ui.style_color(StyleColor::Text), color);
             }
+
             assert_eq!(ui.current_font_size(), 30.0);
             assert_eq!(ui.style_color(StyleColor::Text), [1.0, 0.0, 0.0, 1.0]);
         });
+
         context.end_frame();
     }
 }

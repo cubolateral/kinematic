@@ -10,7 +10,6 @@ pub(crate) struct ValueHandle(pub TrackValue);
 impl UserData for ValueHandle {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method(MetaMethod::ToString, |_, this, ()| Ok(this.0.to_string()));
-
         methods.add_meta_method(MetaMethod::Index, |_, this, name: String| {
             let index = if matches!(this.0, TrackValue::Quaternion(_)) {
                 ["x", "y", "z", "w"]
@@ -84,15 +83,12 @@ impl UserData for ValueHandle {
 
             Ok(Self(result))
         });
-
         methods.add_meta_method(MetaMethod::Div, |_, this, n: f32| {
             Ok(Self(scale(&this.0, 1.0 / n)?))
         });
-
         methods.add_meta_method(MetaMethod::Unm, |_, this, ()| {
             Ok(Self(scale(&this.0, -1.0)?))
         });
-
         methods.add_method("dot", |_, this, other: mlua::UserDataRef<Self>| {
             match (&this.0, &other.0) {
                 (TrackValue::Vector2(a), TrackValue::Vector2(b)) => Ok(a.dot(*b)),
@@ -100,7 +96,6 @@ impl UserData for ValueHandle {
                 _ => Err(mlua::Error::runtime("Dot product needs matching vectors.")),
             }
         });
-
         methods.add_method("cross", |_, this, other: mlua::UserDataRef<Self>| {
             match (&this.0, &other.0) {
                 (TrackValue::Vector3(a), TrackValue::Vector3(b)) => {
@@ -109,20 +104,17 @@ impl UserData for ValueHandle {
                 _ => Err(mlua::Error::runtime("Cross product needs vec3 values.")),
             }
         });
-
         methods.add_method("length", |_, this, ()| match this.0 {
             TrackValue::Vector2(v) => Ok(v.length()),
             TrackValue::Vector3(v) => Ok(v.length()),
             _ => Err(mlua::Error::runtime("Expected a vector.")),
         });
-
         methods.add_method("normalized", |_, this, ()| match this.0 {
             TrackValue::Vector2(v) => Ok(Self(TrackValue::Vector2(v.normalize_or_zero()))),
             TrackValue::Vector3(v) => Ok(Self(TrackValue::Vector3(v.normalize_or_zero()))),
             TrackValue::Quaternion(v) => Ok(Self(TrackValue::Quaternion(v.normalize()))),
             _ => Err(mlua::Error::runtime("Expected a vector or quaternion.")),
         });
-
         methods.add_method(
             "lerp",
             |_, this, (other, t): (mlua::UserDataRef<Self>, f32)| {
@@ -200,7 +192,6 @@ pub(crate) fn from_lua(
         TrackValue::String(_) => TrackValue::String(String::from_lua(value, lua)?),
         TrackValue::Enum(_) => {
             let name = String::from_lua(value, lua)?;
-
             let TrackChoices::Enum(choices) = choices else {
                 return Err(mlua::Error::runtime("Missing enum choices."));
             };
@@ -217,7 +208,6 @@ pub(crate) fn from_lua(
             let Value::UserData(value) = value else {
                 return Err(mlua::Error::runtime("Expected a Kinematic value."));
             };
-
             let actual = value.borrow::<ValueHandle>()?.0.clone();
 
             if std::mem::discriminant(&actual) != std::mem::discriminant(expected) {

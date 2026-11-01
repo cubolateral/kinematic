@@ -155,13 +155,18 @@ fn layout(shape: &CodeShape, source: &str, fill: Color) -> Layout {
     let mut token_index = 0;
     let (space, _) = font.measure_str(" ", None);
     let mut count = 0_usize;
+
     for (line_index, line) in source.split('\n').enumerate() {
         groups.next('\n');
+
         let raw_length = line.len();
+
         count += 1;
+
         let line = line.strip_suffix('\r').unwrap_or(line);
         let mut x = 0.0;
         let mut visual_column = 0;
+
         for (column, (byte, ch)) in line.char_indices().enumerate() {
             let text = ch.to_string();
             let width = if ch == '\t' {
@@ -173,11 +178,13 @@ fn layout(shape: &CodeShape, source: &str, fill: Color) -> Layout {
             let mut builder = skia_safe::PathBuilder::new();
             let glyphs = font.text_to_glyphs_vec(&text);
             let mut positions = vec![skia_safe::Point::default(); glyphs.len()];
+
             font.get_pos(
                 &glyphs,
                 &mut positions,
                 Some((x, y - metrics.ascent).into()),
             );
+
             if ch != '\t' {
                 for (glyph, position) in glyphs.into_iter().zip(positions) {
                     if let Some(path) = font.get_path(glyph) {
@@ -185,9 +192,11 @@ fn layout(shape: &CodeShape, source: &str, fill: Color) -> Layout {
                     }
                 }
             }
+
             while tokens[token_index].0.end <= byte_offset + byte {
                 token_index += 1;
             }
+
             cells.push(Cell {
                 byte: byte_offset + byte,
                 token: tokens[token_index].0.clone(),
@@ -200,22 +209,30 @@ fn layout(shape: &CodeShape, source: &str, fill: Color) -> Layout {
                     color: Some(tokens[token_index].1),
                 },
             });
+
             x += width;
+
             visual_column += if ch == '\t' {
                 tab - visual_column % tab
             } else {
                 1
             };
         }
+
         max_width = max_width.max(x);
+
         byte_offset += raw_length + 1;
     }
+
     let size = Vector2::new(max_width, height + spacing * count.saturating_sub(1) as f32);
     let offset = (-size.x * 0.5, -size.y * 0.5);
+
     for cell in &mut cells {
         cell.rect.offset(offset);
+
         cell.part.path = cell.part.path.with_offset(offset);
     }
+
     Layout { cells, size }
 }
 
@@ -226,8 +243,10 @@ fn emphasized_parts(layout: &Layout, shape: &CodeShape) -> Vec<MorphPart> {
         .filter(|cell| !cell.part.path.is_empty())
         .map(|cell| {
             let mut rgba = cell.part.color.unwrap().rgba();
+
             rgba[3] *= shape.dim_opacity
                 + (1.0 - shape.dim_opacity) * shape.selection.coverage(cell.position, true);
+
             MorphPart {
                 key: cell.part.key.clone(),
                 group: cell.part.group,
@@ -252,12 +271,14 @@ fn key_edit_parts(
     {
         let touched = intervals.iter().any(|(old, new)| {
             let range = if incoming { new } else { old };
+
             if range.is_empty() {
                 cell.token.start < range.start && range.start < cell.token.end
             } else {
                 cell.token.start < range.end && range.start < cell.token.end
             }
         });
+
         if touched {
             part.key = format!("{incoming}:{}", cell.byte);
         } else {
@@ -270,6 +291,7 @@ fn key_edit_parts(
             } else {
                 0
             };
+
             part.key = format!("Keep:{}", cell.byte as isize + shift);
         }
     }
@@ -277,15 +299,20 @@ fn key_edit_parts(
 
 fn draw_highlights(layout: &Layout, shape: &CodeShape, opacity: f32, canvas: &skia_safe::Canvas) {
     let mut paint = skia_safe::Paint::default();
+
     paint.set_anti_alias(true);
+
     for cell in &layout.cells {
         let mut color = shape.highlight_color.rgba();
+
         color[3] *= opacity * shape.highlights.coverage(cell.position, false);
+
         if color[3] > 0.0 {
             paint.set_color4f(
                 skia_safe::Color4f::new(color[0], color[1], color[2], color[3]),
                 None,
             );
+
             canvas.draw_rect(cell.rect, &paint);
         }
     }
@@ -299,11 +326,13 @@ fn draw_code(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
     let from = layout(&shape, &shape.code, style.fill);
     let mut part_style = (*style).clone();
     let mut parts = emphasized_parts(&from, &shape);
+
     if let Some(text) = fade.incoming_text(&shape.code) {
         let to = layout(&shape, text, style.fill);
         let mut incoming = emphasized_parts(&to, &shape);
         let edit = world.get::<&CodeEditState>(entity).unwrap();
         let mut token_edit = false;
+
         if edit.active {
             let mut shift = 0_isize;
             let intervals = edit
@@ -315,22 +344,29 @@ fn draw_code(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
                     let old = code_interval(&shape.code, *range)?;
                     let start = (old.start as isize + shift) as usize;
                     let new = start..start + edit.replacement.len();
+
                     shift += new.len() as isize - old.len() as isize;
+
                     Ok((old, new))
                 })
                 .collect::<Result<Vec<_>, String>>();
+
             if let Ok(intervals) = intervals {
                 key_edit_parts(&from, &mut parts, &intervals, false);
                 key_edit_parts(&to, &mut incoming, &intervals, true);
+
                 token_edit = true;
             }
         }
+
         draw_highlights(&from, &shape, opacity * (1.0 - fade.progress), canvas);
         draw_highlights(&to, &shape, opacity * fade.progress, canvas);
+
         if fade.morph || token_edit {
             for part in morph_parts(&parts, &incoming, fade.progress, fade.group) {
                 part_style.fill = part.color(style.fill);
                 part_style.stroke.a = style.stroke.a * part_style.fill.a;
+
                 draw_complete_styled_path(
                     &part.path(),
                     &part_style,
@@ -339,12 +375,15 @@ fn draw_code(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
                     canvas,
                 );
             }
+
             return;
         }
+
         for (parts, alpha) in [(&parts, 1.0 - fade.progress), (&incoming, fade.progress)] {
             for part in parts {
                 part_style.fill = part.color.unwrap();
                 part_style.stroke.a = style.stroke.a * part_style.fill.a;
+
                 draw_complete_styled_path(
                     &part.path,
                     &part_style,
@@ -356,9 +395,11 @@ fn draw_code(world: &hecs::World, entity: hecs::Entity, canvas: &skia_safe::Canv
         }
     } else {
         draw_highlights(&from, &shape, opacity, canvas);
+
         for part in parts {
             part_style.fill = part.color.unwrap();
             part_style.stroke.a = style.stroke.a * part_style.fill.a;
+
             draw_complete_styled_path(&part.path, &part_style, transform.scale, opacity, canvas);
         }
     }
@@ -368,9 +409,11 @@ fn code_box(world: &hecs::World, entity: hecs::Entity) -> Vector2 {
     let shape = world.get::<&CodeShape>(entity).unwrap();
     let fade = world.get::<&TextFade>(entity).unwrap();
     let mut size = layout(&shape, &shape.code, Color::default()).size;
+
     if let Some(text) = fade.incoming_text(&shape.code) {
         size = size.max(layout(&shape, text, Color::default()).size);
     }
+
     size
 }
 
@@ -390,6 +433,7 @@ impl Default for Code {
                     let size = code_box(world, entity);
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
+
                     crate::core::components::styled_bounds(
                         skia_safe::Rect::from_xywh(-size.x * 0.5, -size.y * 0.5, size.x, size.y),
                         &style,
@@ -418,6 +462,7 @@ fn syntax_tokens(
                 TokenKind::Comment => shape.comment_color,
                 TokenKind::Operator => shape.operator_color,
             };
+
             (token.range.clone(), color)
         })
         .collect()
@@ -426,9 +471,11 @@ fn syntax_tokens(
 #[cfg(test)]
 fn syntax_colors(source: &str, shape: &CodeShape, fill: Color) -> Vec<Color> {
     let mut colors = vec![fill; source.len()];
+
     for (range, color) in syntax_tokens(source, shape, fill) {
         colors[range].fill(color);
     }
+
     colors
 }
 
@@ -452,32 +499,46 @@ mod tests {
             .selection(CodeRanges::new(vec![[[1, 1], [1, 6]]]))
             .build(&mut scene);
         let mut surface = skia_safe::surfaces::raster_n32_premul((640, 320)).unwrap();
+
         surface.canvas().translate((320.0, 160.0));
         surface.canvas().clear(skia_safe::colors::TRANSPARENT);
+
         scene.draw(surface.canvas());
+
         assert_eq!(surface.peek_pixels().unwrap().get_color((320, 160)).a(), 0);
+
         scene.world_2d().add(&code);
+
         let before = code.get(CodeShape::code_property());
         let selection = code.get(CodeShape::selection_property());
         let bounds = code.box_size();
+
         scene.draw(surface.canvas());
+
         let pixels = surface.peek_pixels().unwrap();
         let mut red = false;
         let mut blue = false;
         let mut dimmed = false;
+
         for y in 0..320 {
             for x in 0..640 {
                 let color = pixels.get_color((x, y));
+
                 if color.a() == 0 {
                     continue;
                 }
+
                 red |= color.r() > 200 && color.b() < 20;
+
                 blue |= color.b() > 200 && color.r() < 20;
+
                 dimmed |= color.a() > 30 && color.a() <= 64;
+
                 assert!((x as f32 - 320.0).abs() <= bounds.x * 0.5 + 1.0);
                 assert!((y as f32 - 160.0).abs() <= bounds.y * 0.5 + 1.0);
             }
         }
+
         assert!(red && blue && dimmed);
         assert_eq!(code.get(CodeShape::code_property()), before);
         assert_eq!(code.get(CodeShape::selection_property()), selection);
@@ -491,6 +552,7 @@ mod tests {
         };
         let source = "local é = 0x1.fp+2 .. 2e-3 --[=[ Comment.\n]=]\n[==[String.]==] 'é\\\"'";
         let colors = syntax_colors(source, &shape, Color::WHITE);
+
         for (text, expected) in [
             ("local", shape.keyword_color),
             ("0x1.fp+2", shape.number_color),
@@ -501,6 +563,7 @@ mod tests {
             ("é", Color::WHITE),
         ] {
             let index = source.find(text).unwrap();
+
             assert!(
                 colors[index..index + text.len()]
                     .iter()
@@ -508,8 +571,11 @@ mod tests {
                 "{text}"
             );
         }
+
         let mut plain = shape.clone();
+
         plain.language = CodeLanguage::Plain;
+
         assert!(
             syntax_colors(source, &plain, Color::WHITE)
                 .iter()
@@ -520,6 +586,7 @@ mod tests {
     #[test]
     fn defaults_to_plain_and_hack_nerd_font() {
         let shape = CodeShape::default();
+
         assert_eq!(shape.language, CodeLanguage::Plain);
         assert_eq!(shape.font, Font::new(fonts::HACK_MONO));
     }
@@ -527,6 +594,7 @@ mod tests {
     #[test]
     fn token_edits_fade_whole_words_and_new_lines_without_matching_repeated_letters() {
         let shape = CodeShape::default();
+
         for (source, target, old, new, changed_line, changed_columns) in [
             (
                 "local value = 1",
@@ -551,8 +619,10 @@ mod tests {
             let mut outgoing = emphasized_parts(&from, &shape);
             let mut incoming = emphasized_parts(&to, &shape);
             let edits = [(old, new)];
+
             key_edit_parts(&from, &mut outgoing, &edits, false);
             key_edit_parts(&to, &mut incoming, &edits, true);
+
             for (cell, part) in to
                 .cells
                 .iter()
@@ -564,7 +634,9 @@ mod tests {
                     assert!(!outgoing.iter().any(|old| old.key == part.key));
                 }
             }
+
             let draws = morph_parts(&outgoing, &incoming, 0.5, false);
+
             assert!(
                 draws
                     .iter()
@@ -579,11 +651,14 @@ mod tests {
     fn tabs_use_visual_stops_and_preserve_unicode_source_positions() {
         let shape = CodeShape::default();
         let block = layout(&shape, "é\tx\r\nz", Color::WHITE);
+
         assert_eq!(
             block.cells.iter().map(|c| c.position).collect::<Vec<_>>(),
             vec![[1, 1], [1, 2], [1, 3], [2, 1]]
         );
+
         let space = shape.font.skia_font(shape.size).measure_str(" ", None).0;
+
         assert!((block.cells[2].rect.left - block.cells[0].rect.left - space * 4.0).abs() < 0.01);
     }
 }

@@ -21,6 +21,7 @@ fn animated_frame(
             0.0,
             motion::CONTROL_DURATION,
         );
+
         (hover_key, amount)
     };
     let color = motion::mix(ui.style_color(normal), ui.style_color(hovered), amount);
@@ -28,7 +29,9 @@ fn animated_frame(
     let _hovered = ui.push_style_color(hovered, color);
     let clicked = draw();
     let hovered = ui.is_item_hovered();
+
     ui.with_current_state_storage(|mut storage| storage.set_bool(hover_key, hovered));
+
     clicked
 }
 
@@ -42,7 +45,6 @@ pub fn text_button_colored(ui: &Ui, label: &str, size: [f32; 2], color: StyleCol
     let _hovered = ui.push_style_color(StyleColor::ButtonHovered, transparent);
     let _active = ui.push_style_color(StyleColor::ButtonActive, transparent);
     let _border = ui.push_style_var(StyleVar::FrameBorderSize(0.0));
-
     let clicked = ui.invisible_button(label, size);
     let (min, max) = ui.item_rect();
     let text_size = ui.calc_text_size(label);
@@ -62,8 +64,8 @@ pub fn text_button_colored(ui: &Ui, label: &str, size: [f32; 2], color: StyleCol
         ui.style_color(StyleColor::TextLink),
         if ui.is_item_active() { 1.0 } else { amount },
     );
-
     let _text = ui.push_style_color(StyleColor::Text, text_color);
+
     ui.get_window_draw_list()
         .add_text(text_position, ui.get_color_u32(StyleColor::Text), label);
 
@@ -117,20 +119,25 @@ pub fn choice<S: AsRef<str>>(ui: &Ui, label: &str, current: &mut usize, options:
         return false;
     };
     let mut changed = false;
+
     for (index, option) in options.iter().enumerate() {
         let _id = ui.push_id(index);
+
         if ui
             .selectable_config(option.as_ref())
             .selected(*current == index)
             .build()
         {
             changed = *current != index;
+
             *current = index;
         }
+
         if *current == index {
             ui.set_item_default_focus();
         }
     }
+
     changed
 }
 
@@ -177,6 +184,7 @@ pub fn progress(ui: &Ui, progress: f32, label: &str) {
 pub fn icon_toggle(ui: &Ui, label: &str, enabled: bool) -> bool {
     let amount = {
         let _id = ui.push_id(label);
+
         motion::transition(
             ui,
             "##ToggleSelection",
@@ -193,6 +201,8 @@ pub fn icon_toggle(ui: &Ui, label: &str, enabled: bool) -> bool {
             amount,
         ),
     );
+
     ui.set_next_item_allow_overlap();
+
     text_button_colored(ui, label, [ui.frame_height(); 2], StyleColor::Text)
 }

@@ -168,7 +168,6 @@ fn pair(value: Value) -> Result<(Value, Value)> {
             "From requires a pair {start, finish}.",
         ));
     };
-
     let entries = table
         .clone()
         .pairs::<Value, Value>()
@@ -225,7 +224,6 @@ impl AnimationDefinition {
             let mask = property
                 .channel
                 .map_or((1 << property.value()?.channels()) - 1, |c| 1 << c);
-
             let (start, mut finish) = if operation == Operation::From {
                 let (start, finish) = pair(value)?;
 
@@ -438,12 +436,12 @@ impl AnimationDefinition {
                 } = task
                 {
                     camera_value(&mut initial, target.name(), from);
-
                     camera_value(&mut camera, target.name(), to);
                 }
             }
 
             initial.validate().map_err(mlua::Error::runtime)?;
+
             camera.validate().map_err(mlua::Error::runtime)?;
         }
 

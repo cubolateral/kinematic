@@ -85,7 +85,6 @@ mod tests {
         let ellipse = ellipse().radius(vec2(160.0, 80.0)).build(&mut scene);
 
         assert_eq!(ellipse.box_size(), vec2(320.0, 160.0));
-
         assert_eq!(
             ellipse.get(EllipseShape::radius_property()),
             vec2(160.0, 80.0)

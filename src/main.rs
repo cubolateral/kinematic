@@ -43,6 +43,7 @@ fn run() -> Result<(), String> {
         let name = args.get(2).ok_or("Missing project name.")?;
 
         LuaProject::create(root, name, args.iter().any(|a| a == "--3d"))?;
+
         println!("Created {}.", root);
 
         return Ok(());
@@ -54,6 +55,7 @@ fn run() -> Result<(), String> {
 
         for scene in scenes {
             scene.update(scene.duration()).map_err(|e| e.to_string())?;
+
             println!("Validated scene ({} seconds).", scene.duration());
         }
 
@@ -69,11 +71,13 @@ fn run() -> Result<(), String> {
     }
 
     let mut app = app::app();
+
     if let Some(root) = args.first() {
         app = app.open_project(root);
     } else if let Some(root) = storage::current_project()
         .unwrap_or_else(|error| {
             eprintln!("Could not restore current project: {error}.");
+
             None
         })
         .filter(|root| root.is_dir())

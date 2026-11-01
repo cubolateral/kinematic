@@ -113,7 +113,6 @@ fn guide_mesh(
     let guide_extent = guide_scale * 100.0;
     let mut positions = Vec::new();
     let mut colors = Vec::new();
-
     let axis_extent = guide_extent.max(100.0);
 
     for (enabled, from, to, color) in [
@@ -214,11 +213,9 @@ fn add_segment(
     let right = rotation * glam::Vec3::X;
     let up = rotation * glam::Vec3::Y;
     let forward = rotation * -glam::Vec3::Z;
-
     let Some((from, to)) = clip_segment_to_camera(camera, forward, from, to) else {
         return;
     };
-
     let direction = to - from;
 
     if !direction.is_finite() || direction.length_squared() <= f32::EPSILON {
@@ -264,6 +261,7 @@ fn add_segment(
     ];
 
     positions.extend(vertices);
+
     colors.extend([color; 6]);
 }
 
@@ -322,9 +320,7 @@ mod tests {
             renderer.occluded.render_states.depth_test,
             three_d::DepthTest::Always
         );
-
         assert!(!renderer.occluded.render_states.write_mask.depth);
-
         assert_eq!(
             renderer.visible.render_states.depth_test,
             three_d::DepthTest::LessOrEqual
@@ -362,7 +358,6 @@ mod tests {
         let forward = -glam::Vec3::Z;
 
         assert!(!positions.is_empty());
-
         assert!(positions.iter().all(|point| {
             (*point - camera.camera_position).dot(forward) >= camera.camera_near - 0.0001
         }));

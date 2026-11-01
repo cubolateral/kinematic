@@ -46,12 +46,15 @@ impl Latex3DShape {
         let mut hash = DefaultHasher::new();
 
         text.hash(&mut hash);
+
         part.hash(&mut hash);
+
         let thickness = if self.size > f32::EPSILON {
             self.thickness / self.size
         } else {
             0.0
         };
+
         thickness.to_bits().hash(&mut hash);
 
         GeometryKey::new::<Latex3DShape>(hash.finish())
@@ -133,12 +136,12 @@ fn draw_latex_object(
 
     let material = world.get::<&Material>(entity).unwrap();
     let transform = global_matrix3d(world, entity);
-
     let fade = world.get::<&TextFade>(entity).unwrap();
 
     if let Some(text) = fade.incoming_text(&shape.text) {
         if fade.morph {
             use crate::core::objects::{latex_geometry::morph_geometry, text_morph::morph_parts};
+
             let thickness = if shape.size > f32::EPSILON {
                 shape.thickness / shape.size
             } else {
@@ -147,12 +150,15 @@ fn draw_latex_object(
             let from = morph_geometry(&shape.text, thickness);
             let to = morph_geometry(text, thickness);
             let mut part_material = (*material).clone();
+
             for part in morph_parts(&from, &to, fade.progress, fade.group) {
                 if part.opacity <= 0.0 {
                     continue;
                 }
+
                 part_material.opacity = material.opacity * part.opacity;
                 part_material.albedo = part.color(material.albedo);
+
                 context.render_material(
                     shape.geometry_key(if part.incoming { text } else { &shape.text }, part.index),
                     || extruded_path_mesh(&part.part.path, LATEX_TESSELLATION_TOLERANCE),
@@ -160,8 +166,10 @@ fn draw_latex_object(
                     &part_material,
                 )?;
             }
+
             return Ok(());
         }
+
         let incoming = Latex3DShape {
             text: text.to_owned(),
             ..(*shape).clone()
@@ -170,9 +178,11 @@ fn draw_latex_object(
         let mut incoming_material = (*material).clone();
 
         outgoing_material.opacity *= 1.0 - fade.progress;
+
         incoming_material.opacity *= fade.progress;
 
         draw_latex_3d(&shape, &outgoing_material, transform, context)?;
+
         draw_latex_3d(&incoming, &incoming_material, transform, context)?;
     } else {
         draw_latex_3d(&shape, &material, transform, context)?;

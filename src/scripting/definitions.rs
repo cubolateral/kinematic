@@ -9,6 +9,7 @@ pub fn definitions() -> String {
     output.push_str(include_str!("property.lua"));
 
     value_definitions(&mut output);
+
     output.push_str("--- Named easing curves accepted by Animation:play. The default is cubic_in_out.\n---@class Kinematic.Easing\n");
 
     for easing in Easing::ALL {
@@ -60,6 +61,7 @@ pub fn definitions() -> String {
 
         if new_class {
             documentation(&mut output, object.documentation);
+
             output.push_str(&format!("---@class Kinematic.{class}: Kinematic.Object\n"));
             output.push_str(&format!("---@field signal fun(self:Kinematic.{class}, callback:fun(object:Kinematic.{class}, frame:Kinematic.Frame)):Kinematic.Signal Runs a callback after scene evaluation at each frame; returns a signal that can be stopped.\n"));
 
@@ -76,6 +78,7 @@ pub fn definitions() -> String {
 
             for method in object.methods {
                 documentation(&mut output, method.documentation);
+
                 output.push_str(&method.annotation.replace("Native:", &format!("{class}:")));
                 output.push('\n');
             }
@@ -104,6 +107,7 @@ pub fn definitions() -> String {
 
         if !custom {
             documentation(&mut output, object.documentation);
+
             output.push_str("--- Creates the object with the supplied initial properties at the current schedule time.\n");
             output.push_str(&format!("---@param options Kinematic.{options_class} Initial properties, name, identifier, and resources.\n---@return Kinematic.{class} object Handle exposing animatable properties and object methods.\nfunction Scene:{}(options) end\n\n",object.name));
         }
@@ -173,7 +177,6 @@ fn value_definitions(output: &mut String) {
         let methods = include_str!("property.lua");
 
         output.push_str(&format!("local {class}Property = {{}}\n\n"));
-
         output.push_str(
             &methods
                 .replace("---@generic T\n", "")
@@ -367,20 +370,23 @@ mod tests {
                     object.name,
                     method.name
                 );
-
                 assert!(definitions.contains(method.documentation.lines().next().unwrap().trim()));
             }
         }
 
         assert!(definitions.contains("Radius in local coordinates. Default: 128. Minimum: 0."));
         assert!(definitions.contains("Position of the entity."));
+
         for name in ["Text2D", "Text3D", "Latex2D", "Latex3D"] {
             assert!(definitions.contains(&format!("function {name}:morph(text, group) end\n\n")));
         }
+
         for name in ["Text2D", "Latex2D", "Latex3D"] {
             assert!(definitions.contains(&format!("function {name}:fade(text) end\n\n")));
         }
+
         assert!(!definitions.contains("Scene:native"));
+
         for name in ["to", "by", "from"] {
             assert!(!definitions.contains(&format!("function Animation:{name}(")));
         }
@@ -408,7 +414,6 @@ mod tests {
                 block.lines().any(|line| line.starts_with("--- ")),
                 "{block}"
             );
-
             assert_eq!(
                 block
                     .lines()

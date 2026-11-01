@@ -108,9 +108,11 @@ pub(crate) fn atomic_write(
         }
 
         file.sync_all()?;
+
         drop(file);
 
         unchanged(path, expected)?;
+
         std::fs::rename(&temporary, path)?;
 
         Ok(())
@@ -139,6 +141,7 @@ mod tests {
         atomic_write(&path, b"Original", None).unwrap();
 
         std::fs::write(&path, b"External").unwrap();
+
         assert!(atomic_write(&path, b"Local", Some(b"Original")).is_err());
         assert_eq!(std::fs::read(&path).unwrap(), b"External");
 
@@ -147,7 +150,6 @@ mod tests {
         let context = ProjectContext::new(&root).unwrap();
 
         assert!(context.resolve("../outside.lua").is_err());
-
         assert_eq!(
             context.resolve("scenes/intro.lua").unwrap(),
             root.canonicalize().unwrap().join("scenes/intro.lua")

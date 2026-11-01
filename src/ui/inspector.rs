@@ -52,11 +52,13 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
     windows::panel(ui, WINDOW_NAME, || {
         super::timeline::audio_shortcuts(editor, ui, true);
+
         if let Some(clip) = editor.selected_audio() {
             audio::draw(editor, ui, &mut state.audio, clip);
 
             return;
         }
+
         state.audio = audio::State::default();
 
         let Some((scene_index, entity)) = selected else {
@@ -64,21 +66,18 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
             return;
         };
-
         let _object_id = ui.push_id(&format!("{scene_index}:{}", entity.to_bits()));
-
         let (scene, inspector_edits) = editor.inspector_scene_mut(scene_index);
         let world = scene.world();
-
         let Ok(inspection) = world.get::<&Inspection>(entity) else {
             widgets::muted(ui, "The selected object is unavailable.");
 
             return;
         };
-
         let name = world
             .get::<&Name>(entity)
             .expect("Inspected object must contain a Name component.");
+
         header(ui, name.get(), &format!("Type: {}", inspection.object_name));
 
         if let Ok(settings) = world.get::<&CanvasSettings>(entity) {
@@ -88,6 +87,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
                 &format!("{} x {}.", settings.resolution.0, settings.resolution.1),
             );
         }
+
         if let Ok(source) = world.get::<&ProjectionSource>(entity) {
             properties::read_only(
                 ui,
@@ -128,16 +128,21 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
             if edit.changed {
                 value = target.clamp(value);
+
                 let valid = match &target {
                     TrackTarget::Dynamic(schema) => schema.validate(&value).is_ok(),
                     _ => value.validate().is_ok(),
                 };
+
                 if valid && value != before {
                     inspector_edits.record(entity, target.clone(), before);
+
                     target.set(&world, entity, value);
+
                     scene.invalidate();
                 }
             }
+
             if edit.reset {
                 inspector_edits.reset(scene, entity, &target);
             }
@@ -147,9 +152,12 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
 fn header(ui: &dear_imgui_rs::Ui, name: &str, details: &str) {
     widgets::text(ui, name);
+
     ui.same_line();
+
     widgets::muted(ui, details);
     widgets::separator(ui);
+
     ui.spacing();
 }
 
@@ -181,11 +189,9 @@ fn edit_value_input(
             let Some(track) = track else {
                 return false;
             };
-
             let TrackChoices::Enum(variants) = track.choices else {
                 return false;
             };
-
             let Some(mut current) = variants.iter().position(|variant| variant == v) else {
                 return false;
             };
@@ -343,6 +349,7 @@ fn edit_value_input(
         }
         TrackValue::CodeRanges(v) => {
             widgets::text(ui, format!("{name}: {v}"));
+
             false
         }
         TrackValue::String(v) => controls::text_area(ui, name, v),
@@ -397,13 +404,11 @@ mod tests {
         let mut context = dear_imgui_rs::Context::create();
 
         context.set_ini_filename(None::<&str>).unwrap();
-
         context
             .font_atlas()
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
-
         context.io_mut().set_display_size([320.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
 
@@ -449,7 +454,6 @@ mod tests {
                                 !edit_value(ui, &mut state, "Position", &mut vector, None, false)
                                     .changed
                             );
-
                             assert_eq!(ui.item_rect_size(), size);
                         }
                     }
@@ -484,7 +488,6 @@ mod tests {
 
         assert!(original.dot(restored).abs() > 1.0 - 1e-6);
         assert!((original.length() - 1.0).abs() < 1e-6);
-
         assert!(quaternion_from_degrees([0.0, 90.0, 0.0]).abs_diff_eq(
             glam::Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
             1e-6
@@ -495,6 +498,7 @@ mod tests {
         edit.euler = [385.0, -40.0, 110.0];
 
         edit.sync(original);
+
         assert_eq!(edit.euler[0], 385.0);
 
         edit.mode = 1;
@@ -502,6 +506,7 @@ mod tests {
         let external = glam::Quat::from_rotation_x(0.5);
 
         edit.sync(external);
+
         assert_eq!(edit.mode, 1);
         assert!(external.dot(quaternion_from_degrees(edit.euler)).abs() > 1.0 - 1e-6);
     }

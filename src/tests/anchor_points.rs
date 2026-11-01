@@ -21,10 +21,11 @@ fn two_dimensional_anchors_align_objects() {
     assert_eq!(other.top_right(), vec2(60.0, 25.0));
     assert_eq!(other.bottom_left(), vec2(40.0, 35.0));
     assert_eq!(other.bottom_right(), vec2(60.0, 35.0));
-
     assert_eq!(object.left_to(other.right()), vec2(64.0, 30.0));
     assert_eq!(object.top_to(other.bottom()), vec2(50.0, 37.0));
+
     object.position(object.left_to(other.right())).immediate();
+
     assert_eq!(object.left(), other.right());
 }
 
@@ -44,15 +45,14 @@ fn three_dimensional_anchors_align_objects() {
     assert_eq!(other.back(), vec3(50.0, 30.0, 9.0));
     assert_eq!(other.top_left_front(), vec3(40.0, 35.0, 15.0));
     assert_eq!(other.bottom_right_back(), vec3(60.0, 25.0, 9.0));
-
     assert_eq!(object.back_to(other.front()), vec3(50.0, 30.0, 16.0));
-
     assert_eq!(
         object.top_left_front_to(other.bottom_right_back()),
         vec3(64.0, 23.0, 8.0)
     );
 
     object.position(object.back_to(other.front())).immediate();
+
     assert_eq!(object.back(), other.front());
 }
 
@@ -73,7 +73,9 @@ fn group_anchor_uses_offset_child_bounds() {
 
     assert_eq!(group.box_size(), vec2(10.0, 10.0));
     assert_eq!(group.bottom_to(margin.bottom()), vec2(0.0, 85.0));
+
     group.position(group.bottom_to(margin.bottom())).immediate();
+
     assert_eq!(group.bottom(), margin.bottom());
 }
 
@@ -123,7 +125,6 @@ fn anchors_include_children_scheduled_for_the_current_time() {
     assert_eq!(group_2d.box_size(), Vector2::ZERO);
     assert_eq!(group_3d.box_size(), Vector3::ZERO);
     assert_eq!(group_2d.bottom_to(vec2(0.0, 100.0)), vec2(0.0, 75.0));
-
     assert_eq!(
         group_3d.front_to(vec3(0.0, 0.0, 100.0)),
         vec3(0.0, 0.0, 75.0)
@@ -165,7 +166,6 @@ fn future_nested_group_bottom_aligns_after_play() {
             .position(rule_group.bottom_to(margin.bottom()))
             .play();
     });
-
     scene.update(2.0);
 
     assert_eq!(rule_group.bottom(), margin.bottom());

@@ -40,6 +40,7 @@ fn presentation(messages: &[String]) -> Vec<Message<'_>> {
         .enumerate()
         .map(|(id, raw)| {
             let (_, text) = message_parts(raw, false);
+
             Message {
                 id,
                 severity: severity(raw),
@@ -91,6 +92,7 @@ mod tests {
             "Warning: LuaLS main.lua:12:1: Unused name.".into(),
         ];
         let view = presentation(&raw);
+
         assert_eq!(view[0].id, 0);
         assert_eq!(view[0].text, "Missing name.");
         assert_eq!(view[0].location, Some([10, 4]));

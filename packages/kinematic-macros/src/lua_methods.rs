@@ -70,23 +70,21 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
             let FnArg::Typed(input) = input else {
                 unreachable!()
             };
-
             let Pat::Ident(name) = &*input.pat else {
                 return Err(syn::Error::new_spanned(
                     input,
                     "Lua arguments require simple names.",
                 ));
             };
-
             let Type::Path(path) = &*input.ty else {
                 return Err(syn::Error::new_spanned(
                     &input.ty,
                     "Unsupported Lua argument type.",
                 ));
             };
-
             let mut value_type = &*input.ty;
             let optional = path.path.segments.last().unwrap().ident == "Option";
+
             if optional {
                 let syn::PathArguments::AngleBracketed(args) =
                     &path.path.segments.last().unwrap().arguments
@@ -99,6 +97,7 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
                         "Expected an optional primitive type.",
                     ));
                 };
+
                 value_type = inner;
             } else {
                 if required != names.len() {
@@ -107,8 +106,10 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
                         "Required arguments must precede optional arguments.",
                     ));
                 }
+
                 required += 1;
             }
+
             let Type::Path(value_path) = value_type else {
                 return Err(syn::Error::new_spanned(
                     value_type,
@@ -147,7 +148,6 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
             } else {
                 quote!()
             };
-
             let conversion = quote! {
                 if !(#compatible) { return Err(mlua::Error::runtime("Incompatible native method argument type.")); }
                 let #ident = <#rust_type as mlua::FromLua>::from_lua(value, lua)?;
@@ -159,12 +159,16 @@ fn generate(block: &mut ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
             } else {
                 quote!({ #conversion })
             };
+
             conversions.push(quote! {
                 let value = values.next().unwrap_or(mlua::Value::Nil);
                 let #ident = #conversion;
             });
+
             let suffix = if optional { "?" } else { "" };
+
             annotations.push_str(&format!("---@param {} {lua_type}{suffix}\n", name.ident));
+
             names.push(&name.ident);
         }
 

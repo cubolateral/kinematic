@@ -67,7 +67,9 @@ fn custom_3d_object_uses_the_public_draw_contract() {
     scene.world_3d().add(&custom);
 
     assert_eq!(custom.get_position_z(), 3.0);
+
     custom.set_position_z(4.0);
+
     assert_eq!(custom.get_position_z(), 4.0);
     assert_eq!(custom.box_size(), vec3(2.0, 3.0, 4.0));
     assert_eq!(custom.global_position(), vec3(1.0, 2.0, 4.0));

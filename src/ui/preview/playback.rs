@@ -11,6 +11,7 @@ pub(super) fn draw(
     volume: &mut i32,
 ) -> bool {
     use kinematic_ui::timeline::transport::{self, Action};
+
     let playing = timeline.is_playing();
     let status = if !interactive {
         "EXPORTING".to_owned()
@@ -43,7 +44,9 @@ pub(super) fn draw(
         volume,
         &mut speed,
     );
+
     timeline.set_playback_speed(speed);
+
     match action {
         Some(Action::Start) => timeline.go_to_start(),
         Some(Action::Previous) => timeline.previous_frame(),
@@ -53,6 +56,7 @@ pub(super) fn draw(
         Some(Action::Loop) => timeline.toggle_loop(),
         _ => (),
     }
+
     action == Some(Action::Fullscreen)
 }
 
@@ -103,7 +107,6 @@ pub(in crate::ui) fn fullscreen_controls(
         ui.set_cursor_screen_pos([scrubber_min[0], buttons_y]);
 
         let response = draw(timeline, ui, fps, interactive, true, volume);
-
         let mouse = ui.io().mouse_pos();
         let panel_hovered = ui.is_mouse_hovering_rect(
             scrubber_min,

@@ -255,7 +255,6 @@ mod tests {
                 easing.evaluate(0.0).abs() < 0.000_001,
                 "{easing:?} must start at zero."
             );
-
             assert!(
                 (easing.evaluate(1.0) - 1.0).abs() < 0.000_001,
                 "{easing:?} must end at one."

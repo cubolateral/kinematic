@@ -56,16 +56,20 @@ fn draw_top_bar(
 
     {
         let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
+
         if controls::text_button(ui, kinematic_ui::icons::HOME, [ui.frame_height(); 2]) {
             code.request_project(ProjectAction::Close);
         }
+
         inputs::tooltip(ui, InputAction::ProjectList, "Home");
     }
 
     draw_project_menu(settings, editor, messages, ui);
 
     let started = export::draw(editor, ui);
+
     draw_bar_actions(code, settings, false, ui);
+
     started
 }
 
@@ -79,9 +83,11 @@ fn draw_project_menu(
         ui,
         ui.window_pos()[1] + ui.window_size()[1] - kinematic_ui::theme::BORDER_WIDTH,
     );
+
     if let Some(_menu) = controls::menu(ui, "Project") {
         {
             let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
+
             if kinematic_ui::menu::item(
                 ui,
                 "Save project",
@@ -91,6 +97,7 @@ fn draw_project_menu(
                     messages.show(Kind::Error, error);
                 }
             }
+
             if controls::menu_item(ui, "Project settings") {
                 settings.project_open = true;
             }
@@ -113,21 +120,26 @@ fn draw_bar_actions(
     let width = ui.frame_height();
     let spacing = ui.clone_style().item_spacing()[0];
     let count = if home { 2.0 } else { 1.0 };
+
     ui.set_cursor_pos_x(
         ui.window_size()[0]
             - ui.clone_style().window_padding()[0]
             - width * count
             - spacing * (count - 1.0),
     );
+
     if home {
         if controls::text_button(ui, kinematic_ui::icons::SETTINGS, [width; 2]) {
             settings.editor_open = true;
         }
+
         ui.same_line();
     }
+
     if controls::text_button(ui, kinematic_ui::icons::CLOSE, [width; 2]) {
         code.request_exit();
     }
+
     inputs::tooltip(ui, InputAction::Quit, "Quit");
 }
 
@@ -141,6 +153,7 @@ impl Ui {
         let mut flags = context.io().config_flags();
 
         flags.insert(dear_imgui_rs::ConfigFlags::DOCKING_ENABLE);
+
         context.io_mut().set_config_flags(flags);
         context.io_mut().set_config_drag_click_to_input_text(true);
 
@@ -148,18 +161,24 @@ impl Ui {
         let mut code = code::State::default();
 
         code.zoom = cache.code_zoom;
+
         code.set_project_directory(cache.project_directory);
 
         let mut home = home::State::default();
+
         home.recent = cache.recent_projects;
         home.details = cache.project_details;
+
         if let Ok(Some(root)) = crate::storage::current_project() {
             if !home.recent.contains(&root) {
                 home.recent.insert(0, root);
             }
         }
+
         home.refresh();
+
         let font = theme::initialize(context);
+
         code.bold_font = Some(theme::load_bold_font(context));
 
         Self {
@@ -213,6 +232,7 @@ impl Ui {
                     self.messages.show(Kind::Error, error);
                 }
             }
+
             let fullscreen_button = preview::draw_fullscreen(editor, ui, &mut self.audio_volume);
 
             if fullscreen_shortcut || fullscreen_button {
@@ -283,6 +303,7 @@ impl Ui {
                 !self.code.focused && !self.code.files_focused(),
                 self.code.dragged_audio(),
             );
+
             fullscreen_button
         };
 
@@ -305,6 +326,7 @@ impl Ui {
         if let Some(path) = self.home.copy_path.take() {
             context.set_clipboard_text(path);
         }
+
         self.code.prepare(
             context,
             editor.and_then(|e| e.documents.as_ref()),
@@ -319,6 +341,7 @@ impl Ui {
 
         if editor.is_none() {
             let _border = ui.push_style_var(dear_imgui_rs::StyleVar::WindowBorderSize(0.0));
+
             if let Some(_bar) = ui.begin_main_menu_bar() {
                 draw_bar_actions(&mut self.code, &mut self.settings, true, ui);
             }
@@ -331,21 +354,28 @@ impl Ui {
         if inputs::active(ui, InputAction::Quit) {
             self.code.request_exit();
         }
+
         if editor.is_some() && inputs::active(ui, InputAction::ProjectList) {
             self.code.request_project(ProjectAction::Close);
         }
+
         if editor.is_none() {
             self.is_fullscreen = false;
+
             self.home.draw(&mut self.code, ui);
         }
+
         let has_editor = editor.is_some();
         let project_directory = self.code.project_directory();
+
         if !self.messages.is_pending() {
             self.code.projects(editor, ui);
         }
+
         if let Some(message) = self.code.project_error.take() {
             self.messages.show(Kind::Error, message);
         }
+
         if let Some(error) = self
             .home
             .error
@@ -354,14 +384,17 @@ impl Ui {
         {
             self.messages.show(Kind::Error, error);
         }
+
         if std::mem::take(&mut self.home.dirty)
             || project_directory != self.code.project_directory()
         {
             self.save_cache();
         }
+
         if !has_editor {
             self.draw_status_bar(ui, false);
         }
+
         self.messages.draw(ui);
     }
 
@@ -405,7 +438,9 @@ impl Ui {
 
     pub(crate) fn reset_project(&mut self) {
         self.code.reset();
+
         self.settings.project_open = false;
+
         self.home.refresh();
     }
 
@@ -436,8 +471,10 @@ impl Ui {
 
 fn save_project(editor: &mut Editor) -> Result<(), String> {
     editor.save_project()?;
+
     if let Some(documents) = &mut editor.documents {
         documents.save_all()?;
     }
+
     Ok(())
 }

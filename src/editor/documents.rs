@@ -129,9 +129,12 @@ impl Documents {
                 document.text = text;
 
                 document.version += 1;
+
                 document.edited_at = Instant::now();
+
                 self.formatting_saves.remove(path);
                 self.formatting_previews.remove(path);
+
                 self.status = "Unsaved edits; preview uses saved files.".into();
             }
         }
@@ -139,6 +142,7 @@ impl Documents {
 
     pub fn request(&mut self, path: PathBuf) {
         self.changed.insert(path);
+
         self.revision += 1;
 
         self.last_edit = Instant::now();
@@ -178,7 +182,6 @@ impl Documents {
         } else {
             document.text.clone()
         };
-
         let document = self.open.get_mut(path).unwrap();
 
         if let Err(error) = atomic_write(
@@ -193,10 +196,12 @@ impl Documents {
 
         if document.text != text {
             document.text = text.clone();
+
             document.version += 1;
         }
 
         document.disk = Some(text.as_bytes().to_vec());
+
         let saved_version = document.version;
 
         self.request(path.to_owned());
@@ -253,6 +258,7 @@ impl Documents {
     pub fn clear_formatting_previews(&mut self) {
         self.formatting_previews.clear();
         self.formatting_saves.clear();
+
         if let Some(lsp) = &mut self.lsp {
             lsp.cancel_format_requests();
         }
@@ -329,6 +335,7 @@ impl Documents {
             std::fs::create_dir(&full).map_err(|e| e.to_string())?;
         } else {
             atomic_write(&full, b"", None).map_err(|e| e.to_string())?;
+
             self.open(path)?;
         }
 
@@ -339,6 +346,7 @@ impl Documents {
 
     pub fn rename(&mut self, from: &Path, to: &Path) -> Result<(), String> {
         self.check_file_path(from)?;
+
         self.check_file_path(to)?;
 
         let manifest = self.scene_manifest(|manifest| {
@@ -347,11 +355,13 @@ impl Documents {
                     *path = next;
                 }
             }
+
             for clip in &mut manifest.audio {
                 if let Some(next) = files::renamed_path(&clip.file, from, to) {
                     clip.file = next;
                 }
             }
+
             manifest.legacy_audio = std::mem::take(&mut manifest.legacy_audio)
                 .into_iter()
                 .map(|(path, mut clips)| {
@@ -360,6 +370,7 @@ impl Documents {
                             clip.file = next;
                         }
                     }
+
                     (files::renamed_path(&path, from, to).unwrap_or(path), clips)
                 })
                 .collect();
@@ -481,10 +492,10 @@ impl Documents {
             Err(error) => {
                 self.diagnostics
                     .push(format!("Formatting skipped: {error}"));
+
                 return;
             }
         };
-
         let result = self
             .context
             .resolve(&reply.path)
@@ -496,13 +507,16 @@ impl Documents {
 
         if let Err(error) = result {
             document.conflict = true;
+
             self.diagnostics
                 .push(format!("Formatting skipped: {error}"));
+
             return;
         }
 
         document.text = formatted;
         document.disk = Some(document.text.as_bytes().to_vec());
+
         document.version += 1;
     }
 
@@ -538,7 +552,9 @@ impl Documents {
 
             let utf8 = lsp.utf8;
             let replies = lsp.poll();
+
             self.diagnostics.append(&mut lsp.messages);
+
             for reply in replies {
                 if reply.method == "textDocument/formatting" {
                     if self.formatting_saves.get(&reply.path) == Some(&reply.version) {
@@ -579,6 +595,7 @@ impl Documents {
                                     | notify::EventKind::Modify(notify::event::ModifyKind::Name(_))
                             ) {
                                 let full = self.context.root().join(path);
+
                                 if full.is_dir() {
                                     if let Err(error) = watch_directory(
                                         &mut self.watcher,
@@ -589,6 +606,7 @@ impl Documents {
                                     }
                                 }
                             }
+
                             if watched(path) {
                                 self.file_paths = None;
 
@@ -620,6 +638,7 @@ impl Documents {
 
                 if document.dirty() {
                     document.conflict = true;
+
                     self.status = "External edit conflicts with an unsaved document.".into();
 
                     continue;
@@ -651,6 +670,7 @@ impl Documents {
             }
 
             self.changed.insert(path);
+
             self.revision += 1;
         }
 
@@ -671,14 +691,18 @@ fn watch_directory(
                 .watch(root, notify::RecursiveMode::Recursive)
                 .map_err(|e| e.to_string())?;
         }
+
         Ok(())
     }
+
     #[cfg(not(windows))]
     {
         let relative = directory.strip_prefix(root).map_err(|e| e.to_string())?;
+
         if !watched(relative) && relative != Path::new("kinematic") {
             return Ok(());
         }
+
         if std::fs::symlink_metadata(directory)
             .map_err(|e| e.to_string())?
             .file_type()
@@ -686,15 +710,19 @@ fn watch_directory(
         {
             return Ok(());
         }
+
         watcher
             .watch(directory, notify::RecursiveMode::NonRecursive)
             .map_err(|e| e.to_string())?;
+
         for entry in std::fs::read_dir(directory).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
+
             if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
                 watch_directory(watcher, root, &entry.path())?;
             }
         }
+
         Ok(())
     }
 }
@@ -723,6 +751,7 @@ mod tests {
     #[test]
     fn monitoring_skips_ignored_trees_but_keeps_project_files_and_metadata() {
         let root = std::env::temp_dir().join(format!("kinematic-watch-{}", std::process::id()));
+
         for path in [
             "scenes/nested",
             "kinematic/scenes",
@@ -732,12 +761,15 @@ mod tests {
         ] {
             std::fs::create_dir_all(root.join(path)).unwrap();
         }
+
         let (send, receive) = mpsc::channel();
         let mut watcher = notify::recommended_watcher(move |event| {
             let _ = send.send(event);
         })
         .unwrap();
+
         watch_directory(&mut watcher, &root, &root).unwrap();
+
         for path in [
             "kinematic/target/ignored.lua",
             "target/ignored.lua",
@@ -748,9 +780,12 @@ mod tests {
         ] {
             std::fs::write(root.join(path), "Test.").unwrap();
         }
+
         let mut changed = BTreeSet::new();
+
         while let Ok(event) = receive.recv_timeout(Duration::from_millis(200)) {
             let event = event.unwrap();
+
             if !matches!(event.kind, notify::EventKind::Access(_)) {
                 changed.extend(
                     event
@@ -760,6 +795,7 @@ mod tests {
                 );
             }
         }
+
         for path in [
             "scenes/nested/intro.lua",
             "kinematic/project.ron",
@@ -770,6 +806,7 @@ mod tests {
                 "Missing event for {path}."
             );
         }
+
         for path in [
             "kinematic/target/ignored.lua",
             "target/ignored.lua",
@@ -780,62 +817,88 @@ mod tests {
                 "Unexpected event for {path}."
             );
         }
+
         drop(watcher);
+
         std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn monitoring_picks_up_created_and_renamed_directories() {
         let root = std::env::temp_dir().join(format!("kinematic-watch-new-{}", std::process::id()));
+
         std::fs::create_dir_all(&root).unwrap();
+
         let mut docs = Documents::new(ProjectContext::new(&root).unwrap(), "").unwrap();
         // Test directory watching independently of LuaLS.
         drop(docs.lsp.take());
+
         let wait_for_change = |docs: &mut Documents, path: &Path| {
             let deadline = Instant::now() + Duration::from_secs(2);
+
             while !docs.external.contains(path) && !docs.changed.contains(path) {
                 docs.poll();
+
                 assert!(
                     Instant::now() < deadline,
                     "Missing event for {}.",
                     path.display()
                 );
+
                 std::thread::sleep(Duration::from_millis(10));
             }
         };
+
         std::fs::create_dir_all(root.join("new/nested")).unwrap();
+
         wait_for_change(&mut docs, Path::new("new"));
+
         std::fs::write(root.join("new/nested/intro.lua"), "Original.").unwrap();
+
         wait_for_change(&mut docs, Path::new("new/nested/intro.lua"));
+
         std::fs::rename(root.join("new"), root.join("moved")).unwrap();
+
         wait_for_change(&mut docs, Path::new("moved"));
+
         std::fs::write(root.join("moved/nested/intro.lua"), "Updated.").unwrap();
+
         wait_for_change(&mut docs, Path::new("moved/nested/intro.lua"));
+
         drop(docs);
+
         std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
     fn auto_save_waits_for_idle_edits_and_skips_conflicts() {
         let root = std::env::temp_dir().join(format!("kinematic-auto-save-{}", std::process::id()));
+
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("test.lua"), "Old").unwrap();
+
         let mut docs = Documents::new(
             ProjectContext::new(&root).unwrap(),
             &crate::scripting::definitions(),
         )
         .unwrap();
         let path = Path::new("test.lua");
+
         docs.open(path).unwrap();
         docs.edit(path, "New".into());
 
         assert!(docs.auto_save_paths(Duration::from_secs(1)).is_empty());
+
         docs.open.get_mut(path).unwrap().edited_at -= Duration::from_secs(1);
+
         assert_eq!(docs.auto_save_paths(Duration::from_secs(1)), vec![path]);
+
         docs.open.get_mut(path).unwrap().conflict = true;
+
         assert!(docs.auto_save_paths(Duration::from_secs(1)).is_empty());
 
         drop(docs);
+
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
@@ -843,7 +906,6 @@ mod tests {
         let root = std::env::temp_dir().join(format!("kinematic-documents-{}", std::process::id()));
 
         std::fs::create_dir_all(&root).unwrap();
-
         std::fs::write(root.join("test.lua"), "Old").unwrap();
 
         let mut docs = Documents::new(
@@ -855,15 +917,19 @@ mod tests {
 
         docs.open(path).unwrap();
         docs.edit(path, "Local".into());
+
         assert_eq!(docs.sources()[path], "Old");
         assert_eq!(docs.revision, 0);
         assert_eq!(std::fs::read_to_string(root.join(path)).unwrap(), "Old");
 
         std::fs::write(root.join(path), "External").unwrap();
+
         assert!(docs.save(path).is_err());
         assert_eq!(docs.open[path].text, "Local");
+
         docs.resolve_conflict(path, true).unwrap();
         docs.save(path).unwrap();
+
         assert_eq!(docs.sources()[path], "Local");
         assert_eq!(std::fs::read_to_string(root.join(path)).unwrap(), "Local");
 
@@ -876,6 +942,7 @@ mod tests {
     fn delayed_format_only_changes_the_saved_revision() {
         let root =
             std::env::temp_dir().join(format!("kinematic-format-save-{}", std::process::id()));
+
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("test.lua"), "local x=1").unwrap();
 
@@ -885,6 +952,7 @@ mod tests {
         )
         .unwrap();
         let path = Path::new("test.lua");
+
         docs.open(path).unwrap();
         docs.formatting_saves.insert(path.into(), 1);
 
@@ -898,11 +966,14 @@ mod tests {
 
         docs.edit(path, "local x=2".into());
         docs.apply_saved_format(reply(), true);
+
         assert_eq!(docs.open[path].text, "local x=2");
         assert_eq!(docs.sources()[path], "local x=1");
 
         docs.save(path).unwrap();
+
         assert!(docs.poll());
+
         docs.formatting_saves.insert(path.into(), 2);
         docs.apply_saved_format(
             super::super::lsp::Reply {
@@ -911,9 +982,11 @@ mod tests {
             },
             true,
         );
+
         assert_eq!(docs.sources()[path], "local x = 2");
 
         drop(docs);
+
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -921,6 +994,7 @@ mod tests {
     fn ready_format_is_written_with_the_save() {
         let root =
             std::env::temp_dir().join(format!("kinematic-ready-format-{}", std::process::id()));
+
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("test.lua"), "local x=1").unwrap();
 
@@ -930,12 +1004,14 @@ mod tests {
         )
         .unwrap();
         let path = Path::new("test.lua");
+
         docs.open(path).unwrap();
         docs.edit(path, "local x=2".into());
+
         docs.formatting = Some(serde_json::json!({"tabSize": 2, "insertSpaces": true}));
+
         docs.formatting_previews
             .insert(path.into(), (2, Some("local x = 2".into())));
-
         docs.save(path).unwrap();
 
         assert_eq!(docs.open[path].text, "local x = 2");
@@ -948,6 +1024,7 @@ mod tests {
         assert!(docs.formatting_saves.is_empty());
 
         drop(docs);
+
         std::fs::remove_dir_all(root).unwrap();
     }
 }

@@ -20,6 +20,7 @@ fn file_icon(ui: &Ui, label: &str, directory: bool) -> (&'static str, [f32; 4]) 
             _ => crate::icons::FILE,
         }
     };
+
     (
         icon,
         ui.style_color(if directory {
@@ -35,6 +36,7 @@ pub fn file_label(ui: &Ui, position: [f32; 2], label: &str, directory: bool) {
     let x = position[0] + ui.tree_node_to_label_spacing();
     let y = position[1] + ui.clone_style().frame_padding()[1];
     let draw = ui.get_window_draw_list();
+
     draw.add_text([x, y], color, icon);
     draw.add_text(
         [
@@ -51,6 +53,7 @@ pub fn file_branch(ui: &Ui, parent: [f32; 2], previous: [f32; 2], child: [f32; 2
     let x = parent[0] + ui.tree_node_to_label_spacing() * 0.5;
     let color = ui.get_color_u32(StyleColor::TreeLines);
     let draw = ui.get_window_draw_list();
+
     draw.add_line([x, previous[1] + middle], [x, child[1] + middle], color)
         .build();
     draw.add_line([x, child[1] + middle], [child[0], child[1] + middle], color)
@@ -59,8 +62,10 @@ pub fn file_branch(ui: &Ui, parent: [f32; 2], previous: [f32; 2], child: [f32; 2
 
 pub fn file_row(ui: &Ui, label: &str, directory: bool, selected: bool) -> bool {
     let (icon, color) = file_icon(ui, label, directory);
+
     ui.text_colored(color, icon);
     ui.same_line_with_spacing(0.0, ui.clone_style().item_spacing()[0].max(10.0));
+
     let position = ui.cursor_screen_pos();
     let clicked = ui
         .selectable_config("##Entry")
@@ -71,8 +76,10 @@ pub fn file_row(ui: &Ui, label: &str, directory: bool, selected: bool) -> bool {
         )
         .selected(selected)
         .build();
+
     ui.get_window_draw_list()
         .add_text(position, ui.get_color_u32(StyleColor::Text), label);
+
     clicked
 }
 
@@ -89,20 +96,22 @@ pub fn suggestion(
     let pressed = ui.is_item_hovered_with_flags(
         dear_imgui_rs::ItemHoveredFlags::ALLOW_WHEN_OVERLAPPED_BY_WINDOW,
     ) && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left);
+
     if !detail.is_empty() {
         let origin = ui.item_rect_min();
+
         ui.get_window_draw_list().add_text(
             [origin[0] + ui.calc_text_size(label)[0] + 28.0, origin[1]],
             detail_color,
             detail,
         );
     }
+
     pressed
 }
 
 pub fn bindings<'a>(ui: &Ui, groups: impl IntoIterator<Item = (&'a str, Vec<(&'a str, &'a str)>)>) {
     let flags = dear_imgui_rs::TableFlags::SCROLL_Y;
-
     let Some(_table) = ui.begin_table_with_sizing(
         "Shortcut list",
         2,
@@ -137,8 +146,11 @@ pub fn bindings<'a>(ui: &Ui, groups: impl IntoIterator<Item = (&'a str, Vec<(&'a
                 ui.table_next_row();
                 ui.table_next_column();
                 ui.set_cursor_pos_x(ui.cursor_pos_x() + ui.tree_node_to_label_spacing());
+
                 crate::widgets::text(ui, name);
+
                 ui.table_next_column();
+
                 crate::widgets::muted(ui, crate::shortcut::compact(binding));
             }
         }
@@ -174,11 +186,15 @@ pub fn project_row(
     } else {
         StyleColor::TextDisabled
     });
+
     {
         let _clip = draw.push_clip_rect(min, [max_x, position[1] + size[1]], true);
+
         draw.add_text(min, color, name);
+
         if !available {
             let y = min[1] + ui.text_line_height() * 0.5;
+
             draw.add_line(
                 [min[0], y],
                 [(min[0] + ui.calc_text_size(name)[0]).min(max_x), y],
@@ -187,10 +203,12 @@ pub fn project_row(
             .build();
         }
     }
+
     let y = min[1] + ui.text_line_height() + spacing;
     let metadata = format!("{opened_at} {version}");
     let metadata_x = (max_x - ui.calc_text_size(&metadata)[0]).max(min[0]);
     let color = ui.get_color_u32(StyleColor::TextDisabled);
+
     {
         let _clip = draw.push_clip_rect(
             [min[0], y],
@@ -200,14 +218,17 @@ pub fn project_row(
             ],
             true,
         );
+
         draw.add_text(
             [min[0], y],
             color,
             format!("{}  {path}", crate::icons::FOLDER),
         );
     }
+
     {
         let _clip = draw.push_clip_rect([metadata_x, y], [max_x, y + ui.text_line_height()], true);
+
         draw.add_text([metadata_x, y], color, opened_at);
         draw.add_text(
             [max_x - ui.calc_text_size(version)[0], y],
@@ -219,5 +240,6 @@ pub fn project_row(
             version,
         );
     }
+
     clicked
 }

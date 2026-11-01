@@ -242,6 +242,7 @@ fn jump_bracket(editor: &mut TextEditor) -> CteResult<()> {
     }
 
     editor.select_region(Selection::new(probe, probe))?;
+
     editor.select_to_brackets(true);
 
     let selection = editor.main_cursor_selection();
@@ -349,6 +350,7 @@ fn move_lines(editor: &mut TextEditor, down: bool) -> CteResult<()> {
         } else {
             editor.move_lines_up();
         }
+
         return Ok(());
     }
 
@@ -394,6 +396,7 @@ fn move_lines(editor: &mut TextEditor, down: bool) -> CteResult<()> {
     };
     let last_line = editor.line_count() - 1;
     let end = Position::new(last_line, editor.line_text(last_line)?.chars().count());
+
     editor.select_region(Selection::new(
         shifted(selection.start).min(end),
         shifted(selection.end).min(end),
@@ -593,6 +596,7 @@ impl State {
                         };
 
                         documents.active = Some(paths[(index + offset) % paths.len()].clone());
+
                         self.focus_requested = true;
                     }
                 }
@@ -740,6 +744,7 @@ impl State {
                                     .build()
                             {
                                 open_path = Some(entry.path.clone());
+
                                 close = true;
                             }
 
@@ -844,21 +849,30 @@ mod tests {
                     Position::new(end.0, end.1),
                 ))
                 .unwrap();
+
             super::move_lines(&mut editor, down).unwrap();
+
             assert_eq!(editor.text().unwrap(), expected);
             assert_eq!(
                 editor.main_cursor_selection().start,
                 Position::new(target.0, target.1)
             );
+
             editor.undo();
+
             assert_eq!(editor.text().unwrap(), text);
+
             editor.redo();
+
             assert_eq!(editor.text().unwrap(), expected);
         }
+
         for (line, down) in [(0, false), (1, true)] {
             editor.set_text("alpha\nbeta").unwrap();
             editor.set_cursor(Position::new(line, 0)).unwrap();
+
             super::move_lines(&mut editor, down).unwrap();
+
             assert_eq!(editor.text().unwrap(), "alpha\nbeta");
             assert!(!editor.can_undo());
         }
@@ -884,13 +898,11 @@ mod tests {
 
         context.set_clipboard_backend(Clipboard::default());
         context.set_ini_filename(None::<&str>).unwrap();
-
         context
             .font_atlas()
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
-
         context.io_mut().set_display_size([1280.0, 720.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
         context.load_ini_settings("[Window][Files]\nPos=0,0\nSize=240,600\n[Window][Code]\nPos=250,0\nSize=700,600\n[Window][Console]\nPos=250,610\nSize=700,100\n");
@@ -898,7 +910,6 @@ mod tests {
         let root = std::env::temp_dir().join(format!("kinematic-shortcuts-{}", std::process::id()));
 
         std::fs::create_dir_all(&root).unwrap();
-
         std::fs::write(root.join("a.lua"), "local café = 1\nprint(café)\n").unwrap();
 
         let mut documents =
@@ -922,6 +933,7 @@ mod tests {
             |context: &mut dear_imgui_rs::Context, state: &mut State, documents: &mut Documents| {
                 state.prepare(context, Some(documents), &settings);
                 state.draw(documents, &settings, context.frame());
+
                 context.end_frame();
             };
 
@@ -1017,10 +1029,13 @@ mod tests {
             }
 
             press(&mut context, &mut state, &mut documents, key, shift, alt);
+
             assert_eq!(documents.open[path].text, expected, "{key:?}");
+
             state.tabs.get_mut(path).unwrap().editor.undo();
 
             frame(&mut context, &mut state, &mut documents);
+
             assert_eq!(documents.open[path].text, text, "Undo {key:?}");
         }
 
@@ -1106,7 +1121,6 @@ mod tests {
             state.tabs[path].editor.main_cursor_selection(),
             Selection::new(Position::new(0, 0), Position::new(1, 0))
         );
-
         assert_eq!(documents.open[path].text, "local café = 1\nprint(café)\n");
 
         state
@@ -1127,9 +1141,11 @@ mod tests {
         );
 
         assert_eq!(documents.open[path].text, "local  = 1\nprint(café)\n");
+
         state.tabs.get_mut(path).unwrap().editor.undo();
 
         frame(&mut context, &mut state, &mut documents);
+
         assert_eq!(documents.open[path].text, "local café = 1\nprint(café)\n");
 
         state
@@ -1153,7 +1169,6 @@ mod tests {
             documents.open[path].text,
             "local café = 1\nlocal café = 1\nprint(café)\n"
         );
-
         assert_eq!(
             state.tabs[path].editor.main_cursor_position(),
             Position::new(1, 0)
@@ -1211,7 +1226,6 @@ mod tests {
             false,
             false,
         );
-
         press(
             &mut context,
             &mut state,
@@ -1231,7 +1245,6 @@ mod tests {
             false,
             false,
         );
-
         press(
             &mut context,
             &mut state,
@@ -1259,19 +1272,20 @@ mod tests {
         }
 
         frame(&mut context, &mut state, &mut documents);
+
         context.io_mut().add_key_event(Key::Enter, true);
 
         frame(&mut context, &mut state, &mut documents);
+
         context.io_mut().add_key_event(Key::Enter, false);
 
         frame(&mut context, &mut state, &mut documents);
-        assert!(state.navigation.is_none());
 
+        assert!(state.navigation.is_none());
         assert_eq!(
             state.tabs[path].editor.main_cursor_position(),
             Position::new(2, 3)
         );
-
         assert!(state.error.is_none(), "{:?}", state.error);
 
         drop(documents);

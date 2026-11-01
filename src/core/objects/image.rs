@@ -127,7 +127,6 @@ pub(crate) fn write_test_image() -> std::path::PathBuf {
     let mut surface = skia_safe::surfaces::raster_n32_premul((2, 1)).unwrap();
 
     surface.canvas().clear(skia_safe::colors::RED);
-
     surface.canvas().draw_rect(
         skia_safe::Rect::from_xywh(1.0, 0.0, 1.0, 1.0),
         &skia_safe::Paint::new(skia_safe::colors::BLUE, None),

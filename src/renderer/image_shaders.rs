@@ -76,7 +76,6 @@ impl ImageShaders {
         unsafe {
             self.gl
                 .bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(output.framebuffer()));
-
             self.gl.use_program(Some(program));
             self.gl.bind_vertex_array(Some(vao));
 
@@ -91,7 +90,6 @@ impl ImageShaders {
             );
 
             uniform_1f(&self.gl, program, "k_time", time);
-
             uniform_1f(&self.gl, program, "k_alpha", alpha);
 
             for (name, value) in &data.uniforms {

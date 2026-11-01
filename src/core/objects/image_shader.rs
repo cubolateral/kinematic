@@ -176,6 +176,7 @@ impl ImageShaderData {
         let value = value.into().into_track_value();
 
         validate_shader_track_value(&value).unwrap_or_else(|error| panic!("{error}"));
+
         self.uniforms.insert(name, value);
     }
 
@@ -354,9 +355,10 @@ mod tests {
         let mut data = ImageShaderData::new(shader);
 
         data.uniforms.insert("k_time".into(), TrackValue::F32(1.0));
-        assert!(validate_shader_values(&data).is_err());
-        data.uniforms.clear();
 
+        assert!(validate_shader_values(&data).is_err());
+
+        data.uniforms.clear();
         data.uniforms
             .insert("amount".into(), TrackValue::F32(f32::NAN));
 
@@ -432,10 +434,13 @@ mod tests {
         let object = build.object.unwrap();
 
         scene.update(1.0);
+
         assert_eq!(object.get_uniform::<f32>("u_progress"), 0.5);
         assert_eq!(object.get_uniform::<f32>("u_other"), 1.0);
         assert_eq!(object.get_position().x, 10.0);
+
         scene.update(0.0);
+
         assert_eq!(object.get_uniform::<f32>("u_progress"), 0.0);
         assert_eq!(object.get_position().x, 0.0);
     }
@@ -468,7 +473,6 @@ mod tests {
                         .easing(Easing::Linear)
                         .play();
                 });
-
                 scene.wait(3.0);
 
                 self.object = Some(object);
@@ -487,8 +491,11 @@ mod tests {
         let object = build.object.unwrap();
 
         scene.update(0.5);
+
         assert_eq!(object.get_uniform::<f32>("u_progress"), 0.9);
+
         scene.update(1.5);
+
         assert_eq!(object.get_uniform::<f32>("u_progress"), 0.5);
     }
 
@@ -544,7 +551,6 @@ mod tests {
                     .build(scene);
 
                 scene.world_2d().add(&object);
-
                 scene.all(|_| {
                     object.uniform("value", 1.0_f32).play();
                     object.uniform("value", 2.0_f32).play();
@@ -564,6 +570,7 @@ mod tests {
         };
 
         scene.update(0.5);
+
         assert_eq!(build.0.unwrap().get_uniform::<f32>("value"), 1.0);
     }
 }

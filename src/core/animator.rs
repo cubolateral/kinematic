@@ -318,7 +318,6 @@ impl Schedule {
                     axis.is_finite() && axis.length_squared() > f32::EPSILON,
                     "Rotation axis must be finite and non-zero."
                 );
-
                 assert!(angle.is_finite(), "Rotation angle must be finite.");
 
                 let axis = axis.normalize();
@@ -353,7 +352,6 @@ impl Schedule {
                     axis.is_finite() && axis.length_squared() > f32::EPSILON,
                     "Rotation axis must be finite and non-zero."
                 );
-
                 assert!(angle.is_finite(), "Rotation angle must be finite.");
 
                 let axis = axis.normalize();
@@ -434,12 +432,10 @@ impl Schedule {
             self.repeats.is_empty(),
             "Repeat cycles cannot contain another repeat."
         );
-
         assert!(
             self.duration.is_finite() && self.duration > 0.0,
             "Repeat cycles must have a finite, positive duration."
         );
-
         assert!(
             !self.tweens.is_empty(),
             "Repeat cycles must contain an animation."
@@ -541,6 +537,7 @@ impl Schedule {
         }
 
         drop(world);
+
         scene.compile_runtime();
 
         self.duration
@@ -627,7 +624,6 @@ impl AnimatorHandle {
         self.context
             .active
             .replace(std::rc::Rc::downgrade(&self.state));
-
         self.sync_scene_time();
 
         previous
@@ -835,6 +831,7 @@ impl AnimatorHandle {
         let scheduling = state.scheduling;
 
         state.schedule.append(schedule, scheduling);
+
         self.context.time.set(state.time());
     }
 }

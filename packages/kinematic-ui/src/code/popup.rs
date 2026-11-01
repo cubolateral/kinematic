@@ -11,7 +11,9 @@ pub fn editor(
     let mut editor = TextEditor::try_create(context)?;
 
     editor.set_language(None);
+
     editor.set_palette(palette)?;
+
     editor.set_read_only(true);
     editor.set_show_line_numbers(false);
     editor.set_show_minimap(false);

@@ -50,6 +50,7 @@ impl SimulationState for State {
 impl SimulationState2D for State {
     fn on_draw(&mut self, _world: &hecs::World, _entity: hecs::Entity, canvas: &skia_safe::Canvas) {
         self.observe();
+
         canvas.clear(skia_safe::colors::WHITE);
     }
 
@@ -187,13 +188,15 @@ fn custom_object_preserves_mutation_update_order_and_seek() {
     let ca = scene.spawn_object(CA2D::new(Arc::clone(&observed)), "CA");
 
     scene.world_2d().add(&ca);
+
     ca.set_auto_update(false);
     ca.set_color(Color::CYAN);
-
     ca.set_cell(0, true);
     ca.update();
     ca.set_cell(1, true);
+
     scene.wait(3.0);
+
     ca.set_cell(2, true);
     ca.update();
 
@@ -207,7 +210,6 @@ fn custom_object_preserves_mutation_update_order_and_seek() {
     assert_eq!(cells, vec![true, true, true, false]);
     assert_eq!(ca.get_color(), Color::CYAN);
     assert_eq!(ca.box_size(), Vector2::ONE);
-
     assert_eq!(
         expected.1,
         vec![
@@ -222,10 +224,13 @@ fn custom_object_preserves_mutation_update_order_and_seek() {
     scene.update(0.0);
 
     draw(&scene);
+
     assert_eq!(observed.lock().unwrap().0, vec![true, true, false, false]);
+
     scene.update(3.0);
 
     draw(&scene);
+
     assert_eq!(*observed.lock().unwrap(), expected);
 }
 
@@ -238,6 +243,7 @@ fn auto_update_runs_after_same_frame_mutations() {
 
     scene.world_2d().add(&ca);
     scene.world_2d().add(&label);
+
     ca.set_cell(0, true);
 
     let signal_label = label.clone();
@@ -251,8 +257,8 @@ fn auto_update_runs_after_same_frame_mutations() {
     scene.update(0.0);
 
     draw(&scene);
-    assert_eq!(label.get_text(), "Alive: 1");
 
+    assert_eq!(label.get_text(), "Alive: 1");
     assert_eq!(
         observed.lock().unwrap().1,
         vec![
@@ -269,6 +275,7 @@ fn signal_can_write_simulation_in_the_same_frame() {
     let ca = scene.spawn_object(CA2D::new(Arc::clone(&observed)), "CA");
 
     scene.world_2d().add(&ca);
+
     ca.signal(|ca, _frame| ca.write_simulation_now(|state| state.set_cell(0, true)));
 
     scene.update(0.0);
@@ -279,7 +286,6 @@ fn signal_can_write_simulation_in_the_same_frame() {
         ca.read_simulation(|state| state.cells.clone()),
         vec![true, false, false, false]
     );
-
     assert_eq!(observed.lock().unwrap().0, vec![true, false, false, false]);
 }
 
@@ -292,11 +298,13 @@ fn simulation_drawing_is_opt_in_for_2d_3d_and_custom_callbacks() {
         .build(&mut scene);
 
     assert_eq!(ca_2d.get_color(), Color::MAGENTA);
+
     ca_2d.checkpoint();
 
     let ca_3d = ca_3d().build(&mut scene);
 
     assert_eq!(ca_3d.box_size(), Vector3::ONE);
+
     ca_3d.checkpoint();
 
     let custom = custom_draw().build(&mut scene);
@@ -307,5 +315,6 @@ fn simulation_drawing_is_opt_in_for_2d_3d_and_custom_callbacks() {
     let mut surface = skia_safe::surfaces::raster_n32_premul((1, 1)).unwrap();
 
     scene.draw(surface.canvas());
+
     assert_eq!(surface.peek_pixels().unwrap().get_color((0, 0)).g(), 255);
 }

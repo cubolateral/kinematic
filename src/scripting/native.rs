@@ -99,13 +99,21 @@ pub(crate) fn objects() -> Vec<NativeObject> {
     }
 
     preset!("triangle", RegularPolygon2D, 3);
+
     preset!("square", RegularPolygon2D, 4);
+
     preset!("triangle_3d", RegularPolygon3D, 3);
+
     preset!("square_3d", RegularPolygon3D, 4);
+
     preset!("circle_3d", RegularPolygon3D, 32);
+
     preset!("tetrahedron", Prism, 3);
+
     preset!("cube", Prism, 4);
+
     preset!("cylinder", Prism, 32);
+
     preset!("cone", Pyramid, 32);
 
     objects

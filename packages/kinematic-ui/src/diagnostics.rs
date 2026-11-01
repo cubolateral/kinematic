@@ -120,6 +120,7 @@ impl Footer {
 
         if show_position {
             ui.set_cursor_screen_pos([origin[0] + left_width + 8.0, origin[1]]);
+
             widgets::muted(ui, position);
         }
 
@@ -154,6 +155,7 @@ impl Footer {
                 .size([0.0, (height - ui.frame_height_with_spacing()).max(1.0)])
                 .build(ui, || {
                     let visible = self.visible(messages);
+
                     for (index, message) in visible.iter().enumerate() {
                         let _id = ui.push_id(index as i32);
                         let size = [ui.content_region_avail()[0].max(1.0), ui.text_line_height()];
@@ -208,6 +210,7 @@ fn message_parts<'a>(message: &Message<'a>, summary: bool) -> (String, &'a str) 
     } else {
         format!("{severity}: ")
     };
+
     (prefix, message.text)
 }
 #[derive(Default)]
@@ -220,6 +223,7 @@ impl InputTextCallbackHandler for &mut TextSelection {
     fn on_always(&mut self, data: TextCallbackData<'_>) {
         let start = data.selection_start().min(data.selection_end());
         let end = data.selection_start().max(data.selection_end());
+
         self.source = data.str().to_owned();
         self.text = data.str()[start..end].to_owned();
     }
@@ -241,8 +245,10 @@ fn draw_message(
         let _color = ui.push_style_color(StyleColor::Text, message.severity.color());
         let _hover_color = ui.push_style_color(StyleColor::TextLink, message.severity.color());
         let clicked = controls::text_button(ui, &prefix, [prefix_width, size[1]]);
+
         if ui.is_item_hovered() {
             let y = origin[1] + (size[1] + ui.text_line_height()) * 0.5;
+
             ui.get_window_draw_list()
                 .add_line(
                     [origin[0], y],
@@ -251,9 +257,12 @@ fn draw_message(
                 )
                 .build();
         }
+
         clicked
     };
+
     ui.set_cursor_screen_pos([origin[0] + prefix_width, origin[1]]);
+
     let _padding = ui.push_style_var(StyleVar::FramePadding([
         0.0,
         ((size[1] - ui.text_line_height()) * 0.5).max(0.0),
@@ -263,6 +272,7 @@ fn draw_message(
     let _width = ui.push_item_width((size[0] - prefix_width).max(1.0));
     let mut value = text.to_owned();
     let _id = ui.push_id(text);
+
     ui.input_text("##Diagnostic", &mut value)
         .read_only(true)
         .callback_flags(InputTextCallback::ALWAYS)
@@ -275,6 +285,7 @@ fn draw_message(
     {
         ui.open_popup("Diagnostic actions");
     }
+
     if let Some(_popup) = ui.begin_popup("Diagnostic actions") {
         if controls::menu_item(ui, "Copy") {
             *copy = Some(if selection.source == text && !selection.text.is_empty() {
@@ -283,15 +294,18 @@ fn draw_message(
                 format!("{prefix}{text}")
             });
         }
+
         if controls::menu_item(ui, "Copy All") {
             let all = messages
                 .iter()
                 .map(|message| {
                     let (prefix, text) = message_parts(message, true);
+
                     format!("{prefix}{text}")
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
+
             *copy = Some(all);
         }
     }
@@ -319,8 +333,10 @@ mod tests {
     #[test]
     fn error_and_warning_text_can_be_selected() {
         use dear_imgui_rs::{Condition, Key, MouseButton, WindowFlags};
+
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
@@ -329,6 +345,7 @@ mod tests {
             .build();
         context.io_mut().set_display_size([640.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         let mut selection = super::TextSelection::default();
         let mut copy = None;
         let frame = |context: &mut dear_imgui_rs::Context,
@@ -341,6 +358,7 @@ mod tests {
                 ..message(0, "Mensagem com acentuação.")
             };
             let mut position = [0.0; 2];
+
             ui.window("Selection test")
                 .position([0.0, 0.0], Condition::Always)
                 .size([600.0, 100.0], Condition::Always)
@@ -355,30 +373,46 @@ mod tests {
                         &[message],
                         copy,
                     );
+
                     let (min, max) = ui.item_rect();
+
                     position = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
                 });
+
             context.end_frame();
+
             position
         };
+
         for severity in [Severity::Error, Severity::Warning] {
             let position = frame(&mut context, &mut selection, &mut copy, severity);
+
             context.io_mut().add_mouse_pos_event(position);
+
             frame(&mut context, &mut selection, &mut copy, severity);
+
             context
                 .io_mut()
                 .add_mouse_button_event(MouseButton::Left, true);
+
             frame(&mut context, &mut selection, &mut copy, severity);
+
             context
                 .io_mut()
                 .add_mouse_button_event(MouseButton::Left, false);
+
             frame(&mut context, &mut selection, &mut copy, severity);
+
             context.io_mut().add_key_event(Key::ModCtrl, true);
             context.io_mut().add_key_event(Key::A, true);
+
             frame(&mut context, &mut selection, &mut copy, severity);
+
             assert_eq!(selection.text, "Mensagem com acentuação.");
+
             context.io_mut().add_key_event(Key::A, false);
             context.io_mut().add_key_event(Key::ModCtrl, false);
+
             frame(&mut context, &mut selection, &mut copy, severity);
         }
     }
@@ -389,13 +423,11 @@ mod tests {
         let mut context = dear_imgui_rs::Context::create();
 
         context.set_ini_filename(None::<&str>).unwrap();
-
         context
             .font_atlas()
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
-
         context.io_mut().set_display_size([640.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
 
@@ -429,7 +461,9 @@ mod tests {
                         let size = ui.calc_text_size(&label)[0] + 8.0;
 
                         positions.push([x + size * 0.5, origin[1] + ui.frame_height() * 0.5]);
+
                         assert!(x >= origin[0] && x + size <= origin[0] + width);
+
                         x += size + 8.0;
                     }
 
@@ -474,6 +508,7 @@ mod tests {
                 .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, false);
 
             frame(&mut context, &mut footer);
+
             assert!(footer.expanded == if index == 2 { None } else { Some(severity) });
         }
     }
@@ -504,11 +539,17 @@ mod tests {
         let mut footer = Footer::default();
 
         assert_eq!(footer.visible(&messages), [&messages[1]]);
+
         footer.toggle(Severity::Error);
+
         assert_eq!(footer.visible(&messages), [&messages[0], &messages[1]]);
+
         footer.toggle(Severity::Warning);
+
         assert_eq!(footer.visible(&messages), [&messages[2]]);
+
         footer.toggle(Severity::Warning);
+
         assert_eq!(footer.visible(&messages), [&messages[1]]);
         assert_eq!(footer.visible(&messages[2..]), [&messages[2]]);
         assert!(footer.visible(&[]).is_empty());

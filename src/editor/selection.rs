@@ -55,28 +55,37 @@ mod tests {
 
         selection.select(1, entity);
         selection.select_audio(42);
+
         assert_eq!(selection.get(), None);
         assert_eq!(selection.audio(), Some(42));
 
         selection.select(1, entity);
+
         assert_eq!(selection.get(), Some((1, entity)));
         assert_eq!(selection.audio(), None);
 
         selection.remap_scenes(&[1, 0]);
+
         assert_eq!(selection.get(), Some((0, entity)));
+
         selection.clear();
+
         assert_eq!(selection.get(), None);
         assert_eq!(selection.audio(), None);
 
         selection.select_audio(42);
         selection.remap_scenes(&[0]);
+
         assert_eq!(selection.audio(), Some(42));
+
         selection.clear_audio();
+
         assert_eq!(selection.get(), None);
         assert_eq!(selection.audio(), None);
 
         selection.select_audio(42);
         selection.clear();
+
         assert_eq!(selection.get(), None);
         assert_eq!(selection.audio(), None);
     }

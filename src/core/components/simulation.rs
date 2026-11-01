@@ -77,11 +77,9 @@ impl SimulationContext<'_> {
             .get::<&T>(self.entity)
             .unwrap_or_else(|_| panic!("Simulation entity must contain the requested component.")))
         .clone();
-
         let Ok(animation) = self.world.get::<&Animation>(self.entity) else {
             return component;
         };
-
         let mut snapshot = hecs::World::new();
         let entity = snapshot.spawn((component,));
 
@@ -455,7 +453,6 @@ impl Simulation {
     pub(crate) fn schedule_checkpoint(&mut self, time: f32) {
         self.operations
             .push(SimulationOperation::Checkpoint { time });
-
         self.reset_replay();
     }
 
@@ -491,7 +488,6 @@ impl Simulation {
                 )
             }),
         });
-
         self.reset_replay();
     }
 
@@ -745,6 +741,7 @@ impl Simulation {
             match operation {
                 SimulationOperation::Update { .. } => {
                     self.current.on_update(&context)?;
+
                     context.update_index += 1;
                 }
                 SimulationOperation::Checkpoint { .. } => {}
@@ -874,6 +871,7 @@ mod tests {
     impl SimulationState for Counter {
         fn on_update(&mut self, context: &SimulationContext<'_>) {
             self.steps += 1;
+
             self.elapsed += context.dt;
         }
     }
@@ -1005,6 +1003,7 @@ mod tests {
         );
 
         seek(&mut simulation, 3, 20, |_| true);
+
         assert_eq!(observed(&mut simulation, &value).0, 4);
 
         seek(&mut simulation, 110, 20, |_| true);
@@ -1022,6 +1021,7 @@ mod tests {
         let mut simulation = Simulation::new(ReplayCounter(Arc::clone(&updates)));
 
         seek(&mut simulation, 100, 20, |_| true);
+
         assert_eq!(*updates.lock().unwrap(), 101);
 
         seek(&mut simulation, 102, 20, |_| true);
@@ -1041,9 +1041,11 @@ mod tests {
         simulation.schedule_checkpoint(0.0);
 
         seek(&mut simulation, 10, 20, |_| false);
+
         assert_eq!(*updates.lock().unwrap(), 3);
 
         seek(&mut simulation, 0, 20, |_| false);
+
         assert_eq!(*updates.lock().unwrap(), 3);
     }
 
@@ -1060,6 +1062,7 @@ mod tests {
         let first = *value.lock().unwrap();
 
         seek(&mut simulation, 3, 20, |_| true);
+
         assert_ne!(*value.lock().unwrap(), first);
 
         seek(&mut simulation, 110, 20, |_| true);

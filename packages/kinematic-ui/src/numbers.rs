@@ -138,7 +138,6 @@ where
             flags,
         )
     };
-
     let text_editing = ui.is_item_active() && ui.io().want_text_input();
 
     if !ui.is_item_active() {

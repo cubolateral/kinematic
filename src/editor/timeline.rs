@@ -149,36 +149,57 @@ mod tests {
     #[test]
     fn playback_speed_scales_time_with_bounded_steps_and_keeps_frame_steps() {
         let mut timeline = Timeline::new(10.0, 20);
+
         assert_eq!(timeline.playback_speed(), 1.0);
+
         timeline.play();
+
         assert_eq!(timeline.update(1.0), Some(1.0));
+
         for (requested, expected) in [(0.0, 0.10), (1.23, 1.25), (6.0, 5.0)] {
             timeline.set_playback_speed(requested);
+
             assert_eq!(timeline.playback_speed(), expected);
+
             timeline.go_to(0.0);
+
             assert_eq!(timeline.update(1.0), Some(expected));
         }
+
         timeline.set_playback_speed(f32::NAN);
+
         assert_eq!(timeline.playback_speed(), 5.0);
+
         timeline.go_to(0.0);
         timeline.next_frame();
+
         assert_eq!(timeline.time(), 0.05);
     }
 
     #[test]
     fn scrubbing_pauses_and_resumes_playback() {
         let mut timeline = Timeline::new(2.0, 60);
+
         timeline.play();
+
         timeline.is_controlling = true;
+
         timeline.go_to(0.5);
+
         assert!(!timeline.is_playing());
         assert_eq!(timeline.update(0.1), Some(0.5));
+
         timeline.is_controlling = false;
+
         assert!(timeline.is_playing());
         assert_eq!(timeline.update(0.1), Some(0.6));
+
         timeline.pause();
+
         timeline.is_controlling = true;
+
         timeline.go_to(1.0);
+
         assert!(!timeline.is_playing());
     }
 
@@ -187,14 +208,21 @@ mod tests {
         let mut timeline = Timeline::new(2.0, 60);
 
         timeline.play();
+
         assert_eq!(timeline.update(2.0), Some(0.0));
         assert!(timeline.is_playing());
+
         timeline.set_loop(false);
+
         assert_eq!(timeline.update(2.0), Some(2.0));
         assert!(!timeline.is_playing());
+
         timeline.play();
+
         assert_eq!(timeline.time(), 0.0);
+
         timeline.set_loop(true);
+
         assert_eq!(timeline.update(2.0), Some(0.0));
         assert!(timeline.is_playing());
     }

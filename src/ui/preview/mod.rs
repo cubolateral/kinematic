@@ -70,7 +70,6 @@ pub(super) fn draw(
             let Some(_tabs) = ui.tab_bar("Preview modes") else {
                 return;
             };
-
             let preview_tab = ui.tab_item_with_flags(
                 "PREVIEW",
                 None,
@@ -99,6 +98,7 @@ pub(super) fn draw(
                 ) {
                     editor.clear_selection();
                 }
+
                 if kinematic_ui::canvas::preview_tools(
                     ui,
                     min,
@@ -117,8 +117,10 @@ pub(super) fn draw(
                 ) {
                     editor.toggle_margin();
                 }
+
                 if let Some(error) = editor.render_error() {
                     ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + ui.frame_height() + 16.0]);
+
                     widgets::message(ui, error);
                 }
             }
@@ -170,11 +172,15 @@ pub(super) fn draw(
             editor.absolute_time(),
             editor.project_duration(),
         );
+
         ui.set_cursor_screen_pos([ui.cursor_screen_pos()[0], ui.item_rect_max()[1]]);
+
         let fps = editor.preview_fps();
+
         toggle_fullscreen =
             playback::draw(editor.timeline_mut(), ui, fps, !is_exporting, false, volume);
     });
+
     toggle_fullscreen
 }
 
@@ -222,7 +228,6 @@ fn draw_editor_3d(
         min,
         available,
     );
-
     navigation::tools(editor, ui, min);
     navigation::gizmo(editor, ui, min, available, orientation);
 }
@@ -255,18 +260,23 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         camera_shortcuts(),
         &[],
     );
+
     if tools.camera {
         editor.toggle_editor_2d_camera_view();
     }
+
     if tools.reset {
         editor.reset_editor_2d_camera_transform();
     }
+
     if tools.margin {
         editor.toggle_margin();
     }
+
     if let Some(axis) = tools.axis {
         editor.toggle_editor_2d_axis(axis);
     }
+
     if let Some(error) = editor.render_error() {
         widgets::message(ui, error);
     }

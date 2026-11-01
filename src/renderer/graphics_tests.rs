@@ -11,7 +11,6 @@ fn graphics_canvas_projection_alpha_orientation() {
     let video = sdl.video().unwrap();
 
     video.gl_attr().set_context_version(3, 3);
-
     video
         .gl_attr()
         .set_context_profile(sdl3::video::GLProfile::Core);
@@ -75,24 +74,26 @@ fn graphics_canvas_projection_alpha_orientation() {
         .build(&mut scene);
 
     world.add(&screen);
+
     scene.root().view_2d(false).immediate();
     scene.update(0.0);
+
     renderer.render(&scene, &mut output, &mut skia).unwrap();
 
     let source_texture = renderer.targets[&overlay.texture()].texture();
     let first = read(&gl, &output);
 
     assert_pixel(&first, 32, 48, [64, 32, 0, 255]);
-
     assert_pixel(
         &read(&gl, &renderer.targets[&world.texture()]),
         32,
         48,
         [64, 32, 0, 128],
     );
-
     assert_pixel(&first, 32, 16, [0, 0, 255, 255]);
+
     renderer.render(&scene, &mut output, &mut skia).unwrap();
+
     assert_eq!(read(&gl, &output), first);
 
     verify_export(&gl, &output, &first);
@@ -103,12 +104,17 @@ fn graphics_canvas_projection_alpha_orientation() {
     );
 
     world.clear(Color::BLUE).play();
+
     scene.update(0.0);
+
     renderer.render(&scene, &mut output, &mut skia).unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 48, [64, 32, 127, 255]);
+
     screen.remove();
+
     scene.update(1.0);
+
     renderer.render(&scene, &mut output, &mut skia).unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 48, [0, 0, 255, 255]);
@@ -130,7 +136,9 @@ fn graphics_canvas_projection_alpha_orientation() {
     world.add(&cube);
     world.add(&ball);
     world.add(&plane);
+
     scene.update(1.0);
+
     renderer.render(&scene, &mut output, &mut skia).unwrap();
 
     let pixels = read(&gl, &output);
@@ -141,7 +149,6 @@ fn graphics_canvas_projection_alpha_orientation() {
     );
 
     assert_pixel(&pixels, 48, 32, [0, 255, 0, 255]);
-
     assert_pixel(&pixels, 16, 32, [255, 0, 0, 255]);
 
     let light = directional_light()
@@ -150,7 +157,9 @@ fn graphics_canvas_projection_alpha_orientation() {
         .build(&mut scene);
 
     world.add(&light);
+
     scene.update(1.0);
+
     renderer.render(&scene, &mut output, &mut skia).unwrap();
 
     let lit = read(&gl, &output);
@@ -161,16 +170,22 @@ fn graphics_canvas_projection_alpha_orientation() {
     );
 
     light.remove();
+
     scene.update(1.0);
+
     renderer.render(&scene, &mut output, &mut skia).unwrap();
+
     assert_eq!(read(&gl, &output), pixels);
 
     let projection = projection_2d().source(&world).build(&mut scene);
 
     overlay.add(&projection);
+
     scene.root().view_2d(true).immediate();
     scene.update(1.0);
+
     renderer.render(&scene, &mut output, &mut skia).unwrap();
+
     assert_eq!(read(&gl, &output), pixels);
 
     let target_texture = renderer.targets[&overlay.texture()].texture();
@@ -181,13 +196,13 @@ fn graphics_canvas_projection_alpha_orientation() {
     let second = Scene::new_with_resolution((64, 64));
 
     second.update(0.0);
+
     renderer.render(&second, &mut output, &mut skia).unwrap();
 
     assert_eq!(
         renderer.targets[&overlay.texture()].texture(),
         target_texture
     );
-
     assert!(
         geometries
             .iter()
@@ -200,7 +215,6 @@ fn graphics_canvas_projection_alpha_orientation() {
         renderer.targets[&overlay.texture()].texture(),
         target_texture
     );
-
     assert_eq!(read(&gl, &output), pixels);
 
     let group_shader = ImageShader::new(
@@ -241,6 +255,7 @@ fn graphics_canvas_projection_alpha_orientation() {
         .build(&mut shader_scene);
 
     group.add(&child);
+
     shader_scene.world_2d().add(&group);
     shader_scene.update(0.25);
 
@@ -249,8 +264,11 @@ fn graphics_canvas_projection_alpha_orientation() {
         .unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 32, [0, 255, 64, 255]);
+
     group.set_uniform("gain", 0.5_f32);
+
     assert_eq!(group.get_uniform::<f32>("gain"), 0.5);
+
     shader_scene.update(0.25);
 
     renderer
@@ -290,6 +308,7 @@ fn graphics_canvas_projection_alpha_orientation() {
         .build(&mut mesh_scene);
 
     group.add(&child);
+
     mesh_scene.world_3d().add(&group);
     mesh_scene.root().view_2d(false).immediate();
     mesh_scene.update(0.25);
@@ -299,7 +318,9 @@ fn graphics_canvas_projection_alpha_orientation() {
         .unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 32, [128, 64, 0, 255]);
+
     child.set_uniform("gain", 0.25_f32);
+
     mesh_scene.update(0.25);
 
     renderer
@@ -353,22 +374,30 @@ fn graphics_canvas_projection_alpha_orientation() {
         .build(&mut filter_scene);
 
     source.add(&stripe);
+
     let spatial = filter_scene.world_3d();
+
     spatial
         .camera_position(vec3(0.0, 0.0, 2.0))
         .camera_fov(std::f32::consts::FRAC_PI_2)
         .immediate();
+
     let projection = projection_3d()
         .source(&source)
         .size(vec2(4.0, 4.0))
         .build(&mut filter_scene);
+
     spatial.add(&projection);
+
     let flat = canvas_2d().resolution((64, 64)).build(&mut filter_scene);
+
     filter_scene.add_canvas_2d(&flat);
+
     let projection = projection_2d()
         .source(&source)
         .size(vec2(64.0, 64.0))
         .build(&mut filter_scene);
+
     flat.add(&projection);
 
     for filter in [
@@ -380,8 +409,10 @@ fn graphics_canvas_projection_alpha_orientation() {
 
         for output_canvas in [source.texture(), spatial.texture(), flat.texture()] {
             filter_scene.update(0.0);
+
             let plan = crate::renderer::plan::canvas_plan_for(&filter_scene, output_canvas.entity)
                 .unwrap();
+
             renderer
                 .render_targets(&filter_scene, &plan.order, &plan.sources, &mut skia)
                 .unwrap();
@@ -412,6 +443,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     }
 
     reset_gl(&gl, (64, 64));
+
     assert_eq!(unsafe { gl.get_error() }, glow::NO_ERROR);
 
     let allocations: Vec<_> = renderer
@@ -428,6 +460,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     }
 
     drop(output);
+
     skia.flush_and_submit();
 }
 
@@ -437,7 +470,6 @@ fn read(gl: &glow::Context, target: &Target) -> Vec<u8> {
     unsafe {
         gl.bind_buffer(glow::PIXEL_PACK_BUFFER, None);
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(target.framebuffer()));
-
         gl.read_pixels(
             0,
             0,
@@ -448,6 +480,7 @@ fn read(gl: &glow::Context, target: &Target) -> Vec<u8> {
             glow::PixelPackData::Slice(Some(&mut pixels)),
         );
     }
+
     pixels
 }
 fn assert_pixel(pixels: &[u8], x: usize, y: usize, expected: [u8; 4]) {
@@ -481,6 +514,7 @@ fn verify_export(gl: &glow::Context, target: &Target, preview: &[u8]) {
     });
 
     exporter.write_audio(&vec![0.0; 3200]).unwrap();
+
     assert!(matches!(
         exporter
             .process_frame(gl, target.framebuffer(), target.size)
@@ -498,6 +532,7 @@ fn verify_export(gl: &glow::Context, target: &Target, preview: &[u8]) {
         .unwrap();
 
     std::fs::remove_file(path).unwrap();
+
     assert!(decoded.status.success());
     assert_eq!(decoded.stdout.len(), preview.len());
 

@@ -29,7 +29,6 @@ impl State {
                 scene.world_3d().entity(),
             ]
             .into();
-
             self.scene_key = Some(scene_key);
         }
     }
@@ -74,6 +73,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             !active_children(&world, root).is_empty(),
             selected == Some(root),
         );
+
         if root_response.toggled {
             state.toggle(root);
         } else if root_response.clicked {
@@ -169,27 +169,34 @@ fn draw_row(
             effective_visibility: row.ancestor_visible && visibility.unwrap_or(true),
         },
     );
+
     if response.hovered {
         if let Ok(inspection) = world.get::<&Inspection>(entity) {
             widgets::tooltip(ui, format!("Type: {}", inspection.object_name));
         }
     }
+
     if response.toggled {
         state.toggle(entity);
     }
+
     if response.clicked {
         *clicked = Some(entity);
     }
+
     if response.edit {
         *edit_clicked = Some(entity);
     }
+
     if response.visibility {
         if let Some(visibility) = visibility {
             if let Ok(mut draw) = world.get::<&mut Draw2D>(entity) {
                 draw.visibility = !visibility;
+
                 *visibility_changed = true;
             } else if let Ok(mut draw) = world.get::<&mut Draw3D>(entity) {
                 draw.visibility = !visibility;
+
                 *visibility_changed = true;
             }
         }
@@ -293,6 +300,7 @@ mod tests {
 
         state.toggle(scene.world_2d().entity());
         state.sync(&scene);
+
         assert!(!state.expanded.contains(&scene.world_2d().entity()));
 
         let next_scene = Scene::new();
@@ -353,13 +361,13 @@ mod tests {
             rows.iter().map(|row| row.entity).collect::<Vec<_>>(),
             vec![node, child, sibling]
         );
-
         assert_eq!(rows[1].branches, vec![true]);
         assert!(rows[1].is_last);
         assert!(rows[1].ancestor_selected);
         assert!(rows[2].is_last);
 
         state.toggle(node);
+
         rows.clear();
 
         collect_rows(
@@ -379,8 +387,11 @@ mod tests {
         );
 
         state.toggle(node);
+
         assert_eq!(state.expanded, [root, node].into());
+
         state.toggle(root);
+
         rows.clear();
 
         collect_rows(

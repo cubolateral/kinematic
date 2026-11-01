@@ -30,13 +30,11 @@ pub fn row(
         };
 
         ui.table_setup_column_stretch_weight("Name", dear_imgui_rs::TableColumnFlags::empty(), 0.4);
-
         ui.table_setup_column_stretch_weight(
             "Value",
             dear_imgui_rs::TableColumnFlags::empty(),
             0.6,
         );
-
         ui.table_next_column();
 
         let position = ui.cursor_screen_pos();
@@ -64,15 +62,14 @@ pub fn row(
         );
 
         drop(clip);
-
         drop(draw);
+
         ui.dummy([text_width, ui.frame_height()]);
 
         let mut reset = false;
 
         if show_reset {
             ui.same_line_with_spacing(0.0, 0.0);
-
             ui.set_cursor_screen_pos([
                 position[0] + (name_width - ui.frame_height()).max(0.0),
                 position[1],
@@ -90,6 +87,7 @@ pub fn row(
         let _width = ui.push_item_width(-1.0);
         let (changed, committed) = ui.group(|| {
             let changed = input();
+
             (changed, ui.is_item_deactivated_after_edit())
         });
 
@@ -151,6 +149,7 @@ pub fn components<T, const N: usize>(
 pub fn read_only(ui: &dear_imgui_rs::Ui, name: &str, value: &str) {
     row(ui, name, false, || {
         ui.text_disabled(value);
+
         false
     });
 }
@@ -171,10 +170,13 @@ pub fn slider(
     let mut edit = row(ui, name, *value != default, || {
         controls::slider(ui, "##value", value, range, "%.3f")
     });
+
     if edit.reset {
         *value = default;
+
         edit.changed = true;
     }
+
     edit
 }
 
@@ -186,6 +188,7 @@ mod tests {
     fn property_sliders_commit_on_release() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
@@ -194,44 +197,57 @@ mod tests {
             .build();
         context.io_mut().set_display_size([640.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         let mut value = 0.2;
         let mut rect = [[0.0; 2]; 2];
         let mut changed_while_dragging = false;
         let mut committed = false;
+
         for frame in 0..7 {
             if frame >= 2 {
                 let [min, max] = rect;
                 let ratio = if frame >= 4 { 0.7 } else { 0.4 };
+
                 context.io_mut().add_mouse_pos_event([
                     min[0] + (max[0] - min[0]) * ratio,
                     (min[1] + max[1]) * 0.5,
                 ]);
             }
+
             if frame == 3 || frame == 5 {
                 context
                     .io_mut()
                     .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, frame == 3);
             }
+
             let ui = context.frame();
+
             ui.window("Slider commit test")
                 .position([0.0; 2], dear_imgui_rs::Condition::Always)
                 .size([520.0, 300.0], dear_imgui_rs::Condition::Always)
                 .build(|| {
                     let edit = row(ui, "Volume", false, || {
                         let changed = ui.slider("##value", 0.0, 1.0, &mut value);
+
                         rect = [ui.item_rect_min(), ui.item_rect_max()];
+
                         changed
                     });
+
                     if frame == 3 || frame == 4 {
                         changed_while_dragging |= edit.changed;
+
                         assert!(!edit.committed);
                     }
+
                     if frame == 5 {
                         committed = edit.committed;
                     }
                 });
+
             context.end_frame();
         }
+
         assert!(changed_while_dragging);
         assert!(committed);
     }

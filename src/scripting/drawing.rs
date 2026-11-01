@@ -26,7 +26,6 @@ impl UserData for Matrix {
             mlua::MetaMethod::Mul,
             |_, this, rhs: mlua::UserDataRef<Self>| Ok(Self(this.0 * rhs.0)),
         );
-
         m.add_method("translate", |_, this, v: mlua::UserDataRef<ValueHandle>| {
             let TrackValue::Vector3(v) = v.0 else {
                 return Err(mlua::Error::runtime("Translation needs vec3."));
@@ -34,7 +33,6 @@ impl UserData for Matrix {
 
             Ok(Self(this.0 * glam::Mat4::from_translation(v)))
         });
-
         m.add_method("scale", |_, this, v: mlua::UserDataRef<ValueHandle>| {
             let TrackValue::Vector3(v) = v.0 else {
                 return Err(mlua::Error::runtime("Scale needs vec3."));
@@ -42,7 +40,6 @@ impl UserData for Matrix {
 
             Ok(Self(this.0 * glam::Mat4::from_scale(v)))
         });
-
         m.add_method("rotate", |_, this, v: mlua::UserDataRef<ValueHandle>| {
             let TrackValue::Quaternion(v) = v.0 else {
                 return Err(mlua::Error::runtime("Rotation needs a quaternion."));
@@ -58,38 +55,38 @@ impl UserData for PathHandle {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method_mut("move_to", |_, this, (x, y): (f32, f32)| {
             finite(&[x, y])?;
+
             this.0.move_to((x, y));
 
             Ok(())
         });
-
         m.add_method_mut("line_to", |_, this, (x, y): (f32, f32)| {
             finite(&[x, y])?;
+
             this.0.line_to((x, y));
 
             Ok(())
         });
-
         m.add_method_mut(
             "quad_to",
             |_, this, (x1, y1, x2, y2): (f32, f32, f32, f32)| {
                 finite(&[x1, y1, x2, y2])?;
+
                 this.0.quad_to((x1, y1), (x2, y2));
 
                 Ok(())
             },
         );
-
         m.add_method_mut(
             "cubic_to",
             |_, this, (x1, y1, x2, y2, x3, y3): (f32, f32, f32, f32, f32, f32)| {
                 finite(&[x1, y1, x2, y2, x3, y3])?;
+
                 this.0.cubic_to((x1, y1), (x2, y2), (x3, y3));
 
                 Ok(())
             },
         );
-
         m.add_method_mut("close", |_, this, ()| {
             this.0.close();
 
@@ -223,7 +220,6 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                                     "Vertex color needs a color value.",
                                 ));
                             };
-
                             let c = c.rgba().map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8);
 
                             Ok(three_d::Srgba::new(c[0], c[1], c[2], c[3]))
@@ -323,11 +319,9 @@ fn paint(value: Value, stroke: Option<f32>) -> Result<skia_safe::Paint> {
     match value {
         Value::UserData(value) => {
             let value = value.borrow::<ValueHandle>()?;
-
             let TrackValue::Color(color) = value.0 else {
                 return Err(mlua::Error::runtime("Paint needs a color or gradient."));
             };
-
             let [r, g, b, a] = color.rgba();
 
             paint.set_color4f(skia_safe::Color4f::new(r, g, b, a), None);
@@ -343,6 +337,7 @@ fn paint(value: Value, stroke: Option<f32>) -> Result<skia_safe::Paint> {
             }
 
             finite(&start)?;
+
             finite(&end)?;
 
             let colors = gradient
@@ -352,7 +347,6 @@ fn paint(value: Value, stroke: Option<f32>) -> Result<skia_safe::Paint> {
                     let TrackValue::Color(color) = value.0 else {
                         return Err(mlua::Error::runtime("Gradient needs colors."));
                     };
-
                     let [r, g, b, a] = color.rgba();
 
                     Ok(skia_safe::Color4f::new(r, g, b, a))
@@ -400,22 +394,22 @@ impl UserData for Context2D {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("save", |_, this, ()| {
             this.push(Command2D::Save)?;
+
             this.depth.set(this.depth.get() + 1);
 
             Ok(())
         });
-
         m.add_method("restore", |_, this, ()| {
             if this.depth.get() == 0 {
                 return Err(mlua::Error::runtime("Unbalanced drawing restore."));
             }
 
             this.push(Command2D::Restore)?;
+
             this.depth.set(this.depth.get() - 1);
 
             Ok(())
         });
-
         m.add_method("layer", |_, this, alpha: f32| {
             finite(&[alpha])?;
 
@@ -426,40 +420,35 @@ impl UserData for Context2D {
             }
 
             this.push(Command2D::Layer(alpha))?;
+
             this.depth.set(this.depth.get() + 1);
 
             Ok(())
         });
-
         m.add_method("translate", |_, this, (x, y): (f32, f32)| {
             finite(&[x, y])?;
 
             this.push(Command2D::Translate(x, y))
         });
-
         m.add_method("scale", |_, this, (x, y): (f32, f32)| {
             finite(&[x, y])?;
 
             this.push(Command2D::Scale(x, y))
         });
-
         m.add_method("rotate", |_, this, r: f32| {
             finite(&[r])?;
 
             this.push(Command2D::Rotate(r))
         });
-
         m.add_method("clip", |_, this, path: mlua::UserDataRef<PathHandle>| {
             this.push(Command2D::Clip(path.0.snapshot()))
         });
-
         m.add_method(
             "fill",
             |_, this, (path, color): (mlua::UserDataRef<PathHandle>, Value)| {
                 this.push(Command2D::Path(path.0.snapshot(), paint(color, None)?))
             },
         );
-
         m.add_method(
             "stroke",
             |_, this, (path, color, width): (mlua::UserDataRef<PathHandle>, Value, f32)| {
@@ -469,7 +458,6 @@ impl UserData for Context2D {
                 ))
             },
         );
-
         m.add_method(
             "rect",
             |_, this, (x, y, w, h, color): (f32, f32, f32, f32, Value)| {
@@ -481,7 +469,6 @@ impl UserData for Context2D {
                 ))
             },
         );
-
         m.add_method(
             "circle",
             |_, this, (x, y, r, color): (f32, f32, f32, Value)| {
@@ -497,7 +484,6 @@ impl UserData for Context2D {
                 ))
             },
         );
-
         m.add_method(
             "image",
             |_,
@@ -521,7 +507,6 @@ impl UserData for Context2D {
                 ))
             },
         );
-
         m.add_method(
             "text",
             |_,
@@ -601,11 +586,9 @@ pub(super) fn bounds_2d(world: &hecs::World, entity: hecs::Entity) -> skia_safe:
             .borrow()
             .get(&entity)
             .and_then(|c| c.bounds.clone());
-
         let Some(callback) = callback else {
             return Ok(skia_safe::Rect::new_empty());
         };
-
         let (props, state) = arguments(&runtime, world, entity)?;
         let bounds = runtime.draw_call(|| callback.call::<Table>((props, state)))?;
         let values = bound_fields(&runtime.lua, bounds, &["x", "y", "width", "height"])?;
@@ -648,11 +631,9 @@ pub(super) fn bounds_3d(world: &hecs::World, entity: hecs::Entity) -> (glam::Vec
             .borrow()
             .get(&entity)
             .and_then(|c| c.bounds.clone());
-
         let Some(callback) = callback else {
             return Ok((glam::Vec3::ZERO, glam::Vec3::ZERO));
         };
-
         let (props, state) = arguments(&runtime, world, entity)?;
         let bounds = runtime.draw_call(|| callback.call::<Table>((props, state)))?;
         let values = bound_fields(
@@ -711,11 +692,9 @@ pub(super) fn draw_2d(
             .borrow()
             .get(&entity)
             .and_then(|c| c.draw.clone());
-
         let Some(callback) = callback else {
             return Ok(());
         };
-
         let context = Context2D {
             active: Rc::new(Cell::new(true)),
             commands: Rc::new(RefCell::new(Vec::new())),
@@ -725,6 +704,7 @@ pub(super) fn draw_2d(
         let result = runtime.draw_call(|| callback.call::<()>((context.clone(), props, state)));
 
         context.active.set(false);
+
         result?;
 
         if context.depth.get() != 0 {
@@ -745,6 +725,7 @@ pub(super) fn draw_2d(
                     let mut paint = skia_safe::Paint::default();
 
                     paint.set_alpha_f(*alpha);
+
                     canvas.save_layer(&skia_safe::canvas::SaveLayerRec::default().paint(&paint));
                 }
                 Command2D::Translate(x, y) => {
@@ -812,7 +793,6 @@ impl UserData for Context3D {
                 Ok(())
             },
         );
-
         m.add_method(
             "instances",
             |_,
@@ -852,11 +832,9 @@ pub(super) fn draw_3d(
             .borrow()
             .get(&entity)
             .and_then(|c| c.draw.clone());
-
         let Some(callback) = callback else {
             return Ok(());
         };
-
         let context = Context3D {
             active: Rc::new(Cell::new(true)),
             commands: Rc::new(RefCell::new(Vec::new())),
@@ -865,6 +843,7 @@ pub(super) fn draw_3d(
         let result = runtime.draw_call(|| callback.call::<()>((context.clone(), props, state)));
 
         context.active.set(false);
+
         result?;
 
         let material = world

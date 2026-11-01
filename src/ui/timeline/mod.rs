@@ -42,8 +42,8 @@ pub(super) fn draw(
 
     windows::panel(ui, WINDOW_NAME, || {
         audio_shortcuts(editor, ui, keyboard);
-        let _disabled = ui.begin_disabled_with_cond(is_exporting);
 
+        let _disabled = ui.begin_disabled_with_cond(is_exporting);
         let focused_scene = editor.focused_scene_index();
         let time = {
             let timeline = editor.timeline_mut();
@@ -68,7 +68,6 @@ pub(super) fn draw(
         let mut objects_hovered = false;
 
         ui.set_cursor_screen_pos([content_left, top + SCRUBBER_HEIGHT]);
-
         ui.child_window("Timeline Objects")
             .size([0.0, child_height])
             .flags(dear_imgui_rs::WindowFlags::ALWAYS_VERTICAL_SCROLLBAR)
@@ -88,17 +87,16 @@ pub(super) fn draw(
                 audio::draw(editor, ui, &draw_list, layout, time, state, dragged_audio);
 
                 ruler::draw_mouse_indicator(ui, &draw_list, layout);
-
                 ruler::draw_playhead(ui, &draw_list, layout, playhead_x);
 
                 view = Some((layout, mouse));
             });
 
         let Some((layout, mouse)) = view else { return };
-
         let timeline_hovered = (header_hovered || objects_hovered)
             && layout.contains_timeline_x(mouse[0])
             && (layout.top..=layout.bottom).contains(&mouse[1]);
+
         if timeline_hovered
             && !state.audio_hovered
             && (ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)
@@ -106,19 +104,18 @@ pub(super) fn draw(
         {
             editor.clear_audio_selection();
         }
+
         let draw_list = ui.get_window_draw_list();
         let playhead_x = time.x(layout, time.current);
 
         ruler::draw_scrubber(ui, &draw_list, layout, time, fps);
-
         ruler::draw_time_grid_lines(ui, &draw_list, layout, time);
-
         ruler::draw_time_grid_labels(ui, &draw_list, layout, time, fps);
-
         ruler::draw_time_panel(ui, &draw_list, layout, time, playhead_x, fps);
 
         if is_exporting {
             state.interaction = Interaction::None;
+
             editor.timeline_mut().is_controlling = false;
         } else {
             interaction::update(editor.timeline_mut(), ui, layout, state, timeline_hovered);
@@ -137,6 +134,7 @@ pub(in crate::ui) fn audio_shortcuts(editor: &mut Editor, ui: &dear_imgui_rs::Ui
         if crate::ui::inputs::active(ui, crate::ui::inputs::Action::SplitAudio) {
             editor.split_audio();
         }
+
         if crate::ui::inputs::active(ui, crate::ui::inputs::Action::DeleteAudio) {
             editor.delete_audio();
         }

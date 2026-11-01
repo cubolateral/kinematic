@@ -28,6 +28,7 @@ pub(super) fn resolve(object: &ObjectHandle, action: &CodeAction) -> Result<Anim
     };
     let mut edits = Vec::new();
     let mut replacement = String::new();
+
     match action {
         CodeAction::Select(ranges) | CodeAction::Highlight(ranges) => {
             for (ranges, _) in &ranges.0 {
@@ -35,11 +36,13 @@ pub(super) fn resolve(object: &ObjectHandle, action: &CodeAction) -> Result<Anim
                     code_interval(&source, *range).map_err(mlua::Error::runtime)?;
                 }
             }
+
             let name = if matches!(action, CodeAction::Select(_)) {
                 "selection"
             } else {
                 "highlights"
             };
+
             return Ok(AnimationDefinition::target(
                 object.clone(),
                 object.property(name)?.target,
@@ -49,19 +52,25 @@ pub(super) fn resolve(object: &ObjectHandle, action: &CodeAction) -> Result<Anim
         CodeAction::Morph(text, _) | CodeAction::Fade(text) => source.clone_from(text),
         CodeAction::Insert(position, text) => {
             edits.push([*position, *position]);
+
             replacement.clone_from(text);
         }
         CodeAction::Append(text) => {
             let end = code_position(&source, source.len());
+
             edits.push([end, end]);
+
             if !source.is_empty() && !source.ends_with('\n') && !text.is_empty() {
                 replacement.push('\n');
             }
+
             replacement.push_str(text);
         }
         CodeAction::Prepend(text) => {
             edits.push([[1, 1], [1, 1]]);
+
             replacement.clone_from(text);
+
             if !source.is_empty() && !text.ends_with('\n') && !text.is_empty() {
                 replacement.push('\n');
             }
@@ -74,6 +83,7 @@ pub(super) fn resolve(object: &ObjectHandle, action: &CodeAction) -> Result<Anim
                     .flat_map(|(ranges, _)| ranges.iter())
                     .copied(),
             );
+
             replacement.clone_from(text);
         }
         CodeAction::Erase(ranges) => edits.extend(
@@ -84,21 +94,26 @@ pub(super) fn resolve(object: &ObjectHandle, action: &CodeAction) -> Result<Anim
                 .copied(),
         ),
     }
+
     edits.sort_unstable();
     edits.dedup();
+
     let intervals = edits
         .iter()
         .map(|range| code_interval(&source, *range).map_err(mlua::Error::runtime))
         .collect::<Result<Vec<_>>>()?;
+
     if intervals
         .windows(2)
         .any(|pair| pair[0].end > pair[1].start || pair[0].start == pair[1].start)
     {
         return Err(mlua::Error::runtime("Code edits cannot overlap."));
     }
+
     for interval in intervals.into_iter().rev() {
         source.replace_range(interval, &replacement);
     }
+
     let active = !matches!(action, CodeAction::Morph(..) | CodeAction::Fade(_));
     let mut tasks = vec![text_transition::<CodeShape>(
         object.entity,
@@ -106,6 +121,7 @@ pub(super) fn resolve(object: &ObjectHandle, action: &CodeAction) -> Result<Anim
         matches!(action, CodeAction::Morph(..)),
         matches!(action, CodeAction::Morph(_, true)),
     )];
+
     for (info, value) in [
         (
             CodeEditState::active_property().info(),
@@ -133,6 +149,7 @@ pub(super) fn resolve(object: &ObjectHandle, action: &CodeAction) -> Result<Anim
             rotation: None,
         });
     }
+
     AnimationDefinition::from_task(object.clone(), Task::All(tasks))
 }
 
@@ -143,17 +160,21 @@ fn sequence(value: Value) -> Result<Vec<Value>> {
         ));
     };
     let length = table.raw_len();
+
     if table.clone().pairs::<Value, Value>().any(|entry| !matches!(entry, Ok((Value::Integer(key), _)) if key >= 1 && key as usize <= length)) {
         return Err(mlua::Error::runtime("Code positions and ranges require contiguous indexed values."));
     }
+
     (1..=length)
         .map(|index| {
             let value = table.raw_get::<Value>(index)?;
+
             if value.is_nil() {
                 return Err(mlua::Error::runtime(
                     "Code positions and ranges cannot contain holes.",
                 ));
             }
+
             Ok(value)
         })
         .collect()
@@ -166,26 +187,32 @@ fn position(value: Value) -> Result<CodePosition> {
             "Code position requires two positive integers {line, column}.",
         ));
     };
+
     if *line <= 0 || *column <= 0 {
         return Err(mlua::Error::runtime(
             "Code positions start at line 1, column 1.",
         ));
     }
+
     Ok([*line as usize, *column as usize])
 }
 
 fn range(value: Value) -> Result<CodeRange> {
     let entries = sequence(value)?;
+
     if entries.len() != 2 {
         return Err(mlua::Error::runtime(
             "Code range requires {start, exclusive_end}.",
         ));
     }
+
     let start = position(entries[0].clone())?;
     let end = position(entries[1].clone())?;
+
     if end < start {
         return Err(mlua::Error::runtime("Code range end precedes its start."));
     }
+
     Ok([start, end])
 }
 
@@ -194,16 +221,19 @@ pub(super) fn parse_ranges(_lua: &Lua, value: Value) -> Result<CodeRanges> {
         if value.is_nil() {
             return Ok(());
         }
+
         if depth > 64 {
             return Err(mlua::Error::runtime(
                 "Code range nesting exceeds 64 levels.",
             ));
         }
+
         let Value::Table(table) = &value else {
             return Err(mlua::Error::runtime(
                 "Expected a code range or a list of ranges.",
             ));
         };
+
         if let Value::Table(first) = table.raw_get::<Value>(1)?
             && matches!(
                 first.raw_get::<Value>(1)?,
@@ -211,9 +241,12 @@ pub(super) fn parse_ranges(_lua: &Lua, value: Value) -> Result<CodeRanges> {
             )
         {
             ranges.push(range(value)?);
+
             return Ok(());
         }
+
         let mut entries = Vec::new();
+
         for entry in table.clone().pairs::<Value, Value>() {
             let (key, value) = entry?;
             let Value::Integer(key) = key else {
@@ -221,21 +254,29 @@ pub(super) fn parse_ranges(_lua: &Lua, value: Value) -> Result<CodeRanges> {
                     "Code range lists require positive integer keys.",
                 ));
             };
+
             if key < 1 {
                 return Err(mlua::Error::runtime(
                     "Code range lists require positive integer keys.",
                 ));
             }
+
             entries.push((key, value));
         }
+
         entries.sort_unstable_by_key(|(key, _)| *key);
+
         for (_, value) in entries {
             collect(value, ranges, depth + 1)?;
         }
+
         Ok(())
     }
+
     let mut ranges = Vec::new();
+
     collect(value, &mut ranges, 0)?;
+
     Ok(CodeRanges::new(ranges))
 }
 
@@ -255,6 +296,7 @@ pub(super) fn ranges_to_lua(lua: &Lua, ranges: &CodeRanges) -> Result<Value> {
         .flat_map(|(ranges, weight)| ranges.iter().filter(move |_| *weight > 0.0))
         .copied()
         .collect::<std::collections::BTreeSet<_>>();
+
     lua.create_sequence_from(
         ranges
             .into_iter()
@@ -270,11 +312,13 @@ fn arguments<T: FromLuaMulti>(lua: &Lua, args: MultiValue, count: usize) -> Resu
             "Incorrect number of code method arguments.",
         ));
     }
+
     T::from_lua_multi(args, lua)
 }
 
 fn prepare(lua: &Lua, object: &ObjectHandle, action: CodeAction) -> Result<Value> {
     object.runtime()?.construction()?;
+
     AnimationDefinition::code(object.clone(), action).into_lua(lua)
 }
 
@@ -291,11 +335,13 @@ fn coordinate(value: Value, zero: bool) -> Result<usize> {
 
 fn matches(lua: &Lua, object: &ObjectHandle, args: MultiValue) -> Result<Vec<CodeRange>> {
     let count = args.len();
+
     if !(1..=3).contains(&count) {
         return Err(mlua::Error::runtime(
             "Code search requires text and optional match_case and match_whole_word booleans.",
         ));
     }
+
     let (value, match_case, match_whole_word): (Value, Value, Value) = arguments(lua, args, count)?;
     let boolean = |value| match value {
         Value::Nil => Ok(false),
@@ -310,32 +356,39 @@ fn matches(lua: &Lua, object: &ObjectHandle, args: MultiValue) -> Result<Vec<Cod
         return Err(mlua::Error::runtime("Code search text must be a string."));
     };
     let text = text.to_str()?;
+
     if text.is_empty() {
         return Err(mlua::Error::runtime("Code search text cannot be empty."));
     }
+
     let TrackValue::String(source) = object.property("code")?.value()? else {
         unreachable!()
     };
     let word = |ch: char| ch.is_alphanumeric() || ch == '_';
     let mut result = Vec::new();
     let mut previous_end = 0;
+
     for (start, _) in source.char_indices() {
         if start < previous_end {
             continue;
         }
+
         let mut end = start;
         let mut chars = source[start..].char_indices();
         let found = text.chars().all(|expected| {
             let Some((offset, ch)) = chars.next() else {
                 return false;
             };
+
             end = start + offset + ch.len_utf8();
+
             if match_case {
                 ch == expected
             } else {
                 ch.to_lowercase().eq(expected.to_lowercase())
             }
         });
+
         if !found
             || (match_whole_word
                 && ((text.chars().next().is_some_and(word)
@@ -345,9 +398,12 @@ fn matches(lua: &Lua, object: &ObjectHandle, args: MultiValue) -> Result<Vec<Cod
         {
             continue;
         }
+
         result.push([code_position(&source, start), code_position(&source, end)]);
+
         previous_end = end;
     }
+
     Ok(result)
 }
 
@@ -684,7 +740,9 @@ end
 "#,
         )
         .unwrap();
+
         let definitions = crate::scripting::definitions();
+
         for method in ["find", "find_all"] {
             assert!(definitions.contains(&format!(
                 "function Code:{method}(text, match_case, match_whole_word) end"
@@ -716,10 +774,13 @@ end
             ))
             .unwrap();
             let entity = scene.entity("object").unwrap();
+
             for (time, group) in [(0.5, true), (1.5, false), (2.5, false), (0.5, true)] {
                 scene.update(time).unwrap();
+
                 let world = scene.scene().world();
                 let fade = world.get::<&TextFade>(entity).unwrap();
+
                 assert!(fade.active && fade.morph, "{builder}");
                 assert_eq!(fade.group, group, "{builder} at {time}");
             }
@@ -760,6 +821,7 @@ end
         )
         .unwrap();
         let entity = scene.entity("code").unwrap();
+
         for (time, expected, highlight, outside) in [
             (7.0, "done", 0.0, 1.0),
             (2.5, "éxx🦀\nprint(1)", 0.5, 0.5),
@@ -770,12 +832,16 @@ end
             (6.0, "é🦀\nprint(42)", 0.0, 1.0),
         ] {
             scene.update(time).unwrap();
+
             let world = scene.scene().world();
             let shape = world.get::<&CodeShape>(entity).unwrap();
+
             assert_eq!(shape.code, expected, "Time: {time}.");
             assert!((shape.highlights.coverage([2, 1], false) - highlight).abs() < 0.001);
             assert!((shape.selection.coverage([1, 1], true) - outside).abs() < 0.001);
+
             let fade = world.get::<&TextFade>(entity).unwrap();
+
             if time == 5.5 {
                 assert!(fade.active && !fade.morph);
                 assert!((fade.progress - 0.5).abs() < 0.001);
@@ -814,7 +880,9 @@ end
         )
         .unwrap();
         let entity = scene.entity("code").unwrap();
+
         scene.update(7.5).unwrap();
+
         assert!(
             scene
                 .scene()
@@ -823,7 +891,9 @@ end
                 .unwrap()
                 .active
         );
+
         scene.update(0.0).unwrap();
+
         assert_eq!(
             scene
                 .scene()
@@ -865,30 +935,39 @@ end
                 "return function(s) local c=s:code{{code='abc'}}; s:world_2d():add(c); assert(not pcall(function() {operation} end)); assert(c.code:get()=='abc'); c:morph('ok'):play(1); assert(c.code:get()=='ok') end"
             );
             let scene = load(&source).unwrap_or_else(|error| panic!("{operation}: {error}"));
+
             assert!((scene.duration() - 1.0).abs() < 0.001, "{operation}");
         }
+
         assert!(load("return function(s) s:code {language='unknown'} end").is_err());
     }
 
     #[test]
     fn language_choices_are_available_in_lua_and_generated_documentation() {
         use crate::core::{TrackEnum, objects::CodeLanguage};
+
         let definitions = crate::scripting::definitions();
         let field = definitions
             .lines()
             .find(|line| line.starts_with("---@field language? "))
             .unwrap();
         let mut source = String::from("return function(s)\n");
+
         for language in CodeLanguage::VARIANTS {
             assert!(field.contains(&format!("'{language}'")), "{language}");
+
             source.push_str(&format!("local code=s:code{{language='{language}'}}; assert(code.language:get()=='{language}')\n"));
         }
+
         source.push_str("end");
+
         load(&source).unwrap();
+
         let scene = load(include_str!(
             "../../examples/lua/2d/scenes/code_languages.lua"
         ))
         .unwrap();
+
         for time in [1.5, 9.5, 18.5, 0.0, scene.duration()] {
             scene.update(time).unwrap();
         }
@@ -897,18 +976,24 @@ end
     #[test]
     fn example_and_generated_function_documentation_include_working_code() {
         let scene = load(include_str!("../../examples/lua/2d/scenes/code.lua")).unwrap();
+
         for time in [0.0, 1.0, scene.duration(), 2.0] {
             scene.update(time).unwrap();
         }
+
         let definitions = crate::scripting::definitions();
+
         for method in METHODS {
             assert!(method.documentation.contains("```lua"), "{}", method.name);
             assert!(!method.documentation.contains("snippet"));
+
             for tween in method.documentation.split(":play(").skip(1) {
                 assert!(tween.starts_with("1)"), "{}", method.name);
             }
+
             assert!(definitions.contains(method.documentation.lines().next().unwrap()));
         }
+
         assert!(definitions.contains("---@class Kinematic.CodeRange\n"));
         assert!(!definitions.contains("---@alias Kinematic.CodeRange {[1]:"));
     }

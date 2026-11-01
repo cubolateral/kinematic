@@ -36,11 +36,13 @@ impl Margin {
             MarginUnit::Percentage => [resolution.0 as f32 / 100.0, resolution.1 as f32 / 100.0],
             MarginUnit::Pixels => [1.0, 1.0],
         };
+
         [self.left * x, self.right * x, self.top * y, self.bottom * y]
     }
 
     pub(crate) fn is_valid(self, resolution: (u32, u32)) -> bool {
         let sides = self.pixels(resolution);
+
         sides.iter().all(|v| v.is_finite() && *v >= 0.0)
             && sides[0] + sides[1] < resolution.0 as f32
             && sides[2] + sides[3] < resolution.1 as f32
@@ -50,6 +52,7 @@ impl Margin {
 impl<'de> Deserialize<'de> for Margin {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         struct Visitor;
+
         impl<'de> serde::de::Visitor<'de> for Visitor {
             type Value = Margin;
 
@@ -67,9 +70,11 @@ impl<'de> Deserialize<'de> for Margin {
                 let y: u32 = seq
                     .next_element()?
                     .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+
                 if seq.next_element::<serde::de::IgnoredAny>()?.is_some() {
                     return Err(serde::de::Error::invalid_length(3, &self));
                 }
+
                 Ok(Margin {
                     unit: MarginUnit::Pixels,
                     left: x as f32,
@@ -89,8 +94,10 @@ impl<'de> Deserialize<'de> for Margin {
                     top: f32,
                     bottom: f32,
                 }
+
                 let fields =
                     Fields::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
+
                 Ok(Margin {
                     unit: fields.unit,
                     left: fields.left,
@@ -100,6 +107,7 @@ impl<'de> Deserialize<'de> for Margin {
                 })
             }
         }
+
         deserializer.deserialize_any(Visitor)
     }
 }
@@ -149,12 +157,14 @@ mod tests {
     #[test]
     fn margins_preserve_legacy_pixels_and_round_trip_each_side() {
         let legacy: Margin = ron::from_str("(64, 32)").unwrap();
+
         assert_eq!(legacy.unit, MarginUnit::Pixels);
         assert_eq!(legacy.pixels((1280, 720)), [64.0, 64.0, 32.0, 32.0]);
         assert_eq!(
             Margin::default().pixels((1280, 720)),
             [64.0, 64.0, 36.0, 36.0]
         );
+
         let margin = Margin {
             left: 10.0,
             right: 20.0,
@@ -163,17 +173,23 @@ mod tests {
             ..Margin::default()
         };
         let text = ron::to_string(&margin).unwrap();
+
         assert_eq!(ron::from_str::<Margin>(&text).unwrap(), margin);
+
         let mut scene = crate::core::Scene::new_with_resolution((1000, 500));
+
         scene.set_margin(margin);
+
         assert_eq!(
             scene.margin(),
             crate::core::types::Rect::new(-400.0, -225.0, 700.0, 400.0)
         );
         assert!(margin.is_valid((1000, 500)));
+
         for left in [-1.0, 80.0, f32::NAN, f32::INFINITY] {
             assert!(!Margin { left, ..margin }.is_valid((1000, 500)));
         }
+
         assert!(
             !Margin {
                 bottom: 95.0,
@@ -193,13 +209,11 @@ mod tests {
     #[test]
     fn project_settings_require_exportable_values() {
         assert!(ProjectSettings::is_valid(&ProjectSettings::default()));
-
         assert!(!ProjectSettings::is_valid(&ProjectSettings {
             resolution: (1279, 720),
             fps: 60,
             margin: Margin::default(),
         }));
-
         assert!(!ProjectSettings::is_valid(&ProjectSettings {
             resolution: (1280, 720),
             fps: 0,

@@ -239,6 +239,7 @@ mod tests {
         changed = shape.clone();
 
         changed.minor_segments += 1;
+
         assert_ne!(shape.geometry_key(), changed.geometry_key());
     }
 }

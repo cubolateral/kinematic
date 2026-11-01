@@ -86,6 +86,7 @@ impl Snapshot {
                     let saved_value = Self::capture(value, path, seen, depth + 1)?;
 
                     path.pop();
+
                     entries.push((saved_key, saved_value));
 
                     Ok(())
@@ -169,23 +170,18 @@ impl UserData for RandomHandle {
         methods.add_method_mut("number", |_, this, ()| Ok(this.0.f32()));
         methods.add_method_mut("integer", |_, this, ()| Ok(this.0.u32()));
         methods.add_method_mut("boolean", |_, this, ()| Ok(this.0.bool()));
-
         methods.add_method_mut("range", |_, this, (min, max): (f64, f64)| {
             super::runtime::engine(|| this.0.range_f64(min..max))
         });
-
         methods.add_method_mut("range_integer", |_, this, (min, max): (i64, i64)| {
             super::runtime::engine(|| this.0.range_i64(min..max))
         });
-
         methods.add_method_mut("chance", |_, this, probability: f64| {
             super::runtime::engine(|| this.0.chance(probability))
         });
-
         methods.add_method_mut("normal", |_, this, (mean, deviation): (f64, f64)| {
             super::runtime::engine(|| this.0.normal(mean, deviation))
         });
-
         methods.add_method_mut(
             "choose",
             |_, this, (values, weights): (Vec<Value>, Option<Vec<f64>>)| {
@@ -195,7 +191,6 @@ impl UserData for RandomHandle {
                 })
             },
         );
-
         methods.add_method_mut(
             "choose_multiple",
             |_, this, (values, amount): (Vec<Value>, usize)| {
@@ -208,7 +203,6 @@ impl UserData for RandomHandle {
                 })
             },
         );
-
         methods.add_method_mut("shuffle", |_, this, values: mlua::Table| {
             let mut items = values
                 .clone()
@@ -223,7 +217,6 @@ impl UserData for RandomHandle {
 
             Ok(values)
         });
-
         methods.add_method("fork", |_, this, key: u64| Ok(Self(this.0.fork(key))));
     }
 }
@@ -290,6 +283,7 @@ mod tests {
         let restored = copy.value(&lua).unwrap();
 
         restored.as_table().unwrap().set("count", 50).unwrap();
+
         original.as_table().unwrap().set("count", 99).unwrap();
 
         assert_eq!(

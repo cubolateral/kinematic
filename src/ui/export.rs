@@ -6,7 +6,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui) -> bool {
     let Some(_menu) = controls::menu(ui, "Export") else {
         return false;
     };
-
     let is_exporting = editor.is_exporting();
     let mut started = false;
 

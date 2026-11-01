@@ -180,12 +180,16 @@ pub trait ObjectHandler: Clone {
     /// Moves this object to a container, preserving local properties and lifetime.
     fn reparent(&self, node: &impl crate::core::objects::NodeHandler) {
         let world = self.object_world();
+
         assert!(
             std::rc::Rc::ptr_eq(&world, &node.container_world()),
             "Objects belong to different scenes."
         );
+
         let animator = self.object_animator();
+
         animator.assert_finite_scope();
+
         crate::core::objects::reparent_child(
             &world,
             node.container_entity(),
@@ -368,7 +372,6 @@ pub trait ObjectHandler: Clone {
 
         crate::core::objects::validate_shader_track_value(&from)
             .unwrap_or_else(|error| panic!("{error}"));
-
         crate::core::objects::validate_shader_track_value(&to)
             .unwrap_or_else(|error| panic!("{error}"));
 
@@ -1071,7 +1074,6 @@ fn bounds3d_inner(
         else {
             continue;
         };
-
         let matrix = local_matrix3d(world, child);
 
         for x in [child_min.x, child_max.x] {
@@ -1080,6 +1082,7 @@ fn bounds3d_inner(
                     let p = matrix.transform_point3(glam::vec3(x, y, z));
 
                     min = min.min(p);
+
                     max = max.max(p);
                 }
             }

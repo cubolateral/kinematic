@@ -10,6 +10,7 @@ impl Editor {
 
     pub(crate) fn audio_samples(&self, id: u64) -> Option<std::sync::Arc<Vec<[f32; 2]>>> {
         let index = self.audio_clips().iter().position(|clip| clip.id == id)?;
+
         self.project_audio
             .clips
             .get(index)
@@ -24,6 +25,7 @@ impl Editor {
 
     pub(crate) fn selected_audio(&self) -> Option<AudioClip> {
         let id = self.selection.audio()?;
+
         self.audio_clips()
             .iter()
             .find(|clip| clip.id == id)
@@ -71,6 +73,7 @@ impl Editor {
     pub(crate) fn audio_error(&mut self, error: String) {
         if let Some(documents) = &mut self.documents {
             documents.status = error.clone();
+
             documents.diagnostics.push(error);
         }
     }
@@ -85,10 +88,14 @@ impl Editor {
         if !self.audio_editable() {
             return Err("Apply or resolve source edits before editing audio.".into());
         }
+
         let project = self.lua_project.as_ref().ok_or("No Lua project is open.")?;
         let mut manifest = project.manifest.clone();
+
         manifest.audio = clips.clone();
+
         manifest.validate(&project.context)?;
+
         let mut samples = self
             .audio_clips()
             .iter()
@@ -96,6 +103,7 @@ impl Editor {
             .map(|(clip, event)| (clip.file.clone(), event.samples.clone()))
             .collect::<std::collections::BTreeMap<_, _>>();
         let mut events = Vec::with_capacity(clips.len());
+
         for clip in &clips {
             let sample = if let Some(sample) = samples.get(&clip.file) {
                 sample.clone()
@@ -112,15 +120,21 @@ impl Editor {
                     bytes,
                     std::time::Instant::now() + std::time::Duration::from_secs(10),
                 )?;
+
                 samples.insert(clip.file.clone(), sample.clone());
+
                 sample
             };
+
             events.push(audio::clip_event(clip, sample)?);
         }
+
         self.lua_project.as_mut().unwrap().manifest = manifest;
         self.project_audio.clips = events;
+
         if let Some(documents) = &mut self.documents {
             documents.project_dirty |= clips != self.saved_audio;
+
             documents.status = if documents.project_dirty {
                 "Unsaved project changes."
             } else {
@@ -128,11 +142,14 @@ impl Editor {
             }
             .into();
         }
+
         let duration = self.project_duration();
         let duration = self.focused_scene.map_or(duration, |index| {
             self.scenes[index].end - self.scenes[index].start
         });
+
         self.timeline.set_duration(duration);
+
         Ok(())
     }
 
@@ -144,8 +161,10 @@ impl Editor {
         {
             return Ok(());
         }
+
         let documents = self.documents.as_mut().unwrap();
         let path = std::path::Path::new(MANIFEST);
+
         if documents
             .open
             .get(path)
@@ -155,19 +174,28 @@ impl Editor {
                 "Save or resolve manifest text edits before saving project changes.".into(),
             );
         }
+
         let project = self.lua_project.as_mut().ok_or("No Lua project is open.")?;
+
         project.save()?;
+
         self.saved_audio = project.manifest.audio.clone();
+
         documents.project_dirty = false;
+
         if let Some(document) = documents.open.get_mut(path) {
             let text =
                 ron::ser::to_string_pretty(&project.manifest, ron::ser::PrettyConfig::default())
                     .map_err(|error| error.to_string())?;
+
             document.disk = Some(text.as_bytes().to_vec());
             document.text = text;
+
             document.version += 1;
         }
+
         documents.status = "Project saved.".into();
+
         Ok(())
     }
 
@@ -176,6 +204,7 @@ impl Editor {
             if !self.audio_editable() {
                 return Err("Apply or resolve source edits before importing audio.".into());
             }
+
             let project = self.lua_project.as_ref().ok_or("No Lua project is open.")?;
             let bytes = Sources::default()
                 .read_audio(&project.context, &file)
@@ -186,6 +215,7 @@ impl Editor {
             )?;
             let mut clips = self.audio_clips().to_vec();
             let id = next_id(&clips)?;
+
             clips.push(AudioClip {
                 id,
                 lane: 0,
@@ -199,10 +229,14 @@ impl Editor {
                 gain: 1.0,
                 pan: 0.0,
             });
+
             self.edit_audio(clips)?;
+
             self.select_audio(id);
+
             Ok::<_, String>(())
         })();
+
         if let Err(error) = result {
             self.audio_error(error);
         }
@@ -217,13 +251,16 @@ impl Editor {
             Ok(id) => id,
             Err(error) => {
                 self.audio_error(error);
+
                 return;
             }
         };
         let time = self.absolute_time() as f64;
         let selected = clips.iter_mut().find(|item| item.id == clip.id).unwrap();
+
         if let Some(right) = selected.split(time, id) {
             clips.push(right);
+
             self.commit_audio(clips);
         }
     }
@@ -238,6 +275,7 @@ impl Editor {
             .filter(|item| item.id != clip.id)
             .cloned()
             .collect();
+
         self.commit_audio(clips);
     }
 }

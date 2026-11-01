@@ -79,7 +79,6 @@ impl Font {
 
         let path = self.path.clone();
         let mut cache = FONT_CACHE.lock().unwrap();
-
         let typeface = cache.entry(path.clone()).or_insert_with(|| {
             let data = std::fs::read(&path).unwrap_or_else(|error| {
                 panic!("Font at `{}` could not be read: {error}.", path.display())
@@ -282,7 +281,6 @@ pub(crate) fn text_box(shape: &TextShape) -> Vector2 {
     let width = lines.iter().map(|line| line.width).fold(0.0, f32::max);
     let height =
         metrics.descent - metrics.ascent + font.spacing() * lines.len().saturating_sub(1) as f32;
-
     let thickness = shape.thickness.max(0.0);
 
     Vector2::new(width + thickness, height + thickness)
@@ -329,20 +327,26 @@ pub(in crate::core::objects) fn text_parts(
     shape: &TextShape,
 ) -> Vec<crate::core::objects::text_morph::MorphPart> {
     use crate::core::objects::text_morph::MorphPart;
+
     let font = shape.font.skia_font(shape.size);
     let mut parts = Vec::new();
     let mut groups = crate::core::objects::text_morph::TokenGroups::default();
+
     for line in text_lines(shape, &font) {
         groups.next('\n');
+
         let glyphs = font.text_to_glyphs_vec(line.text);
         let mut positions = vec![skia_safe::Point::default(); glyphs.len()];
+
         font.get_pos(
             &glyphs,
             &mut positions,
             Some(skia_safe::Point::new(line.origin.0, line.origin.1)),
         );
+
         for ((glyph, position), ch) in glyphs.into_iter().zip(positions).zip(line.text.chars()) {
             let group = groups.next(ch);
+
             if let Some(path) = font.get_path(glyph) {
                 parts.push(MorphPart {
                     key: glyph.to_string(),
@@ -356,6 +360,7 @@ pub(in crate::core::objects) fn text_parts(
             }
         }
     }
+
     parts
 }
 
@@ -396,7 +401,6 @@ fn draw_text_object(
     let shape = world.get::<&TextShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
-
     let fade = world.get::<&TextFade>(entity).unwrap();
 
     if let Some(incoming) = fade.incoming_shape(&shape) {
@@ -415,8 +419,10 @@ fn draw_text_object(
                     canvas,
                 );
             }
+
             return;
         }
+
         draw_text_2d(
             &shape,
             &style,
@@ -459,7 +465,6 @@ impl Default for Text2D {
                     let shape = world.get::<&TextShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
-
                     let fade = world.get::<&TextFade>(entity).unwrap();
                     let mut bounds = *text_path(&shape).bounds();
 
@@ -497,17 +502,14 @@ mod tests {
             world.get::<&TextShape>(bundled.entity()).unwrap().font,
             Font::new(fonts::HACK_MONO)
         );
-
         assert_eq!(
             world.get::<&TextShape>(custom.entity()).unwrap().font,
             Font::new(custom_path)
         );
-
         assert_eq!(
             world.get::<&TextShape>(bundled.entity()).unwrap().thickness,
             3.0
         );
-
         assert_eq!(TextShape::thickness_property().info().name, "thickness");
     }
 
@@ -559,7 +561,6 @@ mod tests {
             right[0].origin.0 + right[0].width,
             right[1].origin.0 + right[1].width,
         ));
-
         assert!(approximately_equal(
             right[1].origin.1 - right[0].origin.1,
             font.spacing(),

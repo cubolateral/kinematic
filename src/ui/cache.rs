@@ -33,8 +33,10 @@ impl Cache {
         let Ok(path) = crate::storage::global_path(CACHE_PATH) else {
             return Self::default();
         };
+
         read(&path).unwrap_or_else(|error| {
             eprintln!("Could not load editor cache: {error}.");
+
             Self::default()
         })
     }
@@ -54,6 +56,7 @@ impl Cache {
         {
             return Err("Editor cache volume and zoom must be finite and within range.".into());
         }
+
         Ok(())
     }
 }
@@ -65,26 +68,32 @@ fn read(path: &Path) -> Result<Cache, Box<dyn std::error::Error>> {
         Err(error) => return Err(error.into()),
     };
     let cache: Cache = ron::de::from_bytes(&contents)?;
+
     cache.validate()?;
+
     Ok(cache)
 }
 
 fn write(cache: &Cache, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
     cache.validate()?;
+
     let expected = match std::fs::read(path) {
         Ok(contents) => {
             ron::de::from_bytes::<Cache>(&contents)?;
+
             Some(contents)
         }
         Err(error) if error.kind() == ErrorKind::NotFound => None,
         Err(error) => return Err(error.into()),
     };
     let contents = ron::ser::to_string_pretty(cache, ron::ser::PrettyConfig::default())?;
+
     crate::core::atomic_write(
         path,
         format!("{contents}\n").as_bytes(),
         expected.as_deref(),
     )?;
+
     Ok(())
 }
 
@@ -111,10 +120,15 @@ mod tests {
             )]
             .into(),
         };
+
         assert_eq!(read(&path).unwrap(), Cache::default());
+
         write(&cache, &path).unwrap();
+
         assert_eq!(read(&path).unwrap(), cache);
+
         std::fs::write(&path, "(audio_volume: 0)").unwrap();
+
         assert_eq!(
             read(&path).unwrap(),
             Cache {
@@ -122,17 +136,22 @@ mod tests {
                 ..Cache::default()
             }
         );
+
         for text in [
             "(audio_volume: 101)",
             "(code_zoom: NaN)",
             "(code_zoom: 19.0)",
         ] {
             std::fs::write(&path, text).unwrap();
+
             assert!(read(&path).is_err());
         }
+
         std::fs::write(&path, "Invalid cache.").unwrap();
+
         assert!(write(&cache, &path).is_err());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "Invalid cache.");
+
         std::fs::remove_dir_all(root).unwrap();
     }
 }

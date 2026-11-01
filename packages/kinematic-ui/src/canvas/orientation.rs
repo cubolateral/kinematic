@@ -28,6 +28,7 @@ pub struct Response {
 
 pub fn bounds(min: [f32; 2], size: [f32; 2]) -> [[f32; 2]; 2] {
     let origin = [min[0] + size[0] - SIZE - 8.0, min[1] + 8.0];
+
     [origin, [origin[0] + SIZE, origin[1] + SIZE]]
 }
 
@@ -37,6 +38,7 @@ fn points(axes: [[f32; 3]; 3], center: [f32; 2]) -> [(usize, bool, [f32; 3]); 6]
         let positive = index % 2 == 0;
         let sign = if positive { 1.0 } else { -1.0 };
         let [x, y, z] = axes[axis];
+
         (
             axis,
             positive,
@@ -47,7 +49,9 @@ fn points(axes: [[f32; 3]; 3], center: [f32; 2]) -> [(usize, bool, [f32; 3]); 6]
             ],
         )
     });
+
     points.sort_by(|a, b| a.2[2].total_cmp(&b.2[2]));
+
     points
 }
 
@@ -71,34 +75,43 @@ pub fn draw(
 ) -> Response {
     let [origin, _] = bounds(min, size);
     let center = [origin[0] + SIZE * 0.5, origin[1] + SIZE * 0.5];
+
     ui.set_cursor_screen_pos(origin);
     ui.set_next_item_allow_overlap();
     ui.invisible_button("Viewport orientation", [SIZE; 2]);
+
     let hovered = ui.is_item_hovered();
     let active = ui.is_item_active();
     let points = points(axes, center);
     let target = hovered.then(|| hit(&points, ui.io().mouse_pos())).flatten();
     let mut response = Response::default();
+
     if hovered && ui.is_mouse_clicked(MouseButton::Left) {
         state.started = true;
         state.pressed = target;
         state.dragged = false;
     }
+
     if active && ui.is_mouse_dragging(MouseButton::Left) {
         state.dragged = true;
+
         response.orbit = Some(ui.io().mouse_delta());
     }
+
     if state.started && ui.is_mouse_released(MouseButton::Left) {
         if !state.dragged && state.pressed == target {
             response.axis = target;
         }
+
         state.started = false;
     }
+
     if !ui.is_mouse_down(MouseButton::Left) {
         state.started = false;
     }
 
     let draw = ui.get_window_draw_list();
+
     if hovered || active {
         draw.add_circle(
             center,
@@ -108,13 +121,17 @@ pub fn draw(
         .filled(true)
         .build();
     }
+
     for &(axis, positive, [x, y, _]) in &points {
         let color = COLORS[axis];
+
         if positive {
             draw.add_line(center, [x, y], color).thickness(2.0).build();
         }
+
         let highlighted = target == Some((axis, positive));
         let radius = if highlighted { HOVER_RADIUS } else { RADIUS };
+
         draw.add_circle(
             [x, y],
             radius,
@@ -129,9 +146,11 @@ pub fn draw(
         draw.add_circle([x, y], radius, if highlighted { [1.0; 4] } else { color })
             .thickness(OUTLINE)
             .build();
+
         if positive || highlighted {
             let label = ["X", "Y", "Z"][axis];
             let text = ui.calc_text_size(label);
+
             draw.add_text(
                 [x - text[0] * 0.5, y - text[1] * 0.5],
                 if highlighted {
@@ -143,6 +162,7 @@ pub fn draw(
             );
         }
     }
+
     response
 }
 
@@ -154,13 +174,16 @@ mod tests {
             [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             [50.0; 2],
         );
+
         assert_eq!(super::hit(&front, [83.0, 50.0]), Some((0, true)));
         assert_eq!(super::hit(&front, [50.0, 17.0]), Some((1, true)));
         assert_eq!(super::hit(&front, [50.0, 50.0]), Some((2, true)));
+
         let back = super::points(
             [[-1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]],
             [50.0; 2],
         );
+
         assert_eq!(super::hit(&back, [50.0, 50.0]), Some((2, false)));
         assert_eq!(super::hit(&back, [83.0, 50.0]), Some((0, false)));
         assert_eq!(super::hit(&front, [100.0; 2]), None);
@@ -169,8 +192,10 @@ mod tests {
     #[test]
     fn clicking_a_ball_aligns_but_dragging_orbits_without_snapping() {
         use dear_imgui_rs::{Condition, Context, MouseButton};
+
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
@@ -179,7 +204,9 @@ mod tests {
             .build();
         context.io_mut().set_display_size([640.0, 360.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         let mut state = super::State::default();
+
         fn frame(
             context: &mut Context,
             state: &mut super::State,
@@ -190,8 +217,10 @@ mod tests {
             context
                 .io_mut()
                 .add_mouse_button_event(MouseButton::Left, down);
+
             let ui = context.frame();
             let mut response = super::Response::default();
+
             ui.window("Orientation test")
                 .position([0.0; 2], Condition::Always)
                 .size([640.0, 360.0], Condition::Always)
@@ -204,19 +233,27 @@ mod tests {
                         state,
                     );
                 });
+
             context.end_frame();
+
             response
         }
+
         let ball = [613.0, 90.0];
+
         frame(&mut context, &mut state, ball, false);
         frame(&mut context, &mut state, ball, false);
+
         assert!(frame(&mut context, &mut state, ball, true).axis.is_none());
         assert_eq!(
             frame(&mut context, &mut state, ball, false).axis,
             Some((0, true))
         );
+
         frame(&mut context, &mut state, ball, true);
+
         let dragged = [600.0, 105.0];
+
         assert!(
             frame(&mut context, &mut state, dragged, true)
                 .orbit

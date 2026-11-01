@@ -128,6 +128,7 @@ fn draw_prism(
     let shape = world.get::<&PrismShape>(entity).unwrap();
 
     validate_sides(shape.sides)?;
+
     validate_dimensions(shape.size)?;
 
     let transformation = global_matrix3d(world, entity) * glam::Mat4::from_scale(shape.size);

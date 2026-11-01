@@ -43,10 +43,11 @@ return function(s)
         position = k.vec2(-100, 0),
         fill = k.color("#60A5FA"),
     }
-
     s:world_2d():add(ball)
-    ball:to {position = k.vec2(100, 0)}:play(2, k.ease.linear)
-    s:wait(0.5)
+
+    ball:to { position = k.vec2(100, 0) }:play(1)
+
+    s:wait(1)
 end
 ```
 

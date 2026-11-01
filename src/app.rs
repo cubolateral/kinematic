@@ -26,7 +26,6 @@ impl App {
     pub fn new() -> Self {
         let sdl = sdl3::init().unwrap();
         let video_subsystem = sdl.video().unwrap();
-
         let gl_attributes = video_subsystem.gl_attr();
 
         gl_attributes.set_context_version(3, 3);
@@ -39,7 +38,6 @@ impl App {
             .opengl()
             .build()
             .unwrap();
-
         let gl_context = window.gl_create_context().unwrap();
 
         window.gl_make_current(&gl_context).unwrap();
@@ -59,11 +57,13 @@ impl App {
 
         match crate::storage::global_path("cache/imgui.ini").and_then(|path| {
             std::fs::create_dir_all(path.parent().unwrap())?;
+
             Ok(path)
         }) {
             Ok(path) => imgui.set_ini_filename(Some(path)).unwrap(),
             Err(error) => {
                 eprintln!("Could not prepare ImGui cache: {error}.");
+
                 imgui.set_ini_filename(None::<std::path::PathBuf>).unwrap();
             }
         }
@@ -79,7 +79,6 @@ impl App {
             )
         }
         .unwrap();
-
         let imgui_renderer = dear_imgui_glow::GlowRenderer::new(gl, &mut imgui).unwrap();
         let gl = std::rc::Rc::new(unsafe {
             glow::Context::from_loader_function(|name| {
@@ -133,6 +132,7 @@ impl App {
             if let Some(editor) = editor {
                 self.ui.remember_project(editor.context().root());
             }
+
             if let Err(error) =
                 crate::storage::save_current_project(editor.map(|editor| editor.context().root()))
             {
@@ -146,7 +146,6 @@ impl App {
         self.export_only = true;
 
         self.run();
-
         self.export_result
             .take()
             .unwrap_or_else(|| Err("Project could not be exported.".into()))
@@ -211,6 +210,7 @@ impl App {
                 Ok(audio) => Some(audio),
                 Err(error) => {
                     eprintln!("Audio preview unavailable: {error}");
+
                     None
                 }
             }
@@ -236,9 +236,11 @@ impl App {
             if let Some(preview) = &mut audio {
                 if let Err(error) = preview.update(editor.as_ref(), self.ui.audio_volume()) {
                     eprintln!("Audio preview failed: {error}");
+
                     audio = None;
                 }
             }
+
             if let Some(editor) = &mut editor {
                 if let Some(settings) = editor.take_pending_project_settings() {
                     editor.apply_project_settings(settings);
@@ -254,9 +256,11 @@ impl App {
                 }
 
                 editor.update();
+
                 if let Some(preview) = &mut audio {
                     if let Err(error) = preview.update(Some(editor), self.ui.audio_volume()) {
                         eprintln!("Audio preview failed: {error}");
+
                         audio = None;
                     }
                 }
@@ -318,6 +322,7 @@ impl App {
             }
 
             self.ui.draw_projects(editor.as_mut(), ui);
+
             ui_motion.draw(ui);
 
             let frame = self
@@ -366,19 +371,17 @@ impl App {
                                 self.ui.is_fullscreen(),
                                 self.ui.preview_view(),
                             );
-
                             previous.preview_mut().unregister(&mut self.imgui_renderer);
-
                             previous
                                 .editor_2d_mut()
                                 .unregister(&mut self.imgui_renderer);
-
                             previous
                                 .editor_3d_mut()
                                 .unregister(&mut self.imgui_renderer);
                         }
 
                         crate::scripting::release_unused();
+
                         self.ui.reset_project();
 
                         editor = next;
@@ -398,6 +401,7 @@ impl App {
         if editor.is_none() {
             self.remember_project(None);
         }
+
         self.ui.reset_project();
 
         if let Some(mut editor) = editor {
@@ -413,6 +417,7 @@ impl App {
         }
 
         crate::scripting::release_unused();
+
         self.ui.save_cache();
         self.imgui_renderer.shutdown(&mut self.imgui).unwrap();
         self.imgui_sdl.shutdown(&mut self.imgui).unwrap();
@@ -510,13 +515,11 @@ mod keyboard_tests {
             };
 
             normalize_key_event(&mut down);
-
             normalize_key_event(&mut up);
 
             assert!(
                 matches!(down, Event::KeyDown { scancode: Some(code), keymod: Mod::LCTRLMOD, .. } if code == expected)
             );
-
             assert!(
                 matches!(up, Event::KeyUp { scancode: Some(code), keymod: Mod::NOMOD, .. } if code == expected)
             );

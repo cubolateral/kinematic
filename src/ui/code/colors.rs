@@ -60,7 +60,9 @@ pub(in crate::ui) struct Colors {
 impl Default for Colors {
     fn default() -> Self {
         let mut palette = kinematic_ui::code::palette();
+
         palette.set(PaletteColor::Background, packed(0x1e1e1e));
+
         Self::from_palette(Theme::Custom, &palette)
     }
 }
@@ -98,9 +100,11 @@ impl Colors {
         ) = theme.colors()
         else {
             self.theme = theme;
+
             return;
         };
         let mut palette = Palette::dark();
+
         for (slot, rgb) in [
             (PaletteColor::Text, text),
             (PaletteColor::Keyword, keyword),
@@ -127,6 +131,7 @@ impl Colors {
         ] {
             palette.set(slot, packed(rgb));
         }
+
         *self = Self::from_palette(theme, &palette);
     }
 
@@ -134,6 +139,7 @@ impl Colors {
         use kinematic_ui::{controls, properties};
 
         properties::section(ui, "Code Editor Colors");
+
         let mut theme = self.theme;
         let mut changed = properties::field(ui, "Theme", &mut theme, Theme::Custom, |value| {
             let mut index = Theme::ALL
@@ -141,14 +147,20 @@ impl Colors {
                 .position(|theme| theme == value)
                 .unwrap_or(0);
             let changed = controls::choice(ui, "##value", &mut index, Theme::NAMES);
+
             *value = Theme::ALL[index];
+
             changed
         });
+
         if changed {
             self.apply(theme);
         }
+
         let mut defaults = Self::default();
+
         defaults.apply(self.theme);
+
         for slot in PaletteColor::ALL {
             let label = match slot {
                 PaletteColor::Text => "Text",
@@ -175,6 +187,7 @@ impl Colors {
                 PaletteColor::CurrentLineNumber => "Current line number",
             };
             let mut value = self.values[slot as usize];
+
             if properties::field(
                 ui,
                 label,
@@ -183,9 +196,11 @@ impl Colors {
                 |value| controls::color(ui, "##value", value),
             ) {
                 self.set(slot, value);
+
                 changed = true;
             }
         }
+
         changed
     }
 
@@ -213,25 +228,38 @@ mod tests {
     #[test]
     fn presets_customization_and_persistence() {
         let mut colors = Colors::default();
+
         for &theme in &Theme::ALL[1..] {
             colors.apply(theme);
+
             assert_eq!(colors.theme, theme);
+
             let palette = colors.palette();
+
             assert_ne!(
                 palette.get(PaletteColor::Background),
                 palette.get(PaletteColor::Text)
             );
             assert!(palette.colors().iter().all(|color| color >> 24 == 255));
         }
+
         colors.apply(Theme::Dracula);
+
         assert_eq!(colors.palette().get(PaletteColor::Background), 0xff362a28);
+
         let untouched = colors.values[PaletteColor::Keyword as usize];
+
         colors.set(PaletteColor::Background, [0.1, 0.2, 0.3, 1.0]);
+
         assert_eq!(colors.theme, Theme::Custom);
         assert_eq!(colors.values[PaletteColor::Keyword as usize], untouched);
+
         let saved = ron::to_string(&colors).unwrap();
+
         assert_eq!(ron::from_str::<Colors>(&saved).unwrap(), colors);
+
         colors.apply(Theme::OneDark);
+
         assert_eq!(colors.theme, Theme::OneDark);
         assert_eq!(colors.palette().get(PaletteColor::Background), 0xff342c28);
     }

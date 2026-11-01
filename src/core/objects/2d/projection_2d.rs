@@ -88,6 +88,7 @@ pub(crate) fn draw_projection_2d(
     let save_count = canvas.save();
 
     canvas.clip_path(&path, None, true);
+
     let filter = world
         .get::<&ProjectionSource>(entity)
         .unwrap()

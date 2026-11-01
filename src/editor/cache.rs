@@ -175,6 +175,7 @@ pub(super) struct Camera3DCache {
 impl Default for Camera3DCache {
     fn default() -> Self {
         let camera = crate::core::components::Camera3D::default();
+
         Self {
             position: [4.0, 3.0, 6.0],
             yaw: 0.588,
@@ -233,6 +234,7 @@ mod tests {
     fn removed_timeline_preference_does_not_discard_cached_time() {
         let cache: EditorCache =
             ron::from_str("(timeline_time: 1.5, timeline_tracks_expanded: true)").unwrap();
+
         assert_eq!(cache.timeline_time, 1.5);
         assert_eq!(cache.preview_pan, [0.0; 2]);
         assert_eq!(cache.preview_zoom, 1.0);
@@ -241,11 +243,16 @@ mod tests {
     #[test]
     fn preview_cache_rejects_nonfinite_pan_and_invalid_zoom() {
         let mut cache = EditorCache::default();
+
         assert!(EditorCache::is_valid(&cache));
+
         cache.preview_zoom = 0.0;
+
         assert!(!EditorCache::is_valid(&cache));
+
         cache.preview_zoom = 1.0;
         cache.preview_pan[0] = f32::NAN;
+
         assert!(!EditorCache::is_valid(&cache));
     }
 

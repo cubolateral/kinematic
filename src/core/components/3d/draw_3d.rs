@@ -74,7 +74,6 @@ impl three_d::Geometry for MeshOutline {
         program.use_uniform("modelMatrix", self.transformation);
         program.use_vertex_attribute("position", &self.positions);
         program.use_vertex_attribute("barycentric", &self.barycentric);
-
         program.draw_arrays(
             render_states,
             viewer.viewport(),
@@ -321,6 +320,7 @@ impl<'a> RenderContext3D<'a> {
                 };
 
                 self.geometry_uploads += 1;
+
                 self.geometry_upload_ms += started.elapsed().as_secs_f64() * 1000.0;
 
                 geometry
@@ -445,7 +445,6 @@ impl<'a> RenderContext3D<'a> {
             let mesh = &mut self.geometries.get_mut(&key).unwrap().mesh;
 
             mesh.set_transformation(transformation.to_cols_array_2d().into());
-
             mesh.render_with_material(
                 &three_d::ColorMaterial {
                     color,
@@ -503,7 +502,9 @@ impl<'a> RenderContext3D<'a> {
         let states = render_states(transparent, false);
 
         self.prepare_geometry(key, create, data.outline_width > 0.0);
+
         self.render_mesh_shader(key, transformation, data, states)?;
+
         self.render_outline(key, transformation, data);
 
         Ok(true)
@@ -519,7 +520,6 @@ impl<'a> RenderContext3D<'a> {
         let Some(shader) = self.mesh_shader.clone() else {
             return Ok(false);
         };
-
         let attributes = self.geometries[&key].attributes;
         let cache_key = (shader.shader.id, attributes);
 
@@ -535,6 +535,7 @@ impl<'a> RenderContext3D<'a> {
                     .map_err(|error| format!("Mesh shader compilation failed: {error}"))?;
 
             validate_mesh_program(&program, attributes)?;
+
             self.mesh_programs.insert(cache_key, program);
         }
 
@@ -596,6 +597,7 @@ impl<'a> RenderContext3D<'a> {
         }
 
         self.geometry_uploads += 1;
+
         self.geometry_upload_ms += started.elapsed().as_secs_f64() * 1000.0;
     }
 
@@ -614,7 +616,6 @@ impl<'a> RenderContext3D<'a> {
             .unwrap();
 
         outline.set_transformation(transformation.to_cols_array_2d().into());
-
         outline.render_with_material(
             &OutlineMaterial {
                 width: data.outline_width,
@@ -948,7 +949,6 @@ mod tests {
     fn geometry_keys_include_type_and_variant() {
         assert_eq!(GeometryKey::new::<Shape>(3), GeometryKey::new::<Shape>(3));
         assert_ne!(GeometryKey::new::<Shape>(3), GeometryKey::new::<Shape>(4));
-
         assert_ne!(
             GeometryKey::new::<Shape>(3),
             GeometryKey::new::<OtherShape>(3)

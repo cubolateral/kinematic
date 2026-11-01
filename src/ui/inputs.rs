@@ -585,12 +585,16 @@ impl Default for InputMap {
             let mut binding =
                 Binding::new(action, Editor, name.trim_end_matches('.'), display, &[key])
                     .modifiers(modifiers, modifiers);
+
             if let Some(number) = number {
                 binding.keys.push(number);
+
                 binding.display = format!("{} / {display}", display.replace("Keypad ", ""));
             }
+
             map.bindings.push(binding);
         }
+
         map.bindings.push(
             Binding::new(
                 CameraSlow,
@@ -1180,13 +1184,11 @@ mod tests {
             let mut context = dear_imgui_rs::Context::create();
 
             context.set_ini_filename(None::<&str>).unwrap();
-
             context
                 .font_atlas()
                 .try_claim_legacy_renderer()
                 .unwrap()
                 .build();
-
             context.io_mut().set_display_size([640.0, 480.0]);
             context.io_mut().set_delta_time(1.0 / 60.0);
 
@@ -1218,13 +1220,11 @@ mod tests {
         let mut context = dear_imgui_rs::Context::create();
 
         context.set_ini_filename(None::<&str>).unwrap();
-
         context
             .font_atlas()
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
-
         context.io_mut().set_display_size([640.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
 

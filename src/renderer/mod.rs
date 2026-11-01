@@ -113,6 +113,7 @@ impl Renderer {
             let rate = u64::from(crate::core::audio::SAMPLE_RATE);
             let fps = u64::from(export.fps);
             let sample = |frame| (frame * rate + fps / 2) / fps;
+
             (sample(export.frame_index), sample(export.frame_index + 1))
         })
     }
@@ -238,7 +239,6 @@ impl Renderer {
         std::fs::create_dir_all(&self.output_directory)?;
 
         let output_path = available_path(&self.output_directory, project_name, "mp4");
-
         let encoder = Encoder::new(&output_path, resolution, fps, silent)?;
         let frame_count = frame_count(duration, fps);
 
@@ -288,7 +288,6 @@ impl Renderer {
         let Some(export) = self.export.take() else {
             return Ok(());
         };
-
         let output_path = export.output_path.clone();
 
         drop(export);
@@ -425,7 +424,6 @@ fn save_screenshot(
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(framebuffer));
         gl.read_buffer(glow::COLOR_ATTACHMENT0);
         gl.pixel_store_i32(glow::PACK_ALIGNMENT, 1);
-
         gl.read_pixels(
             0,
             0,
@@ -435,7 +433,6 @@ fn save_screenshot(
             glow::UNSIGNED_BYTE,
             glow::PixelPackData::Slice(Some(&mut pixels)),
         );
-
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
     }
 
@@ -519,7 +516,6 @@ fn enqueue_readback(
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, Some(framebuffer));
         gl.read_buffer(glow::COLOR_ATTACHMENT0);
         gl.bind_buffer(glow::PIXEL_PACK_BUFFER, Some(buffer));
-
         gl.read_pixels(
             0,
             0,
@@ -529,7 +525,6 @@ fn enqueue_readback(
             glow::UNSIGNED_BYTE,
             glow::PixelPackData::BufferOffset(0),
         );
-
         gl.bind_buffer(glow::PIXEL_PACK_BUFFER, None);
         gl.bind_framebuffer(glow::READ_FRAMEBUFFER, None);
     }
@@ -639,6 +634,7 @@ mod tests {
         std::fs::write(&path, b"incomplete").unwrap();
 
         remove_output_file(&path).unwrap();
+
         assert!(!path.exists());
 
         remove_output_file(&path).unwrap();

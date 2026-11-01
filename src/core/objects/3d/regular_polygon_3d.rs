@@ -101,6 +101,7 @@ fn draw_regular_polygon_3d(
     let shape = world.get::<&RegularPolygon3DShape>(entity).unwrap();
 
     validate_sides(shape.sides)?;
+
     validate_dimensions(shape.size.extend(0.0))?;
 
     let transformation =

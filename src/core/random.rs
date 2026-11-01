@@ -56,9 +56,13 @@ impl Random {
         let temporary = self.state[1] << 17;
 
         self.state[2] ^= self.state[0];
+
         self.state[3] ^= self.state[1];
+
         self.state[1] ^= self.state[2];
+
         self.state[0] ^= self.state[3];
+
         self.state[2] ^= temporary;
 
         self.state[3] = self.state[3].rotate_left(45);
@@ -382,7 +386,6 @@ mod tests {
         *random.choose_mut(&mut mutable).unwrap() = 99;
 
         assert!(mutable.contains(&99));
-
         assert_eq!(
             random.choose_weighted(&values, &[0.0, 0.0, 1.0, 0.0]),
             Some(&30)
@@ -395,10 +398,12 @@ mod tests {
         let mut second = first;
 
         Random::new(81).shuffle(&mut first);
-
         Random::new(81).shuffle(&mut second);
+
         assert_eq!(first, second);
+
         first.sort();
+
         assert_eq!(first, [1, 2, 3, 4, 5, 6]);
     }
 

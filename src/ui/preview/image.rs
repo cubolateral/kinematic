@@ -42,7 +42,6 @@ pub(super) fn draw_editor(
     let min = origin;
     let max = [min[0] + size[0], min[1] + size[1]];
     let center = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
-
     let free_scale = (size[0] / preview.size[0]).min(size[1] / preview.size[1]);
     let (width, height) = editor.editor_2d_canvas_size();
     let camera_scale = (size[0] / width.max(1) as f32).min(size[1] / height.max(1) as f32);
@@ -63,17 +62,20 @@ pub(super) fn draw_editor(
 
     if active && ui.is_mouse_dragging(middle) {
         let delta = editor.editor_mouse_delta(ui.io().mouse_delta());
+
         if delta != [0.0; 2] {
             editor.release_editor_2d_camera(camera_scale / free_scale);
             editor.pan_editor_2d([delta[0] / free_scale, delta[1] / free_scale]);
         }
 
         wrap_pointer(ui, editor, min, max);
+
         ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeAll));
     }
 
     if hovered && ui.io().mouse_wheel() != 0.0 {
         editor.release_editor_2d_camera(camera_scale / free_scale);
+
         let anchor = [
             (mouse[0] - center[0]) / free_scale,
             (mouse[1] - center[1]) / free_scale,
@@ -83,6 +85,7 @@ pub(super) fn draw_editor(
     }
 
     editor.set_editor_2d_viewport(size);
+
     let camera_view = editor.editor_2d_camera_view();
     let display_scale = if camera_view {
         camera_scale
@@ -94,6 +97,7 @@ pub(super) fn draw_editor(
     } else {
         editor.editor_2d_view()
     };
+
     kinematic_ui::canvas::draw_editor_2d(
         ui,
         &kinematic_ui::canvas::Editor2D {
@@ -123,6 +127,7 @@ pub(super) fn draw_editor(
             ((mouse[0] - center[0]) / display_scale - pan[0]) / zoom,
             ((mouse[1] - center[1]) / display_scale - pan[1]) / zoom,
         );
+
     Some(point)
 }
 
@@ -133,7 +138,9 @@ pub(super) fn draw_editor_3d(
     editor: &mut Editor,
 ) -> (bool, bool, Option<Vector2>) {
     editor.request_editor_3d_size([available[0].max(1.0), available[1].max(1.0)]);
+
     let (active, hovered, clicked) = kinematic_ui::canvas::draw_editor_3d(ui, preview, available);
+
     (active, hovered, clicked.map(|[x, y]| vec2(x, y)))
 }
 

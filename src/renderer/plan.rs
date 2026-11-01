@@ -34,6 +34,7 @@ pub(crate) fn order_dependencies(
         }
 
         visiting.pop();
+
         done.push(entity);
 
         Ok(())
@@ -304,9 +305,12 @@ mod tests {
         let allocation = initial.order.as_ptr();
 
         cache.get(&second, 2).unwrap();
+
         first.update(0.5);
+
         assert_eq!(cache.get(&first, 3).unwrap().order.as_ptr(), allocation);
         assert_eq!(cache.entries.len(), 2);
+
         first.update(1.0);
 
         assert_eq!(
@@ -322,6 +326,7 @@ mod tests {
         );
 
         first.invalidate();
+
         cache.get(&first, 6).unwrap();
 
         assert_eq!(
@@ -348,6 +353,7 @@ mod tests {
         let second = projection_2d().source(&scene.world_2d()).build(&mut scene);
 
         extra.add(&second);
+
         scene.update(0.0);
 
         assert_eq!(

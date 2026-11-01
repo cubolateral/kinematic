@@ -32,9 +32,11 @@ impl View {
 
         let zoom = (self.zoom * (wheel * 0.15).exp()).clamp(0.01, 100.0);
         let ratio = zoom / self.zoom;
+
         for axis in 0..2 {
             self.pan[axis] = anchor[axis] + (self.pan[axis] - anchor[axis]) * ratio;
         }
+
         self.zoom = zoom;
     }
 }
@@ -81,6 +83,7 @@ pub fn draw_navigable(
     let max = [origin[0] + size[0], origin[1] + size[1]];
     let center = [origin[0] + size[0] * 0.5, origin[1] + size[1] * 0.5];
     let (scale, fitted, _, _) = placement(origin, size, preview.size);
+
     ui.invisible_button_options(
         "Preview canvas.",
         size,
@@ -88,24 +91,30 @@ pub fn draw_navigable(
             .flags(dear_imgui_rs::ButtonFlags::ALLOW_OVERLAP)
             .mouse_buttons(dear_imgui_rs::InvisibleButtonMouseButtons::MIDDLE),
     );
+
     let mouse = ui.io().mouse_pos();
     let over_tools = mouse[0] >= origin[0] + 8.0
         && mouse[0] <= origin[0] + 16.0 + ui.frame_height() * 2.0
         && mouse[1] >= origin[1] + 8.0
         && mouse[1] <= origin[1] + 8.0 + ui.frame_height();
     let hovered = ui.is_item_hovered() && !over_tools;
+
     if !over_tools
         && ui.is_item_active()
         && ui.is_mouse_dragging(dear_imgui_rs::MouseButton::Middle)
     {
         let delta = ui.io().mouse_delta();
+
         for axis in 0..2 {
             view.pan[axis] += delta[axis] / scale;
         }
+
         ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeAll));
     }
+
     if hovered {
         let mouse = ui.io().mouse_pos();
+
         view.zoom_at(
             ui.io().mouse_wheel(),
             [
@@ -114,6 +123,7 @@ pub fn draw_navigable(
             ],
         );
     }
+
     let min = [
         center[0] + view.pan[0] * scale - fitted[0] * view.zoom * 0.5,
         center[1] + view.pan[1] * scale - fitted[1] * view.zoom * 0.5,
@@ -124,7 +134,9 @@ pub fn draw_navigable(
     ];
     let draw = ui.get_window_draw_list();
     let _clip = draw.push_clip_rect(origin, max, true);
+
     set_sampler(&draw, preview.nearest);
+
     draw.add_image(
         preview.texture,
         min,
@@ -134,9 +146,11 @@ pub fn draw_navigable(
         [1.0; 4],
     );
     draw.set_sampler_linear();
+
     if let Some(margin) = margin {
         draw_margin(ui, &draw, min, image_max, preview.size, margin);
     }
+
     draw.add_rect(
         min,
         image_max,
@@ -144,6 +158,7 @@ pub fn draw_navigable(
     )
     .thickness(1.0)
     .build();
+
     hovered && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)
 }
 
@@ -242,7 +257,6 @@ fn draw_margin(
     draw.add_rect(a, b, [0.0, 0.0, 0.0, 0.7])
         .thickness(3.0)
         .build();
-
     draw.add_rect(a, b, margin_color(ui)).thickness(1.0).build();
 }
 
@@ -261,8 +275,10 @@ mod tests {
     fn fitted_video_preserves_aspect_and_stays_above_the_footer() {
         let origin = [10.0, 20.0];
         let viewport = [800.0, 450.0];
+
         for source in [[1920.0, 1080.0], [1080.0, 1920.0], [1000.0, 1000.0]] {
             let (_, size, min, max) = placement(origin, viewport, source);
+
             assert!((size[0] / size[1] - source[0] / source[1]).abs() < 0.001);
             assert!(min[0] >= origin[0] && min[1] >= origin[1]);
             assert!(max[0] <= origin[0] + viewport[0]);
@@ -303,6 +319,7 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
         .build();
 
     set_sampler(&draw_list, preview.nearest);
+
     draw_list.add_image(preview.texture, min, max, [0.0, 1.0], [1.0, 0.0], [1.0; 4]);
     draw_list.set_sampler_linear();
 
@@ -310,10 +327,10 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
         center[0] + pan[0] * display_scale,
         center[1] + pan[1] * display_scale,
     ];
-
     let length = (max[0] - min[0]).hypot(max[1] - min[1])
         + (origin[0] - center[0]).hypot(origin[1] - center[1]);
     let (sin, cos) = props.rotation.sin_cos();
+
     for (enabled, direction, color) in [
         (props.axes[0], [cos, sin], [1.0, 0.3, 0.3, 1.0]),
         (props.axes[1], [-sin, cos], [0.3, 1.0, 0.3, 1.0]),
@@ -378,7 +395,6 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
             [0.0, 0.0, 0.0, 0.7],
             3.0,
         );
-
         draw_world_outline(
             &draw_list,
             Some(points),
@@ -419,7 +435,6 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
         [0.0, 0.0, 0.0, 1.0],
         3.0,
     );
-
     draw_world_outline(
         &draw_list,
         selection,
@@ -457,6 +472,7 @@ pub fn draw_editor_3d(
     let max = ui.item_rect_max();
 
     set_sampler(&ui.get_window_draw_list(), preview.nearest);
+
     ui.get_window_draw_list().add_image(
         preview.texture,
         min,
@@ -497,13 +513,13 @@ fn draw_world_outline(
     let Some(points) = points else {
         return;
     };
-
     let project = |point: [f32; 2]| {
         let (sin, cos) = rotation.sin_cos();
         let point = [
             point[0] * cos - point[1] * sin,
             point[0] * sin + point[1] * cos,
         ];
+
         [
             center[0] + (pan[0] + point[0] * zoom) * display_scale,
             center[1] + (pan[1] + point[1] * zoom) * display_scale,
@@ -524,7 +540,9 @@ fn draw_world_outline(
 
 fn axes(ui: &dear_imgui_rs::Ui, enabled: &[bool]) -> Option<usize> {
     crate::widgets::muted(ui, "Axes");
+
     let mut clicked = None;
+
     for (axis, (&enabled, (label, color))) in enabled
         .iter()
         .zip([
@@ -537,17 +555,21 @@ fn axes(ui: &dear_imgui_rs::Ui, enabled: &[bool]) -> Option<usize> {
         if axis > 0 {
             ui.same_line();
         }
+
         ui.set_next_item_allow_overlap();
+
         let color = if enabled {
             color
         } else {
             ui.style_color(dear_imgui_rs::StyleColor::TextDisabled)
         };
         let _color = ui.push_style_color(dear_imgui_rs::StyleColor::Text, color);
+
         if crate::controls::button_sized(ui, label, [32.0, ui.frame_height()]) {
             clicked = Some(axis);
         }
     }
+
     clicked
 }
 
@@ -595,6 +617,7 @@ pub struct Tools {
 
 pub fn tools_contains(ui: &dear_imgui_rs::Ui, min: [f32; 2]) -> bool {
     let spacing = ui.clone_style().item_spacing()[0];
+
     ui.is_mouse_hovering_rect(
         [min[0] + 8.0, min[1] + 8.0],
         [
@@ -606,7 +629,9 @@ pub fn tools_contains(ui: &dear_imgui_rs::Ui, min: [f32; 2]) -> bool {
 
 pub fn margin_button(ui: &dear_imgui_rs::Ui, visible: bool, shortcut: &str) -> bool {
     let clicked = crate::controls::icon_toggle(ui, "M", visible);
+
     crate::shortcut::tooltip(ui, "Toggle margin", shortcut);
+
     clicked
 }
 
@@ -621,7 +646,9 @@ pub fn tools(
     entries: &[(&str, &str)],
 ) -> Tools {
     ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + 8.0]);
+
     let camera = crate::controls::icon_toggle(ui, crate::icons::VIDEO_CAMERA, camera_view);
+
     crate::shortcut::tooltip(
         ui,
         if camera_view {
@@ -631,29 +658,42 @@ pub fn tools(
         },
         shortcuts[0],
     );
+
     ui.same_line();
+
     let reset = crate::controls::text_button(ui, crate::icons::RESET, [ui.frame_height(); 2]);
+
     crate::shortcut::tooltip(ui, "Reset camera transform", shortcuts[1]);
+
     ui.same_line();
+
     let margin = margin_button(ui, margin, shortcuts[2]);
+
     ui.same_line();
+
     if crate::controls::icon_toggle(ui, crate::icons::EYE, ui.is_popup_open("View options")) {
         ui.open_popup("View options");
     }
+
     if ui.is_item_hovered() {
         crate::widgets::tooltip(ui, "View options");
     }
+
     let mut axis = None;
     let mut option = None;
+
     if let Some(_popup) = ui.begin_popup("View options") {
         axis = axes(ui, enabled_axes);
+
         if !entries.is_empty() {
             crate::widgets::separator(ui);
+
             for (index, (action, shortcut)) in entries.iter().enumerate() {
                 if crate::shortcut::menu_item(ui, action, shortcut) {
                     option = Some(index);
                 }
             }
+
             crate::widgets::separator(ui);
             crate::shortcut::hints(
                 ui,
@@ -668,6 +708,7 @@ pub fn tools(
             );
         }
     }
+
     Tools {
         camera,
         reset,
@@ -686,11 +727,15 @@ pub fn preview_tools(
 ) -> bool {
     ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + 8.0]);
     ui.set_next_item_allow_overlap();
+
     if crate::controls::text_button(ui, crate::icons::RESET, [ui.frame_height(); 2]) {
         *view = View::default();
     }
+
     crate::shortcut::tooltip(ui, "Fit canvas", shortcuts[0]);
+
     ui.same_line();
+
     margin_button(ui, margin, shortcuts[1])
 }
 
@@ -705,7 +750,6 @@ mod frame_tests {
         assert_eq!([wide_camera[0][0], wide_camera[1][0]], [10.0, 1610.0]);
         assert!((wide_camera[0][1] - 70.0).abs() < 0.001);
         assert!((wide_camera[1][1] - 970.0).abs() < 0.001);
-
         assert_eq!(
             camera_frame([0.0, 0.0], [2000.0, 1000.0], 1.0),
             [[500.0, 0.0], [1500.0, 1000.0]]
@@ -718,34 +762,48 @@ mod navigation_tests {
     #[test]
     fn preview_zoom_preserves_the_mouse_anchor_and_fit_resets_the_view() {
         let mut view = super::View::default();
+
         view.pan = [20.0, -10.0];
+
         let anchor = [80.0, 40.0];
         let point = [anchor[0] - view.pan[0], anchor[1] - view.pan[1]];
+
         view.zoom_at(3.0, anchor);
+
         for axis in 0..2 {
             assert!((view.pan[axis] + point[axis] * view.zoom - anchor[axis]).abs() < 0.001);
         }
+
         view.zoom_at(1000.0, anchor);
+
         assert_eq!(view.zoom, 100.0);
+
         view = super::View::default();
+
         assert_eq!(view.pan, [0.0; 2]);
         assert_eq!(view.zoom, 1.0);
+
         view.zoom_at(-1.0, anchor);
+
         assert!(view.zoom < 1.0);
     }
 
     #[test]
     fn preview_overlay_controls_and_canvas_navigation_work_together() {
         use super::*;
+
         use dear_imgui_rs::{Condition, Context, MouseButton, TextureId};
+
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
+
         unsafe extern "C" fn sampler(
             _: *const dear_imgui_rs::sys::ImDrawList,
             _: *const dear_imgui_rs::sys::ImDrawCmd,
@@ -757,8 +815,10 @@ mod navigation_tests {
                 .platform_io_mut()
                 .set_draw_callback_set_sampler_linear_raw(Some(sampler));
         }
+
         context.io_mut().set_display_size([640.0, 360.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         fn frame(
             context: &mut Context,
             view: &mut View,
@@ -767,22 +827,27 @@ mod navigation_tests {
             wheel: f32,
         ) -> ([[f32; 2]; 2], bool) {
             let io = context.io_mut();
+
             io.add_mouse_pos_event(point);
             io.add_mouse_button_event(MouseButton::Left, buttons[0]);
             io.add_mouse_button_event(MouseButton::Middle, buttons[1]);
             io.add_mouse_wheel_event([0.0, wheel]);
+
             let ui = context.frame();
             let mut targets = [[0.0; 2]; 2];
             let mut margin = false;
+
             ui.window("Preview navigation test")
                 .position([0.0; 2], Condition::Always)
                 .size([640.0, 360.0], Condition::Always)
                 .build(|| {
                     let origin = ui.cursor_screen_pos();
+
                     targets[0] = [
                         origin[0] + 8.0 + ui.frame_height() * 0.5,
                         origin[1] + 8.0 + ui.frame_height() * 0.5,
                     ];
+
                     draw_navigable(
                         ui,
                         Image {
@@ -794,28 +859,40 @@ mod navigation_tests {
                         None,
                         view,
                     );
+
                     margin = preview_tools(ui, origin, view, false, ["0", "M"]);
+
                     let min = ui.item_rect_min();
                     let max = ui.item_rect_max();
+
                     targets[1] = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
                 });
+
             context.end_frame();
+
             (targets, margin)
         }
+
         let mut view = View {
             pan: [20.0, -10.0],
             zoom: 1.5,
         };
         let ([reset, margin], _) = frame(&mut context, &mut view, [0.0; 2], [false; 2], 0.0);
+
         frame(&mut context, &mut view, reset, [false; 2], 0.0);
         frame(&mut context, &mut view, reset, [true, false], 0.0);
         frame(&mut context, &mut view, reset, [false; 2], 0.0);
+
         assert_eq!(view.pan, [0.0; 2]);
         assert_eq!(view.zoom, 1.0);
+
         frame(&mut context, &mut view, margin, [false; 2], 0.0);
         frame(&mut context, &mut view, margin, [true, false], 0.0);
+
         assert!(frame(&mut context, &mut view, margin, [false; 2], 0.0).1);
+
         let point = [300.0, 180.0];
+
         frame(&mut context, &mut view, point, [false; 2], 0.0);
         frame(&mut context, &mut view, point, [false, true], 0.0);
         frame(
@@ -825,10 +902,13 @@ mod navigation_tests {
             [false, true],
             0.0,
         );
+
         assert!(view.pan[0] > 0.0);
+
         frame(&mut context, &mut view, point, [false; 2], 0.0);
         frame(&mut context, &mut view, point, [false; 2], 1.0);
         frame(&mut context, &mut view, point, [false; 2], 0.0);
+
         assert!(view.zoom > 1.0);
     }
 

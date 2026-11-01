@@ -12,6 +12,7 @@ fn action_label(action: &str) -> &str {
 
 fn hint(ui: &Ui, action: &str, shortcut: &str) {
     ui.text(action_label(action));
+
     if !shortcut.is_empty() {
         ui.same_line();
         ui.text_disabled(compact(shortcut));
@@ -55,6 +56,7 @@ pub fn hints(ui: &Ui, entries: &[(&str, &str)]) {
     ) else {
         return;
     };
+
     for (action, shortcut) in entries {
         ui.table_next_row();
         ui.table_next_column();

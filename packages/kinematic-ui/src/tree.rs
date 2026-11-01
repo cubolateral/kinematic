@@ -36,7 +36,6 @@ pub fn row(ui: &dear_imgui_rs::Ui, row: Row<'_>) -> Response {
     let control_count = 1.0 + f32::from(visibility.is_some());
     let selectable_width = (row_width - ROW_HEIGHT * control_count).max(1.0);
     let was_clicked = selectable_row(ui, row_id, [selectable_width, ROW_HEIGHT]);
-
     let hovered = ui.is_item_hovered();
     let text_y = position[1] + (ROW_HEIGHT - text_size(ui, row.label)[1]) * 0.5;
     let draw_list = ui.get_window_draw_list();
@@ -45,7 +44,6 @@ pub fn row(ui: &dear_imgui_rs::Ui, row: Row<'_>) -> Response {
         [position[0] + selectable_width, position[1] + ROW_HEIGHT],
         true,
     );
-
     let line_color = ui.get_color_u32(dear_imgui_rs::StyleColor::TreeLines);
     let middle = position[1] + ROW_HEIGHT * 0.5;
 
@@ -76,7 +74,6 @@ pub fn row(ui: &dear_imgui_rs::Ui, row: Row<'_>) -> Response {
             line_color,
         )
         .build();
-
     draw_list
         .add_line([branch_x, middle], [arrow_x, middle], line_color)
         .build();
@@ -100,7 +97,6 @@ pub fn row(ui: &dear_imgui_rs::Ui, row: Row<'_>) -> Response {
     );
 
     drop(text_clip);
-
     drop(draw_list);
 
     let toggled = has_children
@@ -119,16 +115,19 @@ pub fn row(ui: &dear_imgui_rs::Ui, row: Row<'_>) -> Response {
         )
         .filled(true)
         .build();
-
     ui.same_line_with_spacing(0.0, 0.0);
 
     let edit = crate::controls::text_button(ui, crate::icons::PENCIL, [ROW_HEIGHT; 2]);
+
     if ui.is_item_hovered() {
         crate::widgets::tooltip(ui, "Edit in the matching canvas");
     }
+
     let mut visibility_clicked = false;
+
     if let Some(visible) = visibility {
         ui.same_line_with_spacing(0.0, 0.0);
+
         visibility_clicked = crate::controls::text_button_colored(
             ui,
             if visible {
@@ -143,10 +142,12 @@ pub fn row(ui: &dear_imgui_rs::Ui, row: Row<'_>) -> Response {
                 dear_imgui_rs::StyleColor::TextDisabled
             },
         );
+
         if ui.is_item_hovered() {
             crate::widgets::tooltip(ui, if visible { "Hide" } else { "Show" });
         }
     }
+
     Response {
         clicked: was_clicked && !toggled,
         toggled,
@@ -233,6 +234,7 @@ pub fn root(
     drop(draw_list);
 
     let toggled = draw_arrow(ui, position, expanded, root_clicked);
+
     Response {
         clicked: root_clicked && !toggled,
         toggled,
@@ -246,6 +248,7 @@ mod tests {
     fn arrows_selection_and_actions_are_separate_click_targets() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
@@ -254,26 +257,33 @@ mod tests {
             .build();
         context.io_mut().set_display_size([640.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         let mut targets = [[0.0; 2]; 4];
         let mut actions = [[false; 4]; 4];
+
         for frame in 0..14 {
             if frame >= 2 {
                 let target = (frame - 2) / 3;
                 let phase = (frame - 2) % 3;
+
                 context.io_mut().add_mouse_pos_event(targets[target]);
+
                 if phase == 1 || phase == 2 {
                     context
                         .io_mut()
                         .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, phase == 1);
                 }
             }
+
             let ui = context.frame();
+
             ui.window("Tree interaction test")
                 .position([0.0; 2], dear_imgui_rs::Condition::Always)
                 .size([360.0, 200.0], dear_imgui_rs::Condition::Always)
                 .build(|| {
                     let min = ui.cursor_screen_pos();
                     let width = ui.content_region_avail_width();
+
                     targets = [
                         24.0,
                         80.0,
@@ -281,6 +291,7 @@ mod tests {
                         width - super::ROW_HEIGHT * 0.5,
                     ]
                     .map(|x| [min[0] + x, min[1] + super::ROW_HEIGHT * 0.5]);
+
                     let response = super::row(
                         ui,
                         super::Row {
@@ -294,6 +305,7 @@ mod tests {
                             effective_visibility: true,
                         },
                     );
+
                     if frame >= 2 {
                         for (output, value) in actions[(frame - 2) / 3].iter_mut().zip([
                             response.clicked,
@@ -305,8 +317,10 @@ mod tests {
                         }
                     }
                 });
+
             context.end_frame();
         }
+
         assert_eq!(
             actions,
             [

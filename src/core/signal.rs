@@ -76,7 +76,6 @@ impl SignalContext {
 
         self.next_id
             .set(id.checked_add(1).expect("Too many signals."));
-
         self.signals.borrow_mut().push(ScheduledSignal {
             id,
             target,
@@ -176,7 +175,6 @@ impl SignalContext {
                 .map(|signal| std::rc::Rc::clone(&signal.callback))
                 .collect::<Vec<_>>()
         };
-
         let frame = SignalFrame {
             time,
             index: frame_index(time, fps),

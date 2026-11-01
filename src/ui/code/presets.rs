@@ -56,10 +56,13 @@ impl Resolution {
                 Self::PortraitHd => "HD portrait",
                 Self::PortraitFullHd => "Full HD portrait",
             };
+
             format!("{width} × {height} ({description})")
         });
         let changed = controls::choice(ui, "##Resolution", &mut index, &labels);
+
         *self = Self::OPTIONS[index];
+
         changed
     }
 }
@@ -98,7 +101,9 @@ impl Fps {
             .unwrap();
         let labels = Self::OPTIONS.map(|value| value.value().to_string());
         let changed = controls::choice(ui, "##FPS", &mut index, &labels);
+
         *self = Self::OPTIONS[index];
+
         changed
     }
 }
@@ -110,8 +115,10 @@ mod tests {
     #[test]
     fn presets_have_the_project_defaults_and_valid_export_settings() {
         let defaults = crate::core::ProjectSettings::default();
+
         assert_eq!(Resolution::default().value(), defaults.resolution);
         assert_eq!(Fps::default().value(), defaults.fps);
+
         for resolution in Resolution::OPTIONS {
             for fps in Fps::OPTIONS {
                 assert!(crate::core::ProjectSettings::is_valid(

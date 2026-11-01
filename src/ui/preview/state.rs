@@ -140,7 +140,6 @@ mod tests {
         let mut state = State::new(crate::editor::EditorMode::Three);
 
         state.take_requested_mode();
-
         state.show_preview();
 
         assert_eq!(state.mode(), Mode::Preview);

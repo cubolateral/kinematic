@@ -14,6 +14,7 @@ pub(super) struct Appearance {
 impl Default for Appearance {
     fn default() -> Self {
         let visual = kinematic_ui::theme::Theme::default();
+
         Self {
             background: visual.background,
             accent: visual.accent,

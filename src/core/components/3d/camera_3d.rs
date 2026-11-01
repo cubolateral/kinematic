@@ -104,7 +104,6 @@ mod tests {
         };
 
         assert!(orthogonal.validate().is_ok());
-
         assert!(
             Camera3D {
                 camera_mode: Camera3DMode::Perspective,

@@ -51,6 +51,7 @@ impl Documentation {
 
             if line.starts_with("```") {
                 result.append(&pending, if code { Kind::Code } else { Kind::Paragraph });
+
                 pending.clear();
 
                 code = !code;
@@ -62,12 +63,14 @@ impl Documentation {
                 pending.push_str(original.trim_end());
             } else if line.is_empty() || line == "---" {
                 result.append(&pending, Kind::Paragraph);
+
                 pending.clear();
             } else if let Some(parameter) = line
                 .strip_prefix("@*param*")
                 .or_else(|| line.strip_prefix("@param"))
             {
                 result.append(&pending, Kind::Paragraph);
+
                 pending.clear();
 
                 if !parameters {
@@ -82,6 +85,7 @@ impl Documentation {
                 .or_else(|| line.strip_prefix("@return"))
             {
                 result.append(&pending, Kind::Paragraph);
+
                 pending.clear();
 
                 if !returns {
@@ -93,11 +97,15 @@ impl Documentation {
                 result.append(returned.trim(), Kind::Paragraph);
             } else if line.starts_with('#') {
                 result.append(&pending, Kind::Paragraph);
+
                 pending.clear();
+
                 result.append(line.trim_start_matches('#').trim(), Kind::Heading);
             } else if line.starts_with("- ") || line.starts_with("* ") {
                 result.append(&pending, Kind::Paragraph);
+
                 pending.clear();
+
                 result.append(&format!("• {}", &line[2..]), Kind::Paragraph);
             } else {
                 if !pending.is_empty() {
@@ -151,6 +159,7 @@ impl Documentation {
                         let begin = self.text.len();
 
                         self.text.push_str(&rest[..end]);
+
                         colors.push((begin..self.text.len(), PaletteColor::KnownIdentifier));
 
                         remaining = &rest[end + 1..];
@@ -171,6 +180,7 @@ impl Documentation {
                             let begin = self.text.len();
 
                             self.text.push_str(&rest[..end].replace('`', ""));
+
                             colors.push((begin..self.text.len(), PaletteColor::Declaration));
 
                             remaining = &rest[end + marker.len()..];
@@ -186,6 +196,7 @@ impl Documentation {
                             let begin = self.text.len();
 
                             self.text.push_str(&rest[..end]);
+
                             colors.push((begin..self.text.len(), PaletteColor::KnownIdentifier));
 
                             remaining = &rest[end + 2 + close + 1..];
@@ -531,6 +542,7 @@ fn code_colors(text: &str, base: usize) -> Vec<(Range<usize>, PaletteColor)> {
         };
 
         colors.push((base + offset..base + offset + length, color));
+
         offset += length;
     }
 
@@ -547,17 +559,14 @@ mod tests {
         );
 
         assert!(!doc.text.contains("(method)"));
-
         assert!(
             doc.text
                 .contains("Parameters\n\noptions — Initial properties.")
         );
-
         assert!(
             doc.text
                 .contains("Returns\n\nobject — Handle exposing properties.")
         );
-
         assert!(!doc.text.contains('@') && !doc.text.contains('*'));
         assert!(doc.text.contains("Built-in text scene object."));
 
@@ -571,7 +580,6 @@ mod tests {
             position(&doc.text, offset).column,
             "local label = s:text_2d {text='Olá".chars().count()
         );
-
         assert!(
             doc.blocks
                 .iter()

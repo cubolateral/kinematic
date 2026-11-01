@@ -70,7 +70,6 @@ impl Target {
             target.framebuffer = Some(gl.create_framebuffer()?);
 
             gl.bind_framebuffer(glow::FRAMEBUFFER, target.framebuffer);
-
             gl.framebuffer_texture_2d(
                 glow::FRAMEBUFFER,
                 glow::COLOR_ATTACHMENT0,
@@ -83,21 +82,18 @@ impl Target {
                 target.depth = Some(gl.create_renderbuffer()?);
 
                 gl.bind_renderbuffer(glow::RENDERBUFFER, target.depth);
-
                 gl.renderbuffer_storage(
                     glow::RENDERBUFFER,
                     glow::DEPTH_COMPONENT24,
                     size.0 as i32,
                     size.1 as i32,
                 );
-
                 gl.framebuffer_renderbuffer(
                     glow::FRAMEBUFFER,
                     glow::DEPTH_ATTACHMENT,
                     glow::RENDERBUFFER,
                     target.depth,
                 );
-
                 gl.bind_renderbuffer(glow::RENDERBUFFER, None);
             }
 
@@ -157,6 +153,7 @@ impl Target {
 
     pub fn set_filter(&mut self, filter: CanvasFilter) {
         self.filter = filter;
+
         self.texture();
     }
 
@@ -226,16 +223,14 @@ impl Target {
     /// Presents premultiplied RGB over the project's opaque black background.
     pub fn present_to(&self, destination: &mut Target) {
         destination.set_filter(self.filter);
+
         unsafe {
             self.gl.disable(glow::SCISSOR_TEST);
             self.gl.disable(glow::FRAMEBUFFER_SRGB);
-
             self.gl
                 .bind_framebuffer(glow::READ_FRAMEBUFFER, self.framebuffer);
-
             self.gl
                 .bind_framebuffer(glow::DRAW_FRAMEBUFFER, destination.framebuffer);
-
             self.gl.blit_framebuffer(
                 0,
                 0,

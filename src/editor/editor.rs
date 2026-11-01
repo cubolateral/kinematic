@@ -110,8 +110,11 @@ impl InspectorEdits {
             return false;
         };
         let edit = self.0.remove(index);
+
         edit.target.set(&scene.world(), edit.entity, edit.original);
+
         scene.invalidate();
+
         true
     }
 
@@ -119,12 +122,15 @@ impl InspectorEdits {
         if self.0.is_empty() {
             return;
         }
+
         let world = scene.world();
+
         for edit in self.0.drain(..) {
             if world.contains(edit.entity) {
                 edit.target.set(&world, edit.entity, edit.original);
             }
         }
+
         scene.invalidate();
     }
 }
@@ -297,6 +303,7 @@ impl Editor {
             && scenes
                 .iter()
                 .all(|entry| matches!(entry.scene, SceneInstance::Lua(_)));
+
         if migrate {
             manifest.migrate_audio(
                 &scenes
@@ -309,17 +316,22 @@ impl Editor {
                 .diagnostics
                 .push("Legacy audio requires valid scene scripts before migration.".into());
         }
+
         let audio = crate::scripting::audio::clip_events(
             &project.context,
             &sources,
             &manifest.audio,
             &crate::core::audio::AudioEvents::default(),
         );
+
         if migrate && audio.is_ok() {
             manifest.validate(&project.context)?;
+
             project.manifest = manifest;
+
             project.save()?;
         }
+
         let metadata = Project {
             name: project.manifest.name.clone(),
             context: project.context.clone(),
@@ -338,9 +350,11 @@ impl Editor {
             Ok(events) => editor.project_audio.clips = events,
             Err(error) => documents.diagnostics.push(error),
         }
+
         if editor.focused_scene.is_none() {
             editor.timeline.set_duration(editor.project_duration());
         }
+
         editor.saved_audio = project.manifest.audio.clone();
         editor.documents = Some(documents);
         editor.lua_project = Some(project);
@@ -501,16 +515,21 @@ impl Editor {
             } else {
                 project.manifest.clone()
             };
+
             if documents.project_dirty && manifest_changed {
                 let saved = project.saved_manifest()?;
+
                 if manifest.audio != saved.audio || manifest.legacy_audio != saved.legacy_audio {
                     return Err("Project audio changed on disk; resolve the conflict before saving local audio.".into());
                 }
+
                 if project.manifest.legacy_audio.is_empty() {
                     manifest.legacy_audio.clear();
                 }
+
                 manifest.audio = project.manifest.audio.clone();
             }
+
             let settings_changed = manifest.settings() != project.manifest.settings();
             let mut candidates = Vec::new();
             let mut order = Vec::new();
@@ -570,6 +589,7 @@ impl Editor {
             }
 
             let migrated = !manifest.legacy_audio.is_empty();
+
             if migrated {
                 manifest.migrate_audio(
                     &order
@@ -585,8 +605,10 @@ impl Editor {
                         })
                         .collect::<Vec<_>>(),
                 )?;
+
                 manifest.validate(&project.context)?;
             }
+
             let audio = crate::core::audio::AudioEvents {
                 clips: crate::scripting::audio::clip_events(
                     &project.context,
@@ -596,6 +618,7 @@ impl Editor {
                 )?,
                 ..Default::default()
             };
+
             Ok::<_, String>(PendingLua {
                 audio: Some(audio),
                 save_manifest: migrated && !documents.project_dirty,
@@ -611,7 +634,9 @@ impl Editor {
         match result {
             Ok(pending) => {
                 documents.replaying = true;
+
                 self.pending_lua = Some(pending);
+
                 documents.status = "Validating drawing and resources.".into();
             }
 
@@ -668,6 +693,7 @@ impl Editor {
             }
 
             self.canvas_timer.tick();
+
             self.accumulator -= delta;
         }
     }
@@ -684,7 +710,6 @@ impl Editor {
                         scene.start
                     },
             );
-
             self.timeline.pause();
         }
     }
@@ -738,7 +763,6 @@ impl Editor {
                         "Replaying simulations at {time:.2} s: {} steps. Editing or Cancel discards this candidate.",
                         candidate.simulation_steps()
                     );
-
                     self.pending_lua = Some(pending);
 
                     return;
@@ -790,17 +814,21 @@ impl Editor {
             let saved = (|| {
                 if documents.project_dirty {
                     let baseline = project.saved_manifest()?;
+
                     project.manifest.audio = baseline.audio;
                     project.manifest.legacy_audio = baseline.legacy_audio;
                 }
+
                 project.save()
             })();
+
             project.manifest.audio = draft_audio;
             project.manifest.legacy_audio = draft_legacy;
+
             if let Err(error) = saved {
                 project.manifest = previous;
-                documents.replaying = false;
 
+                documents.replaying = false;
                 documents.status =
                     "Manifest save conflicted. Showing the last valid revision.".into();
 
@@ -831,10 +859,12 @@ impl Editor {
         if let Some(audio) = pending.audio {
             self.project_audio = audio;
         }
+
         for (index, candidate) in pending.candidates {
             if let Some(scene) = self.scenes.get_mut(index) {
                 scene.inspector_edits.reset_all(&scene.scene);
             }
+
             if index >= self.scenes.len() {
                 self.scenes.push(EditorScene {
                     scene: SceneInstance::Lua(candidate),
@@ -844,6 +874,7 @@ impl Editor {
                 });
             } else if let SceneInstance::Lua(scene) = &mut self.scenes[index].scene {
                 scene.apply_reload(candidate);
+
                 documents.console.extend(scene.console());
             } else {
                 self.scenes[index].scene = SceneInstance::Lua(candidate);
@@ -889,7 +920,6 @@ impl Editor {
                 .iter()
                 .map(|index| previous[*index].take().unwrap())
                 .collect();
-
             self.project.name = manifest.name.clone();
 
             let settings = manifest.settings();
@@ -913,6 +943,7 @@ impl Editor {
             if !self.documents.as_ref().unwrap().project_dirty {
                 self.saved_audio = manifest.audio.clone();
             }
+
             self.lua_project.as_mut().unwrap().accept_manifest(manifest);
 
             let duration = recalculate_scene_ranges(&mut self.scenes);
@@ -927,6 +958,7 @@ impl Editor {
                 });
             } else {
                 self.active_scene = 0;
+
                 preserved_time = Some(0.0_f32.min(duration));
             }
         }
@@ -1011,6 +1043,7 @@ impl Editor {
             self.performance.render_ms = started.elapsed().as_secs_f32() * 1000.0;
 
             crate::renderer::target::reset_gl(gl, window_size);
+
             skia_context.reset(None);
 
             if self.is_exporting {
@@ -1214,11 +1247,16 @@ impl Editor {
         if self.is_exporting || self.pending_lua.is_some() {
             return Err("Finish applying project changes before renaming the project.".into());
         }
+
         let project = self.lua_project.as_mut().ok_or("No Lua project is open.")?;
         let mut manifest = project.manifest.clone();
+
         manifest.name = name.trim().into();
+
         manifest.validate(&project.context)?;
+
         let documents = self.documents.as_mut().unwrap();
+
         if documents
             .open
             .get(std::path::Path::new(crate::scripting::MANIFEST))
@@ -1226,16 +1264,22 @@ impl Editor {
         {
             return Err("Save or resolve manifest text edits before renaming the project.".into());
         }
+
         let previous_name = std::mem::replace(&mut project.manifest.name, manifest.name);
         let was_dirty = documents.project_dirty;
+
         documents.project_dirty = true;
+
         if let Err(error) = self.save_project() {
             self.lua_project.as_mut().unwrap().manifest.name = previous_name;
             self.documents.as_mut().unwrap().project_dirty = was_dirty;
+
             return Err(error);
         }
+
         self.project.name = self.lua_project.as_ref().unwrap().manifest.name.clone();
         self.documents.as_mut().unwrap().status = "Project name saved.".into();
+
         Ok(())
     }
 
@@ -1467,11 +1511,9 @@ impl Editor {
         let Some(index) = self.focused_scene.take() else {
             return;
         };
-
         let time = self.scenes[index].start + self.timeline.time();
 
         self.timeline.set_duration(self.project_duration());
-
         self.timeline.go_to(time);
 
         self.evaluated = None;
@@ -1743,6 +1785,7 @@ impl Editor {
         }
 
         self.editor_view_2d.pan[0] += delta[0];
+
         self.editor_view_2d.pan[1] += delta[1];
 
         self.editor_rendered = None;
@@ -1778,6 +1821,7 @@ impl Editor {
         if !self.editor_view_2d.canvas_view {
             return;
         }
+
         let canvas = self.editor_2d_canvas();
         let camera = self.scenes[self.active_scene]
             .scene
@@ -1788,6 +1832,7 @@ impl Editor {
         let rotation = -camera.camera_rotation;
         let zoom = camera.camera_zoom * scale;
         let position = glam::Mat2::from_angle(rotation) * camera.camera_position;
+
         self.editor_view_2d.pan = (-position * zoom).to_array();
         self.editor_view_2d.zoom = zoom;
         self.editor_view_2d.rotation = rotation;
@@ -1831,7 +1876,6 @@ impl Editor {
 
     pub(crate) fn editor_2d_selection_outline(&self) -> Option<[skia_safe::Point; 4]> {
         let entity = self.selected_entity()?;
-
         let SelectedCanvas::Two(canvas) = self.selected_canvas() else {
             return None;
         };
@@ -1867,10 +1911,12 @@ impl Editor {
 
     pub(crate) fn mix_audio(&self, start: u64, end: u64) -> Vec<f32> {
         let mut samples = vec![[0.0; 2]; end.saturating_sub(start) as usize];
+
         for (index, scene) in self.scenes.iter().enumerate() {
             if self.focused_scene.is_some_and(|focused| focused != index) {
                 continue;
             }
+
             let offset = if self.focused_scene.is_some() {
                 0.0
             } else {
@@ -1882,6 +1928,7 @@ impl Editor {
                 .round() as u64;
             let from = start.max(scene_start);
             let to = end.min(scene_end);
+
             if from < to {
                 scene.scene.audio.borrow().mix(
                     offset,
@@ -1890,8 +1937,10 @@ impl Editor {
                 );
             }
         }
+
         self.project_audio
             .mix(-(self.timeline_origin() as f64), start, &mut samples);
+
         crate::core::audio::limit(samples)
     }
 
@@ -1899,10 +1948,12 @@ impl Editor {
         let Some((start, end)) = self.renderer.audio_range() else {
             return Ok(());
         };
+
         for (index, scene) in self.scenes.iter().enumerate() {
             if self.focused_scene.is_some_and(|focused| focused != index) {
                 continue;
             }
+
             let offset = if self.focused_scene.is_some() {
                 0.0
             } else {
@@ -1911,13 +1962,16 @@ impl Editor {
             let local_start = start as f64 / crate::core::audio::SAMPLE_RATE as f64 - offset;
             let local_end = end as f64 / crate::core::audio::SAMPLE_RATE as f64 - offset;
             let duration = scene.end - scene.start;
+
             if local_end > 0.0 && local_start < duration as f64 {
                 scene
                     .scene
                     .evaluate(local_end.min(duration as f64) as f32)?;
             }
         }
+
         self.evaluated = None;
+
         self.renderer
             .write_audio(&self.mix_audio(start, end))
             .map_err(|e| e.to_string())
@@ -1998,10 +2052,13 @@ impl Editor {
         if let Err(error) = self.export_audio() {
             self.renderer
                 .fail(&crate::renderer::RenderError::InvalidProject(error));
+
             self.pending_export_time = None;
             self.is_exporting = false;
+
             return;
         }
+
         let result = self.renderer.process_frame(
             gl,
             self.preview.framebuffer(),
@@ -2074,6 +2131,7 @@ impl Editor {
         self.editor_rendered = Some(key);
 
         crate::renderer::target::reset_gl(gl, window_size);
+
         skia_context.reset(None);
     }
 
@@ -2138,6 +2196,7 @@ impl Editor {
         self.editor_3d_rendered = Some(key);
 
         crate::renderer::target::reset_gl(gl, window_size);
+
         skia_context.reset(None);
     }
 
@@ -2220,7 +2279,6 @@ impl Editor {
             if let SceneInstance::Lua(scene) = &scene.scene {
                 if let Some(documents) = &mut self.documents {
                     documents.console.extend(scene.console());
-
                     documents
                         .console
                         .drain(..documents.console.len().saturating_sub(500));
@@ -2253,6 +2311,7 @@ fn recalculate_scene_ranges(scenes: &mut [EditorScene]) -> f32 {
     for scene in scenes {
         scene.start = start;
         scene.end = start + scene.scene.duration();
+
         start = scene.end;
     }
 
@@ -2318,6 +2377,7 @@ mod tests {
     #[test]
     fn inspector_edits_restore_all_values_and_keep_the_first_original() {
         use crate::core::{Trackable, components::Style};
+
         let mut scene = Scene::new();
         let object = rect().build(&mut scene);
         let entity = object.entity();
@@ -2326,18 +2386,22 @@ mod tests {
         let mut edits = InspectorEdits::default();
 
         edits.record(entity, target.clone(), original.clone());
+
         target.set(
             &scene.world(),
             entity,
             TrackValue::Color(crate::core::types::Color::RED),
         );
+
         edits.record(entity, target.clone(), target.get(&scene.world(), entity));
+
         let schema = std::sync::Arc::new(crate::core::PropertySchema {
             name: "amount".into(),
             default: TrackValue::F32(1.0),
             limits: crate::core::TrackLimits::None,
             choices: Vec::new(),
         });
+
         scene
             .world_mut()
             .insert_one(
@@ -2347,11 +2411,15 @@ mod tests {
                 ),
             )
             .unwrap();
+
         let dynamic = TrackTarget::Dynamic(schema);
+
         edits.record(entity, dynamic.clone(), TrackValue::F32(1.0));
+
         dynamic.set(&scene.world(), entity, TrackValue::F32(5.0));
 
         let render_key = scene.render_key();
+
         edits.reset_all(&scene);
 
         assert_eq!(dynamic.get(&scene.world(), entity), TrackValue::F32(1.0));
@@ -2371,9 +2439,13 @@ mod tests {
         let entity = object.entity();
         let target = TrackTarget::uniform("amount");
         let mut edits = InspectorEdits::default();
+
         edits.record(entity, target.clone(), TrackValue::F32(0.25));
+
         object.set_uniform("amount", 0.75_f32);
+
         edits.reset_all(&scene);
+
         assert_eq!(object.get_uniform::<f32>("amount"), 0.25);
         assert!(!edits.contains(entity, &target));
     }
@@ -2381,15 +2453,20 @@ mod tests {
     #[test]
     fn inspector_reset_invalidates_the_rendered_scene() {
         use crate::core::components::Camera3D;
+
         let scene = Scene::new();
         let entity = scene.world_3d().entity();
         let track = <Camera3D as crate::core::Trackable>::track(0);
         let target = TrackTarget::property(std::any::TypeId::of::<Camera3D>(), track);
         let mut edits = InspectorEdits::default();
         let original = TrackValue::Enum("Perspective");
+
         target.set(&scene.world(), entity, TrackValue::Enum("Orthogonal"));
+
         edits.record(entity, target.clone(), original.clone());
+
         let render_key = scene.render_key();
+
         assert!(edits.reset(&scene, entity, &target));
         assert_ne!(scene.render_key(), render_key);
         assert_eq!(target.get(&scene.world(), entity), original);

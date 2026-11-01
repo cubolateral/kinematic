@@ -62,7 +62,9 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
         let mut boxes = layout(&ast, &options);
         let display = to_display_list(&boxes);
         let mut groups = Vec::new();
+
         tag_groups(&mut boxes, "", &mut groups);
+
         let tagged = to_display_list(&boxes);
         // Resolve inherited fill separately from explicit colors, including black and white.
         // Both layout passes run only when a formula first enters the cache.
@@ -77,11 +79,12 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
             size: Vector2::new(display.width as f32, display.total_height() as f32),
             parts: Vec::new(),
         };
-
         let mut tokens = super::text_morph::TokenGroups::default();
         let mut previous_scope = "";
         let mut previous_run = None;
+
         assert_eq!(display.items.len(), tagged.items.len());
+
         for ((item, alternate), tagged) in display
             .items
             .iter()
@@ -91,15 +94,20 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
             let tint = item_color(item);
             let fill =
                 (tint == item_color(alternate)).then(|| Color::new(tint.r, tint.g, tint.b, tint.a));
-
             let start = geometry.parts.len();
+
             emit(item, cache, fill, &mut geometry.parts);
+
             let (group, run) = &groups[item_color(tagged).r as usize];
+
             if group != previous_scope || *run != previous_run {
                 tokens.next(' ');
+
                 previous_scope = group;
+
                 previous_run = *run;
             }
+
             let symbol = match item {
                 DisplayItem::GlyphPath { char_code, .. } => {
                     char::from_u32(*char_code).unwrap_or(' ')
@@ -115,6 +123,7 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
                 DisplayItem::Rect { .. } => "Rect".to_owned(),
                 DisplayItem::Path { .. } => "Path".to_owned(),
             };
+
             for (index, part) in geometry.parts[start..].iter_mut().enumerate() {
                 part.key = format!("{group}/{identity}/{index}");
                 part.group = token;
@@ -133,7 +142,6 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
                 .size
                 .x
                 .max(bounds.left.abs().max(bounds.right.abs()) * 2.0);
-
             geometry.size.y = geometry
                 .size
                 .y
@@ -159,16 +167,22 @@ fn tag_groups(
     groups: &mut Vec<(String, Option<usize>)>,
 ) {
     use ratex_layout::layout_box::{BoxContent, VBoxChildKind};
+
     let color = ratex_types::color::Color::new(groups.len() as f32, 0.0, 0.0, 1.0);
     let run = matches!(node.content, BoxContent::GlyphRun { .. }).then_some(groups.len());
+
     groups.push((group.to_owned(), run));
+
     node.color = color;
+
     let mut child = |node: &mut ratex_layout::LayoutBox, role: &str| {
         tag_groups(node, &format!("{group}/{role}"), groups);
     };
+
     match &mut node.content {
         BoxContent::HBox(children) => {
             let mut counts = HashMap::new();
+
             for node in children {
                 match &node.content {
                     BoxContent::Glyph { .. }
@@ -193,7 +207,9 @@ fn tag_groups(
                     _ => {
                         let kind = std::mem::discriminant(&node.content);
                         let index = counts.entry(kind).or_insert(0);
+
                         tag_groups(node, &format!("{group}/{kind:?}:{index}"), groups);
+
                         *index += 1;
                     }
                 }
@@ -221,16 +237,20 @@ fn tag_groups(
                     _ => None,
                 })
                 .collect();
+
             if let Some(node) = sup {
                 child(node, &format!("{identity:?}/Superscript"));
             }
+
             if let Some(node) = sub {
                 child(node, &format!("{identity:?}/Subscript"));
             }
+
             tag_groups(base, group, groups);
         }
         BoxContent::Radical { body, index, .. } => {
             child(body, "Radicand");
+
             if let Some(node) = index {
                 child(node, "RootIndex");
             }
@@ -252,6 +272,7 @@ fn tag_groups(
                     child(node, &format!("Cell{row}:{column}"));
                 }
             }
+
             for (row, node) in row_tags.iter_mut().enumerate() {
                 if let Some(node) = node {
                     child(node, &format!("Tag{row}"));
@@ -267,7 +288,9 @@ fn tag_groups(
             if bg_color.is_some() {
                 *bg_color = Some(color);
             }
+
             *border_color = color;
+
             child(body, "Body");
         }
         BoxContent::RaiseBox { body, .. }
@@ -477,18 +500,22 @@ mod tests {
     fn text_word_groups_respect_spaces_and_symbols() {
         let parts = morph_geometry(r"\text{local d = wji make:func}", 0.0);
         let mut lengths = Vec::new();
+
         for (index, part) in parts.iter().enumerate() {
             if index == 0 || part.group != parts[index - 1].group {
                 lengths.push(0);
             }
+
             *lengths.last_mut().unwrap() += 1;
         }
+
         assert_eq!(lengths, [5, 1, 1, 3, 4, 1, 4]);
     }
 
     #[test]
     fn grouped_morph_keeps_words_whole_inside_formula_roles() {
         use crate::core::objects::text_morph::morph_parts;
+
         for (from, to) in [
             ("abc+def", "def+abcd"),
             (r"\frac{abc}{def}", r"\frac{abcd}{def}"),
@@ -496,6 +523,7 @@ mod tests {
             let from = morph_geometry(from, 0.0);
             let to = morph_geometry(to, 0.0);
             let draws = morph_parts(&from, &to, 0.5, true);
+
             assert!(
                 draws
                     .iter()
@@ -514,6 +542,7 @@ mod tests {
     #[test]
     fn morph_preserves_fraction_script_and_matrix_groups() {
         use crate::core::objects::text_morph::morph_parts;
+
         for (from, to, fading) in [
             (r"\frac{x}{y}", r"\frac{y}{x}", 4),
             (r"x^{a}_{b}", r"x^{b}_{a}", 4),
@@ -527,14 +556,17 @@ mod tests {
             let from = morph_geometry(from, 0.0);
             let to = morph_geometry(to, 0.0);
             let draws = morph_parts(&from, &to, 0.5, false);
+
             assert_eq!(
                 draws.iter().filter(|draw| draw.opacity == 0.5).count(),
                 fading
             );
         }
+
         let from = morph_geometry(r"\frac{x+x}{x}", 0.0);
         let to = morph_geometry(r"\frac{x+x+1}{x}", 0.0);
         let draws = morph_parts(&from, &to, 0.5, false);
+
         assert_eq!(
             draws.iter().filter(|draw| draw.opacity == 1.0).count(),
             from.len()
@@ -545,6 +577,7 @@ mod tests {
     #[test]
     fn adding_scripts_keeps_the_base_and_interpolates_explicit_colors() {
         use crate::core::objects::text_morph::morph_parts;
+
         let from = morph_geometry(r"\color{red}{x}", 0.0);
         let to = morph_geometry(r"\color{blue}{x}^2", 0.0);
         let draws = morph_parts(&from, &to, 0.5, false);
@@ -558,6 +591,7 @@ mod tests {
                     to.iter().map(|part| &part.key).collect::<Vec<_>>()
                 )
             });
+
         assert_eq!(base.color(Color::WHITE), Color::new(0.5, 0.0, 0.5, 1.0));
         assert_eq!(draws.iter().filter(|draw| draw.opacity == 0.5).count(), 1);
     }
@@ -605,7 +639,6 @@ mod tests {
                 numerator.bottom < bar.top,
                 "Numerator crosses the fraction bar: {text}."
             );
-
             assert!(
                 denominator.top > bar.bottom,
                 "Denominator crosses the fraction bar: {text}."
@@ -651,14 +684,12 @@ mod tests {
         let colors = geometry(r"x+\color{black}{y}+\color{white}{z}");
 
         assert!(colors.parts.iter().any(|part| part.color.is_none()));
-
         assert!(
             colors
                 .parts
                 .iter()
                 .any(|part| part.color == Some(Color::BLACK))
         );
-
         assert!(
             colors
                 .parts

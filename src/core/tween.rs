@@ -203,7 +203,6 @@ impl<Object> Tween<Object> {
         }) {
             target.to = to;
             target.rotation = None;
-
             target.mask = match (target.mask, channel) {
                 (Some(mask), Some(channel)) => Some(mask | (1 << channel)),
                 (_, None) | (None, Some(_)) => None,
@@ -307,7 +306,6 @@ impl<Object> Tween<Object> {
 
         crate::core::objects::validate_shader_track_value(&from)
             .unwrap_or_else(|error| panic!("{error}"));
-
         crate::core::objects::validate_shader_track_value(&to)
             .unwrap_or_else(|error| panic!("{error}"));
 
@@ -398,7 +396,6 @@ impl<Object> Tween<Object> {
                 .same(&TrackTarget::property(type_id, track_info))
         }) {
             target.to = TrackValue::Quaternion(to);
-
             target.rotation = match target.rotation.take() {
                 Some(mut rotation) if rotation.axis == axis => {
                     rotation.angle += angle;
@@ -412,7 +409,6 @@ impl<Object> Tween<Object> {
                 }
                 _ => None,
             };
-
             target.mask = None;
             target.relative = 0;
         } else {
@@ -547,7 +543,6 @@ impl<Object> Tween<Object> {
                 }
             })
             .collect();
-
         let task = if tasks.len() == 1 {
             tasks.pop().unwrap()
         } else {
@@ -605,7 +600,6 @@ fn validate_rotation(axis: Vector3, angle: f32) {
         axis.is_finite() && axis.length_squared() > f32::EPSILON,
         "Rotation axis must be finite and non-zero."
     );
-
     assert!(angle.is_finite(), "Rotation angle must be finite.");
 }
 

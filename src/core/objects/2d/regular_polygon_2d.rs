@@ -62,11 +62,9 @@ impl Default for RegularPolygon2D {
                     let shape = world.get::<&RegularPolygon2DShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
-
                     let Some(points) = polygon_points(&shape) else {
                         return;
                     };
-
                     let path = skia_safe::Path::polygon(&points, true, None, None);
 
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
@@ -82,7 +80,6 @@ impl Default for RegularPolygon2D {
                     let shape = world.get::<&RegularPolygon2DShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
-
                     let Some(points) = polygon_points(&shape) else {
                         return skia_safe::Rect::default();
                     };
@@ -125,7 +122,6 @@ mod tests {
 
         assert_eq!(polygon.box_size(), vec2(320.0, 180.0));
         assert_eq!(polygon.get(RegularPolygon2DShape::sides_property()), 3);
-
         assert_eq!(
             scene
                 .world()
@@ -142,7 +138,6 @@ mod tests {
 
         assert_eq!(default.sides, 4);
         assert_eq!(polygon_points(&default).unwrap().len(), 4);
-
         assert!(
             polygon_points(&RegularPolygon2DShape {
                 sides: 2,

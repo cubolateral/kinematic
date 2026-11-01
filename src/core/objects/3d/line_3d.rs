@@ -184,7 +184,6 @@ fn line_box(shape: &Line3DShape) -> Vector3 {
     let Ok(Some(geometry)) = line_geometry(shape) else {
         return Vector3::ZERO;
     };
-
     let mut minimum = shape.from
         - Vector3::splat(if geometry.from_length > 0.0 {
             0.0
@@ -211,6 +210,7 @@ fn line_box(shape: &Line3DShape) -> Vector3 {
         ),
     ] {
         minimum = minimum.min(point - Vector3::splat(radius));
+
         maximum = maximum.max(point + Vector3::splat(radius));
     }
 
@@ -267,7 +267,6 @@ pub fn draw_line_3d(
     let Some(geometry) = line_geometry(&shape)? else {
         return Ok(());
     };
-
     let body_length = (geometry.body_to - geometry.body_from).length();
 
     if body_length > f32::EPSILON {

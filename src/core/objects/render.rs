@@ -58,7 +58,6 @@ fn draw_entity_with_parent(
     let Ok(draw) = world.get::<&Draw2D>(entity) else {
         return;
     };
-
     let opacity = draw.opacity.clamp(0.0, 1.0);
 
     if !draw.visibility || opacity <= 0.0 {
@@ -70,7 +69,6 @@ fn draw_entity_with_parent(
         .ok()
         .and_then(|filter| image_filter(&filter));
     let filtered = image_filter.is_some();
-
     let children = children_by_z_index(world, entity);
     let global = parent.append(local_transform(world, entity));
     let save_count = canvas.save();
@@ -93,7 +91,6 @@ fn draw_entity_with_parent(
             shader_image.bounds,
             &skia_safe::Paint::default(),
         );
-
         canvas.restore_to_count(save_count);
 
         return;
@@ -207,7 +204,6 @@ fn subtree_visual_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<sk
         let Some(child_bounds) = subtree_visual_bounds(world, child) else {
             continue;
         };
-
         let transformed = transform_matrix(local_transform(world, child))
             .map_rect(child_bounds)
             .0;
@@ -304,7 +300,6 @@ fn draw_projection_2d_entity(
     let Ok(source) = world.get::<&ProjectionSource>(entity) else {
         return;
     };
-
     let Some(image) = source
         .0
         .and_then(|source| images.and_then(|images| images.get(&source)))
@@ -579,7 +574,6 @@ fn local_bounds(world: &hecs::World, entity: hecs::Entity) -> Option<skia_safe::
         })
         .filter_map(|child| transformed_bounds(world, child))
         .reduce(union_bounds);
-
     let bounds = match (own, child_bounds) {
         (Some(own), Some(children)) => Some(union_bounds(own, children)),
         (Some(own), None) => Some(own),
@@ -623,7 +617,6 @@ fn apply_global_transform(
     let Some(inverse_parent) = transform_matrix(parent).invert() else {
         return;
     };
-
     let relative = skia_safe::Matrix::concat(&inverse_parent, &transform_matrix(global));
 
     canvas.concat(&relative);
@@ -737,6 +730,7 @@ pub(crate) fn draw_canvas2d_editor_with_images(
         let mut paint = skia_safe::Paint::new(skia_safe::Color4f::new(0.0, 0.0, 0.0, 0.25), None);
 
         paint.set_anti_alias(true);
+
         canvas.draw_path(&mask, &paint);
     }
 
@@ -1144,6 +1138,7 @@ fn ray_cuboid_intersection(
         let second = (max[axis] - origin) / direction;
 
         near = near.max(first.min(second));
+
         far = far.min(first.max(second));
 
         if near > far {
@@ -1243,6 +1238,7 @@ mod shader_capture_tests {
             .build(&mut scene);
 
         group.add(&child);
+
         scene.world_2d().add(&group);
         scene.update(0.0);
 
@@ -1267,7 +1263,6 @@ mod shader_capture_tests {
         };
 
         assert!(image_filter(&filter).is_none());
-
         assert!(
             image_filter(&Filter {
                 shadow_color: Color::BLACK,

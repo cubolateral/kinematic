@@ -24,13 +24,16 @@ pub fn scene(
     } else {
         StyleColor::Header
     });
+
     draw.add_rect(min, [(max[0] - 1.0).max(min[0]), max[1]], fill)
         .rounding(0.0)
         .filled(true)
         .build();
+
     let y = min[1] + (EVENT_HEIGHT - ui.calc_text_size(label)[1]) * 0.5;
     let arrow_spacing = ui.calc_text_size(crate::icons::ARROW_LEFT)[0] + ui.calc_text_size(" ")[0];
     let _clip = draw.push_clip_rect(min, max, true);
+
     draw.add_text(
         [
             min[0] + PANEL_TEXT_PADDING + if focused { arrow_spacing } else { 0.0 },
@@ -39,6 +42,7 @@ pub fn scene(
         ui.get_color_u32(StyleColor::Text),
         label,
     );
+
     focused.then_some([min[0] + PANEL_TEXT_PADDING, y])
 }
 
@@ -59,11 +63,14 @@ pub fn event_handle(ui: &Ui, draw: &DrawListMut<'_>, bounds: [[f32; 2]; 2], labe
     let [min, max] = bounds;
     let accent = ui.get_color_u32(StyleColor::CheckMark);
     let text = crate::theme::contrast_text(ui.style_color(StyleColor::CheckMark));
+
     draw.add_rect(min, max, accent)
         .rounding(0.0)
         .filled(true)
         .build();
+
     let _clip = draw.push_clip_rect(min, max, true);
+
     draw.add_text(
         [
             min[0] + PANEL_TEXT_PADDING,
@@ -76,11 +83,13 @@ pub fn event_handle(ui: &Ui, draw: &DrawListMut<'_>, bounds: [[f32; 2]; 2], labe
 
 pub fn back(ui: &Ui, draw: &DrawListMut<'_>, position: [f32; 2]) -> (bool, bool) {
     ui.set_cursor_screen_pos(position);
+
     let clicked = ui.invisible_button(
         "##back_to_all_scenes",
         ui.calc_text_size(crate::icons::ARROW_LEFT),
     );
     let hovered = ui.is_item_hovered();
+
     draw.add_text(
         position,
         ui.get_color_u32(if hovered {
@@ -90,6 +99,7 @@ pub fn back(ui: &Ui, draw: &DrawListMut<'_>, position: [f32; 2]) -> (bool, bool)
         }),
         crate::icons::ARROW_LEFT,
     );
+
     (clicked, hovered)
 }
 
@@ -102,7 +112,9 @@ pub fn audio_header(
     collapsed: bool,
 ) -> bool {
     separator(ui, draw, min[0], min[0] + width, min[1] + height);
+
     let clicked = ui.invisible_button("##audio_header", [width, 24.0]);
+
     draw.add_text(
         [min[0] + 10.0, min[1] + 4.0],
         ui.get_color_u32(StyleColor::Text),
@@ -117,6 +129,7 @@ pub fn audio_header(
         ui.get_color_u32(StyleColor::Text),
         "Audio",
     );
+
     clicked
 }
 
@@ -128,6 +141,7 @@ pub fn audio(
     hovered: bool,
 ) {
     let [min, max] = bounds;
+
     draw.add_rect(
         min,
         max,
@@ -147,6 +161,7 @@ pub fn audio(
 pub fn audio_label(ui: &Ui, draw: &DrawListMut<'_>, bounds: [[f32; 2]; 2], label: &str) {
     let [min, max] = bounds;
     let _clip = draw.push_clip_rect(min, max, true);
+
     draw.add_text(
         [min[0] + CLIP_HANDLE, min[1] + 3.0],
         ui.get_color_u32(StyleColor::Text),
@@ -165,9 +180,11 @@ pub fn waveform(
     let center = min[1] + 41.0;
     let scale = 17.0 * gain;
     let accent = ui.get_color_u32(StyleColor::CheckMark);
+
     for pixel in 0..(max[0] - min[0]).ceil() as usize {
         let x = min[0] + pixel as f32;
         let [low, high] = peaks(x, (x + 1.0).min(max[0]));
+
         draw.add_line(
             [x, center - high * scale],
             [x, center - low * scale],
@@ -183,6 +200,7 @@ mod tests {
     fn timeline_blocks_remain_square_with_rounded_controls() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
@@ -194,19 +212,23 @@ mod tests {
         context
             .style_mut()
             .set_frame_rounding(crate::theme::CORNER_RADIUS);
+
         let ui = context.frame();
+
         super::event_span(
             ui,
             &ui.get_foreground_draw_list(),
             [10.0, 20.0],
             [50.0, 70.0],
         );
+
         let frame = context.render_legacy();
         let positions = frame
             .draw_data()
             .draw_lists()
             .flat_map(|list| list.vtx_buffer().iter().map(|vertex| vertex.pos))
             .collect::<Vec<_>>();
+
         assert_eq!(
             positions,
             [[10.0, 20.0], [50.0, 20.0], [50.0, 70.0], [10.0, 70.0]]
@@ -230,6 +252,7 @@ pub fn audio_lanes(
         .floor()
         .max(0.0) as usize)
         .min(count.saturating_sub(1));
+
     for lane in first..=last {
         separator(
             ui,

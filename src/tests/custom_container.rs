@@ -32,24 +32,19 @@ fn custom_container_returns_typed_direct_children() {
         container.children(),
         vec![rectangle.entity(), circle.entity()]
     );
-
     assert_eq!(container.get_child_entity(0), Ok(rectangle.entity()));
-
     assert_eq!(
         container.get_child_entity(2),
         Err(ChildError::NotFound { index: 2, len: 2 })
     );
-
     assert_eq!(
         container.get_child::<Rect>(0).unwrap().entity(),
         rectangle.entity()
     );
-
     assert_eq!(
         container.get_child::<Circle>(1).unwrap().entity(),
         circle.entity()
     );
-
     assert!(matches!(
         container.get_child::<Circle>(0),
         Err(ChildError::TypeMismatch {
@@ -58,7 +53,6 @@ fn custom_container_returns_typed_direct_children() {
             actual: "Rect",
         })
     ));
-
     assert!(matches!(
         container.get_child::<Rect>(2),
         Err(ChildError::NotFound { index: 2, len: 2 })
@@ -79,6 +73,7 @@ fn custom_container_manages_children_and_sibling_order() {
     parent.add(&circle);
     parent.insert(&last, 1);
     parent.add(&nested);
+
     nested.add(&nested_child);
 
     assert_eq!(
@@ -90,14 +85,11 @@ fn custom_container_manages_children_and_sibling_order() {
             nested.entity()
         ]
     );
-
     assert_eq!(
         parent.first_child::<Rect>().unwrap().entity(),
         first.entity()
     );
-
     assert_eq!(parent.last_child::<Rect>().unwrap().entity(), last.entity());
-
     assert_eq!(
         parent
             .all_children::<Rect>()
@@ -106,26 +98,20 @@ fn custom_container_manages_children_and_sibling_order() {
             .collect::<Vec<_>>(),
         vec![first.entity(), last.entity()]
     );
-
     assert!(parent.first_child::<Line2D>().is_none());
-
     assert_eq!(
         nested.ancestor::<CustomContainer>().unwrap().entity(),
         parent.entity()
     );
-
     assert_eq!(nested.parent(), Some(parent.entity()));
-
     assert_eq!(
         parent.first_child_recursively::<Rect>().unwrap().entity(),
         first.entity()
     );
-
     assert_eq!(
         parent.last_child_recursively::<Rect>().unwrap().entity(),
         nested_child.entity()
     );
-
     assert_eq!(
         parent
             .all_children_recursively::<Rect>()
@@ -140,6 +126,7 @@ fn custom_container_manages_children_and_sibling_order() {
     first.move_to_bottom();
     first.move_up();
     first.move_to(2);
+
     assert_eq!(parent.children()[2], first.entity());
 
     parent.remove_children();

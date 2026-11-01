@@ -35,6 +35,7 @@ pub fn draw(ui: &Ui, version: &str, top_border: bool) -> bool {
             if top_border {
                 widgets::horizontal_border(ui, ui.window_pos()[1]);
             }
+
             let version = format!("v{version}");
             let spacing = ui.clone_style().item_spacing()[0];
             let button_width = ui.frame_height();
@@ -43,14 +44,19 @@ pub fn draw(ui: &Ui, version: &str, top_border: bool) -> bool {
             let right = origin[0] + ui.content_region_avail()[0] - right_width;
 
             ui.set_cursor_pos([right.max(origin[0]), origin[1]]);
+
             let _id = ui.push_id("Repository");
+
             repository_clicked =
                 controls::text_button(ui, icons::REPOSITORY, [button_width, ui.frame_height()]);
+
             if ui.is_item_hovered() {
                 widgets::tooltip(ui, "Open the Kinematic repository");
             }
+
             ui.same_line();
             ui.align_text_to_frame_padding();
+
             widgets::muted(ui, version);
         });
 

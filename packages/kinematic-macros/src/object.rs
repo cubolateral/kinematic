@@ -85,7 +85,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     let animator_handle_type = quote!(crate::core::AnimatorHandle);
     let trackable_info_type = quote!(crate::core::TrackableInfo);
     let trackable_trait = quote!(crate::core::Trackable);
-
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
             Fields::Named(named) => &named.named,
@@ -93,7 +92,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
         },
         _ => panic!("Object can only be derived for structs."),
     };
-
     let mut component_accessors = Vec::with_capacity(fields.len());
     let mut trackable_infos = Vec::with_capacity(fields.len());
     let mut trackable_types = Vec::with_capacity(fields.len());
@@ -160,7 +158,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
         })
         .collect();
-
     let spatial_impl = match spatial.as_str() {
         "2d" => quote! {
             impl crate::core::objects::Object2DHandler for #handler_name {}
@@ -297,7 +294,6 @@ pub fn derive_object(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             }
         },
     );
-
     let expanded = quote! {
         unsafe impl hecs::DynamicBundle for #object_name {
             fn has<T: hecs::Component>(&self) -> bool {

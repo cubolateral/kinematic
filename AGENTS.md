@@ -37,6 +37,13 @@ Kinematic is an animation editor for Lua projects, implemented in Rust. The sour
 - Keep comments and string literals concise, start them with an uppercase letter, and end them with punctuation.
 - Prefer simple implementations. Avoid new layers, dependencies, unsafe code, or public types unless they are needed by the behavior.
 
+### Code layout and spacing
+
+- Use blank lines to show a meaningful change in context or purpose, not to separate every statement. Keep a cohesive block compact enough to read as one unit, while giving distinct stages room to stand apart.
+- Keep related local declarations together, such as values that describe the same UI region or inputs to one operation. Separate declarations only when they belong to different concerns or when a new phase begins.
+- Keep related operations on the same object together. In tests, group setup, the behavior being exercised, and its assertions into distinct blocks; keep assertions that verify the same outcome together.
+- Avoid both uninterrupted blocks that mix unrelated work and excessive blank lines that fragment a single thought. Choose spacing by the relationship between statements, and apply the same judgment across Rust, Lua, and other source files.
+
 ## Validation
 
 For Rust changes, run cargo fmt --check, cargo check --workspace, and cargo test --workspace. Inspect callers before changing a core contract or macro-generated API. Keep macro output and its implementing traits/types synchronized.

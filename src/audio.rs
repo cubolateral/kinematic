@@ -4,14 +4,18 @@ pub(crate) fn self_test(samples: &[[f32; 2]]) -> Result<(), String> {
     let sdl = sdl3::init().map_err(|e| e.to_string())?;
     let preview = AudioPreview::new(&sdl)?;
     let samples = samples.iter().flatten().copied().collect::<Vec<_>>();
+
     preview
         .stream
         .put_data_f32(&samples)
         .map_err(|e| e.to_string())?;
+
     std::thread::sleep(std::time::Duration::from_millis(100));
+
     if preview.stream.queued_bytes().map_err(|e| e.to_string())? as usize >= samples.len() * 4 {
         return Err("Audio device did not consume samples.".into());
     }
+
     Ok(())
 }
 
@@ -37,8 +41,11 @@ impl AudioPreview {
         let stream = audio
             .new_playback_stream(&spec, None)
             .map_err(|e| e.to_string())?;
+
         device.bind_stream(&stream).map_err(|e| e.to_string())?;
+
         stream.resume().map_err(|e| e.to_string())?;
+
         Ok(Self {
             stream,
             device,
@@ -59,21 +66,27 @@ impl AudioPreview {
                 .audio
                 .new_playback_stream(&spec, None)
                 .map_err(|e| e.to_string())?;
+
             self.device
                 .bind_stream(&stream)
                 .map_err(|e| e.to_string())?;
+
             self.stream = stream;
             self.speed = speed;
             self.cursor = None;
         }
+
         Ok(())
     }
 
     pub fn update(&mut self, editor: Option<&Editor>, volume: f32) -> Result<(), String> {
         let transport = editor.map(Editor::audio_transport);
         let speed = transport.map_or(1.0, |(_, _, _, speed)| speed);
+
         self.set_speed(speed)?;
+
         self.stream.set_gain(volume).map_err(|e| e.to_string())?;
+
         if let (Some(editor), Some((true, revision, end, _))) = (editor, transport) {
             if let Some((previous_revision, start)) = self.cursor
                 && previous_revision == revision
@@ -81,9 +94,11 @@ impl AudioPreview {
             {
                 if end > start {
                     let max_queued = (end - start).max(u64::from(SAMPLE_RATE) / 4) * 8;
+
                     if self.stream.queued_bytes().map_err(|e| e.to_string())? as u64 > max_queued {
                         self.stream.clear().map_err(|e| e.to_string())?;
                     }
+
                     self.stream
                         .put_data_f32(&editor.mix_audio(start, end))
                         .map_err(|e| e.to_string())?;
@@ -91,6 +106,7 @@ impl AudioPreview {
             } else {
                 self.stream.clear().map_err(|e| e.to_string())?;
             }
+
             self.cursor = Some((revision, end));
         } else if let Some((revision, start)) = self.cursor.take() {
             if let (Some(editor), Some((false, current_revision, end, _))) = (editor, transport)
@@ -104,6 +120,7 @@ impl AudioPreview {
                 self.stream.clear().map_err(|e| e.to_string())?;
             }
         }
+
         Ok(())
     }
 }
@@ -119,11 +136,16 @@ mod tests {
         let mut preview = AudioPreview::new(&sdl).unwrap();
         let sound = crate::core::audio::Sound::preset("boink").unwrap();
         let samples = crate::core::audio::limit((*sound.samples()).clone());
+
         preview.stream.put_data_f32(&samples).unwrap();
+
         preview.cursor = Some((0, 0));
+
         for speed in [0.10, 1.25, 5.0] {
             preview.set_speed(speed).unwrap();
+
             let (source, _) = preview.stream.get_format().unwrap();
+
             assert_eq!(
                 source.unwrap().freq,
                 Some((SAMPLE_RATE as f32 * speed) as i32)
@@ -131,11 +153,17 @@ mod tests {
             assert_eq!(preview.stream.queued_bytes().unwrap(), 0);
             assert!(preview.cursor.is_none());
         }
+
         preview.update(None, 0.5).unwrap();
+
         assert_eq!(preview.stream.get_gain().unwrap(), 0.5);
+
         preview.update(None, 0.0).unwrap();
+
         assert_eq!(preview.stream.get_gain().unwrap(), 0.0);
+
         preview.update(None, 1.0).unwrap();
+
         assert_eq!(preview.stream.get_gain().unwrap(), 1.0);
         assert_eq!(preview.stream.queued_bytes().unwrap(), 0);
     }

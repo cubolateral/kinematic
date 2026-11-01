@@ -21,8 +21,10 @@ local bounce = k.object {
 return function(s)
 	local boink_source = k.audio_synth { preset = "boink" }
 	local boink = s:audio { source = boink_source, gain = 0.2 }
+
 	boink:play()
 	boink:play { gain = 0.15, pan = -0.5 }
+
 	s:wait(0.6)
 
 	for _, preset in ipairs { "pluck", "click", "impact", "whoosh" } do
@@ -44,13 +46,20 @@ return function(s)
 	local recording = k.audio_file("assets/chime.wav")
 	local left = s:audio { source = recording, gain = 0.4, pan = -0.6 }
 	local right = s:audio { source = recording, gain = 0.4, pan = 0.6 }
+
 	left:play()
+
 	s:wait(0.3)
+
 	right:play { gain = 0.3 }
+
 	s:wait(0.6)
 
 	local ball = s:object(bounce, { id = "ball", fill = k.color("#FBBF24") })
+
 	ball:inputs { hit = boink }
+
 	s:world_2d():add(ball)
+
 	s:wait(4)
 end

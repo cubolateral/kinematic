@@ -19,6 +19,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, volume: &mut i32
 
     let margin = editor.margin_visible().then(|| editor.margin_size());
     let preview = image::preview(editor);
+
     kinematic_ui::windows::fullscreen(
         ui,
         "Fullscreen preview.",

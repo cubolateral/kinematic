@@ -15,7 +15,6 @@ fn track_args(field: &syn::Field) -> syn::Result<Option<TrackArgs>> {
     else {
         return Ok(None);
     };
-
     let mut args = TrackArgs::default();
 
     if matches!(attribute.meta, syn::Meta::Path(_)) {
@@ -88,7 +87,6 @@ fn numeric_literal(expr: &Expr, integer: bool, unsigned: bool) -> syn::Result<f6
 
 fn limits_tokens(field: &syn::Field, args: &TrackArgs) -> syn::Result<proc_macro2::TokenStream> {
     let field_type = type_name(&field.ty);
-
     let Some(kind @ ("f32" | "i32" | "u32")) = field_type.as_deref() else {
         if args.min.is_some() || args.max.is_some() {
             return Err(syn::Error::new(
@@ -216,7 +214,6 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
     let tween_type = quote!(crate::core::Tween);
     let track_property_type = quote!(crate::core::TrackProperty);
     let vector3_type = quote!(crate::core::types::Vector3);
-
     let fields = match &input.data {
         Data::Struct(data) => match &data.fields {
             Fields::Named(named) => &named.named,
@@ -224,7 +221,6 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
         },
         _ => panic!("Trackable can only be derived for structs."),
     };
-
     let tracked_fields: Vec<_> = match fields
         .iter()
         .map(|field| {
@@ -259,7 +255,6 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             struct_name,
             type_fragment(field_ident)
         );
-
         let (setter_generic, setter_value_type, setter_value) =
             if matches!(type_name(field_ty).as_deref(), Some("Quad" | "String")) {
                 (

@@ -61,7 +61,6 @@ fn lua_uses_native_tracks_and_seek() {
             .x,
         -100.0
     );
-
     assert_eq!(scene.duration(), 3.0);
 }
 
@@ -71,13 +70,11 @@ fn reload_preserves_ids_and_rejects_invalid_candidates() {
     let entity = scene.entity("ball").unwrap();
 
     scene.update(1.0).unwrap();
-
     scene
         .reload(sources(&SCENE.replace("radius=24", "radius=48")))
         .unwrap();
 
     assert_eq!(scene.entity("ball"), Some(entity));
-
     assert_eq!(
         scene
             .scene()
@@ -87,10 +84,8 @@ fn reload_preserves_ids_and_rejects_invalid_candidates() {
             .radius,
         48.0
     );
-
     assert!(scene.reload(sources("Invalid Lua ???")).is_err());
     assert_eq!(scene.entity("ball"), Some(entity));
-
     assert_eq!(
         scene
             .scene()
@@ -100,7 +95,6 @@ fn reload_preserves_ids_and_rejects_invalid_candidates() {
             .radius,
         48.0
     );
-
     assert_eq!(scene.revision(), 2);
 }
 
@@ -110,7 +104,6 @@ fn signal_errors_do_not_commit_partial_writes() {
     let scene = load(&source);
 
     assert!(scene.update(2.5).is_err());
-
     assert_eq!(
         scene
             .scene()
@@ -198,7 +191,6 @@ fn duplicate_ids_and_infinite_loops_are_diagnostics() {
         )
         .is_err()
     );
-
     assert!(
         LuaScene::load(
             ProjectContext::new(".").unwrap(),
@@ -250,7 +242,6 @@ end
     let a = scene.entity("a").unwrap();
 
     assert_eq!(world.get::<&Transform2D>(a).unwrap().scale.x, 0.5);
-
     assert_eq!(
         world
             .get::<&crate::core::components::Draw2D>(a)
@@ -281,7 +272,6 @@ end
     ))).unwrap();
 
     assert_eq!(scene.entity("shape"), Some(entity));
-
     assert!(
         scene
             .scene()
@@ -315,6 +305,7 @@ end
     let a = scene.entity("a").unwrap();
 
     scene.update(0.5).unwrap();
+
     assert!(scene.update(1.5).is_err());
 
     let b = scene.entity("b").unwrap();
@@ -323,7 +314,6 @@ end
         scene.scene().world().get::<&CircleShape>(b).unwrap().radius,
         20.5
     );
-
     assert_eq!(
         scene
             .scene()
@@ -333,12 +323,10 @@ end
             .opacity,
         1.0
     );
-
     assert_eq!(
         scene.scene().world().get::<&CircleShape>(a).unwrap().radius,
         10.5
     );
-
     assert_eq!(
         scene
             .scene()
@@ -436,7 +424,6 @@ end
             .position,
         glam::vec2(100.0, 25.0)
     );
-
     assert_eq!(
         scene
             .scene()
@@ -458,7 +445,6 @@ end
             .position,
         glam::vec2(-200.0, 0.0)
     );
-
     assert_eq!(scene.duration(), 4.0);
 }
 
@@ -490,7 +476,6 @@ end
             .position,
         glam::vec2(10.0, 12.0)
     );
-
     assert_eq!(
         scene
             .scene()
@@ -623,7 +608,6 @@ end
     .replace("NEW", &serde_json::to_string(new).unwrap());
     let scene = load(&source);
     let label = scene.entity("label").unwrap();
-
     let progress = |time| easing.evaluate(time).clamp(0.0, 1.0);
 
     for (time, left_opacity, text) in [
@@ -640,6 +624,7 @@ end
     ] {
         let left_alpha = (204.0 * left_opacity).round() as i32;
         let right_alpha = (204.0 * (1.0 - left_opacity)).round() as i32;
+
         scene.update(time).unwrap();
 
         let world = scene.scene().world();
@@ -649,6 +634,7 @@ end
 
         canvas.clear(skia_safe::colors::TRANSPARENT);
         canvas.translate((320.0, 80.0));
+
         (draw.on_draw)(&world, label, canvas, draw.opacity);
 
         let pixels = surface.peek_pixels().unwrap();
@@ -668,6 +654,7 @@ end
             (max_alpha(320, 640) - right_alpha).abs() <= 1,
             "Object: {constructor}, easing: {easing_name}, time: {time}."
         );
+
         let current = if constructor == "text_2d" {
             world.get::<&TextShape>(label).unwrap().text.clone()
         } else {
@@ -783,7 +770,6 @@ end
             .text,
         "Old"
     );
-
     assert!(
         (world
             .get::<&crate::core::components::Draw2D>(label)
@@ -795,7 +781,9 @@ end
     );
 
     drop(world);
+
     assert_eq!(scene.duration(), 4.0);
+
     scene.update(4.0).unwrap();
 
     assert_eq!(
@@ -841,7 +829,6 @@ end
 
     assert!(try_load("return function(s) s:world_3d():to{camera_fov=10}:play(1) end").is_err());
     assert_eq!(scene.scene().name(), "intro");
-
     assert!(
         try_load(
             "return function(s) k.mesh{vertices={{0,0,0},{1,0,0},{0,1,0}},indices={0,1,2}} end"
@@ -875,7 +862,6 @@ end
         "utils/math.lua".into(),
         "return {double=function(value) return value*2 end}".into(),
     );
-
     sources.insert(
         "objects/counter.lua".into(),
         r#"
@@ -908,7 +894,6 @@ return k.object{
     let changed_script = script.replace("self:state().result==6", "self:state().result==9");
 
     sources.insert("intro.lua".into(), changed_script);
-
     sources.insert(
         "utils/math.lua".into(),
         "return {double=function(value) return value*3 end}".into(),
@@ -924,6 +909,7 @@ return k.object{
 
     assert!(scene.reload(sources).is_err());
     assert_eq!(scene.entity("counter"), Some(entity));
+
     scene.update(0.5).unwrap();
 }
 
@@ -956,7 +942,6 @@ end
         crate::core::objects::shader_uniform(&world, entity, "pulse").unwrap(),
         crate::core::TrackValue::F32(3.0)
     );
-
     assert_eq!(
         world.get::<&crate::core::Properties>(entity).unwrap().0["pulse"].1,
         crate::core::TrackValue::F32(6.0)
@@ -1009,6 +994,7 @@ end
 #[test]
 fn text_and_latex_morph_schedule_reusable_tasks_and_seek_in_both_dimensions() {
     use crate::core::objects::{Latex2DShape, Latex3DShape, Text3DShape, TextFade, TextShape};
+
     for (constructor, dimension) in [
         ("text_2d", "2d"),
         ("text_3d", "3d"),
@@ -1031,6 +1017,7 @@ end
         );
         let scene = load(&source);
         let label = scene.entity("label").unwrap();
+
         for (time, text, active, progress) in [
             (0.0, "aba", true, 0.0),
             (1.5, "aba", true, 0.25),
@@ -1040,21 +1027,27 @@ end
             (2.0, "aba", true, 0.5),
         ] {
             scene.update(time).unwrap();
+
             let world = scene.scene().world();
             let fade = world.get::<&TextFade>(label).unwrap();
+
             assert_eq!(fade.active, active, "{constructor} at {time}.");
             assert!((fade.progress - progress).abs() < 0.001);
+
             if active {
                 assert!(fade.morph);
             }
+
             let current = match constructor {
                 "text_2d" => world.get::<&TextShape>(label).unwrap().text.clone(),
                 "text_3d" => world.get::<&Text3DShape>(label).unwrap().text.clone(),
                 "latex_2d" => world.get::<&Latex2DShape>(label).unwrap().text.clone(),
                 _ => world.get::<&Latex3DShape>(label).unwrap().text.clone(),
             };
+
             assert_eq!(current, text);
         }
+
         assert!(
             try_load(&format!(
                 "return function(s) s:{constructor}{{}}:morph(123) end"
@@ -1067,6 +1060,7 @@ end
 #[test]
 fn morph_moves_shared_glyphs_without_crossfading_them() {
     use crate::core::components::Draw2D;
+
     for (constructor, old, new) in [
         ("text_2d", "I        ", "        I"),
         ("latex_2d", r"x\qquad\qquad", r"\qquad\qquad x"),
@@ -1080,32 +1074,42 @@ fn morph_moves_shared_glyphs_without_crossfading_them() {
         let label = scene.entity("label").unwrap();
         let render = |time| {
             scene.update(time).unwrap();
+
             let world = scene.scene().world();
             let draw = world.get::<&Draw2D>(label).unwrap();
             let mut surface = skia_safe::surfaces::raster_n32_premul((640, 160)).unwrap();
             let canvas = surface.canvas();
+
             canvas.clear(skia_safe::colors::TRANSPARENT);
             canvas.translate((320.0, 80.0));
+
             (draw.on_draw)(&world, label, canvas, draw.opacity);
+
             let pixels = surface.peek_pixels().unwrap();
             let mut left = 640;
             let mut right = 0;
             let mut alpha = 0;
+
             for y in 0..160 {
                 for x in 0..640 {
                     let value = pixels.get_color((x, y)).a();
+
                     if value > 0 {
                         left = left.min(x);
+
                         right = right.max(x);
                     }
+
                     alpha = alpha.max(value);
                 }
             }
+
             ((left + right) as f32 * 0.5, alpha)
         };
         let start = render(0.0);
         let end = render(2.0);
         let middle = render(1.0);
+
         assert!(
             (middle.0 - (start.0 + end.0) * 0.5).abs() <= 1.0,
             "{constructor}."
@@ -1157,10 +1161,13 @@ end
     let ball = world
         .get::<&crate::core::components::TreeNode>(scene.entity("ball").unwrap())
         .unwrap();
+
     assert_eq!(ball.lifetime, [1.0, 2.0]);
+
     let inactive = world
         .get::<&crate::core::components::TreeNode>(scene.entity("inactive").unwrap())
         .unwrap();
+
     assert_eq!(inactive.lifetime, [3.0, f32::INFINITY]);
 }
 
@@ -1182,8 +1189,11 @@ return function(s)
 end
 "#,
     );
+
     assert_eq!(scene.duration(), 2.0);
+
     let audio = scene.scene().audio.borrow();
+
     assert_eq!(
         audio
             .scheduled
@@ -1222,10 +1232,14 @@ return function(s)
 end
 "#;
     let mut scene = load(script);
+
     scene.update(4.5).unwrap();
+
     let mix = |scene: &LuaScene| {
         let mut output = vec![[0.0; 2]; 240_000];
+
         scene.scene().audio.borrow().mix(0.0, 0, &mut output);
+
         output
     };
     let expected = mix(&scene);
@@ -1239,26 +1253,36 @@ end
             .map(Vec::len)
             .sum::<usize>()
     };
+
     assert_eq!(event_count(&scene), 20);
+
     scene.update(0.1).unwrap();
     scene.update(4.5).unwrap();
+
     assert_eq!(event_count(&scene), 20);
     assert_eq!(mix(&scene), expected);
+
     scene
         .reload(sources(&format!("-- Layout change.\n{script}")))
         .unwrap();
+
     assert_eq!(event_count(&scene), 20);
     assert_eq!(mix(&scene), expected);
+
     let candidate = scene.prepare_seek().unwrap();
+
     candidate.update(4.5).unwrap();
+
     assert_eq!(event_count(&candidate), 20);
     assert_eq!(mix(&candidate), expected);
+
     scene
         .reload(sources(
             &script.replace("preset='click'", "preset='impact'"),
         ))
         .unwrap();
     scene.update(4.5).unwrap();
+
     assert_eq!(event_count(&scene), 20);
     assert_ne!(mix(&scene), expected);
 }
@@ -1277,7 +1301,9 @@ return function(s)
 end
 "#,
     );
+
     scene.update(0.0).unwrap();
+
     assert_eq!(
         scene
             .scene()
@@ -1289,8 +1315,10 @@ end
             .sum::<usize>(),
         2
     );
+
     scene.update(0.5).unwrap();
     scene.update(0.0).unwrap();
+
     assert_eq!(
         scene
             .scene()
@@ -1327,10 +1355,12 @@ fn sound_validation_and_failed_simulation_leave_no_partial_events() {
             .is_err()
         );
     }
+
     let shared = load(
         "return function(s) local sound=s:audio{source=k.audio_synth{attack=1,decay=1,hold=7,release=1}}; for i=1,20 do sound:play() end end",
     );
     let audio = shared.scene().audio.borrow();
+
     assert_eq!(audio.scheduled.len(), 20);
     assert!(
         audio
@@ -1338,6 +1368,7 @@ fn sound_validation_and_failed_simulation_leave_no_partial_events() {
             .iter()
             .all(|event| std::sync::Arc::ptr_eq(&event.samples, &audio.scheduled[0].samples))
     );
+
     let scene = load(
         r#"
 return function(s)
@@ -1352,8 +1383,11 @@ return function(s)
 end
 "#,
     );
+
     scene.update(0.0).unwrap();
+
     let count = scene.scene().audio.borrow().steps.len();
+
     assert!(scene.update(0.5).is_err());
     assert_eq!(scene.scene().audio.borrow().steps.len(), count);
 }
@@ -1364,10 +1398,12 @@ fn sound_tails_extend_the_scene_without_advancing_the_animator() {
         load("return function(s) s:audio{source=k.audio_synth{}} end").duration(),
         0.0
     );
+
     let scene = load(
         "return function(s) local tone=s:audio{source=k.audio_synth{waveform='triangle',frequency=220,attack=0.01,decay=0.02,hold=0.03,release=0.04}}; tone:play(); tone:play(); s:wait(0.01); tone:play() end",
     );
     let audio = scene.scene().audio.borrow();
+
     assert_eq!(audio.scheduled[0].time, 0.0);
     assert_eq!(audio.scheduled[1].time, 0.0);
     assert!((audio.scheduled[2].time - 0.01).abs() < 1e-6);
@@ -1390,6 +1426,7 @@ end
 "#,
     );
     let audio = scene.scene().audio.borrow();
+
     assert!(
         audio
             .scheduled
@@ -1398,6 +1435,7 @@ end
     );
     assert_eq!(audio.scheduled[1].gain, 0.1);
     assert_eq!(audio.scheduled[2].gain, 0.5);
+
     for script in [
         "return function(s) s:audio{} end",
         "return function(s) s:audio{source=k.audio_synth{},frequency=600} end",
@@ -1424,9 +1462,13 @@ end
 #[ignore = "Requires FFmpeg with WAV support."]
 fn audio_files_share_samples_and_invalidate_simulation_history_on_content_changes() {
     let root = std::env::temp_dir().join(format!("kinematic-file-audio-{}", std::process::id()));
+
     std::fs::create_dir_all(root.join("assets")).unwrap();
+
     let fixture = include_bytes!("../../examples/lua/audio/assets/chime.wav");
+
     std::fs::write(root.join("assets/hit.wav"), fixture).unwrap();
+
     let script = r#"
 return function(s)
     local source=k.audio_file('assets/hit.wav')
@@ -1441,7 +1483,9 @@ return function(s)
     object:inputs{hit=hit}; s:world_2d():add(object); s:wait(4)
 end
 "#;
+
     std::fs::write(root.join("intro.lua"), script).unwrap();
+
     let mut scene = LuaScene::load(
         ProjectContext::new(&root).unwrap(),
         "intro.lua",
@@ -1451,14 +1495,18 @@ end
         crate::core::Margin::default(),
     )
     .unwrap();
+
     assert!(
         scene
             .dependencies()
             .contains(&PathBuf::from("assets/hit.wav"))
     );
+
     scene.update(3.5).unwrap();
+
     {
         let audio = scene.scene().audio.borrow();
+
         assert!(std::sync::Arc::ptr_eq(
             &audio.scheduled[0].samples,
             &audio.scheduled[1].samples
@@ -1471,27 +1519,40 @@ end
                 .all(|event| std::sync::Arc::ptr_eq(&event.samples, &audio.scheduled[0].samples))
         );
     }
+
     let mix = |scene: &LuaScene| {
         let mut samples = vec![[0.0; 2]; 192_000];
+
         scene.scene().audio.borrow().mix(0.0, 0, &mut samples);
+
         samples
     };
     let expected = mix(&scene);
     let steps = scene.simulation_steps();
+
     scene.reload(Sources::default()).unwrap();
+
     assert_eq!(scene.simulation_steps(), 0);
     assert!(steps > 0);
     assert_eq!(mix(&scene), expected);
+
     scene.update(0.1).unwrap();
     scene.update(3.5).unwrap();
+
     assert_eq!(mix(&scene), expected);
+
     let mut changed = fixture.to_vec();
+
     for sample in changed[44..].chunks_exact_mut(2) {
         let value = i16::from_le_bytes(sample.try_into().unwrap()) / 2;
+
         sample.copy_from_slice(&value.to_le_bytes());
     }
+
     std::fs::write(root.join("assets/hit.wav"), changed).unwrap();
+
     scene.reload(Sources::default()).unwrap();
+
     assert!(scene.simulation_steps() > 0);
     assert_ne!(mix(&scene), expected);
     assert_eq!(
@@ -1505,9 +1566,13 @@ end
             .sum::<usize>(),
         8
     );
+
     let valid = mix(&scene);
+
     std::fs::write(root.join("assets/hit.wav"), b"Invalid audio.").unwrap();
+
     assert!(scene.reload(Sources::default()).is_err());
     assert_eq!(mix(&scene), valid);
+
     std::fs::remove_dir_all(root).unwrap();
 }

@@ -128,7 +128,6 @@ impl State {
         let old_span = (self.view_end - self.view_start).max(f32::EPSILON);
         let min_span = (self.duration * 0.01).max(0.05).min(self.duration);
         let new_span = (old_span * (delta_y * 0.01).exp()).clamp(min_span, self.duration);
-
         let anchor = anchor.clamp(0.0, 1.0);
         let anchor_time = self.view_start + old_span * anchor;
         let new_start = anchor_time - new_span * anchor;
@@ -182,7 +181,6 @@ impl State {
             duration,
             grab_offset: mouse_duration - duration,
         });
-
         self.interaction = Interaction::Event;
     }
 
@@ -250,7 +248,6 @@ mod tests {
         let mut state = State::default();
 
         state.sync_duration(10.0);
-
         state.zoom(-100.0, 0.5);
 
         let (zoomed_start, zoomed_end) = state.view_range();
@@ -277,19 +274,27 @@ mod tests {
         let project_view = state.view_range();
 
         state.sync_focus(Some(1), 5.0);
+
         assert_eq!(state.view_range(), (0.0, 5.0));
+
         state.zoom(-100.0, 0.5);
 
         let scene_view = state.view_range();
 
         state.sync_focus(Some(2), 3.0);
+
         assert_eq!(state.view_range(), (0.0, 3.0));
+
         state.sync_focus(None, 25.0);
+
         assert_eq!(state.view_range(), project_view);
 
         state.sync_focus(Some(1), 8.0);
+
         assert_eq!(state.view_range(), scene_view);
+
         state.sync_focus(None, 1.0);
+
         assert_eq!(state.view_range(), (0.0, 1.0));
     }
 
@@ -298,8 +303,8 @@ mod tests {
         let mut state = State::default();
 
         state.begin_event_drag(2, 3, 4, 5.0, 7.0);
-
         state.drag_event(8.0);
+
         assert_eq!(state.event_drag().unwrap().duration, 6.0);
 
         state.drag_event(-2.0);
@@ -317,14 +322,17 @@ mod tests {
         let mut state = State::default();
 
         state.press_scene(2);
+
         assert_eq!(state.release_scene(Some(2), [0.0, 0.0]), Some(2));
 
         state.sync_focus(Some(2), 5.0);
         state.press_scene(2);
-        assert_eq!(state.release_scene(Some(2), [0.0, 0.0]), None);
-        state.sync_focus(None, 10.0);
 
+        assert_eq!(state.release_scene(Some(2), [0.0, 0.0]), None);
+
+        state.sync_focus(None, 10.0);
         state.press_scene(2);
+
         assert_eq!(state.release_scene(Some(2), [10.0, 0.0]), None);
 
         state.press_scene(2);

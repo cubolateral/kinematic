@@ -160,7 +160,6 @@ impl Default for Line2D {
                     let shape = world.get::<&Line2DShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
-
                     let Some(geometry) = line_geometry(&shape) else {
                         return;
                     };
@@ -170,11 +169,9 @@ impl Default for Line2D {
                 box_size: |world, entity| line_box(&world.get::<&Line2DShape>(entity).unwrap()),
                 visual_bounds: |world, entity| {
                     let shape = world.get::<&Line2DShape>(entity).unwrap();
-
                     let Some(geometry) = line_geometry(&shape) else {
                         return skia_safe::Rect::default();
                     };
-
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
 

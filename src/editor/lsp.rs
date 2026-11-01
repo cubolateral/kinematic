@@ -110,7 +110,6 @@ impl Client {
                 }
             }
         });
-
         std::thread::spawn(move || {
             let mut output = BufReader::new(output);
 
@@ -142,6 +141,7 @@ impl Client {
             .map_err(|e| e.to_string())?;
 
         std::fs::create_dir_all(&library).map_err(|e| e.to_string())?;
+
         std::fs::write(library.join("kinematic.lua"), definitions).map_err(|e| e.to_string())?;
 
         let settings = lua_settings(&root);
@@ -268,7 +268,6 @@ impl Client {
                 version,
             },
         );
-
         self.send(
             json!({"jsonrpc":"2.0", "id":id, "method":"completionItem/resolve", "params":item}),
         );
@@ -283,7 +282,6 @@ impl Client {
         replies: &mut Vec<Reply>,
     ) -> Result<String, String> {
         let id = self.request_format(path, text, version, options)?;
-
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
 
         while std::time::Instant::now() < deadline {
@@ -350,7 +348,6 @@ impl Client {
                 version,
             },
         );
-
         self.send(json!({"jsonrpc":"2.0", "id":id, "method":"textDocument/formatting",
             "params":{"textDocument":{"uri":file_uri(&self.root.root().join(path))}, "options":options}}));
 
@@ -372,7 +369,6 @@ impl Client {
 
             self.queued.clear();
             self.requests.clear();
-
             self.messages.push(
                 "LuaLS initialization timed out. Editing and execution remain available.".into(),
             );
@@ -393,7 +389,6 @@ impl Client {
                     .pointer("/result/capabilities/positionEncoding")
                     .and_then(Value::as_str)
                     == Some("utf-8");
-
                 self.ready = true;
 
                 let _ = self
@@ -456,7 +451,6 @@ impl Client {
                     let Some(uri) = value.pointer("/params/uri").and_then(Value::as_str) else {
                         continue;
                     };
-
                     let Some(path) = uri_path(uri).and_then(|path| {
                         path.strip_prefix(self.root.root()).ok().map(Path::to_owned)
                     }) else {
@@ -608,15 +602,18 @@ fn read_message(reader: &mut impl BufRead) -> Result<Option<Value>, String> {
 }
 fn server_path(path: &Path) -> String {
     let path = path.to_string_lossy();
+
     #[cfg(windows)]
     {
         if let Some(path) = path.strip_prefix(r"\\?\UNC\") {
             return format!("//{}", path.replace('\\', "/"));
         }
+
         path.strip_prefix(r"\\?\")
             .unwrap_or(&path)
             .replace('\\', "/")
     }
+
     #[cfg(not(windows))]
     path.into_owned()
 }
@@ -659,6 +656,7 @@ pub(crate) fn uri_path(uri: &str) -> Option<PathBuf> {
             i += 3;
         } else {
             result.push(bytes[i]);
+
             i += 1;
         }
     }
@@ -673,6 +671,7 @@ pub(crate) fn uri_path(uri: &str) -> Option<PathBuf> {
         path
     };
     let path = PathBuf::from(path);
+
     #[cfg(windows)]
     return Some(path.canonicalize().unwrap_or_else(|_| {
         path.parent()
@@ -680,6 +679,7 @@ pub(crate) fn uri_path(uri: &str) -> Option<PathBuf> {
             .and_then(|parent| path.file_name().map(|name| parent.join(name)))
             .unwrap_or(path)
     }));
+
     #[cfg(not(windows))]
     Some(path)
 }
@@ -846,20 +846,15 @@ mod tests {
             apply_text_edits("a😀ç", &json!([edit(1, 3, "b")]), false).unwrap(),
             "abç"
         );
-
         assert!(apply_text_edits("a😀ç", &json!([edit(2, 3, "b")]), false).is_err());
-
         assert!(
             apply_text_edits("abcd", &json!([edit(0, 2, "x"), edit(1, 3, "y")]), true).is_err()
         );
-
         assert!(apply_text_edits("abc", &json!([edit(0, 99, "x")]), true).is_err());
-
         assert_eq!(
             edit_offset("a\r\n", &json!({"line": 1, "character": 0}), true).unwrap(),
             3
         );
-
         assert_eq!(apply_text_edits("abc", &Value::Null, true).unwrap(), "abc");
     }
 
@@ -885,11 +880,14 @@ mod tests {
     fn windows_paths_are_compatible_with_luals() {
         let path = std::env::temp_dir().canonicalize().unwrap();
         let uri = file_uri(&path);
+
         assert!(uri.starts_with("file:///"));
         assert!(!uri.contains("%5C"));
         assert!(!server_path(&path).contains(r"\\?\"));
         assert_eq!(uri_path(&uri).unwrap(), path);
+
         let missing = path.join("kinematic-unsaved.lua");
+
         assert_eq!(uri_path(&file_uri(&missing)).unwrap(), missing);
         assert_eq!(
             server_path(Path::new(r"\\?\UNC\server\share")),
@@ -920,15 +918,12 @@ mod integration_tests {
         let root = std::env::temp_dir().join(format!("kinematic-luals-{}", std::process::id()));
 
         std::fs::create_dir_all(&root).unwrap();
-
         std::fs::write(
             root.join("helper.lua"),
             "local M = {}\nfunction M.answer() return 42 end\nreturn M\n",
         )
         .unwrap();
-
         std::fs::create_dir_all(root.join("kinematic")).unwrap();
-
         std::fs::write(root.join("kinematic/project.ron"), "(version:1,name:\"Test\",scenes:[\"intro.lua\"],resolution:(640,480),fps:60,margin:(0,0))").unwrap();
 
         let mut client = Client::start(
@@ -1045,8 +1040,8 @@ mod integration_tests {
         assert!(formatted.contains("\n  return value\n"), "{formatted:?}");
         assert!(!formatted.contains("  \n"), "{formatted:?}");
         assert!(formatted.ends_with('\n'), "{formatted:?}");
-        client.sync(Path::new("notes.txt"), "This is not Lua.", 1);
 
+        client.sync(Path::new("notes.txt"), "This is not Lua.", 1);
         client.request(
             "textDocument/completion",
             Path::new("settings.ron"),
@@ -1096,7 +1091,6 @@ mod integration_tests {
             items.iter().any(|item| item["code"] == "undefined-global"),
             "{diagnostics}"
         );
-
         assert!(
             items
                 .iter()
@@ -1104,7 +1098,6 @@ mod integration_tests {
                     && item["range"]["start"]["line"] == 9),
             "{diagnostics}"
         );
-
         assert!(
             !items.iter().any(|item| item["code"] == "undefined-field"
                 || (item["code"] == "param-type-mismatch" && item["range"]["start"]["line"] != 9)),
@@ -1115,6 +1108,7 @@ mod integration_tests {
         let component_text = "\nlocal motion = k.component { speed = {default = 40}, mode = {default = 'Idle', choices = {'Idle', 'Moving'}} }\nreturn { motion = motion }\n";
 
         std::fs::write(root.join(component_path), component_text).unwrap();
+
         client.sync(component_path, component_text, 1);
 
         let text = r#"local components = require('components')
@@ -1301,7 +1295,6 @@ end
         let definitions = crate::scripting::definitions();
 
         assert!(definitions.lines().nth(line).unwrap().contains("fade"));
-
         assert!(
             definitions
                 .lines()
@@ -1327,11 +1320,8 @@ end
             std::env::temp_dir().join(format!("kinematic-completion-{}", std::process::id()));
 
         std::fs::create_dir_all(&root).unwrap();
-
         std::fs::create_dir_all(root.join("kinematic")).unwrap();
-
         std::fs::write(root.join("kinematic/project.ron"), "(version:1,name:\"Test\",scenes:[\"intro.lua\"],resolution:(640,480),fps:60,margin:(0,0))").unwrap();
-
         std::fs::write(
             root.join("custom.lua"),
             r#"
@@ -1398,6 +1388,7 @@ return k.object {
                     for reply in client.poll() {
                         if reply.method == "textDocument/completion" && reply.version == version {
                             received = true;
+
                             completion = reply.value.clone();
 
                             labels = reply
@@ -1421,6 +1412,7 @@ return k.object {
                 if labels.iter().any(|label| label.starts_with(expected)) {
                     break;
                 }
+
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
 
@@ -1429,7 +1421,6 @@ return k.object {
                 "{expression} must suggest {expected}: {labels:?}; {:?}",
                 client.messages
             );
-
             assert!(
                 !labels
                     .iter()
@@ -1491,13 +1482,18 @@ return k.object {
     fn code_range_annotations_accept_optional_searches_and_nested_lists() {
         if !server_available() {
             eprintln!("LuaLS integration unavailable: executable not installed.");
+
             return;
         }
+
         let root =
             std::env::temp_dir().join(format!("kinematic-code-ranges-{}", std::process::id()));
+
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("api.lua"), crate::scripting::definitions()).unwrap();
+
         let path = root.join("ranges.lua");
+
         std::fs::write(
             &path,
             r#"---@type Kinematic.Code
@@ -1515,6 +1511,7 @@ code:select(42)
 "#,
         )
         .unwrap();
+
         let logs = root.join("logs");
         let meta = root.with_extension("meta");
         let result = Command::new(executable().unwrap())
@@ -1532,6 +1529,7 @@ code:select(42)
         let diagnostics = report[&file_uri(&path)]
             .as_array()
             .unwrap_or_else(|| panic!("{report}"));
+
         assert_eq!(diagnostics.len(), 1, "{report}");
         assert_eq!(diagnostics[0]["code"], "param-type-mismatch", "{report}");
         assert_eq!(diagnostics[0]["range"]["start"]["line"], 11, "{report}");
@@ -1541,7 +1539,9 @@ code:select(42)
                 .unwrap()
                 .contains("Kinematic.CodeRange")
         );
+
         std::fs::remove_dir_all(&root).unwrap();
+
         if meta.exists() {
             std::fs::remove_dir_all(meta).unwrap();
         }

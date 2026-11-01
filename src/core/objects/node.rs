@@ -331,9 +331,7 @@ fn attach_child_inner(
         world.contains(child),
         "Added object must belong to this scene."
     );
-
     assert_ne!(parent, child, "A container must not be added to itself.");
-
     assert!(
         !world
             .get::<&TreeNode>(child)
@@ -341,7 +339,6 @@ fn attach_child_inner(
             .is_root,
         "The scene root must not be added as a child."
     );
-
     assert!(
         !contains_entity(&world, child, parent),
         "Adding this object would create a container cycle."
@@ -556,7 +553,6 @@ pub(crate) fn layout_offset_2d(world: &hecs::World, entity: hecs::Entity) -> Vec
     else {
         return Vector2::ZERO;
     };
-
     let Ok(layout) = world.get::<&crate::core::objects::Layout2D>(parent) else {
         return Vector2::ZERO;
     };
@@ -569,11 +565,9 @@ pub(crate) fn layout_offset_2d(world: &hecs::World, entity: hecs::Entity) -> Vec
                 .is_ok_and(|node| node.is_activated)
         })
         .collect();
-
     let Some(index) = children.iter().position(|child| *child == entity) else {
         return Vector2::ZERO;
     };
-
     let sizes: Vec<_> = children
         .iter()
         .map(|child| crate::core::objects::object_box(world, *child))
@@ -607,7 +601,6 @@ pub(crate) fn layout_offset_3d(world: &hecs::World, entity: hecs::Entity) -> Vec
     else {
         return Vector3::ZERO;
     };
-
     let Ok(layout) = world.get::<&crate::core::objects::Layout3D>(parent) else {
         return Vector3::ZERO;
     };
@@ -620,11 +613,9 @@ pub(crate) fn layout_offset_3d(world: &hecs::World, entity: hecs::Entity) -> Vec
                 .is_ok_and(|node| node.is_activated)
         })
         .collect();
-
     let Some(index) = children.iter().position(|child| *child == entity) else {
         return Vector3::ZERO;
     };
-
     let sizes: Vec<_> = children
         .iter()
         .map(|child| crate::core::objects::object_box3d(world, *child))
@@ -754,6 +745,7 @@ mod tests {
 
         container.add(&first);
         container.add(&second);
+
         scene.world_2d().add(&container);
 
         assert_eq!(first.global_position(), vec2(-8.0, 0.0));
@@ -761,6 +753,7 @@ mod tests {
         assert_eq!(first.get(Transform2D::position_property()), vec2(3.0, 0.0));
 
         container.set_direction(LayoutDirection2D::HorizontalReverse);
+
         assert_eq!(first.global_position(), vec2(14.0, 0.0));
         assert_eq!(second.global_position(), vec2(-6.0, 0.0));
     }
@@ -777,6 +770,7 @@ mod tests {
 
         container.add(&first);
         container.add(&second);
+
         scene.world_3d().add(&container);
 
         assert_eq!(first.global_position(), vec3(0.0, 0.0, -2.5));
@@ -793,6 +787,7 @@ mod tests {
             .build(&mut scene);
 
         container.add(&child);
+
         scene.world_2d().add(&container);
 
         let image_info = skia_safe::ImageInfo::new(
@@ -823,6 +818,7 @@ mod tests {
         let child = rect().build(&mut scene);
 
         first.add(&second);
+
         second.add(&child);
 
         let cycle = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| second.add(&first)));
@@ -842,8 +838,10 @@ mod tests {
         let child = rect().build(&mut scene);
 
         container.add(&child);
+
         scene.world_2d().add(&container);
         scene.wait(2.0);
+
         container.remove();
 
         let world = scene.world();
@@ -852,7 +850,6 @@ mod tests {
             world.get::<&TreeNode>(container.entity()).unwrap().lifetime,
             [0.0, 2.0]
         );
-
         assert_eq!(
             world.get::<&TreeNode>(child.entity()).unwrap().lifetime,
             [0.0, 2.0]
@@ -912,6 +909,7 @@ mod tests {
 
         container.add(&first);
         container.add(&second);
+
         scene.world_2d().add(&container);
 
         let image_info = skia_safe::ImageInfo::new(
@@ -993,7 +991,9 @@ mod tests {
             .build(&mut scene);
 
         inner.add(&child);
+
         outer.add(&inner);
+
         scene.world_2d().add(&outer);
 
         let inner_position = vec2(-5.0, 28.0);
@@ -1011,7 +1011,6 @@ mod tests {
                 .global_position()
                 .abs_diff_eq(expected_position, 0.0001)
         );
-
         assert!((child.global_rotation() - (std::f32::consts::FRAC_PI_2 + 0.375)).abs() < 0.0001);
         assert!(child.global_scale().abs_diff_eq(vec2(5.0, 5.25), 0.0001));
         assert!((child.global_opacity() - 0.1).abs() < 0.0001);

@@ -12,7 +12,9 @@ pub struct TextActions {
 
 pub fn palette() -> dear_imgui_cte::Palette {
     use dear_imgui_cte::{Palette, PaletteColor};
+
     let mut palette = Palette::dark();
+
     for (slot, color) in [
         (PaletteColor::Text, 0xffd4d4d4),
         (PaletteColor::Identifier, 0xffd4d4d4),
@@ -27,6 +29,7 @@ pub fn palette() -> dear_imgui_cte::Palette {
     ] {
         palette.set(slot, color);
     }
+
     palette
 }
 
@@ -37,5 +40,6 @@ pub fn marker(
 ) -> dear_imgui_cte::CteResult<()> {
     let color = if error { 0xff5555f1 } else { 0xff55cde2 };
     let background = if error { 0x445555f1 } else { 0x4455cde2 };
+
     editor.add_marker(line, color, background, "", "")
 }

@@ -221,16 +221,22 @@ impl State {
                 let path = kinematic_ui::properties::row(ui, "Directory", false, || {
                     controls::text_submit(ui, "##BrowserPath", &mut self.path)
                 });
+
                 if path.changed {
                     self.navigate(&PathBuf::from(&self.path), true);
                 }
+
                 kinematic_ui::properties::row(ui, "Search", false, || {
                     let width = ui.calc_text_size("Hidden files")[0]
                         + ui.frame_height()
                         + ui.clone_style().item_spacing()[0] * 2.0;
+
                     ui.set_next_item_width((ui.content_region_avail_width() - width).max(1.0));
+
                     let changed = controls::text_input(ui, "##BrowserSearch", &mut self.search);
+
                     ui.same_line();
+
                     controls::checkbox(ui, "Hidden files", &mut self.hidden) || changed
                 });
 
@@ -311,20 +317,24 @@ impl State {
                 }
 
                 let target = self.selected.as_ref().unwrap_or(&self.cwd);
+
                 if self.project.as_ref().is_none_or(|(path, _)| path != target) {
                     let valid = self.mode.accepts(target);
 
                     self.project = Some((target.clone(), valid));
                 }
-                let valid = self.project.as_ref().is_some_and(|(_, valid)| *valid);
 
+                let valid = self.project.as_ref().is_some_and(|(_, valid)| *valid);
                 let enabled = self.loading.is_none() && self.error.is_none() && valid;
                 let action =
                     super::windows::actions(ui, &[("Select Folder", enabled), ("Cancel", true)]);
+
                 if action == Some(0) {
                     ui.close_current_popup();
+
                     return Some(Some(target.clone()));
                 }
+
                 if action == Some(1) || inputs::active(ui, InputAction::Cancel) {
                     ui.close_current_popup();
 
@@ -384,6 +394,7 @@ mod tests {
 
         fs::create_dir_all(&root).unwrap();
         fs::write(root.join("notes.txt"), "Keep.").unwrap();
+
         assert!(Mode::Directory.accepts(&root));
         assert!(!Mode::Project.accepts(&root));
         assert!(!Mode::Directory.accepts(&root.join("notes.txt")));
@@ -400,12 +411,15 @@ mod tests {
         let manifest = project.context.root().join(crate::scripting::MANIFEST);
 
         fs::write(&manifest, "Invalid").unwrap();
+
         assert!(!valid_project(project.context.root()));
 
         let mut invalid = project.manifest;
 
         invalid.fps = 0;
+
         fs::write(&manifest, ron::to_string(&invalid).unwrap()).unwrap();
+
         assert!(!valid_project(project.context.root()));
 
         fs::remove_dir_all(root).unwrap();
@@ -425,7 +439,6 @@ mod tests {
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
-
         context.io_mut().set_display_size([1280.0, 720.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
 
@@ -436,7 +449,6 @@ mod tests {
             name: "scene##.lua".into(),
             directory: false,
         }];
-
         state.loading = None;
 
         for _ in 0..2 {
@@ -456,6 +468,7 @@ mod tests {
             assert_eq!(ui.clone_style().child_border_size(), 0.0);
 
             drop(_font);
+
             context.end_frame();
         }
     }
@@ -465,7 +478,6 @@ mod tests {
         let root = std::env::temp_dir().join(format!("kinematic-browser-{}", std::process::id()));
 
         fs::create_dir_all(root.join("Folder [real]")).unwrap();
-
         fs::write(root.join("scene.lua"), "").unwrap();
 
         let entries = read_directory(&root, &AtomicBool::new(false)).unwrap();

@@ -55,8 +55,11 @@ fn prototype(input: &mut &[u8], output: &mut Vec<u8>, root: bool) -> Option<()> 
     let mut discarded = Vec::new();
 
     string(input, &mut discarded)?;
+
     count(input, &mut discarded)?;
+
     count(input, &mut discarded)?;
+
     output.extend_from_slice(take(input, 3)?);
 
     let instructions = count(input, output)?;

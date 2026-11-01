@@ -17,7 +17,6 @@ impl UniformScene {
         scene.world_2d().add(&object);
 
         object.set_uniform("u_progress", 0.25_f32);
-
         object
             .uniform_from("u_progress", 0.0_f32, 1.0_f32)
             .position_x(10.0)
@@ -43,6 +42,7 @@ fn public_uniform_api_uses_the_normal_timeline() {
     let object = builder.object.unwrap();
 
     scene.update(1.0);
+
     assert_eq!(object.get_uniform::<f32>("u_progress"), 0.5);
     assert_eq!(object.get_position().x, 5.0);
 }

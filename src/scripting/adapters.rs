@@ -115,7 +115,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             object: this.clone(),
         })
     });
-
     m.add_method("save", |_, this, ()| {
         let runtime = this.runtime()?;
 
@@ -125,7 +124,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
 
         engine(|| save_snapshot_destinations(&runtime.world.borrow(), this.entity, values))
     });
-
     m.add_method(
         "restore",
         |_, this, snapshot: Option<mlua::UserDataRef<SnapshotHandle>>| {
@@ -150,7 +148,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             Ok(AnimationDefinition::destinations(this.clone(), values))
         },
     );
-
     m.add_method("reset", |_, this, ()| {
         let runtime = this.runtime()?;
 
@@ -160,7 +157,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
 
         Ok(AnimationDefinition::destinations(this.clone(), values))
     });
-
     m.add_method("children", |_, this, ()| {
         let runtime = this.runtime()?;
         let children = children(&runtime.world.borrow().borrow(), this.entity);
@@ -173,7 +169,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             })
             .collect::<Vec<_>>())
     });
-
     m.add_method("parent", |_, this, ()| {
         let runtime = this.runtime()?;
         let entity = runtime
@@ -189,7 +184,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             entity,
         }))
     });
-
     m.add_method("move_to", |_, this, index: usize| {
         this.runtime()?.construction()?;
 
@@ -229,7 +223,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             TrackValue::Vector2(two_d(this)?.box_size())
         }))
     });
-
     m.add_method("bounds", |lua, this, ()| {
         let runtime = this.runtime()?;
         let world = runtime.world.borrow();
@@ -274,7 +267,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
 
         Ok(table)
     });
-
     m.add_method("global_matrix", |_, this, ()| {
         let runtime = this.runtime()?;
         let world = runtime.world.borrow();
@@ -307,7 +299,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
                 return Err(mlua::Error::runtime("Depth anchors require a 3D object."));
             }))
         });
-
         m.add_method(
             format!("{name}_to"),
             move |_, this, point: mlua::UserDataRef<ValueHandle>| {
@@ -355,7 +346,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
     m.add_method("global_opacity", |_, this, ()| {
         Ok(two_d(this)?.global_opacity())
     });
-
     m.add_method("type_name", |_, this, ()| {
         let runtime = this.runtime()?;
         let world = runtime.world.borrow();
@@ -371,7 +361,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             .object_name
             .to_owned())
     });
-
     m.add_method("get_child", |_, this, index: usize| {
         let runtime = this.runtime()?;
         let world = runtime.world.borrow();
@@ -388,7 +377,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             entity,
         })
     });
-
     m.add_method("ancestor", |_, this, type_name: String| {
         let runtime = this.runtime()?;
         let world = runtime.world.borrow();
@@ -421,7 +409,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
 
         Ok(None)
     });
-
     m.add_method("insert", |lua, this, args: mlua::MultiValue| {
         let runtime = this.runtime()?;
 
@@ -439,6 +426,7 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
 
         let (child, index): (mlua::UserDataRef<ObjectHandle>, usize) =
             mlua::FromLuaMulti::from_lua_multi(args, lua)?;
+
         child.runtime()?;
 
         if !Weak::ptr_eq(&this.runtime, &child.runtime) {
@@ -471,7 +459,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
 
         Ok(mlua::Value::Nil)
     });
-
     m.add_method("remove_children", |_, this, ()| {
         let runtime = this.runtime()?;
 
@@ -488,14 +475,12 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             }
         })
     });
-
     m.add_method(
         "get_pixel_color",
         |_, this, point: mlua::UserDataRef<ValueHandle>| {
             let TrackValue::Vector2(point) = point.0 else {
                 return Err(mlua::Error::runtime("Pixel coordinates must be vec2."));
             };
-
             let runtime = this.runtime()?;
             let world = runtime.world.borrow();
             let world = world.borrow();
@@ -516,7 +501,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             )))
         },
     );
-
     m.add_method("focus_camera", |lua, this, options: mlua::Table| {
         let runtime = this.runtime()?;
 
@@ -524,7 +508,6 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
 
         let position = options.get::<mlua::UserDataRef<ValueHandle>>("position")?;
         let target = options.get::<mlua::UserDataRef<ValueHandle>>("target")?;
-
         let (TrackValue::Vector3(position), TrackValue::Vector3(target)) = (&position.0, &target.0)
         else {
             return Err(mlua::Error::runtime(

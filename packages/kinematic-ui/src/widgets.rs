@@ -32,6 +32,7 @@ pub fn separator(ui: &dear_imgui_rs::Ui) {
 
 pub fn horizontal_border(ui: &dear_imgui_rs::Ui, y: f32) {
     let x = ui.window_pos()[0];
+
     ui.get_window_draw_list()
         .add_line(
             [x, y],
@@ -44,5 +45,6 @@ pub fn horizontal_border(ui: &dear_imgui_rs::Ui, y: f32) {
 
 pub fn error(ui: &dear_imgui_rs::Ui, text: impl AsRef<str>) {
     let _color = ui.push_style_color(dear_imgui_rs::StyleColor::Text, crate::theme::ERROR);
+
     ui.text_wrapped(text);
 }

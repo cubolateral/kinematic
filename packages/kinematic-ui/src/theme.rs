@@ -21,6 +21,7 @@ pub fn contrast_text(background: [f32; 4]) -> [f32; 4] {
     let luminance = linear(background[0]) * 0.2126
         + linear(background[1]) * 0.7152
         + linear(background[2]) * 0.0722;
+
     if luminance > 0.179 {
         [0.0, 0.0, 0.0, 1.0]
     } else {
@@ -58,7 +59,6 @@ impl Theme {
         let background = self.background;
         let contrast = self.contrast.clamp(0.0, 1.0);
         let foreground = contrast_text(background);
-
         let mix = |amount: f32| {
             [
                 background[0] + (foreground[0] - background[0]) * amount * contrast,
@@ -67,7 +67,6 @@ impl Theme {
                 background[3],
             ]
         };
-
         let surface = mix(0.08);
         let hover = mix(0.14);
         let active = mix(0.22);
@@ -138,7 +137,6 @@ impl Theme {
             (StyleColor::PlotHistogram, foreground),
             (StyleColor::PlotHistogramHovered, accent),
         ];
-
         let mut tokens = colors
             .into_iter()
             .map(|(style_color, color)| ui.push_style_color(style_color, color))
@@ -153,9 +151,11 @@ impl Theme {
 
 pub fn initialize(context: &mut Context, font: &'static [u8]) -> FontId {
     apply_geometry(context);
+
     context
         .style_mut()
         .set_color(StyleColor::ModalWindowDimBg, [0.0; 4]);
+
     load_font(context, font)
 }
 
@@ -181,17 +181,14 @@ fn apply_geometry(context: &mut Context) {
     style.set_scrollbar_rounding(CORNER_RADIUS);
     style.set_image_rounding(CORNER_RADIUS);
     style.set_drag_drop_target_rounding(CORNER_RADIUS);
-
     style.set_window_border_size(BORDER_WIDTH);
     style.set_child_border_size(0.0);
     style.set_popup_border_size(BORDER_WIDTH);
     style.set_frame_border_size(0.0);
-
     style.set_window_padding(WINDOW_PADDING);
     style.set_frame_padding(FRAME_PADDING);
     style.set_item_spacing(ITEM_SPACING);
     style.set_item_inner_spacing([6.0, 4.0]);
-
     style.set_scrollbar_size(12.0);
     style.set_grab_min_size(10.0);
 }
@@ -215,11 +212,14 @@ mod tests {
     fn the_shared_theme_has_consistent_borders_and_supports_dark_and_light_backgrounds() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = Context::create();
+
         apply_geometry(&mut context);
+
         assert_eq!(context.style().frame_border_size(), 0.0);
         assert_eq!(context.style().window_border_size(), BORDER_WIDTH);
         assert_eq!(context.style().popup_border_size(), BORDER_WIDTH);
         assert_eq!(context.style().frame_rounding(), CORNER_RADIUS);
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
@@ -228,23 +228,29 @@ mod tests {
             .build();
         context.io_mut().set_display_size([640.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         for background in [[0.0, 0.0, 0.0, 1.0], [1.0; 4]] {
             let theme = Theme {
                 background,
                 ..Theme::default()
             };
             let ui = context.frame();
+
             {
                 let _colors = theme.push(ui);
                 let border = ui.style_color(StyleColor::Border)[0];
+
                 assert_eq!(
                     ui.style_color(StyleColor::Border),
                     ui.style_color(StyleColor::Separator)
                 );
+
                 let frame = ui.style_color(StyleColor::FrameBg)[0];
+
                 assert!((border - background[0]).abs() <= 0.121);
                 assert_ne!(frame, background[0]);
             }
+
             context.end_frame();
         }
     }

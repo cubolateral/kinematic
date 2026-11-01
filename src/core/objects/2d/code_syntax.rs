@@ -101,6 +101,7 @@ pub(super) struct Token {
 
 static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(|| {
     let mut builder = two_face::syntax::extra_newlines().into_builder();
+
     builder.add(
         SyntaxDefinition::load_from_str(
             include_str!("../../../../assets/syntaxes/HLSL.sublime-syntax"),
@@ -114,6 +115,7 @@ static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(|| {
 
 static SCOPES: LazyLock<Vec<(Scope, TokenKind)>> = LazyLock::new(|| {
     use TokenKind::*;
+
     [
         ("comment", Comment),
         ("punctuation.definition.comment", Comment),
@@ -145,18 +147,24 @@ static CACHE: Mutex<VecDeque<CachedTokens>> = Mutex::new(VecDeque::new());
 
 pub(super) fn tokens(source: &str, language: CodeLanguage) -> Arc<Vec<Token>> {
     let mut cache = CACHE.lock().unwrap();
+
     if let Some(index) = cache
         .iter()
         .position(|(lang, text, _)| *lang == language && text == source)
     {
         let entry = cache.remove(index).unwrap();
         let tokens = entry.2.clone();
+
         cache.push_front(entry);
+
         return tokens;
     }
+
     drop(cache);
+
     let tokens = Arc::new(parse_tokens(source, language).unwrap_or_else(|| {
         let mut tokens = Vec::new();
+
         push_tokens(
             &mut tokens,
             source,
@@ -164,16 +172,20 @@ pub(super) fn tokens(source: &str, language: CodeLanguage) -> Arc<Vec<Token>> {
             TokenKind::Plain,
             false,
         );
+
         tokens
     }));
     let mut cache = CACHE.lock().unwrap();
+
     cache.push_front((language, source.to_owned(), tokens.clone()));
     cache.truncate(32);
+
     tokens
 }
 
 fn kind(stack: &ScopeStack) -> TokenKind {
     static PUNCTUATION: LazyLock<Scope> = LazyLock::new(|| Scope::new("punctuation").unwrap());
+
     for scope in stack.scopes.iter().rev() {
         if let Some((_, kind)) = SCOPES
             .iter()
@@ -197,6 +209,7 @@ fn kind(stack: &ScopeStack) -> TokenKind {
 fn parse_tokens(source: &str, language: CodeLanguage) -> Option<Vec<Token>> {
     if language == CodeLanguage::Plain {
         let mut tokens = Vec::new();
+
         push_tokens(
             &mut tokens,
             source,
@@ -204,8 +217,10 @@ fn parse_tokens(source: &str, language: CodeLanguage) -> Option<Vec<Token>> {
             TokenKind::Plain,
             false,
         );
+
         return Some(tokens);
     }
+
     let syntax = SYNTAXES
         .find_syntax_by_extension(language.extension())
         .expect("Every code language must have a bundled grammar.");
@@ -215,14 +230,20 @@ fn parse_tokens(source: &str, language: CodeLanguage) -> Option<Vec<Token>> {
     let mut offset = 0;
     let mut previous = TokenKind::Plain;
     let mut continuation = true;
+
     static LINE_COMMENT: LazyLock<Scope> = LazyLock::new(|| Scope::new("comment.line").unwrap());
+
     for line in LinesWithEndings::from(source) {
         let operations = parser.parse_line(line, &SYNTAXES).ok()?;
+
         for (text, operation) in ScopeRegionIterator::new(&operations, line) {
             stack.apply(operation).ok()?;
+
             let end = offset + text.len();
             let current = kind(&stack);
+
             continuation &= previous == current;
+
             let content_end = if current == TokenKind::Comment
                 && stack
                     .scopes
@@ -233,6 +254,7 @@ fn parse_tokens(source: &str, language: CodeLanguage) -> Option<Vec<Token>> {
             } else {
                 end
             };
+
             push_tokens(
                 &mut tokens,
                 source,
@@ -247,17 +269,21 @@ fn parse_tokens(source: &str, language: CodeLanguage) -> Option<Vec<Token>> {
                 TokenKind::Plain,
                 false,
             );
+
             if !text.is_empty() {
                 continuation = true;
             }
+
             previous = if content_end < end {
                 TokenKind::Plain
             } else {
                 current
             };
+
             offset = end;
         }
     }
+
     Some(tokens)
 }
 
@@ -271,6 +297,7 @@ fn push_tokens(
     if range.is_empty() {
         return;
     }
+
     let literal = matches!(
         kind,
         TokenKind::String | TokenKind::Comment | TokenKind::Number
@@ -278,14 +305,17 @@ fn push_tokens(
     let word = |ch: char| ch.is_alphanumeric() || ch == '_';
     let text = &source[range.clone()];
     let mut start = range.start;
+
     for (byte, ch) in text.char_indices().skip(1).chain([(text.len(), '\0')]) {
         let end = range.start + byte;
         let first = source[start..].chars().next().unwrap();
+
         if end < range.end
             && (literal || word(first) == word(ch) && first.is_whitespace() == ch.is_whitespace())
         {
             continue;
         }
+
         if let Some(previous) = tokens.last_mut()
             && previous.range.end == start
             && previous.kind == kind
@@ -299,6 +329,7 @@ fn push_tokens(
                 kind,
             });
         }
+
         start = end;
     }
 }
@@ -311,16 +342,21 @@ mod tests {
         let language = CodeLanguage::from_track_value(TrackValue::Enum(language)).unwrap();
         let spans = tokens(source, language);
         let mut end = 0;
+
         for token in spans.iter() {
             assert_eq!(token.range.start, end);
             assert!(
                 source.is_char_boundary(token.range.start)
                     && source.is_char_boundary(token.range.end)
             );
+
             end = token.range.end;
         }
+
         assert_eq!(end, source.len());
+
         let start = source.find(text).unwrap();
+
         for token in spans
             .iter()
             .filter(|token| token.range.start < start + text.len() && start < token.range.end)
@@ -332,6 +368,7 @@ mod tests {
     #[test]
     fn every_advertised_language_has_a_grammar_and_colors_real_syntax() {
         use TokenKind::*;
+
         let examples = [
             ("lua", "local value = 42", "local", Keyword),
             ("javascript", "const value = 42;", "const", Keyword),
@@ -457,10 +494,13 @@ mod tests {
                 Keyword,
             ),
         ];
+
         assert_eq!(examples.len() + 1, CodeLanguage::VARIANTS.len());
+
         for (language, source, text, kind) in examples {
             assert_kind(language, source, text, kind);
         }
+
         assert_kind("plain", "local é = 42 -- Note.\n\"Text\"", "local", Plain);
     }
 
@@ -468,6 +508,7 @@ mod tests {
     fn adjacent_literals_keep_separate_identities_and_line_comments_exclude_newlines() {
         let source = "/* One. *//* Two. */";
         let comments = tokens(source, CodeLanguage::C);
+
         assert_eq!(
             comments
                 .iter()
@@ -475,15 +516,19 @@ mod tests {
                 .count(),
             2
         );
+
         let source = "-- One.\n-- Two.";
         let comments = tokens(source, CodeLanguage::Lua);
+
         assert!(
             comments
                 .iter()
                 .filter(|token| token.kind == TokenKind::Comment)
                 .all(|token| !source[token.range.clone()].contains('\n'))
         );
+
         let strings = tokens("\"One.\"\"Two.\"", CodeLanguage::Python);
+
         assert!(
             strings
                 .iter()
@@ -494,6 +539,7 @@ mod tests {
     #[test]
     fn multiline_literals_interpolation_and_embedded_languages_keep_their_scopes() {
         use TokenKind::*;
+
         for (language, source, text, kind) in [
             (
                 "python",

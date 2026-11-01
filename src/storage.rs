@@ -147,6 +147,7 @@ mod tests {
             fs::read_to_string(root.join("kinematic/scenes/scenes/intro.ron")).unwrap(),
             events
         );
+
         let scenes = reopened
             .load_scenes(&crate::scripting::Sources::default())
             .unwrap();
@@ -168,12 +169,15 @@ mod tests {
         assert_eq!(read_current_project(&path).unwrap(), None);
 
         write_current_project(&path, Some(&root)).unwrap();
+
         assert_eq!(read_current_project(&path).unwrap(), Some(root.clone()));
 
         write_current_project(&path, None).unwrap();
+
         assert_eq!(read_current_project(&path).unwrap(), None);
 
         fs::write(&path, "Invalid").unwrap();
+
         assert!(read_current_project(&path).is_err());
 
         fs::remove_dir_all(root).unwrap();
@@ -186,13 +190,9 @@ mod tests {
         let destination = root.join("new");
 
         fs::create_dir_all(&source).unwrap();
-
         fs::create_dir_all(&destination).unwrap();
-
         fs::write(source.join("scene.ron"), "Original").unwrap();
-
         fs::write(source.join("conflict.ron"), "Old").unwrap();
-
         fs::write(destination.join("conflict.ron"), "New").unwrap();
 
         migrate(&source, &destination).unwrap();
@@ -201,14 +201,11 @@ mod tests {
             fs::read_to_string(destination.join("scene.ron")).unwrap(),
             "Original"
         );
-
         assert!(!source.join("scene.ron").exists());
-
         assert_eq!(
             fs::read_to_string(source.join("conflict.ron")).unwrap(),
             "Old"
         );
-
         assert_eq!(
             fs::read_to_string(destination.join("conflict.ron")).unwrap(),
             "New"
@@ -217,6 +214,7 @@ mod tests {
         fs::remove_file(destination.join("conflict.ron")).unwrap();
 
         migrate(&source, &destination).unwrap();
+
         assert!(!source.exists());
 
         fs::remove_dir_all(root).unwrap();

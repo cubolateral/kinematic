@@ -47,13 +47,16 @@ impl Overlay {
             self.elapsed = 0.0;
             self.visible = visible;
         }
+
         self.elapsed = (self.elapsed + dt).min(OVERLAY_DURATION);
+
         let progress = self.elapsed / OVERLAY_DURATION;
         let eased = if visible {
             1.0 - (1.0 - progress).powi(3)
         } else {
             progress.powi(3)
         };
+
         self.opacity = self.start + (f32::from(visible) - self.start) * eased;
     }
 }
@@ -66,22 +69,30 @@ impl Overlays {
         ui.with_bound_context(|| unsafe {
             let context = sys::igGetCurrentContext();
             let frame = ui.frame_count();
+
             if self.context != context as usize || frame < self.frame {
                 self.windows.clear();
+
                 self.context = context as usize;
             } else if frame == self.frame {
                 return;
             }
+
             self.frame = frame;
+
             for overlay in &mut self.windows {
                 overlay.seen = false;
             }
+
             let dt = ui.io().delta_time();
             let mut windows =
                 native_slice((*context).Windows.Data, (*context).Windows.Size).to_vec();
+
             windows.sort_by_key(|&window| (*window).BeginOrderWithinContext);
+
             for window in windows {
                 let root = (*window).RootWindow;
+
                 if !(*window).Active
                     || (*window).Hidden
                     || root.is_null()
@@ -89,10 +100,13 @@ impl Overlays {
                 {
                     continue;
                 }
+
                 let draw = (*window).DrawList;
+
                 if draw.is_null() || (*draw).VtxBuffer.Size == 0 {
                     continue;
                 }
+
                 let popup_closed = (*root).Flags & sys::ImGuiWindowFlags_Popup as i32 != 0
                     && !native_slice(
                         (*context).OpenPopupStack.Data,
@@ -100,13 +114,16 @@ impl Overlays {
                     )
                     .iter()
                     .any(|popup| popup.PopupId == (*root).PopupId);
+
                 if popup_closed || (*root).SkipItems {
                     // Closing windows can submit a background after their contents have disappeared.
                     for vertex in native_slice_mut((*draw).VtxBuffer.Data, (*draw).VtxBuffer.Size) {
                         vertex.col = fade(vertex.col, 0.0);
                     }
+
                     continue;
                 }
+
                 let id = (*root).ID;
                 let index = self
                     .windows
@@ -123,36 +140,51 @@ impl Overlays {
                             visible: true,
                             meshes: Vec::new(),
                         });
+
                         self.windows.len() - 1
                     });
                 let overlay = &mut self.windows[index];
+
                 if !overlay.seen {
                     overlay.meshes.clear();
+
                     overlay.viewport = (*root).ViewportId;
+
                     overlay.advance(true, dt);
+
                     overlay.seen = true;
                 }
+
                 let mesh = Mesh::capture(draw);
                 let vertices = native_slice_mut((*draw).VtxBuffer.Data, (*draw).VtxBuffer.Size);
+
                 for vertex in vertices {
                     vertex.col = fade(vertex.col, overlay.opacity);
                 }
+
                 overlay.meshes.push(mesh);
             }
+
             for overlay in &mut self.windows {
                 if overlay.seen {
                     continue;
                 }
+
                 overlay.advance(false, dt);
+
                 let viewport = sys::igFindViewportByID(overlay.viewport);
+
                 if viewport.is_null() || overlay.opacity == 0.0 {
                     continue;
                 }
+
                 let draw = sys::igGetForegroundDrawList_ViewportPtr(viewport);
+
                 for mesh in &overlay.meshes {
                     mesh.replay(context, draw, overlay.opacity);
                 }
             }
+
             self.windows
                 .retain(|overlay| overlay.seen || overlay.opacity > 0.0);
         });
@@ -162,6 +194,7 @@ impl Overlays {
 fn transient(flags: i32) -> bool {
     let popup = flags & (sys::ImGuiWindowFlags_Popup | sys::ImGuiWindowFlags_Tooltip) as i32 != 0;
     let flags = WindowFlags::from_bits_truncate(flags);
+
     popup
         || (flags.contains(WindowFlags::NO_DOCKING | WindowFlags::NO_SAVED_SETTINGS)
             && (!flags.contains(WindowFlags::NO_TITLE_BAR)
@@ -221,12 +254,14 @@ impl Mesh {
                         }) else {
                             continue;
                         };
+
                         sys::ImTextureRef {
                             _TexID: 0,
                             _TexData: texture,
                         }
                     }
                 };
+
                 sys::ImDrawList_PushClipRect(
                     draw,
                     sys::ImVec2 {
@@ -243,8 +278,10 @@ impl Mesh {
                 // Chunking keeps each reservation within ImGui's 16-bit index range.
                 for indices in self.indices[command.indices.clone()].chunks(60_000) {
                     sys::ImDrawList_PrimReserve(draw, indices.len() as i32, indices.len() as i32);
+
                     for &index in indices {
                         let vertex = &self.vertices[command.vertices + index as usize];
+
                         sys::ImDrawList_PrimVtx(
                             draw,
                             vertex.pos,
@@ -253,6 +290,7 @@ impl Mesh {
                         );
                     }
                 }
+
                 sys::ImDrawList_PopTexture(draw);
                 sys::ImDrawList_PopClipRect(draw);
             }
@@ -284,6 +322,7 @@ mod tests {
     fn closing_a_modal_keeps_its_last_complete_contents_during_the_fade() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context.io_mut().set_display_size([800.0, 600.0]);
         context.io_mut().set_delta_time(OVERLAY_DURATION / 4.0);
@@ -292,14 +331,19 @@ mod tests {
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
+
         let mut overlays = Overlays::default();
         let mut complete = 0;
+
         for frame in 0..10 {
             let ui = context.frame();
+
             if frame == 0 {
                 ui.open_popup("Closing modal");
             }
+
             let mut open = frame < 5;
+
             if let Some(_popup) =
                 crate::windows::sized_modal(ui, "Closing modal", &mut open, [480.0, 240.0])
             {
@@ -308,27 +352,38 @@ mod tests {
                     ui.text("Child contents must remain visible too.");
                 });
             }
+
             overlays.draw(ui);
+
             if frame == 4 {
                 complete = overlays.windows[0]
                     .meshes
                     .iter()
                     .map(|mesh| mesh.indices.len())
                     .sum();
+
                 assert!(complete > 100);
             }
+
             if (5..8).contains(&frame) {
                 assert!(!ui.is_popup_open("Closing modal"));
+
                 let overlay = &overlays.windows[0];
+
                 assert!(!overlay.visible);
                 assert!(overlay.opacity > 0.0);
+
                 let retained: usize = overlay.meshes.iter().map(|mesh| mesh.indices.len()).sum();
+
                 assert_eq!(retained, complete);
+
                 ui.with_bound_context(|| unsafe {
                     let draw = sys::igGetForegroundDrawList_ViewportPtr(sys::igGetMainViewport());
+
                     assert_eq!((*draw).IdxBuffer.Size as usize, complete);
                 });
             }
+
             drop(context.render_legacy());
         }
     }
@@ -336,8 +391,10 @@ mod tests {
     #[test]
     fn tooltips_popups_and_documentation_fade_with_children_and_release_input_on_close() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
+
         for modal in [false, true] {
             let mut context = dear_imgui_rs::Context::create();
+
             context.set_ini_filename(None::<&str>).unwrap();
             context.io_mut().set_display_size([800.0, 600.0]);
             context.io_mut().set_delta_time(OVERLAY_DURATION / 4.0);
@@ -346,31 +403,40 @@ mod tests {
                 .try_claim_legacy_renderer()
                 .unwrap()
                 .build();
+
             let mut overlays = Overlays::default();
+
             for frame in 0..12 {
                 let ui = context.frame();
                 let mut child_id = 0;
                 let mut child_color = 0;
+
                 ui.window("Editor").build(|| {
                     if frame == 0 {
                         ui.open_popup("Popup");
                     }
+
                     if frame < 6 {
                         ui.tooltip(|| ui.text("Tooltip content."));
+
                         let content = || {
                             ui.text("Popup content.");
+
                             if frame == 5 {
                                 ui.close_current_popup();
                             }
                         };
+
                         if modal {
                             let mut open = true;
+
                             if let Some(_popup) = crate::windows::modal(ui, "Popup", &mut open) {
                                 content();
                             }
                         } else if let Some(_popup) = ui.begin_popup("Popup") {
                             content();
                         }
+
                         crate::windows::anchored(
                             ui,
                             "Documentation",
@@ -380,10 +446,13 @@ mod tests {
                             || {
                                 ui.child_window("Code").build(ui, || {
                                     ui.text("Documentation content.");
+
                                     child_id = ui.with_bound_context(|| unsafe {
                                         (*sys::igGetCurrentWindow()).ID
                                     });
+
                                     child_color = 0xff44_88cc;
+
                                     ui.get_window_draw_list()
                                         .add_rect([310.0, 110.0], [320.0, 120.0], child_color)
                                         .filled(true)
@@ -392,11 +461,14 @@ mod tests {
                             },
                         );
                     }
+
                     if frame == 5 {
                         assert!(!ui.is_popup_open("Popup"));
                     }
                 });
+
                 overlays.draw(ui);
+
                 if frame == 2 {
                     assert!(overlays.windows.len() >= 3);
                     assert!(
@@ -405,15 +477,18 @@ mod tests {
                             .iter()
                             .all(|overlay| overlay.opacity > 0.0 && overlay.opacity < 1.0)
                     );
+
                     ui.with_bound_context(|| unsafe {
                         let window = sys::igFindWindowByID(child_id);
                         let draw = (*window).DrawList;
                         let vertices = native_slice((*draw).VtxBuffer.Data, (*draw).VtxBuffer.Size);
                         let color = vertices.last().unwrap().col;
+
                         assert_eq!(color & 0x00ff_ffff, child_color & 0x00ff_ffff);
                         assert!(color >> 24 > 0 && color >> 24 < 255);
                     });
                 }
+
                 if frame == 6 {
                     assert!(
                         overlays
@@ -421,16 +496,21 @@ mod tests {
                             .iter()
                             .all(|overlay| !overlay.visible && overlay.opacity > 0.0)
                     );
+
                     ui.with_bound_context(|| unsafe {
                         let draw =
                             sys::igGetForegroundDrawList_ViewportPtr(sys::igGetMainViewport());
+
                         assert!((*draw).VtxBuffer.Size > 0);
                     });
                 }
+
                 if frame >= 10 {
                     assert!(overlays.windows.is_empty());
                 }
+
                 let rendered = context.render_legacy();
+
                 for list in rendered.draw_data().draw_lists() {
                     for command in list.commands() {
                         if let dear_imgui_rs::render::DrawCmd::Elements { count, cmd_params } =

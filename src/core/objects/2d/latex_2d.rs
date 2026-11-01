@@ -112,24 +112,31 @@ fn draw_latex_object(
     let shape = world.get::<&Latex2DShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
-
     let fade = world.get::<&TextFade>(entity).unwrap();
 
     if let Some(text) = fade.incoming_text(&shape.text) {
         if fade.morph {
             use crate::core::objects::{latex_geometry::morph_geometry, text_morph::morph_parts};
+
             let size = shape.size.max(0.0);
+
             if size <= 0.0 {
                 return;
             }
+
             let from = morph_geometry(&shape.text, shape.thickness / size);
             let to = morph_geometry(text, shape.thickness / size);
+
             canvas.save();
             canvas.scale((size, size));
+
             let mut part_style = (*style).clone();
+
             part_style.stroke_width /= size;
+
             for part in morph_parts(&from, &to, fade.progress, fade.group) {
                 part_style.fill = part.color(style.fill);
+
                 draw_complete_styled_path(
                     &part.path(),
                     &part_style,
@@ -138,9 +145,12 @@ fn draw_latex_object(
                     canvas,
                 );
             }
+
             canvas.restore();
+
             return;
         }
+
         let incoming = Latex2DShape {
             text: text.to_owned(),
             ..(*shape).clone()
@@ -203,6 +213,7 @@ mod tests {
 
         surface.canvas().clear(skia_safe::colors::TRANSPARENT);
         surface.canvas().translate((320.0, 160.0));
+
         scene.draw(surface.canvas());
 
         let pixels = surface.peek_pixels().unwrap();
@@ -223,6 +234,7 @@ mod tests {
             .build(&mut scene);
 
         assert!(pixels(&scene).iter().all(|color| color.a() == 0));
+
         scene.world_2d().add(&formula);
 
         let bounds = formula.box_size();
@@ -233,7 +245,6 @@ mod tests {
                 .iter()
                 .any(|color| color.r() > 200 && color.b() < 20)
         );
-
         assert!(
             rendered
                 .iter()

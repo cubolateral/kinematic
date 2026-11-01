@@ -91,11 +91,10 @@ pub(super) fn draw(
                 if let Some(editor) = editor {
                     if !state.initialized {
                         let (name, settings) = editor.project_info();
-                        state.name = name.into();
 
+                        state.name = name.into();
                         state.resolution =
                             [settings.resolution.0 as i32, settings.resolution.1 as i32];
-
                         state.fps = settings.fps as i32;
                         state.margin = settings.margin;
                         state.initialized = true;
@@ -106,9 +105,11 @@ pub(super) fn draw(
                         let edit = super::properties::row(ui, "Name", false, || {
                             controls::text_submit(ui, "##Name", &mut state.name)
                         });
+
                         if edit.changed || edit.committed {
                             state.name_error = editor.rename_project(&state.name).err();
                         }
+
                         let defaults = ProjectSettings::default();
                         let resolution_changed = field(
                             ui,
@@ -121,7 +122,9 @@ pub(super) fn draw(
                             field(ui, "FPS", &mut state.fps, defaults.fps as i32, |value| {
                                 input_int(ui, &mut state.numeric, "##value", value)
                             });
+
                         super::properties::section(ui, "Margin");
+
                         let mut margin_changed = field(
                             ui,
                             "Unit",
@@ -135,6 +138,7 @@ pub(super) fn draw(
                                     &mut index,
                                     &["Percentage (%)", "Pixels (px)"],
                                 );
+
                                 if changed {
                                     *value = if index == 0 {
                                         MarginUnit::Percentage
@@ -142,9 +146,11 @@ pub(super) fn draw(
                                         MarginUnit::Pixels
                                     };
                                 }
+
                                 changed
                             },
                         );
+
                         for (label, value) in [
                             ("Left", &mut state.margin.left),
                             ("Right", &mut state.margin.right),
@@ -230,6 +236,7 @@ pub(super) fn draw(
                         defaults.font_size,
                         |value| input_float(ui, &mut state.numeric, value, 10.0, 28.0),
                     );
+
                     changed |= field(
                         ui,
                         "Line height",
@@ -237,6 +244,7 @@ pub(super) fn draw(
                         defaults.line_height,
                         |value| input_float(ui, &mut state.numeric, value, 1.0, 2.0),
                     );
+
                     changed |= field(
                         ui,
                         "Tab size",
@@ -244,6 +252,7 @@ pub(super) fn draw(
                         defaults.tab_size,
                         |value| input_usize(ui, &mut state.numeric, value, 1, 8),
                     );
+
                     changed |= field(
                         ui,
                         "Insert spaces",
@@ -251,6 +260,7 @@ pub(super) fn draw(
                         defaults.insert_spaces,
                         |value| controls::checkbox(ui, "##value", value),
                     );
+
                     changed |= field(
                         ui,
                         "Word wrap",
@@ -258,6 +268,7 @@ pub(super) fn draw(
                         defaults.word_wrap,
                         |value| controls::checkbox(ui, "##value", value),
                     );
+
                     changed |= field(
                         ui,
                         "Rulers",
@@ -265,7 +276,9 @@ pub(super) fn draw(
                         defaults.rulers,
                         |value| controls::text_input(ui, "##value", value),
                     );
+
                     widgets::muted(ui, "Comma-separated columns, e.g. 80,100.");
+
                     changed |= field(
                         ui,
                         "Line numbers",
@@ -273,6 +286,7 @@ pub(super) fn draw(
                         defaults.line_numbers,
                         |value| controls::checkbox(ui, "##value", value),
                     );
+
                     changed |= field(
                         ui,
                         "Automatic suggestions",
@@ -280,6 +294,7 @@ pub(super) fn draw(
                         defaults.autocomplete,
                         |value| controls::checkbox(ui, "##value", value),
                     );
+
                     changed |= field(
                         ui,
                         "Show whitespace",
@@ -287,6 +302,7 @@ pub(super) fn draw(
                         defaults.show_spaces,
                         |value| controls::checkbox(ui, "##value", value),
                     );
+
                     changed |= field(
                         ui,
                         "Hover delay (ms)",
@@ -296,6 +312,7 @@ pub(super) fn draw(
                     );
 
                     super::properties::section(ui, "Files");
+
                     changed |= field(
                         ui,
                         "Auto save",
@@ -303,6 +320,7 @@ pub(super) fn draw(
                         defaults.auto_save,
                         |value| controls::checkbox(ui, "##value", value),
                     );
+
                     changed |= field(
                         ui,
                         "Auto save delay (ms)",
@@ -312,6 +330,7 @@ pub(super) fn draw(
                     );
 
                     super::properties::section(ui, "Formatting");
+
                     changed |= field(
                         ui,
                         "Format on save",
@@ -319,7 +338,9 @@ pub(super) fn draw(
                         defaults.format_on_save,
                         |value| controls::checkbox(ui, "##value", value),
                     );
+
                     widgets::muted(ui, "Uses the tab size and indentation settings above.");
+
                     changed |= field(
                         ui,
                         "Trim trailing whitespace",
@@ -327,6 +348,7 @@ pub(super) fn draw(
                         defaults.trim_trailing_whitespace,
                         |value| controls::checkbox(ui, "##value", value),
                     );
+
                     changed |= field(
                         ui,
                         "Insert final newline",
@@ -350,6 +372,7 @@ pub(super) fn draw(
                         defaults.background,
                         |value| controls::color(ui, "##value", value),
                     );
+
                     changed |= field(
                         ui,
                         "Accent",
@@ -357,6 +380,7 @@ pub(super) fn draw(
                         defaults.accent,
                         |value| controls::color(ui, "##value", value),
                     );
+
                     changed |= field(
                         ui,
                         "Contrast",
@@ -364,6 +388,7 @@ pub(super) fn draw(
                         defaults.contrast,
                         |value| input_float(ui, &mut state.numeric, value, 0.25, 1.0),
                     );
+
                     changed |= field(
                         ui,
                         "UI Scale",
@@ -371,6 +396,7 @@ pub(super) fn draw(
                         defaults.scale,
                         |value| input_float(ui, &mut state.numeric, value, 0.75, 1.25),
                     );
+
                     changed |= appearance.editor.colors.draw(ui);
                 }
             }
@@ -393,8 +419,10 @@ fn draw_shortcuts(ui: &dear_imgui_rs::Ui) {
             .filter(|binding| binding.category == category)
             .map(|binding| (binding.name, binding.display.as_str()))
             .collect();
+
         (title, bindings)
     });
+
     kinematic_ui::lists::bindings(ui, groups);
 }
 
@@ -435,9 +463,11 @@ fn input_usize(
         Some(&min),
         Some(&max),
     );
+
     if changed {
         *value = number.clamp(min, max) as usize;
     }
+
     changed
 }
 
@@ -458,6 +488,7 @@ fn input_float(
         Some(&min),
         Some(&max),
     );
+
     if changed {
         *value = if value.is_finite() {
             value.clamp(min, max)
@@ -465,6 +496,7 @@ fn input_float(
             min
         };
     }
+
     changed
 }
 
@@ -476,6 +508,7 @@ mod tests {
     fn settings_open_independently_without_saving_window_geometry() {
         let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
@@ -484,18 +517,30 @@ mod tests {
             .build();
         context.io_mut().set_display_size([1280.0, 720.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         let mut state = State::default();
         let mut appearance = Appearance::default();
+
         state.editor_open = true;
+
         draw(&mut appearance, &mut state, None, context.frame());
+
         context.end_frame();
+
         assert!(state.editor_open && !state.project_open);
+
         state.project_open = true;
+
         draw(&mut appearance, &mut state, None, context.frame());
+
         context.end_frame();
+
         assert!(state.editor_open && state.project_open);
+
         let mut saved = String::new();
+
         context.save_ini_settings(&mut saved);
+
         assert!(!saved.contains("[Window][Editor settings]"));
         assert!(!saved.contains("[Window][Project settings]"));
     }

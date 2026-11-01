@@ -23,7 +23,9 @@ const ACTIONS: [Action; 14] = [
 
 fn apply(editor: &mut Editor, action: Action) {
     use std::f32::consts::{FRAC_PI_2, PI};
+
     let step = 15.0_f32.to_radians();
+
     match action {
         Action::FocusSelection => editor.frame_editor_3d(true),
         Action::FrameAll => editor.frame_editor_3d(false),
@@ -57,6 +59,7 @@ pub(super) fn control(
     let middle = dear_imgui_rs::MouseButton::Middle;
     let looking = active && ui.is_mouse_down(right);
     let dragging = active && ui.is_mouse_down(middle);
+
     if looking {
         let axis = |positive, negative| {
             f32::from(inputs::active(ui, positive)) - f32::from(inputs::active(ui, negative))
@@ -66,9 +69,11 @@ pub(super) fn control(
         } else {
             editor.editor_mouse_delta(ui.io().mouse_delta())
         };
+
         if ui.io().mouse_wheel() != 0.0 {
             editor.change_editor_3d_speed(ui.io().mouse_wheel());
         }
+
         editor.control_editor_3d(
             delta,
             [
@@ -86,6 +91,7 @@ pub(super) fn control(
         } else {
             editor.editor_mouse_delta(ui.io().mouse_delta())
         };
+
         if delta != [0.0; 2] {
             if ui.io().key_shift() {
                 editor.pan_editor_3d(delta, size[1]);
@@ -96,8 +102,10 @@ pub(super) fn control(
     } else if hovered && ui.io().mouse_wheel() != 0.0 {
         editor.zoom_editor_3d(ui.io().mouse_wheel());
     }
+
     if looking || dragging {
         image::wrap_pointer(ui, editor, min, [min[0] + size[0], min[1] + size[1]]);
+
         ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::ResizeAll));
     } else if keyboard && hovered {
         for action in ACTIONS {
@@ -112,6 +120,7 @@ pub(super) fn tools(editor: &mut Editor, ui: &dear_imgui_rs::Ui, min: [f32; 2]) 
     let map = inputs::map();
     let entries = ACTIONS.map(|action| {
         let binding = map.binding(action);
+
         (binding.name, binding.display.as_str())
     });
     let tools = kinematic_ui::canvas::tools(
@@ -123,18 +132,23 @@ pub(super) fn tools(editor: &mut Editor, ui: &dear_imgui_rs::Ui, min: [f32; 2]) 
         super::camera_shortcuts(),
         &entries,
     );
+
     if tools.camera {
         editor.toggle_editor_3d_camera_view();
     }
+
     if tools.reset {
         editor.reset_editor_3d_camera_transform();
     }
+
     if tools.margin {
         editor.toggle_margin();
     }
+
     if let Some(axis) = tools.axis {
         editor.toggle_editor_3d_axis(axis);
     }
+
     if let Some(index) = tools.option {
         apply(editor, ACTIONS[index]);
     }
@@ -151,9 +165,11 @@ pub(super) fn gizmo(
     let axes =
         [glam::Vec3::X, glam::Vec3::Y, glam::Vec3::Z].map(|axis| (inverse * axis).to_array());
     let response = kinematic_ui::canvas::orientation::draw(ui, min, size, axes, state);
+
     if let Some(delta) = response.orbit {
         editor.orbit_editor_3d(-delta[0] * 0.01, -delta[1] * 0.01);
     }
+
     if let Some((axis, positive)) = response.axis {
         apply(
             editor,

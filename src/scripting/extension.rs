@@ -80,16 +80,16 @@ impl SimulationState for ScriptState {
             let callbacks = callbacks
                 .get(&self.entity)
                 .ok_or_else(|| mlua::Error::runtime("Simulation callback is unavailable."))?;
-
             let Some(update) = &callbacks.update else {
                 return Ok(());
             };
-
             let lua = &runtime.lua;
             let frame = lua.create_table_with_capacity(0, 3)?;
 
             frame.set("time", context.time)?;
+
             frame.set("index", context.frame)?;
+
             frame.set("dt", context.dt)?;
 
             let inputs =
@@ -118,6 +118,7 @@ impl SimulationState for ScriptState {
             for (name, sound) in &callbacks.sounds {
                 inputs.set(name.as_str(), sound.clone())?;
             }
+
             let state = self.data.value(lua)?;
             let next = super::audio::step(
                 &runtime,
@@ -127,6 +128,7 @@ impl SimulationState for ScriptState {
                 context.time,
                 || {
                     let returned = update.call::<Value>((state.clone(), frame, inputs))?;
+
                     Snapshot::read(if returned.is_nil() { state } else { returned })
                 },
             )?;
@@ -418,31 +420,26 @@ pub(super) fn configure(
         let mut draw = world.get::<&mut Draw2D>(entity).unwrap();
 
         draw.on_draw = super::drawing::draw_2d;
-
         draw.box_size = |w, e| {
             let b = super::drawing::bounds_2d(w, e);
 
             glam::vec2(b.width(), b.height())
         };
-
         draw.logical_bounds = Some(super::drawing::bounds_2d);
         draw.visual_bounds = super::drawing::bounds_2d;
     } else {
         let mut draw = world.get::<&mut Draw3D>(entity).unwrap();
 
         draw.on_draw = super::drawing::draw_3d;
-
         draw.box_size = |w, e| {
             let (min, max) = super::drawing::bounds_3d(w, e);
 
             max - min
         };
-
         draw.logical_bounds = Some(super::drawing::bounds_3d);
     }
 
     drop(world);
-
     drop(world_handle);
 
     let inputs = if let Some(inputs) = definition.table.get::<Option<Table>>("inputs")? {
@@ -485,9 +482,12 @@ pub(super) fn configure_inputs(handle: &ObjectHandle, inputs: Table) -> Result<(
                         "Sounds must belong to the same scene.",
                     ));
                 }
+
                 sounds.push((name, sound.clone()));
+
                 continue;
             }
+
             if let Ok(object) = value.borrow::<ObjectHandle>() {
                 object.runtime()?;
 
@@ -530,6 +530,7 @@ pub(super) fn configure_inputs(handle: &ObjectHandle, inputs: Table) -> Result<(
     }
 
     properties.sort_by(|a, b| a.0.cmp(&b.0));
+
     states.sort_by(|a, b| a.0.cmp(&b.0));
 
     let mut callbacks = runtime.callbacks.borrow_mut();
@@ -547,7 +548,9 @@ pub(super) fn configure_inputs(handle: &ObjectHandle, inputs: Table) -> Result<(
 
     callback.inputs = properties;
     callback.states = states;
+
     sounds.sort_by(|a, b| a.0.cmp(&b.0));
+
     callback.sounds = sounds;
 
     Ok(())
@@ -577,6 +580,7 @@ pub(super) fn validate_dependencies(runtime: &Runtime) -> Result<()> {
         }
 
         visiting.pop();
+
         done.push(entity);
 
         Ok(())
@@ -622,6 +626,7 @@ pub(super) fn prepare_environment(runtime: &Rc<Runtime>) -> Result<()> {
     let values = lua.create_table()?;
 
     value::register(lua, &values)?;
+
     super::drawing::register(lua, &values)?;
 
     values.set(
@@ -729,8 +734,11 @@ pub(super) fn prepare_environment(runtime: &Rc<Runtime>) -> Result<()> {
     )?;
 
     meta.set("kinematic.readonly", true)?;
+
     meta.set("__metatable", false)?;
+
     proxy.set_metatable(Some(meta))?;
+
     lua.set_named_registry_value("kinematic.update_environment", proxy)?;
 
     Ok(())
@@ -758,6 +766,7 @@ pub(super) fn readonly(lua: &Lua, table: Table) -> Result<Table> {
     let length = table.raw_len();
 
     meta.set("__len", lua.create_function(move |_, _: Value| Ok(length))?)?;
+
     meta.set("__index", table)?;
 
     meta.set(
@@ -770,7 +779,9 @@ pub(super) fn readonly(lua: &Lua, table: Table) -> Result<Table> {
     )?;
 
     meta.set("kinematic.readonly", true)?;
+
     meta.set("__metatable", false)?;
+
     proxy.set_metatable(Some(meta))?;
 
     Ok(proxy)

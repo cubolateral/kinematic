@@ -115,6 +115,7 @@ impl Canvases {
         self.render_targets(scene, &order, &sources, skia)?;
 
         scene.check_runtime()?;
+
         self.images.clear();
 
         for key in &self.used_geometries {
@@ -327,6 +328,7 @@ impl Canvases {
                 }
 
                 self.geometry_uploads += render.geometry_uploads;
+
                 self.geometry_upload_ms += render.geometry_upload_ms;
 
                 Ok::<_, std::io::Error>(())
@@ -497,6 +499,7 @@ impl Canvases {
                             }
 
                             self.geometry_uploads += render.geometry_uploads;
+
                             self.geometry_upload_ms += render.geometry_upload_ms;
 
                             Ok::<_, std::io::Error>(())
@@ -509,6 +512,7 @@ impl Canvases {
                 .get_mut(&key)
                 .unwrap()
                 .set_filter(settings.filter);
+
             self.apply_canvas_shader(scene.time(), &world, key, skia)?;
 
             if self.shader_outputs.contains(&key) {
@@ -549,15 +553,12 @@ impl Canvases {
             let Ok(data) = world.get::<&ImageShaderData>(entity) else {
                 continue;
             };
-
             let Ok(draw) = world.get::<&Draw2D>(entity) else {
                 continue;
             };
-
             let Some(bounds) = image_shader_bounds(world, entity, data.padding) else {
                 continue;
             };
-
             let scale = global_transform(world, entity).scale.abs();
             let camera = if object_follows_camera(world, canvas, entity) {
                 camera_zoom
@@ -602,15 +603,14 @@ impl Canvases {
                 let saved = surface.save();
 
                 surface.clear(skia_safe::colors::TRANSPARENT);
-
                 surface.scale((
                     size.0 as f32 / bounds.width(),
                     size.1 as f32 / bounds.height(),
                 ));
-
                 surface.translate((-bounds.left, -bounds.top));
 
                 draw_image_shader_source(world, entity, surface, &self.images, &self.shader_images);
+
                 surface.restore_to_count(saved);
             });
 
@@ -891,13 +891,16 @@ mod tests {
         let mut usage = HashMap::from([(1, 1), (2, 2), (3, 3)]);
 
         evict_oldest(&mut cache, &mut usage, 3, false);
+
         assert_eq!(cache.len(), 3);
 
         evict_oldest(&mut cache, &mut usage, 3, true);
+
         assert!(!cache.contains_key(&1));
         assert!(cache.contains_key(&3));
 
         evict_oldest(&mut cache, &mut usage, 604, false);
+
         assert_eq!(cache.len(), 1);
         assert!(cache.contains_key(&3));
     }
@@ -930,6 +933,7 @@ fn evict_oldest<K: Copy + Eq + std::hash::Hash, V>(
         .map(|(key, _)| *key)
     {
         cache.remove(&key);
+
         usage.remove(&key);
     }
 }

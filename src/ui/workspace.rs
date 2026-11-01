@@ -23,7 +23,6 @@ pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
             tabs([scene_tree::WINDOW_NAME, inspector::WINDOW_NAME]),
         ),
     );
-
     let viewport = ui.main_viewport();
     let size = viewport.work_size();
     let size = [
@@ -34,6 +33,7 @@ pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
     let _padding = ui.push_style_var(StyleVar::WindowPadding([0.0; 2]));
     let _rounding = ui.push_style_var(StyleVar::WindowRounding(0.0));
     let _border = ui.push_style_var(StyleVar::WindowBorderSize(0.0));
+
     ui.window("Workspace host")
         .position(viewport.work_pos(), Condition::Always)
         .size(size, Condition::Always)
@@ -65,6 +65,7 @@ mod tests {
     fn resizing_keeps_the_workspace_above_the_status_bar() {
         let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .io_mut()
@@ -78,14 +79,19 @@ mod tests {
 
         for size in [[1280.0, 720.0], [640.0, 360.0]] {
             context.io_mut().set_display_size(size);
+
             for _ in 0..3 {
                 let ui = context.frame();
                 let _menu = ui.begin_main_menu_bar();
+
                 drop(_menu);
+
                 super::draw(ui);
+
                 kinematic_ui::status_bar::draw(ui, env!("CARGO_PKG_VERSION"), true);
 
                 let mut workspace_bottom = 0.0;
+
                 ui.window("Workspace host").build(|| {
                     workspace_bottom = ui.window_pos()[1] + ui.window_size()[1];
                 });
@@ -94,6 +100,7 @@ mod tests {
                     assert_eq!(ui.window_pos()[1] + ui.window_size()[1], size[1]);
                     assert_eq!(ui.window_size()[0], size[0]);
                 });
+
                 context.end_frame();
             }
         }

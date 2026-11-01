@@ -108,6 +108,7 @@ fn draw_pyramid(
     let shape = world.get::<&PyramidShape>(entity).unwrap();
 
     validate_sides(shape.sides)?;
+
     validate_dimensions(shape.size)?;
 
     let transformation = global_matrix3d(world, entity) * glam::Mat4::from_scale(shape.size);
@@ -146,7 +147,6 @@ mod tests {
         assert_eq!(pyramid.box_size(), vec3(2.0, 3.0, 4.0));
         assert_eq!(pyramid.get(PyramidShape::sides_property()), 3);
         assert!(pyramid.get(PyramidShape::cap_property()));
-
         assert_eq!(
             scene
                 .world()
@@ -155,7 +155,6 @@ mod tests {
                 .sides,
             3
         );
-
         assert_eq!(pyramid_mesh(3, true).triangle_count(), 4);
     }
 

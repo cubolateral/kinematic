@@ -30,6 +30,7 @@ impl CodeRanges {
                         .iter()
                         .any(|[start, end]| *start <= position && position < *end)
                 };
+
                 if covered { *weight } else { 0.0 }
             })
             .sum::<f32>()
@@ -39,12 +40,15 @@ impl CodeRanges {
     pub fn lerp(&self, to: &Self, progress: f32) -> Self {
         let progress = progress.clamp(0.0, 1.0);
         let mut layers: Vec<(Vec<CodeRange>, f32)> = Vec::new();
+
         for (source, factor) in [(self, 1.0 - progress), (to, progress)] {
             for (ranges, weight) in &source.0 {
                 let weight = weight * factor;
+
                 if weight <= 0.0 {
                     continue;
                 }
+
                 if let Some((_, existing)) = layers.iter_mut().find(|(r, _)| r == ranges) {
                     *existing += weight;
                 } else {
@@ -52,6 +56,7 @@ impl CodeRanges {
                 }
             }
         }
+
         Self(layers)
     }
 }
@@ -61,7 +66,9 @@ pub fn code_offset(code: &str, [line, column]: CodePosition) -> Result<usize, St
     if line == 0 || column == 0 {
         return Err("Code positions start at line 1, column 1.".into());
     }
+
     let mut offset = 0;
+
     for (index, text) in code.split('\n').enumerate() {
         if index + 1 == line {
             return text
@@ -72,8 +79,10 @@ pub fn code_offset(code: &str, [line, column]: CodePosition) -> Result<usize, St
                 .map(|byte| offset + byte)
                 .ok_or_else(|| "Code column is out of bounds.".into());
         }
+
         offset += text.len() + 1;
     }
+
     Err("Code line is out of bounds.".into())
 }
 
@@ -83,14 +92,17 @@ pub fn code_interval(
 ) -> Result<std::ops::Range<usize>, String> {
     let start = code_offset(code, start)?;
     let end = code_offset(code, end)?;
+
     if start > end {
         return Err("Code range end precedes its start.".into());
     }
+
     Ok(start..end)
 }
 
 pub fn code_position(code: &str, offset: usize) -> CodePosition {
     let prefix = &code[..offset];
+
     [
         prefix.bytes().filter(|b| *b == b'\n').count() + 1,
         prefix.rsplit('\n').next().unwrap().chars().count() + 1,
@@ -103,8 +115,10 @@ impl std::fmt::Display for CodeRanges {
             if index > 0 {
                 f.write_str("; ")?;
             }
+
             write!(f, "{ranges:?} ({weight:.2})")?;
         }
+
         Ok(())
     }
 }
@@ -120,8 +134,10 @@ mod tests {
         assert!(code_offset("x", [0, 1]).is_err());
         assert!(code_offset("x", [1, 3]).is_err());
         assert!(code_interval("abc", [[1, 3], [1, 2]]).is_err());
+
         let ranges = CodeRanges::new(vec![[[1, 1], [1, 3]], [[1, 2], [1, 4]]]);
         let half = ranges.lerp(&CodeRanges::default(), 0.5);
+
         assert_eq!(half.coverage([1, 2], false), 0.5);
         assert_eq!(half.coverage([2, 1], true), 0.5);
         assert_eq!(half.coverage([1, 2], true), 1.0);

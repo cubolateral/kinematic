@@ -135,14 +135,18 @@ impl Tab {
         self.assistance.borrow_mut().completion_position = None;
 
         let mut palette = settings.colors.palette();
+
         self.documentation.set_palette(&palette)?;
+
         self.popup_content.set_palette(&palette)?;
         // Parent backgrounds keep selection overlays behind the native text.
         palette.set(PaletteColor::Background, 0);
         palette.set(PaletteColor::Selection, 0);
+
         self.editor.set_palette(&palette)?;
 
         self.editor.set_tab_size(settings.tab_size.clamp(1, 8))?;
+
         self.editor
             .set_line_spacing(if settings.line_height.is_finite() {
                 settings.line_height.clamp(1.0, 2.0)
@@ -152,7 +156,6 @@ impl Tab {
 
         self.editor
             .set_insert_spaces_on_tabs(settings.insert_spaces);
-
         self.editor.set_word_wrap_enabled(settings.word_wrap);
         self.editor.set_show_line_numbers(settings.line_numbers);
         self.editor.set_show_minimap(false);
@@ -304,6 +307,7 @@ impl Tab {
         {
             if mouse_on_source {
                 self.editor.focus();
+
                 focused = true;
             } else if focused
                 && !mouse_on_assistance
@@ -312,10 +316,12 @@ impl Tab {
                 // ImGui exposes the hovered window only through its internal API.
                 unsafe {
                     let hovered = (*dear_imgui_rs::sys::igGetCurrentContext()).HoveredWindow;
+
                     if !hovered.is_null() {
                         dear_imgui_rs::sys::igSetWindowFocus_Str((*hovered).Name);
                     }
                 }
+
                 focused = false;
             }
         }
@@ -403,6 +409,7 @@ impl Tab {
         self.editor.set_read_only(completion_key.is_some());
 
         let palette = settings.colors.palette();
+
         ui.get_window_draw_list()
             .add_rect(
                 origin,
@@ -418,18 +425,22 @@ impl Tab {
             .build();
 
         self.editor.set_read_only(false);
+
         let mut editor_hovered = false;
         let mut mouse_word = None;
 
         if rendered.is_ok() {
             let next = ui.cursor_screen_pos();
             let mut layout = None;
+
             ui.set_cursor_screen_pos(origin);
             ui.child_window("Source")
                 .size([available[0], height])
                 .build(ui, || {
                     self.draw_bookmarks(ui);
+
                     layout = text::Layout::capture(&self.editor, ui);
+
                     editor_hovered = layout.as_ref().is_some_and(|layout| {
                         ui.is_window_hovered_with_flags(
                             dear_imgui_rs::WindowHoveredFlags::ALLOW_WHEN_BLOCKED_BY_ACTIVE_ITEM,
@@ -445,6 +456,7 @@ impl Tab {
             if editor_hovered || self.selecting {
                 ui.set_mouse_cursor(Some(dear_imgui_rs::MouseCursor::TextInput));
             }
+
             if editor_hovered {
                 mouse_word = text::word_at_mouse(&self.editor, ui.io().mouse_pos());
             }
@@ -510,7 +522,9 @@ impl Tab {
                             let mut assistance = self.assistance.borrow_mut();
 
                             self.documentation_popup = None;
+
                             assistance.hover_position = None;
+
                             self.hover_candidate = None;
                             self.documentation_has_content = false;
                         }
@@ -581,12 +595,15 @@ impl Tab {
                     } else if ui.time() - popup.last_hover > 0.25 {
                         if popup.focused && editor_hovered {
                             ui.set_window_focus(Some(WINDOW_NAME));
+
                             self.editor.focus();
                         }
 
                         self.documentation_popup = None;
                         self.hover_candidate = None;
+
                         assistance.hover_position = None;
+
                         self.documentation_has_content = false;
                     }
                 }
@@ -594,7 +611,9 @@ impl Tab {
                 if self.documentation_popup.is_none() {
                     if self.hover_candidate.map(|(position, _)| position) != hovered {
                         self.hover_candidate = hovered.map(|position| (position, ui.time()));
+
                         assistance.hover_position = None;
+
                         self.documentation_has_content = false;
                     }
 
@@ -723,7 +742,6 @@ impl Tab {
                             popup.focused = ui.is_window_focused_with_flags(
                                 dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS,
                             );
-
                             popup.size[1] = (self.documentation_view.height + 24.0)
                                 .min(420.0)
                                 .min(ui.window_viewport().work_size()[1])
@@ -775,6 +793,7 @@ impl Tab {
                         self.assistance.borrow_mut().completion_position = None;
 
                         ui.set_window_focus(Some(WINDOW_NAME));
+
                         self.editor.focus();
                     }
                 }
@@ -846,29 +865,38 @@ impl ProjectForm {
         if self.manual_path {
             return;
         }
+
         let Some(directory) = self.directory.as_ref().filter(|path| path.is_dir()) else {
             self.path.clear();
+
             return;
         };
         let characters: Vec<_> = self.name.chars().collect();
         let mut folder = String::new();
+
         for (index, character) in characters.iter().copied().enumerate() {
             if !character.is_alphanumeric() {
                 if !folder.is_empty() && !folder.ends_with('_') {
                     folder.push('_');
                 }
+
                 continue;
             }
+
             if character.is_uppercase() && !folder.is_empty() && !folder.ends_with('_') {
                 let previous = characters[index - 1];
                 let next_is_lowercase = characters.get(index + 1).is_some_and(|c| c.is_lowercase());
+
                 if previous.is_lowercase() || previous.is_numeric() || next_is_lowercase {
                     folder.push('_');
                 }
             }
+
             folder.extend(character.to_lowercase());
         }
+
         let folder = folder.trim_end_matches('_');
+
         self.path = if folder.is_empty() {
             String::new()
         } else {
@@ -911,6 +939,7 @@ impl State {
     pub(super) fn set_project_directory(&mut self, directory: Option<PathBuf>) {
         self.project_form.directory = directory.filter(|path| path.is_dir());
         self.project_form.manual_path = false;
+
         self.project_form.update_path();
     }
 
@@ -931,6 +960,7 @@ impl State {
         if let Some(text) = self.files.copy_path.take() {
             context.set_clipboard_text(text);
         }
+
         if let Some(text) = self.diagnostics.take_copy() {
             context.set_clipboard_text(text);
         }
@@ -953,6 +983,7 @@ impl State {
                     editor.set_language(lua.then_some(Language::Lua));
                     editor.set_show_line_numbers(true);
                     editor.set_auto_indent_enabled(true);
+
                     editor.set_text(&doc.text)?;
 
                     let mut palette = kinematic_ui::code::palette();
@@ -971,7 +1002,9 @@ impl State {
 
                     editor.set_transaction_callback(move |change| {
                         let mut assistance = changes.borrow_mut();
+
                         assistance.changed = true;
+
                         context_menu::move_bookmarks(&mut assistance.bookmarks, change);
                     })?;
 
@@ -980,6 +1013,7 @@ impl State {
 
                     // Draw selection backgrounds in the parent, behind CTE's text.
                     palette.set(PaletteColor::Selection, 0);
+
                     editor.set_palette(&palette)?;
 
                     self.tabs.insert(
@@ -1070,31 +1104,41 @@ impl State {
     pub fn projects(&mut self, mut editor: Option<&mut Editor>, ui: &dear_imgui_rs::Ui) {
         if self.projects_open && self.browser.is_none() {
             const TITLE: &str = "Create project";
+
             if !ui.is_popup_open(TITLE) {
                 self.project_form.update_path();
+
                 ui.open_popup(TITLE);
             }
+
             let mut open = true;
             let mut finished = false;
+
             if let Some(_modal) = super::windows::modal(ui, TITLE, &mut open) {
                 let browse = super::properties::row(ui, "Project path", false, || {
                     let browse_width =
                         ui.calc_text_size("Browse")[0] + ui.clone_style().frame_padding()[0] * 2.0;
+
                     ui.set_next_item_width(
                         (ui.content_region_avail_width()
                             - browse_width
                             - ui.clone_style().item_spacing()[0])
                             .max(1.0),
                     );
+
                     if controls::text_input(ui, "##ProjectPath", &mut self.project_form.path) {
                         self.project_form.manual_path = true;
                     }
+
                     ui.same_line();
+
                     controls::button_sized(ui, "Browse", [browse_width, 0.0])
                 });
+
                 if browse.changed {
                     self.browse(false);
                 }
+
                 if super::properties::row(ui, "Name", false, || {
                     controls::text_input(ui, "##ProjectName", &mut self.project_form.name)
                 })
@@ -1102,23 +1146,30 @@ impl State {
                 {
                     self.project_form.update_path();
                 }
+
                 super::properties::row(ui, "Resolution", false, || {
                     ui.set_next_item_width(ui.content_region_avail_width());
+
                     self.resolution.draw(ui)
                 });
                 super::properties::row(ui, "FPS", false, || {
                     ui.set_next_item_width(ui.content_region_avail_width());
+
                     self.fps.draw(ui)
                 });
+
                 let valid = !self.project_form.name.trim().is_empty()
                     && !self.project_form.path.trim().is_empty();
+
                 match super::windows::actions(ui, &[("Create project", valid), ("Cancel", true)]) {
                     Some(1) => {
                         finished = true;
+
                         ui.close_current_popup();
                     }
                     Some(0) => {
                         finished = true;
+
                         self.request_project(ProjectAction::Create(
                             self.project_form.path.clone().into(),
                             self.project_form.name.clone(),
@@ -1128,11 +1179,13 @@ impl State {
                                 ..crate::core::ProjectSettings::default()
                             },
                         ));
+
                         ui.close_current_popup();
                     }
                     _ => {}
                 }
             }
+
             self.projects_open = open && !finished;
         }
 
@@ -1177,6 +1230,7 @@ impl State {
                     ui,
                     &[("Save", true), ("Discard", true), ("Cancel", true)],
                 );
+
                 if action == Some(0) {
                     let result = editor
                         .as_deref_mut()
@@ -1196,6 +1250,7 @@ impl State {
                     match result {
                         Ok(()) => {
                             self.finish(pending.clone(), editor.as_deref_mut());
+
                             ui.close_current_popup();
                         }
 
@@ -1205,6 +1260,7 @@ impl State {
 
                 if action == Some(1) {
                     self.finish(pending, editor.as_deref_mut());
+
                     ui.close_current_popup();
                 }
 
@@ -1223,6 +1279,7 @@ impl State {
 
     fn browse(&mut self, opening_project: bool) {
         self.opening_project = opening_project;
+
         let mode = if opening_project {
             browser::Mode::Project
         } else {
@@ -1237,6 +1294,7 @@ impl State {
                 .to_string_lossy()
                 .into_owned()
         };
+
         match browser::State::new(&path, mode) {
             Ok(browser) => self.browser = Some(browser),
             Err(error) => {
@@ -1252,6 +1310,7 @@ impl State {
             if let Some(path) = path.to_str() {
                 self.root = path.to_owned();
                 self.project_error = None;
+
                 if self.opening_project {
                     self.request_project(ProjectAction::Open(path.into()));
                 } else {
@@ -1261,6 +1320,7 @@ impl State {
                 self.project_error = Some("Directory path must be valid UTF-8.".into());
             }
         }
+
         self.opening_project = false;
     }
 
@@ -1292,6 +1352,7 @@ impl State {
             dear_imgui_rs::StyleColor::TextSelectedBg,
             settings.colors.values[PaletteColor::Selection as usize],
         );
+
         self.focused = false;
 
         let formatting = settings.format_on_save.then(|| {
@@ -1301,9 +1362,11 @@ impl State {
                 "insertFinalNewline": settings.insert_final_newline,
             })
         });
+
         if documents.formatting != formatting {
             documents.clear_formatting_previews();
         }
+
         documents.formatting = formatting;
 
         for reply in std::mem::take(&mut documents.replies) {
@@ -1448,7 +1511,9 @@ impl State {
 
         super::windows::panel(ui, FILES_WINDOW, || {
             let mut error = None;
+
             self.focus_requested |= self.files.draw(documents, ui, &mut error);
+
             if let Some(error) = error {
                 documents.status = format!("Error: {error}");
             }
@@ -1638,6 +1703,7 @@ impl State {
                 } else {
                     documents.save(&path)
                 };
+
                 if let Err(error) = result {
                     self.error = Some(error);
                 }
@@ -1743,11 +1809,9 @@ fn diagnostic_location(error: &str) -> Option<(&str, usize, usize)> {
             .trim()
             .trim_start_matches("Warning: ")
             .trim_start_matches("LuaLS ");
-
         let Some(end) = line.find(".lua:") else {
             continue;
         };
-
         let path = line[..end + 4].rsplit(": ").next()?.trim_start_matches('@');
         let mut parts = line[end + 5..].split(':');
 
@@ -1773,8 +1837,11 @@ mod tests {
     fn confirming_project_creation_closes_the_dialog_and_requests_it_once() {
         let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
+
         let font = crate::ui::theme::initialize(&mut context);
+
         context.io_mut().set_display_size([1280.0, 720.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
         context
@@ -1782,29 +1849,39 @@ mod tests {
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
+
         let mut home = crate::ui::home::State::default();
         let mut state = State::default();
+
         state.projects_open = true;
         state.project_form.path = std::env::temp_dir().to_string_lossy().into_owned();
         state.project_form.manual_path = true;
         state.project_form.name = "New project".into();
+
         let mut create_position = [0.0; 2];
+
         for frame in 0..6 {
             if frame >= 2 {
                 context.io_mut().add_mouse_pos_event(create_position);
             }
+
             if frame == 3 || frame == 4 {
                 context
                     .io_mut()
                     .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, frame == 3);
             }
+
             let ui = context.frame();
             let _style = kinematic_ui::windows::style(ui);
             let _font = ui.push_font(font);
+
             home.draw(&mut state, ui);
+
             state.projects(None, ui);
+
             if frame < 4 {
                 assert!(ui.is_popup_open("Create project"));
+
                 if let Some(_popup) = ui.begin_modal_popup("Create project") {
                     let style = ui.clone_style();
                     let right =
@@ -1813,6 +1890,7 @@ mod tests {
                         ui.window_pos()[1] + ui.window_size()[1] - style.window_padding()[1];
                     let button_width =
                         |label| ui.calc_text_size(label)[0] + style.frame_padding()[0] * 2.0;
+
                     create_position = [
                         right
                             - button_width("Cancel")
@@ -1824,6 +1902,7 @@ mod tests {
             } else {
                 assert!(!state.projects_open);
                 assert!(!ui.is_popup_open("Create project"));
+
                 if frame == 4 {
                     assert!(matches!(
                         state.take_action(),
@@ -1833,8 +1912,10 @@ mod tests {
                     assert!(state.take_action().is_none());
                 }
             }
+
             drop(_font);
             drop(_style);
+
             context.end_frame();
         }
     }
@@ -1865,13 +1946,11 @@ mod tests {
 
         context.set_clipboard_backend(Clipboard::default());
         context.set_ini_filename(None::<&str>).unwrap();
-
         context
             .font_atlas()
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
-
         context.io_mut().set_display_size([1280.0, 720.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
         context.load_ini_settings("[Window][Files]\nPos=0,0\nSize=240,600\n[Window][Code]\nPos=250,0\nSize=700,600\n[Window][Console]\nPos=250,610\nSize=700,100\n");
@@ -1880,9 +1959,7 @@ mod tests {
             std::env::temp_dir().join(format!("kinematic-code-focus-{}", std::process::id()));
 
         std::fs::create_dir_all(&root).unwrap();
-
         std::fs::write(root.join("a.lua"), "local a = 1").unwrap();
-
         std::fs::write(root.join("b.lua"), "local b = 2").unwrap();
 
         let mut documents = crate::editor::documents::Documents::new(
@@ -1911,13 +1988,18 @@ mod tests {
         for _ in 0..4 {
             state.prepare(&context, Some(&documents), &settings);
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
         assert_eq!(state.tabs[a].editor.tab_size(), 2);
+
         settings.colors.apply(super::colors::Theme::GitHubLight);
+
         state.prepare(&context, Some(&documents), &settings);
+
         let palette = settings.colors.palette();
+
         for tab in state.tabs.values() {
             assert_eq!(
                 tab.editor
@@ -1957,35 +2039,39 @@ mod tests {
             context
                 .io_mut()
                 .add_key_event(dear_imgui_rs::Key::ModCtrl, ctrl);
-
             context
                 .io_mut()
                 .add_key_event(dear_imgui_rs::Key::ModShift, shift);
-
             context.io_mut().add_key_event(key, true);
+
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
+
             assert_eq!(state.zoom, zoom);
             assert_eq!(documents.open[a].text, original_text);
-            context.io_mut().add_key_event(key, false);
 
+            context.io_mut().add_key_event(key, false);
             context
                 .io_mut()
                 .add_key_event(dear_imgui_rs::Key::ModCtrl, false);
-
             context
                 .io_mut()
                 .add_key_event(dear_imgui_rs::Key::ModShift, false);
 
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
         for character in ['x', 'y'] {
             context.io_mut().add_input_character(character);
+
             state.prepare(&context, Some(&documents), &settings);
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
+
             assert_eq!(documents.active.as_deref(), Some(a));
             assert!(state.focused);
             assert!(state.error.is_none(), "{:?}", state.error);
@@ -1995,23 +2081,39 @@ mod tests {
         assert_eq!(documents.open[b].text, "local b = 2");
 
         let edited = documents.open[a].text.clone();
+
         context.io_mut().add_mouse_pos_event([100.0, 500.0]);
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert!(!state.focused);
+
         context.io_mut().add_input_character('!');
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert_eq!(documents.open[a].text, edited);
 
         context.io_mut().add_mouse_pos_event([600.0, 300.0]);
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert!(state.focused);
+
         context.io_mut().add_input_character('w');
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert_eq!(documents.open[a].text, edited.replacen("xy", "xyw", 1));
+
         context.io_mut().add_mouse_pos_event([-100.0, -100.0]);
 
         documents.open(b).unwrap();
@@ -2021,12 +2123,16 @@ mod tests {
         for _ in 0..3 {
             state.prepare(&context, Some(&documents), &settings);
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
         context.io_mut().add_input_character('z');
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert_eq!(documents.active.as_deref(), Some(b));
         assert!(documents.open[b].text.contains('z'));
         assert!(state.focused);
@@ -2043,23 +2149,22 @@ mod tests {
         });
 
         state.draw(&mut documents, &settings, context.frame());
-        context.end_frame();
-        assert!(state.tabs[b].editor.has_markers());
 
+        context.end_frame();
+
+        assert!(state.tabs[b].editor.has_markers());
         assert!(
             documents
                 .diagnostic_messages()
                 .iter()
                 .any(|message| message == "LuaLS b.lua:1:1: Test error.")
         );
-
         assert!(
             documents
                 .diagnostic_messages()
                 .iter()
                 .any(|message| message == "Warning: LuaLS b.lua:1:1: Test warning.")
         );
-
         assert!(
             !documents
                 .diagnostic_messages()
@@ -2068,15 +2173,18 @@ mod tests {
         );
 
         documents.diagnostics.clear();
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert_eq!(documents.diagnostic_messages().len(), 2);
 
         documents.diagnostics = vec!["Preview failed.".into()];
 
         assert_eq!(documents.diagnostic_messages().len(), 3);
-        documents.diagnostics.clear();
 
+        documents.diagnostics.clear();
         documents.replies.push(crate::editor::lsp::Reply {
             method: "textDocument/publishDiagnostics".into(),
             path: b.to_owned(), version: documents.open[b].version, position: None,
@@ -2084,6 +2192,7 @@ mod tests {
         });
 
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
 
         assert_eq!(
@@ -2092,7 +2201,6 @@ mod tests {
         );
 
         documents.edit(b, "local b = 3".into());
-
         documents.replies.push(crate::editor::lsp::Reply {
             method: "textDocument/publishDiagnostics".into(),
             path: b.to_owned(),
@@ -2103,6 +2211,7 @@ mod tests {
 
         state.prepare(&context, Some(&documents), &settings);
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
 
         assert_eq!(
@@ -2119,9 +2228,10 @@ mod tests {
         });
 
         state.draw(&mut documents, &settings, context.frame());
-        context.end_frame();
-        assert!(!state.tabs[b].editor.has_markers());
 
+        context.end_frame();
+
+        assert!(!state.tabs[b].editor.has_markers());
         assert!(
             !documents
                 .diagnostic_messages()
@@ -2130,8 +2240,8 @@ mod tests {
         );
 
         documents.edit(b, "cir".into());
-        state.prepare(&context, Some(&documents), &settings);
 
+        state.prepare(&context, Some(&documents), &settings);
         state
             .tabs
             .get_mut(b)
@@ -2143,29 +2253,29 @@ mod tests {
         state.focus_requested = true;
 
         state.draw(&mut documents, &settings, context.frame());
-        context.end_frame();
 
+        context.end_frame();
         context
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::ModCtrl, true);
-
         context
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::Space, true);
 
         state.draw(&mut documents, &settings, context.frame());
-        context.end_frame();
 
+        context.end_frame();
         context
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::Space, false);
-
         context
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::ModCtrl, false);
 
         std::thread::sleep(std::time::Duration::from_millis(220));
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
 
         assert_eq!(
@@ -2182,29 +2292,34 @@ mod tests {
         });
 
         state.draw(&mut documents, &settings, context.frame());
-        context.end_frame();
 
+        context.end_frame();
         context
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::Enter, true);
 
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert_eq!(documents.open[b].text, "circle");
 
         context
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::Enter, false);
-
         context.io_mut().add_input_character('x');
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert_eq!(documents.open[b].text, "circlex");
         assert!(state.focused);
         assert!(!state.tabs[b].editor.shows_spaces());
-        documents.edit(b, "        value".into());
-        state.prepare(&context, Some(&documents), &settings);
 
+        documents.edit(b, "        value".into());
+
+        state.prepare(&context, Some(&documents), &settings);
         state
             .tabs
             .get_mut(b)
@@ -2212,16 +2327,17 @@ mod tests {
             .editor
             .set_cursor(dear_imgui_cte::Position::new(0, 8))
             .unwrap();
-
         state.draw(&mut documents, &settings, context.frame());
-        context.end_frame();
 
+        context.end_frame();
         context
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::Backspace, true);
 
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert_eq!(documents.open[b].text, "      value");
 
         context
@@ -2230,11 +2346,16 @@ mod tests {
 
         state.tabs.get_mut(b).unwrap().editor.undo();
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert_eq!(documents.open[b].text, "        value");
+
         documents.edit(b, "circle() value".into());
+
         state.prepare(&context, Some(&documents), &settings);
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
 
         let point = (30..160)
@@ -2258,6 +2379,7 @@ mod tests {
 
         for _ in 0..4 {
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
@@ -2269,24 +2391,29 @@ mod tests {
             context
                 .io_mut()
                 .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, down);
+
             let ui = context.frame();
+
             state.draw(&mut documents, &settings, ui);
+
             assert_eq!(
                 ui.mouse_cursor(),
                 Some(dear_imgui_rs::MouseCursor::TextInput)
             );
+
             context.end_frame();
         }
 
         context.io_mut().set_delta_time(0.7);
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
 
         assert_eq!(
             state.tabs[b].assistance.borrow().hover_position,
             Some(dear_imgui_cte::Position::new(0, 0))
         );
-
         assert!(!state.tabs[b].documentation_has_content);
 
         documents.replies.push(crate::editor::lsp::Reply {
@@ -2295,26 +2422,26 @@ mod tests {
         });
 
         state.draw(&mut documents, &settings, context.frame());
-        context.end_frame();
-        assert!(state.tabs[b].documentation_has_content);
 
+        context.end_frame();
+
+        assert!(state.tabs[b].documentation_has_content);
         assert_eq!(
             state.tabs[b].documentation.text().unwrap(),
             "function circle() end\n\nDraw a circle."
         );
-
         assert!(state.focused);
 
         let popup_position = state.tabs[b].documentation_popup.as_ref().unwrap().position;
 
         context.io_mut().set_delta_time(0.01);
-
         context
             .io_mut()
             .add_mouse_pos_event([popup_position[0] + 30.0, popup_position[1] + 30.0]);
 
         for _ in 0..3 {
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
@@ -2322,7 +2449,6 @@ mod tests {
             state.tabs[b].documentation_popup.as_ref().unwrap().position,
             popup_position
         );
-
         assert!(state.tabs[b].documentation_has_content);
 
         let documentation = "function circle() end\n\nDraw a circle.";
@@ -2333,6 +2459,7 @@ mod tests {
                 .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, pressed);
 
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
@@ -2345,7 +2472,9 @@ mod tests {
             (dear_imgui_rs::Key::ModCtrl, false),
         ] {
             context.io_mut().add_key_event(key, pressed);
+
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
@@ -2355,7 +2484,9 @@ mod tests {
         let tab = state.tabs.get_mut(b).unwrap();
 
         assert!(tab.documentation.main_cursor_has_selection());
+
         tab.documentation.cut();
+
         assert_eq!(tab.documentation.text().unwrap(), documentation);
 
         let long_documentation =
@@ -2369,6 +2500,7 @@ mod tests {
 
         for _ in 0..3 {
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
@@ -2376,16 +2508,15 @@ mod tests {
 
         for _ in 0..3 {
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
         assert!(state.tabs[b].documentation_view.scroll_y > 0.0);
-
         assert_eq!(
             state.tabs[b].documentation_popup.as_ref().unwrap().position,
             popup_position
         );
-
         assert_eq!(documents.open[b].text, "circle() value");
 
         let other_word = (260..700)
@@ -2395,10 +2526,14 @@ mod tests {
                     .is_some_and(|word| word.start != dear_imgui_cte::Position::new(0, 0))
             })
             .unwrap();
+
         context.io_mut().set_delta_time(0.01);
         context.io_mut().add_mouse_pos_event(other_word);
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert!(state.tabs[b].documentation_popup.is_some());
 
         let popup = state
@@ -2413,6 +2548,7 @@ mod tests {
         popup.size[0] = 400.0;
 
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
 
         let bounds = state.tabs[b].documentation_popup.as_ref().unwrap().bounds;
@@ -2430,6 +2566,7 @@ mod tests {
 
             for _ in 0..2 {
                 state.draw(&mut documents, &settings, context.frame());
+
                 context.end_frame();
             }
 
@@ -2437,6 +2574,7 @@ mod tests {
         }
 
         let cursor = state.tabs[b].editor.main_cursor_position();
+
         state
             .tabs
             .get_mut(b)
@@ -2444,6 +2582,7 @@ mod tests {
             .completions
             .receive(&serde_json::json!([{ "label": "circle" }]), cursor);
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
 
         for name in ["Documentation##Code", "Suggestions##Code"] {
@@ -2457,12 +2596,19 @@ mod tests {
 
         context.io_mut().set_delta_time(0.01);
         context.io_mut().add_mouse_pos_event([-100.0, -100.0]);
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert!(state.tabs[b].documentation_has_content);
+
         context.io_mut().set_delta_time(0.3);
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert!(!state.tabs[b].documentation_has_content);
 
         let settings = Settings {
@@ -2471,6 +2617,7 @@ mod tests {
         };
 
         documents.edit(b, "ball".into());
+
         state.prepare(&context, Some(&documents), &settings);
 
         {
@@ -2487,15 +2634,20 @@ mod tests {
         for _ in 0..3 {
             state.prepare(&context, Some(&documents), &settings);
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
         context.io_mut().add_input_character('.');
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
 
         std::thread::sleep(std::time::Duration::from_millis(120));
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
 
         assert_eq!(
@@ -2510,16 +2662,17 @@ mod tests {
         });
 
         state.draw(&mut documents, &settings, context.frame());
-        context.end_frame();
 
+        context.end_frame();
         context
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::DownArrow, true);
 
         state.draw(&mut documents, &settings, context.frame());
-        context.end_frame();
-        assert_eq!(state.tabs[b].completions.selected, 1);
 
+        context.end_frame();
+
+        assert_eq!(state.tabs[b].completions.selected, 1);
         assert_eq!(
             state.tabs[b].editor.main_cursor_position(),
             Position::new(0, 5)
@@ -2528,13 +2681,14 @@ mod tests {
         context
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::DownArrow, false);
-
         context
             .io_mut()
             .add_key_event(dear_imgui_rs::Key::Tab, true);
 
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         assert_eq!(documents.open[b].text, "ball.position");
 
         context
@@ -2542,11 +2696,14 @@ mod tests {
             .add_key_event(dear_imgui_rs::Key::Tab, false);
 
         let completion_source = format!("{}ball.\n{}", "other\n".repeat(50), "other\n".repeat(50));
+
         documents.edit(b, completion_source.clone());
+
         state.prepare(&context, Some(&documents), &settings);
 
         let completion_cursor = Position::new(50, 5);
         let tab = state.tabs.get_mut(b).unwrap();
+
         tab.editor.set_cursor(completion_cursor).unwrap();
         tab.editor
             .scroll_to_line(50, dear_imgui_cte::ScrollAlignment::Bottom)
@@ -2556,6 +2713,7 @@ mod tests {
 
         for _ in 0..3 {
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
         }
 
@@ -2573,8 +2731,11 @@ mod tests {
 
             let window =
                 unsafe { dear_imgui_rs::sys::igFindWindowByName(c"Suggestions##Code".as_ptr()) };
+
             assert!(!window.is_null());
+
             let position = unsafe { (*window).Pos };
+
             suggestion_position = [position.x, position.y];
 
             context.end_frame();
@@ -2589,6 +2750,7 @@ mod tests {
 
             for _ in 0..3 {
                 state.draw(&mut documents, &settings, context.frame());
+
                 context.end_frame();
             }
 
@@ -2600,8 +2762,11 @@ mod tests {
             ] {
                 for down in [true, false] {
                     context.io_mut().add_key_event(key, down);
+
                     state.draw(&mut documents, &settings, context.frame());
+
                     context.end_frame();
+
                     assert_eq!(state.tabs[b].completions.selected, selected);
                     assert_eq!(state.tabs[b].completions.items.len(), 2);
                     assert_eq!(
@@ -2616,7 +2781,9 @@ mod tests {
         context
             .io_mut()
             .add_mouse_pos_event([suggestion_position[0] + 30.0, suggestion_position[1] + 38.0]);
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
 
         for expected in [
@@ -2629,6 +2796,7 @@ mod tests {
                     .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, pressed);
 
                 state.draw(&mut documents, &settings, context.frame());
+
                 context.end_frame();
             }
 
@@ -2636,6 +2804,7 @@ mod tests {
         }
 
         documents.edit(b, "ball.".into());
+
         state.prepare(&context, Some(&documents), &settings);
         state
             .tabs
@@ -2644,30 +2813,46 @@ mod tests {
             .editor
             .set_cursor(Position::new(0, 5))
             .unwrap();
+
         state.focus_requested = true;
+
         context.io_mut().add_mouse_pos_event([-100.0, -100.0]);
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         state.tabs.get_mut(b).unwrap().completions.receive(
             &serde_json::json!([{"label":"radius"}]),
             Position::new(0, 5),
         );
+
         for _ in 0..3 {
             let ui = context.frame();
+
             state.draw(&mut documents, &settings, ui);
+
             ui.window("Suggestions##Code")
                 .build(|| suggestion_position = ui.window_pos());
+
             context.end_frame();
         }
+
         context
             .io_mut()
             .add_mouse_pos_event([suggestion_position[0] + 30.0, suggestion_position[1] + 38.0]);
+
         state.draw(&mut documents, &settings, context.frame());
+
         context.end_frame();
+
         for (character, expected) in [('r', "ball.r"), ('a', "ball.ra"), ('ç', "ball.raç")] {
             context.io_mut().add_input_character(character);
+
             state.draw(&mut documents, &settings, context.frame());
+
             context.end_frame();
+
             assert_eq!(documents.open[b].text, expected);
             assert_eq!(
                 state.tabs[b].editor.main_cursor_position().column,
@@ -2676,7 +2861,6 @@ mod tests {
         }
 
         drop(state);
-
         drop(documents);
 
         std::fs::remove_dir_all(root).unwrap();
@@ -2687,13 +2871,18 @@ mod tests {
         let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let context = dear_imgui_rs::Context::create();
         let mut editor = super::TextEditor::create(&context);
+
         editor.set_text("First.\nSecond.").unwrap();
+
         let diagnostics = serde_json::json!([
             {"severity": 1, "range": {"start": {"line": 0}}},
             {"severity": 2, "range": {"start": {"line": 49}}}
         ]);
+
         super::diagnostic_markers(&mut editor, &diagnostics).unwrap();
+
         editor.set_text("").unwrap();
+
         super::diagnostic_markers(&mut editor, &diagnostics).unwrap();
     }
 
@@ -2708,26 +2897,22 @@ mod tests {
             ])),
             vec![(0, true), (2, false)]
         );
-
         assert_eq!(
             super::documentation_text(
                 "```lua\nfunction circle() end\n```\n---\nDraw&#x20;a circle."
             ),
             "function circle() end\n\nDraw a circle."
         );
-
         assert_eq!(
             super::documentation_text("Intro.\n\n```lua\nexample()\n```\n\nDetails.\n\n"),
             "Intro.\n\nexample()\n\nDetails."
         );
-
         assert_eq!(
             super::assistance_text(
                 &serde_json::json!({"signatures":[{"label":"function example()"}]})
             ),
             "function example()"
         );
-
         assert_eq!(super::indentation_backspace("        ", 4), Some(4));
         assert_eq!(super::indentation_backspace("      ", 4), Some(4));
         assert_eq!(super::indentation_backspace("  ", 4), Some(0));
@@ -2738,34 +2923,44 @@ mod tests {
     #[test]
     fn project_path_follows_the_name_until_edited_and_browse_restores_it() {
         let mut state = State::default();
+
         assert!(state.project_form.path.is_empty());
 
         state.root = std::env::temp_dir().to_str().unwrap().to_owned();
 
         state.browse(false);
+
         assert!(state.browser.is_some());
 
         let selected =
             std::env::temp_dir().join(format!("kinematic-project-path-{}", std::process::id()));
+
         std::fs::create_dir_all(&selected).unwrap();
 
         state.finish_browse(Some(selected.clone()));
+
         assert_eq!(state.root, selected.to_str().unwrap());
         assert_eq!(state.project_form.name, "Project");
         assert_eq!(
             PathBuf::from(&state.project_form.path),
             selected.join("project")
         );
+
         state.project_form.name = "MyHTTP Project".into();
+
         state.project_form.update_path();
+
         assert_eq!(
             PathBuf::from(&state.project_form.path),
             selected.join("my_http_project")
         );
+
         state.project_form.path = selected.join("custom").to_string_lossy().into_owned();
         state.project_form.manual_path = true;
         state.project_form.name = "Another Project".into();
+
         state.project_form.update_path();
+
         assert_eq!(
             PathBuf::from(&state.project_form.path),
             selected.join("custom")
@@ -2773,28 +2968,38 @@ mod tests {
         assert!(state.browser.is_none());
         assert!(state.pending.is_none());
         assert!(state.take_action().is_none());
+
         state.browse(false);
         state.finish_browse(None);
+
         assert_eq!(state.root, selected.to_str().unwrap());
         assert!(state.project_form.manual_path);
         assert_eq!(state.project_directory(), Some(selected.clone()));
+
         state.browse(false);
         state.finish_browse(Some(selected.clone()));
+
         assert_eq!(
             PathBuf::from(&state.project_form.path),
             selected.join("another_project")
         );
+
         state.project_form.name = " ".into();
+
         state.project_form.update_path();
+
         assert!(state.project_form.path.is_empty());
         assert!(state.browser.is_none());
         assert!(state.error.is_none());
+
         state.open_project();
         state.finish_browse(Some(selected.clone()));
+
         assert!(
             matches!(state.pending, Some(super::Pending::Project(super::ProjectAction::Open(ref path))) if path == &selected)
         );
         assert!(!state.opening_project);
+
         std::fs::remove_dir_all(selected).unwrap();
     }
 
@@ -2803,24 +3008,38 @@ mod tests {
         let directory =
             std::env::temp_dir().join(format!("kinematic-project-restore-{}", std::process::id()));
         let mut state = State::default();
+
         state.set_project_directory(None);
+
         assert!(state.project_form.path.is_empty());
+
         std::fs::create_dir_all(&directory).unwrap();
+
         state.set_project_directory(Some(directory.clone()));
+
         assert_eq!(
             PathBuf::from(&state.project_form.path),
             directory.join("project")
         );
+
         std::fs::remove_dir(&directory).unwrap();
+
         state.project_form.update_path();
+
         assert!(state.project_form.path.is_empty());
+
         state.set_project_directory(Some(directory.clone()));
+
         assert!(state.project_directory().is_none());
         assert!(state.project_form.path.is_empty());
+
         std::fs::write(&directory, "File.").unwrap();
+
         state.set_project_directory(Some(directory.clone()));
+
         assert!(state.project_directory().is_none());
         assert!(state.project_form.path.is_empty());
+
         std::fs::remove_file(directory).unwrap();
     }
 
@@ -2830,17 +3049,14 @@ mod tests {
             diagnostic_location("LuaLS scenes/my scene.lua:12:4: Message."),
             Some(("scenes/my scene.lua", 11, 3))
         );
-
         assert_eq!(
             diagnostic_location("Warning: LuaLS scenes/my scene.lua:12:4: Message."),
             Some(("scenes/my scene.lua", 11, 3))
         );
-
         assert_eq!(
             diagnostic_location("Update: runtime error: scenes/main.lua:9: Failed."),
             Some(("scenes/main.lua", 8, 0))
         );
-
         assert_eq!(diagnostic_location("No location."), None);
     }
 }

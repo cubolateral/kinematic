@@ -221,6 +221,7 @@ pub(super) fn configure(
         settings.resolution = size;
 
         settings.validate().map_err(mlua::Error::runtime)?;
+
         stamp.push(format!("Resolution:{size:?}"));
     }
 
@@ -352,6 +353,7 @@ pub(super) fn configure(
                         let (name, texture) = pair?;
 
                         validate_texture(&texture, runtime)?;
+
                         data.textures.insert(name, texture.texture);
                     }
                 }
@@ -436,6 +438,8 @@ pub(super) fn image(handle: &ImageHandle) -> &skia_safe::Image {
 
 pub(super) fn release_unused() {
     IMAGES.with(|cache| cache.borrow_mut().retain(|_, v| v.strong_count() > 0));
+
     FONTS.with(|cache| cache.borrow_mut().retain(|_, v| v.strong_count() > 0));
+
     SHADERS.with(|cache| cache.borrow_mut().retain(|_, v| v.strong_count() > 0));
 }

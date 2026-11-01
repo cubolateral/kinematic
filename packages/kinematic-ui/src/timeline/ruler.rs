@@ -49,6 +49,7 @@ pub fn draw_time_grid_lines(
             color,
             1.0,
         );
+
         tick += step;
     }
 }
@@ -106,7 +107,6 @@ pub fn draw_time_panel(
 ) {
     let accent = ui.style_color(dear_imgui_rs::StyleColor::CheckMark);
     let text_color = crate::theme::contrast_text(accent);
-
     let text = format_grid_time(time.current, grid_step(time, layout.timeline_width), fps);
     let size = text_size(ui, &text);
     let position = [playhead_x - size[0] * 0.5, layout.top + 8.0];
@@ -126,7 +126,6 @@ pub fn draw_time_panel(
         ui.get_color_u32(dear_imgui_rs::StyleColor::CheckMark),
         2.0,
     );
-
     draw_list
         .add_rect(
             min,
@@ -136,7 +135,6 @@ pub fn draw_time_panel(
         .rounding(crate::theme::CORNER_RADIUS)
         .filled(true)
         .build();
-
     draw_list.add_text(position, text_color, text);
 }
 
@@ -192,6 +190,7 @@ fn format_grid_time(time: f32, step: f32, fps: u32) -> String {
         let frames = total_frames % fps as u64;
         let seconds = total_frames / fps as u64;
         let frame_width = fps.saturating_sub(1).to_string().len().max(2);
+
         return format!("{}:{frames:0frame_width$}", format_time(seconds as f32, 0));
     }
 
@@ -200,6 +199,7 @@ fn format_grid_time(time: f32, step: f32, fps: u32) -> String {
 
     while value > 0.0 && value < 1.0 && decimals < 6 {
         value *= 10.0;
+
         decimals += 1;
     }
 
@@ -257,6 +257,7 @@ pub fn progress_line(
     ratio: f32,
 ) {
     let x = min[0] + width * ratio.clamp(0.0, 1.0);
+
     draw.add_line_h(
         x,
         min[0] + width,
@@ -276,7 +277,9 @@ pub fn progress_line(
 pub fn duration_bar(ui: &dear_imgui_rs::Ui, time: f32, duration: f32) {
     let min = ui.cursor_screen_pos();
     let width = ui.content_region_avail_width().max(1.0);
+
     ui.dummy([width, 3.0]);
+
     progress_line(
         ui,
         &ui.get_window_draw_list(),

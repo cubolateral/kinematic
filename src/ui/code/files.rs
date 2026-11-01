@@ -57,6 +57,7 @@ impl Action {
             .binding()
             .map(|binding| inputs::map().binding(binding).display.as_str())
             .unwrap_or("");
+
         menu::item(ui, self.title(), shortcut)
     }
 }
@@ -96,18 +97,22 @@ impl State {
         error: &mut Option<String>,
     ) -> bool {
         let mut focus = false;
+
         if let Some(receiver) = &self.terminal_result {
             match receiver.try_recv() {
                 Ok(message) => {
                     *error = Some(message);
+
                     self.terminal_result = None;
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => self.terminal_result = None,
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
             }
         }
+
         self.focused =
             ui.is_window_focused_with_flags(dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS);
+
         let menu_style = menu::Style::capture(ui);
         let files = match documents.files() {
             Ok(files) => files,
@@ -117,8 +122,10 @@ impl State {
                 return false;
             }
         };
+
         if let Some((target, expanded, recursive)) = self.expansion.take() {
             self.pending_expansion.insert(target.clone(), expanded);
+
             if recursive {
                 for entry in &files {
                     if entry.directory && entry.path.starts_with(&target) {
@@ -127,6 +134,7 @@ impl State {
                 }
             }
         }
+
         let mut children = BTreeMap::<&Path, Vec<&FileEntry>>::new();
 
         for entry in &files {
@@ -140,9 +148,11 @@ impl State {
             path: PathBuf::new(),
             directory: true,
         };
+
         self.selected.retain(|path| {
             path.as_os_str().is_empty() || files.iter().any(|entry| entry.path == *path)
         });
+
         let mut visible = Vec::new();
         let mut context_clicked = false;
         let name = documents
@@ -166,12 +176,15 @@ impl State {
         );
 
         self.visible = visible;
+
         if let Some(folder) = self.drop_folder.take() {
             match documents.move_files(&self.dragged, &folder) {
                 Ok(paths) => {
                     self.selected = paths.into_iter().collect();
                     self.anchor = self.selected.first().cloned();
+
                     self.pending_expansion.insert(folder, true);
+
                     documents.status = "Files moved.".into();
                 }
                 Err(message) => *error = Some(message),
@@ -184,11 +197,14 @@ impl State {
         {
             if self.selected.len() <= 1 {
                 self.select(Path::new(""), false);
+
                 self.context = Some((PathBuf::new(), true));
             }
+
             if self.selected.len() > 1 {
                 self.context = Some((self.selected.first().unwrap().clone(), false));
             }
+
             context_clicked = true;
         }
 
@@ -224,16 +240,21 @@ impl State {
                         || files
                             .iter()
                             .any(|entry| entry.path == target && entry.directory);
+
                     self.context = Some((target, directory));
+
                     action = Some(kind);
                 }
             }
         }
+
         let _menu_style = menu_style.push(ui);
+
         if let Some(_popup) = ui.begin_popup("File context") {
             if self.selected.len() > 1 {
                 let _disabled =
                     ui.begin_disabled_with_cond(self.selected.iter().any(|path| protected(path)));
+
                 if Action::Delete.menu(ui) {
                     action = Some(Action::Delete);
                 }
@@ -250,6 +271,7 @@ impl State {
                         }
                     }
                 }
+
                 if *directory {
                     for (label, expanded, recursive) in [
                         ("Expand Folder", true, false),
@@ -263,24 +285,30 @@ impl State {
                 } else if Action::Open.menu(ui) {
                     action = Some(Action::Open);
                 }
+
                 widgets::separator(ui);
+
                 for kind in [Action::CopyPath, Action::CopyAbsolutePath] {
                     if kind.menu(ui) {
                         action = Some(kind);
                     }
                 }
+
                 {
                     let _disabled = ui.begin_disabled_with_cond(
                         target.as_os_str().is_empty()
                             || Path::new(crate::scripting::MANIFEST).starts_with(target),
                     );
+
                     for kind in [Action::Rename, Action::Duplicate, Action::Delete] {
                         if kind.menu(ui) {
                             action = Some(kind);
                         }
                     }
                 }
+
                 widgets::separator(ui);
+
                 if Action::Terminal.menu(ui) {
                     action = Some(Action::Terminal);
                 }
@@ -295,6 +323,7 @@ impl State {
                         Ok(()) => focus = true,
                         Err(message) => *error = Some(message),
                     }
+
                     true
                 }
                 Action::CopyPath | Action::CopyAbsolutePath => {
@@ -310,7 +339,9 @@ impl State {
                     } else {
                         target.to_string_lossy().into_owned()
                     });
+
                     documents.status = "Path copied.".into();
+
                     true
                 }
                 Action::Terminal => {
@@ -320,26 +351,32 @@ impl State {
                     } else {
                         path.parent().unwrap()
                     };
+
                     match open_terminal(folder) {
                         Ok(result) => {
                             self.terminal_result = Some(result);
+
                             documents.status = "Terminal opened.".into();
                         }
                         Err(message) => *error = Some(message),
                     }
+
                     true
                 }
                 _ => false,
             };
+
             if immediate {
                 return focus | self.dialog(documents, ui, error);
             }
+
             if matches!(action, Action::Rename | Action::Duplicate | Action::Delete)
                 && (target.as_os_str().is_empty()
                     || Path::new(crate::scripting::MANIFEST).starts_with(target))
             {
                 return focus;
             }
+
             let target = if !directory
                 && matches!(
                     action,
@@ -358,20 +395,22 @@ impl State {
             } else {
                 String::new()
             };
-
             let targets = if matches!(action, Action::Delete) {
                 let targets = if self.selected.is_empty() {
                     vec![target.clone()]
                 } else {
                     self.selection_roots()
                 };
+
                 if targets.iter().any(|path| protected(path)) {
                     return focus;
                 }
+
                 targets
             } else {
                 Vec::new()
             };
+
             self.dialog = Some(Dialog {
                 action,
                 target,
@@ -389,6 +428,7 @@ impl State {
 
     fn select(&mut self, path: &Path, range: bool) {
         self.pending_click = None;
+
         if range {
             if let Some((start, end)) = self.anchor.as_ref().and_then(|anchor| {
                 Some((
@@ -400,9 +440,11 @@ impl State {
                     .iter()
                     .cloned()
                     .collect();
+
                 return;
             }
         }
+
         self.selected = [path.to_owned()].into();
         self.anchor = Some(path.to_owned());
     }
@@ -433,7 +475,9 @@ impl State {
         error: &mut Option<String>,
     ) {
         let path = &entry.path;
+
         visible.push(path.clone());
+
         let _id = ui.push_id(path.to_string_lossy().as_ref());
         let position = ui.cursor_screen_pos();
         let forced = self.pending_expansion.remove(path);
@@ -462,13 +506,17 @@ impl State {
         let hovered = ui.is_item_hovered();
         let open = confirmed
             || (hovered && ui.is_mouse_double_clicked(MouseButton::Left) && !ui.io().key_shift());
+
         if hovered && ui.is_mouse_clicked(MouseButton::Right) {
             if !self.selected.contains(path) {
                 self.select(path, false);
             }
+
             self.context = Some((path.clone(), entry.directory));
+
             *context_clicked = true;
         }
+
         if clicked {
             if ui.io().key_shift() || !self.selected.contains(path) || self.selected.len() <= 1 {
                 self.select(path, ui.io().key_shift());
@@ -476,13 +524,16 @@ impl State {
                 self.pending_click = Some(path.clone());
             }
         }
+
         if hovered
             && ui.is_mouse_released(MouseButton::Left)
             && self.pending_click.as_ref() == Some(path)
         {
             self.select(path, false);
+
             self.pending_click = None;
         }
+
         if entry.directory {
             if let Some(target) = ui.drag_drop_target() {
                 for payload in ["KINEMATIC_FILES", "KINEMATIC_AUDIO"] {
@@ -495,10 +546,12 @@ impl State {
                 }
             }
         }
+
         if !protected(path) && !self.selected.iter().any(|path| protected(path)) {
             let audio = self.selected.len() <= 1
                 && !entry.directory
                 && crate::ui::timeline::is_audio_file(path);
+
             if let Some(_source) = ui
                 .drag_drop_source_config(if audio {
                     "KINEMATIC_AUDIO"
@@ -509,15 +562,19 @@ impl State {
             {
                 self.pending_click = None;
                 self.dragged = self.selection_roots();
+
                 if audio {
                     self.dragged_audio = Some(path.clone());
                 }
+
                 for path in &self.dragged {
                     widgets::text(ui, path.to_string_lossy());
                 }
             }
         }
+
         kinematic_ui::lists::file_label(ui, position, name, entry.directory);
+
         if open
             && !entry.directory
             && self.selected.len() <= 1
@@ -533,10 +590,14 @@ impl State {
             if entry.directory {
                 if let Some(entries) = children.get(path.as_path()) {
                     let mut previous = position;
+
                     for child in entries {
                         let child_position = ui.cursor_screen_pos();
+
                         kinematic_ui::lists::file_branch(ui, position, previous, child_position);
+
                         previous = child_position;
+
                         let name = child.path.file_name().unwrap_or_default().to_string_lossy();
 
                         self.row(
@@ -560,7 +621,6 @@ impl State {
         let Some(dialog) = &mut self.dialog else {
             return false;
         };
-
         let title = dialog.action.title();
 
         if dialog.opening {
@@ -585,7 +645,6 @@ impl State {
                     dialog.target.to_string_lossy().into_owned()
                 },
             );
-
             widgets::separator(ui);
 
             let deleting = matches!(dialog.action, Action::Delete);
@@ -602,9 +661,11 @@ impl State {
                     if ui.is_window_appearing() {
                         ui.set_keyboard_focus_here();
                     }
+
                     controls::text_submit(ui, "##Name", &mut dialog.name)
                 })
                 .changed;
+
                 submit |= inputs::active(ui, InputAction::Confirm);
 
                 if matches!(dialog.action, Action::Scene) {
@@ -620,11 +681,13 @@ impl State {
                             &mut index,
                             &["No template", "2D template", "3D template"],
                         );
+
                         dialog.template = [
                             SceneTemplate::None,
                             SceneTemplate::TwoD,
                             SceneTemplate::ThreeD,
                         ][index];
+
                         changed
                     });
 
@@ -645,6 +708,7 @@ impl State {
             };
 
             dialog.opening = false;
+
             if deleting {
                 submit |= inputs::active(ui, InputAction::Confirm);
             }
@@ -661,10 +725,11 @@ impl State {
                 Action::Duplicate => "Duplicate",
                 _ => "Create",
             };
-
             let action =
                 crate::ui::windows::actions(ui, &[(label, validation.is_none()), ("Cancel", true)]);
+
             submit |= action == Some(0);
+
             if action == Some(1) || inputs::active(ui, InputAction::Cancel) {
                 finished = true;
 
@@ -709,7 +774,9 @@ impl State {
                     Ok(()) => {
                         focus =
                             matches!(dialog.action, Action::File | Action::Scene | Action::Script);
+
                         documents.status = format!("{} completed.", dialog.action.title());
+
                         finished = true;
 
                         ui.close_current_popup();
@@ -780,13 +847,16 @@ mod tests {
             let _font = ui.push_font(font);
             let mut origin = [0.0; 2];
             let height = ui.frame_height_with_spacing();
+
             ui.window("Files")
                 .position([20.0, 20.0], Condition::Always)
                 .size([340.0, 600.0], Condition::Always)
                 .build(|| {
                     origin = ui.cursor_screen_pos();
+
                     state.draw(documents, ui, error);
                 });
+
             let positions = state
                 .visible
                 .iter()
@@ -801,14 +871,21 @@ mod tests {
                     )
                 })
                 .collect();
+
             drop(_font);
+
             context.end_frame();
+
             positions
         }
+
         let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
+
         let font = crate::ui::theme::initialize(&mut context);
+
         context
             .font_atlas()
             .try_claim_legacy_renderer()
@@ -816,61 +893,88 @@ mod tests {
             .build();
         context.io_mut().set_display_size([900.0, 700.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         let root =
             std::env::temp_dir().join(format!("kinematic-files-drag-{}", std::process::id()));
         let project = crate::scripting::LuaProject::create(&root, "Drag", false).unwrap();
+
         std::fs::write(root.join("a.txt"), "A").unwrap();
         std::fs::write(root.join("b.txt"), "B").unwrap();
         std::fs::create_dir(root.join("destination")).unwrap();
+
         let mut documents = Documents::new(project.context, "").unwrap();
+
         documents.lsp = None;
+
         let mut state = State::default();
         let mut error = None;
+
         frame(&mut context, font, &mut state, &mut documents, &mut error);
+
         let positions = frame(&mut context, font, &mut state, &mut documents, &mut error);
         let a = Path::new("a.txt");
         let b = Path::new("b.txt");
+
         context.io_mut().add_mouse_pos_event(positions[a]);
+
         frame(&mut context, font, &mut state, &mut documents, &mut error);
+
         for down in [true, false] {
             context
                 .io_mut()
                 .add_mouse_button_event(MouseButton::Left, down);
+
             frame(&mut context, font, &mut state, &mut documents, &mut error);
         }
+
         assert!(
             documents.active.is_none(),
             "A single click must only select."
         );
         assert_eq!(state.selected, [a.to_owned()].into());
+
         for down in [true, false] {
             context
                 .io_mut()
                 .add_mouse_button_event(MouseButton::Left, down);
+
             frame(&mut context, font, &mut state, &mut documents, &mut error);
         }
+
         assert_eq!(documents.active.as_deref(), Some(a));
+
         context.io_mut().add_key_event(Key::ModShift, true);
         context.io_mut().add_mouse_pos_event(positions[b]);
+
         for down in [true, false] {
             context
                 .io_mut()
                 .add_mouse_button_event(MouseButton::Left, down);
+
             frame(&mut context, font, &mut state, &mut documents, &mut error);
         }
+
         context.io_mut().add_key_event(Key::ModShift, false);
+
         assert_eq!(state.selected, [a.to_owned(), b.to_owned()].into());
+
         context.io_mut().add_mouse_pos_event(positions[a]);
+
         frame(&mut context, font, &mut state, &mut documents, &mut error);
+
         context
             .io_mut()
             .add_mouse_button_event(MouseButton::Left, true);
+
         frame(&mut context, font, &mut state, &mut documents, &mut error);
+
         context
             .io_mut()
             .add_mouse_pos_event([positions[a][0] + 16.0, positions[a][1]]);
+
         frame(&mut context, font, &mut state, &mut documents, &mut error);
         frame(&mut context, font, &mut state, &mut documents, &mut error);
+
         assert_eq!(
             state.dragged,
             vec![a.to_owned(), b.to_owned()],
@@ -879,15 +983,20 @@ mod tests {
             state.pending_click,
             context.io().key_shift()
         );
+
         context
             .io_mut()
             .add_mouse_pos_event(positions[Path::new("destination")]);
+
         frame(&mut context, font, &mut state, &mut documents, &mut error);
+
         context
             .io_mut()
             .add_mouse_button_event(MouseButton::Left, false);
+
         frame(&mut context, font, &mut state, &mut documents, &mut error);
         frame(&mut context, font, &mut state, &mut documents, &mut error);
+
         assert!(error.is_none(), "{error:?}");
         assert!(root.join("destination/a.txt").exists());
         assert!(root.join("destination/b.txt").exists());
@@ -895,17 +1004,27 @@ mod tests {
             documents.active.as_deref(),
             Some(Path::new("destination/a.txt"))
         );
+
         context.io_mut().add_key_event(Key::Delete, true);
+
         frame(&mut context, font, &mut state, &mut documents, &mut error);
+
         assert_eq!(state.dialog.as_ref().unwrap().targets.len(), 2);
+
         context.io_mut().add_key_event(Key::Delete, false);
+
         frame(&mut context, font, &mut state, &mut documents, &mut error);
+
         context.io_mut().add_key_event(Key::Enter, true);
+
         frame(&mut context, font, &mut state, &mut documents, &mut error);
+
         assert!(error.is_none(), "{error:?}");
         assert!(!root.join("destination/a.txt").exists());
         assert!(!root.join("destination/b.txt").exists());
+
         drop(documents);
+
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -963,7 +1082,6 @@ mod tests {
             .try_claim_legacy_renderer()
             .unwrap()
             .build();
-
         context.io_mut().set_display_size([900.0, 700.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
 
@@ -991,6 +1109,7 @@ mod tests {
                 });
 
             drop(_font);
+
             context.end_frame();
         }
 
@@ -1008,14 +1127,17 @@ mod tests {
 
             ui.window("Files").build(|| {
                 state.draw(&mut documents, ui, &mut error);
+
                 assert!(ui.is_popup_open("File context"));
             });
 
             drop(_font);
+
             context.end_frame();
         }
 
         assert!(state.context.as_ref().unwrap().0.as_os_str().is_empty());
+
         context.io_mut().add_mouse_pos_event([800.0, 650.0]);
 
         {
@@ -1024,6 +1146,7 @@ mod tests {
 
             ui.window("Files").build(|| {
                 state.draw(&mut documents, ui, &mut error);
+
                 assert!(ui.is_popup_open("File context"));
 
                 if let Some(_popup) = ui.begin_popup("File context") {
@@ -1032,38 +1155,53 @@ mod tests {
             });
 
             drop(_font);
+
             context.end_frame();
         }
 
         state.select(Path::new("scenes/intro.lua"), false);
+
         for down in [true, false] {
             for key in [Key::ModCtrl, Key::ModShift, Key::C] {
                 context.io_mut().add_key_event(key, down);
             }
+
             let ui = context.frame();
             let _font = ui.push_font(font);
+
             ui.window("Files").build(|| {
                 ui.set_window_focus(Some("Files"));
+
                 state.draw(&mut documents, ui, &mut error);
             });
+
             drop(_font);
+
             context.end_frame();
         }
+
         assert_eq!(state.copy_path.as_deref(), Some("scenes/intro.lua"));
         assert_eq!(documents.status, "Path copied.");
 
         let (sender, receiver) = std::sync::mpsc::channel();
+
         sender.send("Terminal failed.".into()).unwrap();
+
         state.terminal_result = Some(receiver);
+
         {
             let ui = context.frame();
             let _font = ui.push_font(font);
+
             ui.window("Files").build(|| {
                 state.draw(&mut documents, ui, &mut error);
             });
+
             drop(_font);
+
             context.end_frame();
         }
+
         assert_eq!(error.take().as_deref(), Some("Terminal failed."));
 
         for (action, target, name, title, expected_path) in [
@@ -1121,7 +1259,6 @@ mod tests {
                                     pos.x,
                                     size.x
                                 );
-
                                 assert!(
                                     (pos.y + size.y / 2.0 - 350.0).abs() <= 1.0,
                                     "{title:?}: Y: {}, {}",
@@ -1134,6 +1271,7 @@ mod tests {
                 });
 
                 drop(_font);
+
                 context.end_frame();
             }
 
@@ -1141,7 +1279,6 @@ mod tests {
             assert!(state.dialog.is_none());
             assert!(error.is_none());
             assert!(root.join(expected_path).exists());
-
             assert!(
                 crate::scripting::LuaProject::open(&root)
                     .unwrap()

@@ -77,6 +77,7 @@ impl Text3DShape {
         let mut hash = DefaultHasher::new();
 
         text.hash(&mut hash);
+
         self.font.resource_key().hash(&mut hash);
         self.size.to_bits().hash(&mut hash);
         self.align.to_bits().hash(&mut hash);
@@ -129,12 +130,13 @@ impl Text3DBuilder {
 
 fn text_3d_box(world: &hecs::World, entity: hecs::Entity) -> Vector3 {
     let shape = world.get::<&Text3DShape>(entity).unwrap();
-
     let fade = world.get::<&TextFade>(entity).unwrap();
     let mut size = text_box(&shape.text_shape(&shape.text));
+
     if let Some(text) = fade.incoming_text(&shape.text) {
         size = size.max(text_box(&shape.text_shape(text)));
     }
+
     (size / TEXT_GEOMETRY_SCALE).extend(shape.depth.abs())
 }
 
@@ -164,23 +166,30 @@ fn draw_text_object(
 
     let material = world.get::<&Material>(entity).unwrap();
     let transform = global_matrix3d(world, entity);
-
     let fade = world.get::<&TextFade>(entity).unwrap();
+
     if let Some(text) = fade.incoming_text(&shape.text) {
         use crate::core::objects::{text_2d::text_parts, text_morph::morph_parts};
+
         let from = text_parts(&shape.text_shape(&shape.text));
         let to = text_parts(&shape.text_shape(text));
         let mut part_material = (*material).clone();
+
         for part in morph_parts(&from, &to, fade.progress, fade.group) {
             if part.opacity <= 0.0 {
                 continue;
             }
+
             let mut hash = DefaultHasher::new();
+
             shape
                 .geometry_key(if part.incoming { text } else { &shape.text })
                 .hash(&mut hash);
+
             part.index.hash(&mut hash);
+
             part_material.opacity = material.opacity * part.opacity;
+
             context.render_material(
                 GeometryKey::new::<TextMorphMesh>(hash.finish()),
                 || {
@@ -380,7 +389,6 @@ pub(crate) fn extruded_path_mesh(path: &skia_safe::Path, tolerance: f32) -> thre
             .entry(from)
             .and_modify(|normal| *normal += outward)
             .or_insert(outward);
-
         side_normals
             .entry(to)
             .and_modify(|normal| *normal += outward)
@@ -397,11 +405,13 @@ pub(crate) fn extruded_path_mesh(path: &skia_safe::Path, tolerance: f32) -> thre
 
     for index in 0..vertex_count {
         positions.push(vertex(index, 0.5));
+
         normals.push(three_d::vec3(0.0, 0.0, 1.0));
     }
 
     for index in 0..vertex_count {
         positions.push(vertex(index, -0.5));
+
         normals.push(three_d::vec3(0.0, 0.0, -1.0));
     }
 
@@ -419,7 +429,9 @@ pub(crate) fn extruded_path_mesh(path: &skia_safe::Path, tolerance: f32) -> thre
         let normal = three_d::vec3(normal.x, normal.y, 0.0);
 
         positions.extend_from_slice(&[vertex(index, 0.5), vertex(index, -0.5)]);
+
         normals.extend_from_slice(&[normal, normal]);
+
         side_vertices.insert(index, front);
     }
 

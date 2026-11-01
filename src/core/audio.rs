@@ -41,6 +41,7 @@ impl Default for Sound {
 impl Sound {
     pub fn preset(name: &str) -> Result<Self, String> {
         let mut sound = Self::default();
+
         match name {
             "boink" => {
                 sound.frequency = 450.0;
@@ -81,6 +82,7 @@ impl Sound {
             }
             _ => return Err(format!("Unknown sound preset '{name}'.")),
         }
+
         Ok(sound)
     }
 
@@ -94,6 +96,7 @@ impl Sound {
         let mut phase = 0.0_f64;
         let mut filtered = 0.0;
         let alpha = 1.0 - (-std::f32::consts::TAU * self.cutoff / SAMPLE_RATE as f32).exp();
+
         Arc::new(
             (0..count)
                 .map(|i| {
@@ -108,8 +111,10 @@ impl Sound {
                         self.sustain * (duration - t) / self.release.max(1.0 / SAMPLE_RATE as f32)
                     };
                     let mut hash = (i as u32).wrapping_add(self.seed).wrapping_add(0x9e3779b9);
+
                     hash = (hash ^ (hash >> 16)).wrapping_mul(0x21f0aaad);
                     hash = (hash ^ (hash >> 15)).wrapping_mul(0x735a2d97);
+
                     let noise = (hash ^ (hash >> 15)) as f32 / u32::MAX as f32 * 2.0 - 1.0;
                     let tone = match self.waveform.as_str() {
                         "triangle" => 1.0 - 4.0 * (phase.fract() - 0.5).abs() as f32,
@@ -119,13 +124,16 @@ impl Sound {
                     let voice = tone * (1.0 - self.noise)
                         + noise * self.noise
                         + (phase * 2.0 * std::f64::consts::TAU).sin() as f32 * self.overtone;
+
                     filtered += alpha * (voice - filtered);
                     // Always fade the edges, including envelopes with zero attack or release.
                     let fade = (t / 0.002).min((duration - t) / 0.002).clamp(0.0, 1.0);
                     let sample = filtered * envelope * fade;
+
                     phase += (self.frequency + (self.end_frequency - self.frequency) * t / duration)
                         as f64
                         / SAMPLE_RATE as f64;
+
                     [sample; 2]
                 })
                 .collect(),
@@ -164,9 +172,11 @@ impl AudioEvents {
                 .filter(|(key, _)| Some(**key) != replacing)
                 .map(|(_, events)| events.len())
                 .sum::<usize>();
+
         if stored + pending >= 100_000 {
             return Err("Scene exceeds 100000 audio occurrences.".into());
         }
+
         Ok(())
     }
 
@@ -195,10 +205,13 @@ impl AudioEvents {
                     .max(0.0)
                     * event.gain,
             ];
+
             for (index, frame) in output.iter_mut().enumerate().take(to).skip(from) {
                 let source =
                     event.samples[event.offset + (start as i64 + index as i64 - at) as usize];
+
                 frame[0] += source[0] * balance[0];
+
                 frame[1] += source[1] * balance[1];
             }
         }
@@ -208,9 +221,11 @@ impl AudioEvents {
         for (key, events) in &previous.steps {
             if key.0 == entity {
                 self.check_capacity(Some(*key), events.len().saturating_sub(1))?;
+
                 self.steps.insert(*key, events.clone());
             }
         }
+
         Ok(())
     }
 }
@@ -232,10 +247,12 @@ mod tests {
         for name in ["boink", "pluck", "click", "impact", "whoosh"] {
             let sound = Sound::preset(name).unwrap();
             let samples = sound.samples();
+
             assert_eq!(samples, sound.samples());
             assert_eq!(samples[0], [0.0; 2]);
             assert!(samples.last().unwrap().iter().all(|v| v.abs() < 0.01));
             assert!(samples.iter().flatten().all(|v| v.is_finite()));
+
             let events = AudioEvents {
                 scheduled: vec![SoundEvent {
                     time: 0.01,
@@ -248,10 +265,14 @@ mod tests {
                 ..Default::default()
             };
             let mut whole = vec![[0.0; 2]; 20_000];
+
             events.mix(0.0, 0, &mut whole);
+
             let mut split = vec![[0.0; 2]; 20_000];
+
             events.mix(0.0, 0, &mut split[..777]);
             events.mix(0.0, 777, &mut split[777..]);
+
             assert_eq!(whole, split);
             assert!(limit(whole).iter().all(|v| v.abs() <= 1.0));
         }
@@ -270,6 +291,7 @@ mod clip_tests {
                 .collect::<Vec<_>>(),
         );
         let mut audio = AudioEvents::default();
+
         audio.clips.push(SoundEvent {
             time: 4.0 / SAMPLE_RATE as f64,
             samples,
@@ -278,15 +300,21 @@ mod clip_tests {
             gain: 0.5,
             pan: -1.0,
         });
+
         let mut whole = vec![[0.0; 2]; 32];
         let scene_offset = 3.0 / SAMPLE_RATE as f64;
+
         audio.mix(scene_offset, 0, &mut whole);
+
         assert!(whole[..7].iter().all(|frame| *frame == [0.0; 2]));
         assert_eq!(whole[7], [7.0 / 64.0, 0.0]);
         assert!(whole[16..].iter().all(|frame| *frame == [0.0; 2]));
+
         let mut chunks = vec![[0.0; 2]; 32];
+
         audio.mix(scene_offset, 0, &mut chunks[..10]);
         audio.mix(scene_offset, 10, &mut chunks[10..]);
+
         assert_eq!(whole, chunks);
     }
 }

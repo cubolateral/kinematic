@@ -18,9 +18,13 @@ return function(s)
             size = 36,
             opacity = 0,
         }
+
         s:world_2d():add(code)
+
         code:to {opacity = 1}:play(1)
+
         s:wait(1)
+
         code:to {opacity = 0}:play(1)
         code:remove()
     end

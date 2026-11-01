@@ -206,6 +206,7 @@ impl LuaScene {
         });
 
         extension::register_runtime(&runtime);
+
         runtime.register()?;
 
         let events = event_path(&path);
@@ -247,10 +248,10 @@ impl LuaScene {
         let Value::Function(build) = returned.into_iter().next().unwrap() else {
             unreachable!()
         };
-
         let name = path.file_stem().unwrap().to_string_lossy().into_owned();
 
         runtime.scene.borrow_mut().as_mut().unwrap().set_name(name);
+
         build.call::<()>(SceneHandle(Rc::downgrade(&runtime)))?;
 
         if let Some(error) = runtime.errors.borrow().first() {
@@ -260,6 +261,7 @@ impl LuaScene {
         let mut scene = runtime.scene.borrow_mut().take().unwrap();
 
         engine(|| scene.finish_build())?;
+
         runtime.building.set(false);
 
         {
@@ -327,7 +329,6 @@ impl LuaScene {
         }
 
         self.runtime.errors.borrow_mut().clear();
-
         self.runtime
             .deadline
             .set(Instant::now() + Duration::from_secs(2));
@@ -372,6 +373,7 @@ impl LuaScene {
 
         if let Err(error) = result {
             *self.runtime.audio.borrow_mut() = saved_audio;
+
             let mut world = self.scene.world_mut();
 
             signals.restore_overrides(&world);
@@ -387,7 +389,9 @@ impl LuaScene {
             }
 
             drop(world);
+
             signals.restore_checkpoint(overrides);
+
             self.scene.restore_time(previous_time);
 
             return Err(error);
@@ -398,7 +402,6 @@ impl LuaScene {
 
     pub(crate) fn update_slice(&self, time: f32) -> Result<bool> {
         self.runtime.errors.borrow_mut().clear();
-
         self.runtime
             .deadline
             .set(Instant::now() + Duration::from_millis(100));
@@ -602,6 +605,7 @@ impl LuaScene {
                         .map_err(mlua::Error::external)?;
 
                     next.copy_history(&simulation);
+
                     candidate
                         .runtime
                         .audio
@@ -651,6 +655,7 @@ impl LuaScene {
         self.runtime = candidate.runtime;
 
         self.revision += 1;
+
         drop(candidate.scene);
 
         super::release_unused();
@@ -709,6 +714,7 @@ impl Runtime {
         }
 
         super::animation::configure(lua, &handle, &options)?;
+
         crate::core::objects::initialize_object_snapshots(&self.world.borrow(), entity);
 
         self.definitions.borrow_mut().insert(
@@ -725,7 +731,6 @@ impl Runtime {
 
     pub(super) fn resource(&self, path: &Path) -> Result<Vec<u8>> {
         self.dependencies.borrow_mut().insert(path.to_owned());
-
         self.sources
             .read(&self.context, path)
             .map_err(mlua::Error::external)
@@ -768,9 +773,13 @@ impl Runtime {
         let api = lua.create_table()?;
 
         value::register(lua, &api)?;
+
         extension::register(lua, &api)?;
+
         super::drawing::register(lua, &api)?;
+
         super::resources::register(self, &api)?;
+
         super::audio::register(self, &api)?;
 
         let easing = lua.create_table()?;
@@ -979,7 +988,6 @@ impl UserData for SceneHandle {
                 })
             },
         );
-
         methods.add_method("object", |lua, this, (definition, options): (mlua::UserDataRef<extension::ObjectDefinition>, Table)| {
             let runtime = this.runtime()?;
 
@@ -1015,6 +1023,7 @@ impl UserData for SceneHandle {
             }
 
             super::animation::configure(lua, &handle, &options)?;
+
             extension::configure(&runtime, &handle, &definition)?;
 
             if options.get::<Option<String>>("name")?.is_none() {
@@ -1024,6 +1033,7 @@ impl UserData for SceneHandle {
             }
 
             crate::core::objects::initialize_object_snapshots(&world, entity);
+
             runtime.definitions.borrow_mut().insert(key, Definition { kind: kind.into(), entity, fingerprint: String::new() });
 
             Ok(handle)
@@ -1079,7 +1089,6 @@ impl UserData for SceneHandle {
             )?
             .play(None, None)
         });
-
         methods.add_method("wait", |_, this, seconds: f32| {
             let runtime = this.runtime()?;
 
@@ -1089,7 +1098,6 @@ impl UserData for SceneHandle {
 
             engine(|| runtime.scene.borrow_mut().as_mut().unwrap().wait(seconds))
         });
-
         methods.add_method("event", |_, this, name: String| {
             let runtime = this.runtime()?;
 
@@ -1239,13 +1247,11 @@ impl UserData for ObjectHandle {
                         let receiver = args
                             .pop_front()
                             .ok_or_else(|| mlua::Error::runtime("Native methods require self."))?;
-
                         let Value::UserData(receiver) = receiver else {
                             return Err(mlua::Error::runtime(
                                 "Native methods require an object receiver.",
                             ));
                         };
-
                         let receiver = receiver.borrow::<ObjectHandle>()?;
 
                         if receiver.entity != object.entity
@@ -1263,9 +1269,7 @@ impl UserData for ObjectHandle {
 
             this.property(&name)?.into_lua(lua)
         });
-
         methods.add_method("prop", |_, this, name: String| this.property(&name));
-
         methods.add_method("get", |lua, this, name: String| {
             let property = this.property(&name)?;
             let value = property.value()?;
@@ -1309,16 +1313,20 @@ impl UserData for ObjectHandle {
                 )
             })
         });
-
         methods.add_method("reparent", |_, this, parent: mlua::UserDataRef<Self>| {
             let runtime = this.runtime()?;
+
             runtime.construction()?;
+
             if !Weak::ptr_eq(&this.runtime, &parent.runtime) {
                 return Err(mlua::Error::runtime("Objects belong to different scenes."));
             }
+
             parent.runtime()?;
+
             engine(|| {
                 runtime.animator.borrow().assert_finite_scope();
+
                 crate::core::objects::reparent_child(
                     &runtime.world.borrow(),
                     parent.entity,
@@ -1327,7 +1335,6 @@ impl UserData for ObjectHandle {
                 );
             })
         });
-
         methods.add_method("remove", |_, this, ()| {
             let runtime = this.runtime()?;
 
@@ -1343,7 +1350,6 @@ impl UserData for ObjectHandle {
                 )
             })
         });
-
         methods.add_method("texture", |_, this, ()| {
             let runtime = this.runtime()?;
 
@@ -1360,7 +1366,6 @@ impl UserData for ObjectHandle {
                 runtime: this.runtime.clone(),
             })
         });
-
         methods.add_method("uniform", |_, this, name: String| {
             let runtime = this.runtime()?;
 
@@ -1377,11 +1382,9 @@ impl UserData for ObjectHandle {
                 channel: None,
             })
         });
-
         methods.add_method("inputs", |_, this, inputs: Table| {
             extension::configure_inputs(this, inputs)
         });
-
         methods.add_method("state", |lua, this, ()| {
             let runtime = this.runtime()?;
             let world = runtime.world.borrow();
@@ -1398,6 +1401,7 @@ impl UserData for ObjectHandle {
                 let runtime = this.runtime()?;
 
                 runtime.construction()?;
+
                 runtime.animator.borrow().assert_finite_scope();
 
                 let world = runtime.world.borrow();
@@ -1428,13 +1432,13 @@ impl UserData for ObjectHandle {
             let runtime = this.runtime()?;
 
             runtime.construction()?;
+
             extension::validate_update(&runtime.lua, &callback)?;
 
             let key = runtime.callback_source(&callback)?;
             let callback_id = runtime.mutations.borrow().len();
 
             runtime.mutations.borrow_mut().push(callback);
-
             runtime
                 .operation_keys
                 .borrow_mut()
@@ -1476,7 +1480,6 @@ impl UserData for ObjectHandle {
 
             Ok(())
         });
-
         methods.add_method("signal", |_, this, callback: Function| {
             let runtime = this.runtime()?;
 
@@ -1493,14 +1496,15 @@ impl UserData for ObjectHandle {
                     runtime
                         .deadline
                         .set(Instant::now() + Duration::from_millis(100));
-
                     runtime.writes.replace(Some(Vec::new()));
 
                     let result = (|| {
                         let info = runtime.lua.create_table()?;
 
                         info.set("time", frame.time)?;
+
                         info.set("index", frame.index)?;
+
                         info.set("dt", frame.dt)?;
 
                         callback.call::<()>((object.clone(), info))
@@ -1612,12 +1616,14 @@ impl PropertyHandle {
                     let mut rgba = v.rgba();
 
                     rgba[channel as usize] = number;
+
                     *v = rgba.into();
                 }
                 TrackValue::Quad(v) => {
                     let mut channels = [v.a, v.b, v.c, v.d];
 
                     channels[channel as usize] = number;
+
                     *v = channels.into();
                 }
                 _ => return Err(mlua::Error::runtime("Unsupported subchannel.")),
@@ -1690,7 +1696,6 @@ impl UserData for PropertyHandle {
             lua.create_userdata(this.object.clone())?
                 .call_method::<Value>("signal", callback)
         });
-
         methods.add_method("get", |lua, this, ()| {
             let value = this.value()?;
 
@@ -1700,9 +1705,7 @@ impl UserData for PropertyHandle {
 
             value::to_lua(lua, value)
         });
-
         methods.add_method("set", |lua, this, value: Value| this.set(lua, value));
-
         methods.add_meta_method(MetaMethod::Index, |_, this, name: String| {
             let channel = super::animation::channel(&this.value()?, &name)?;
 
@@ -1711,7 +1714,6 @@ impl UserData for PropertyHandle {
                 ..this.clone()
             })
         });
-
         methods.add_method(
             "rotate",
             |_, this, (axis, angle): (mlua::UserDataRef<value::ValueHandle>, f32)| {
@@ -1796,6 +1798,7 @@ impl Runtime {
 impl Drop for Runtime {
     fn drop(&mut self) {
         extension::release_runtime(self.id);
+
         self.assets.borrow_mut().clear();
 
         super::resources::release_unused();
@@ -2004,6 +2007,7 @@ end
             (0.0, CanvasFilter::Nearest, CanvasFilter::Linear),
         ] {
             scene.update(time).unwrap();
+
             let world = scene.scene.world();
 
             assert_eq!(
@@ -2033,6 +2037,7 @@ end
 
         scene.update(0.5).unwrap();
         scene.update(3.0).unwrap();
+
         assert_eq!(total(&scene), expected);
 
         let entity = scene.entity("counter");
@@ -2043,7 +2048,6 @@ end
 
         assert_eq!(scene.entity("counter"), entity);
         assert_eq!(total(&scene), expected);
-
         assert_eq!(
             scene.runtime.simulation_steps.get(),
             0,
@@ -2057,6 +2061,7 @@ end
         let clean = load(&source);
 
         clean.update(3.0).unwrap();
+
         assert_eq!(total(&scene), total(&clean));
         assert!(scene.runtime.simulation_steps.get() > 0);
 
@@ -2070,7 +2075,6 @@ end
                 )))
                 .is_err()
         );
-
         assert_eq!(total(&scene), before);
     }
     #[test]
@@ -2097,8 +2101,10 @@ end
         let expected = 181.0 * 182.0 / 2.0;
 
         assert_eq!(total(&scene), expected);
+
         scene.update(0.5).unwrap();
         scene.update(3.0).unwrap();
+
         assert_eq!(total(&scene), expected);
 
         scene
@@ -2114,6 +2120,7 @@ end
         let clean = load(&changed);
 
         clean.update(3.0).unwrap();
+
         assert_eq!(total(&scene), total(&clean));
         assert_eq!(total(&scene), expected * 2.0);
 
@@ -2142,9 +2149,12 @@ end
         let scene = load(source);
 
         scene.update(1.0).unwrap();
+
         assert_eq!(total(&scene), 305.0);
+
         scene.update(0.0).unwrap();
         scene.update(1.0).unwrap();
+
         assert_eq!(total(&scene), 305.0);
     }
 
@@ -2169,6 +2179,7 @@ end
 
         scene.update(0.0).unwrap();
         scene.update(2.0).unwrap();
+
         assert_eq!(state(&scene, "life"), expected);
 
         scene
@@ -2185,6 +2196,7 @@ end
         let clean = load(&changed);
 
         clean.update(2.0).unwrap();
+
         assert_eq!(state(&scene, "life"), state(&clean, "life"));
 
         let manual = load(
@@ -2203,10 +2215,15 @@ end
         );
 
         manual.update(1.0).unwrap();
+
         assert_eq!(total(&manual), 6.0);
+
         manual.update(0.0).unwrap();
+
         assert_eq!(total(&manual), 0.0);
+
         manual.update(1.0).unwrap();
+
         assert_eq!(total(&manual), 6.0);
     }
 
@@ -2214,17 +2231,24 @@ end
     fn legacy_inspector_overrides_are_ignored() {
         let root =
             std::env::temp_dir().join(format!("kinematic-no-overrides-{}", std::process::id()));
+
         std::fs::create_dir_all(root.join("kinematic")).unwrap();
+
         let legacy = root.join("kinematic/overrides.ron");
+
         std::fs::write(&legacy, "Obsolete contents.").unwrap();
+
         let mut scene = LuaScene::load(
             ProjectContext::new(&root).unwrap(), "counter.lua",
             sources("return function(s) local a=s:circle{id='ball',radius=4}; s:world_2d():add(a); a:to{radius=8}:play(1,k.ease.linear) end"),
             (100, 100), 60, Margin::default(),
         ).unwrap();
+
         scene.update(1.0).unwrap();
+
         let entity = scene.entity("ball").unwrap();
         let target = native::property(&scene.scene.world(), entity, "radius").unwrap();
+
         assert_eq!(
             target.get(&scene.scene.world(), entity),
             TrackValue::F32(8.0)
@@ -2234,11 +2258,14 @@ end
                 .dependencies()
                 .contains(Path::new("kinematic/overrides.ron"))
         );
+
         scene.persist_prepared().unwrap();
+
         assert_eq!(
             std::fs::read_to_string(legacy).unwrap(),
             "Obsolete contents."
         );
+
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -2253,6 +2280,7 @@ end
         let mut surface = skia_safe::surfaces::raster_n32_premul((100, 100)).unwrap();
 
         scene.scene.draw(surface.canvas());
+
         assert_eq!(surface.peek_pixels().unwrap().get_color((15, 25)).r(), 255);
 
         let scene = load(&SOURCE.replace(
@@ -2261,7 +2289,9 @@ end
         ));
 
         surface.canvas().clear(skia_safe::colors::TRANSPARENT);
+
         scene.scene.draw(surface.canvas());
+
         assert_eq!(surface.peek_pixels().unwrap().get_color((15, 25)).a(), 0);
         assert!(!scene.runtime.errors.borrow().is_empty());
     }

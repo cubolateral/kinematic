@@ -27,7 +27,9 @@ impl Layout {
         let start = ui.cursor_start_pos();
         let draw = ui.get_window_draw_list();
         let mut min = draw.clip_rect_min();
+
         min[0] = min[0].max(window[0] + gutter as f32 * width);
+
         Some(Self {
             origin: [
                 window[0] + start[0] + gutter as f32 * width,
@@ -65,12 +67,15 @@ fn word(line: &str, column: usize, trailing: bool) -> Option<Range<usize>> {
 
     let mut start = column;
     let mut end = column + 1;
+
     while start > 0 && is_word(characters[start - 1]) {
         start -= 1;
     }
+
     while end < characters.len() && is_word(characters[end]) {
         end += 1;
     }
+
     Some(start..end)
 }
 
@@ -79,9 +84,11 @@ pub fn word_at_mouse(editor: &TextEditor, mouse: [f32; 2]) -> Option<Selection> 
     if !editor.is_mouse_over_glyph(mouse).ok()? {
         return None;
     }
+
     let position = editor.position_at_mouse(mouse).ok()?;
     let line = editor.line_text(position.line).ok()?;
     let range = word(&line, position.column, false)?;
+
     Some(Selection::new(
         Position::new(position.line, range.start),
         Position::new(position.line, range.end),
@@ -99,11 +106,11 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette
     } = *layout;
     let draw = ui.get_window_draw_list();
     let _clip = draw.push_clip_rect(min, max, true);
-
     let cursor = editor.main_cursor_position();
     let current = editor.line_text(cursor.line).ok().and_then(|line| {
         let range = word(&line, cursor.column, true)?;
         let selection = editor.main_cursor_selection();
+
         if !selection.is_empty()
             && selection
                 != Selection::new(
@@ -113,6 +120,7 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette
         {
             return None;
         }
+
         Some(
             line.chars()
                 .skip(range.start)
@@ -130,8 +138,8 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette
             ))
         })
         .collect();
-
     let mut previous_line = None;
+
     for row in editor.first_visible_row()..=editor.last_visible_row() {
         let position = editor.visual_to_document(VisualPosition::new(row, 0));
         let Ok(line) = editor.line_text(position.line) else {
@@ -144,10 +152,12 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette
         let indent = editor
             .document_to_visual(position)
             .map_or(0, |visual| visual.column);
+
         for &(start, end) in &selections {
             if row < start.row || row > end.row {
                 continue;
             }
+
             let left = if row == start.row {
                 start.column
             } else {
@@ -163,6 +173,7 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette
                 let last = editor
                     .document_to_visual(Position::new(position.line, column))
                     .unwrap_or_default();
+
                 last.column
                     + if line.chars().nth(column) == Some('\t') {
                         editor.tab_size() - last.column % editor.tab_size()
@@ -170,11 +181,13 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette
                         1
                     }
             };
+
             if right > left {
                 let point = [
                     origin[0] + left as f32 * width,
                     origin[1] + row as f32 * height - padding,
                 ];
+
                 draw.add_rect(
                     point,
                     [origin[0] + right as f32 * width, point[1] + height],
@@ -184,17 +197,22 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette
                 .build();
             }
         }
+
         if previous_line == Some(position.line) {
             continue;
         }
+
         previous_line = Some(position.line);
 
         if let Some(current) = &current {
             let mut column = 0;
             let mut previous_byte = 0;
+
             for (byte, matched) in line.match_indices(current) {
                 column += line[previous_byte..byte].chars().count();
+
                 previous_byte = byte;
+
                 if line[..byte].chars().next_back().is_some_and(is_word)
                     || line[byte + matched.len()..]
                         .chars()
@@ -203,6 +221,7 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette
                 {
                     continue;
                 }
+
                 for column in column..column + matched.chars().count() {
                     if let Ok(visual) =
                         editor.document_to_visual(Position::new(position.line, column))
@@ -211,6 +230,7 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette
                             origin[0] + visual.column as f32 * width,
                             origin[1] + visual.row as f32 * height - padding,
                         ];
+
                         draw.add_rect(
                             point,
                             [point[0] + width, point[1] + height],
@@ -225,8 +245,10 @@ pub fn draw(editor: &TextEditor, ui: &Ui, layout: &Layout, rulers: &str, palette
     }
 
     let color = palette.get(PaletteColor::Whitespace);
+
     for column in ruler_columns(rulers) {
         let x = origin[0] + column as f32 * width;
+
         draw.add_line([x, min[1]], [x, max[1]], color).build();
     }
 }
@@ -252,6 +274,7 @@ mod tests {
     fn backgrounds_and_hover_follow_native_text_after_scrolling() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
+
         context.set_ini_filename(None::<&str>).unwrap();
         context
             .font_atlas()
@@ -260,14 +283,19 @@ mod tests {
             .build();
         context.io_mut().set_display_size([640.0, 480.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
+
         let mut editor = TextEditor::create(&context);
+
         editor.set_show_minimap(false);
         editor.set_line_spacing(1.5).unwrap();
         editor.set_word_wrap_enabled(true);
+
         let mut palette = editor.palette();
+
         palette.set(dear_imgui_cte::PaletteColor::Background, 0);
         palette.set(dear_imgui_cte::PaletteColor::Selection, 0);
         palette.set(dear_imgui_cte::PaletteColor::Text, 0xff123456);
+
         editor.set_palette(&palette).unwrap();
         editor
             .set_text(&format!(
@@ -275,8 +303,10 @@ mod tests {
                 "local value = 1\n".repeat(40)
             ))
             .unwrap();
+
         let caret = std::rc::Rc::new(std::cell::Cell::new(None));
         let captured = caret.clone();
+
         editor
             .set_custom_caret_callback(move |_, event| captured.set(Some(event)))
             .unwrap();
@@ -293,20 +323,25 @@ mod tests {
                     .select_region(Selection::new(Position::new(40, 0), Position::new(42, 5)))
                     .unwrap();
             }
+
             let selected = phase == 4;
             let mut expected = [0.0; 2];
             let ui = context.frame();
+
             ui.window("Text test")
                 .position([0.0, 0.0], dear_imgui_rs::Condition::Always)
                 .size([600.0, 400.0], dear_imgui_rs::Condition::Always)
                 .build(|| {
                     let origin = ui.cursor_screen_pos();
+
                     ui.text_editor(&mut editor, "Source")
                         .size([180.0, 300.0])
                         .build()
                         .unwrap();
+
                     let next = ui.cursor_screen_pos();
                     let mut layout = None;
+
                     ui.set_cursor_screen_pos(origin);
                     ui.child_window("Source")
                         .size([180.0, 300.0])
@@ -314,13 +349,18 @@ mod tests {
                             layout = Layout::capture(&editor, ui);
                         });
                     ui.set_cursor_screen_pos(next);
+
                     let layout = layout.unwrap();
                     let mut overlay = editor.palette();
+
                     overlay.set(PaletteColor::Selection, 0xff654321);
+
                     draw(&editor, ui, &layout, "", &overlay);
+
                     if phase < 3 {
                         return;
                     }
+
                     let native = caret.get().unwrap();
                     let visual = editor
                         .document_to_visual(editor.main_cursor_position())
@@ -329,9 +369,11 @@ mod tests {
                         native.glyph_position[0] - visual.column as f32 * layout.width,
                         native.glyph_position[1] - visual.row as f32 * layout.height,
                     ];
+
                     for axis in 0..2 {
                         assert!((native_origin[axis] - layout.origin[axis]).abs() < 0.1);
                     }
+
                     let word_visual = editor.document_to_visual(Position::new(40, 5)).unwrap();
                     let word_point = [
                         native_origin[0] + word_visual.column as f32 * layout.width + 0.1,
@@ -339,14 +381,17 @@ mod tests {
                             + word_visual.row as f32 * layout.height
                             + ui.text_line_height() * 0.5,
                     ];
+
                     assert!(layout.contains(word_point));
                     assert_eq!(
                         word_at_mouse(&editor, word_point),
                         Some(Selection::new(Position::new(40, 5), Position::new(40, 10)))
                     );
                     assert!(editor.first_visible_row() > 0);
+
                     expected = if selected {
                         let blank_visual = editor.document_to_visual(Position::new(41, 0)).unwrap();
+
                         [
                             native_origin[0],
                             native_origin[1] + blank_visual.row as f32 * layout.height
@@ -359,12 +404,16 @@ mod tests {
                                 - layout.padding,
                         ]
                     };
+
                     assert!(layout.padding > 0.0);
                 });
+
             let frame = context.render_legacy();
+
             if phase < 3 {
                 continue;
             }
+
             let data = frame.draw_data();
             let color = if selected { 0xff654321 } else { 0x2012_3456 };
             let background = data
@@ -391,6 +440,7 @@ mod tests {
                         .then_some(index)
                 })
                 .unwrap();
+
             assert!(
                 background < foreground,
                 "Backgrounds must render behind the text."

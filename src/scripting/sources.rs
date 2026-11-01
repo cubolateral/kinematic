@@ -44,6 +44,7 @@ impl Sources {
             if limited && bytes.len() > 64 * 1024 * 1024 {
                 return Err(std::io::Error::other("Resource exceeds 64 MiB."));
             }
+
             return Ok(bytes.to_vec());
         }
 
@@ -108,19 +109,25 @@ mod tests {
     fn large_audio_does_not_bypass_the_limit_for_other_resources() {
         let root =
             std::env::temp_dir().join(format!("kinematic-audio-source-{}", std::process::id()));
+
         std::fs::create_dir_all(&root).unwrap();
+
         let file = root.join("large.wav");
         let size = 64 * 1024 * 1024 + 1;
+
         std::fs::File::create(&file).unwrap().set_len(size).unwrap();
+
         let context = ProjectContext::new(&root).unwrap();
         let sources = Sources::default();
         let path = Path::new("large.wav");
+
         assert!(sources.read(&context, path).is_err());
         assert_eq!(
             sources.read_audio(&context, path).unwrap().len() as u64,
             size
         );
         assert!(sources.read(&context, path).is_err());
+
         std::fs::remove_dir_all(root).unwrap();
     }
 }

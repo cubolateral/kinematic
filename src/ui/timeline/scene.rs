@@ -18,6 +18,7 @@ pub(super) fn draw(
     ui.dummy([0.0, ROW_SPACING]);
 
     let top = ui.cursor_screen_pos()[1];
+
     painting::separator(
         ui,
         draw_list,
@@ -71,9 +72,11 @@ pub(super) fn draw(
         let min = [time.x(layout, start), top];
         let max = [time.x(layout, end), top + SCENE_HEIGHT];
         let hovered = ui.is_window_hovered() && ui.is_mouse_hovering_rect(min, max);
+
         if hovered {
             hovered_scene = Some(*index);
         }
+
         let back = painting::scene(
             ui,
             draw_list,
@@ -83,6 +86,7 @@ pub(super) fn draw(
             hovered,
             editor.focused_scene_index() == Some(*index),
         );
+
         if back.is_some() {
             back_position = back;
         }
@@ -147,6 +151,7 @@ pub(super) fn draw(
 
         if clicked && interactive {
             ui.set_cursor_screen_pos(next_row);
+
             editor.clear_scene_focus();
 
             return;

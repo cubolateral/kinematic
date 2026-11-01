@@ -220,7 +220,6 @@ impl Track {
         let Some(channel) = self.target.channel() else {
             return self.target.name().to_owned();
         };
-
         let suffix = match self.keyframes.first().map(|frame| &frame.value) {
             Some(TrackValue::Color(_)) => ["r", "g", "b", "a"][channel as usize],
             Some(TrackValue::Quad(_)) => ["a", "b", "c", "d"][channel as usize],
@@ -296,7 +295,6 @@ impl Track {
                     Some(easing) => easing.evaluate((time - left.time) / (end_time - left.time)),
                     None => return Some(left.value.clone()),
                 };
-
                 let value = match left.interpolation {
                     TrackInterpolation::Value => left.value.lerp(end_value, t),
                     TrackInterpolation::QuaternionAxisAngle { axis, angle } => {
@@ -384,7 +382,6 @@ impl Track {
             Some(easing),
             TrackInterpolation::QuaternionAxisAngle { axis, angle },
         );
-
         self.set_keyframe(start_time + duration, TrackValue::Quaternion(to), None);
     }
 
@@ -501,7 +498,6 @@ impl Track {
         let left = self
             .keyframes
             .partition_point(|keyframe| keyframe.time <= time);
-
         let left_index = left.checked_sub(1);
         let right_index = (left < self.keyframes.len()).then_some(left);
 
@@ -1077,7 +1073,6 @@ impl TrackHandle<Quaternion> {
             axis.is_finite() && axis.length_squared() > f32::EPSILON,
             "Rotation axis must be finite and non-zero."
         );
-
         assert!(angle.is_finite(), "Rotation angle must be finite.");
 
         let from = normalized_quaternion(self.get());
@@ -1085,7 +1080,6 @@ impl TrackHandle<Quaternion> {
         let mut world = self.world.borrow_mut();
 
         (self.replace)(&mut world, self.entity, to);
-
         self.tween(from, to)
     }
 
@@ -1106,7 +1100,6 @@ impl TrackHandle<Quaternion> {
             axis.is_finite() && axis.length_squared() > f32::EPSILON,
             "Rotation axis must be finite and non-zero."
         );
-
         assert!(angle.is_finite(), "Rotation angle must be finite.");
 
         let axis = axis.normalize();
@@ -1264,7 +1257,6 @@ mod tests {
     #[test]
     fn caches_the_current_tween_range() {
         let mut track = tween_track();
-
         let _ = track.find_keyframes(5.0);
 
         assert_eq!(track.current_tween_range, (0.0, 10.0));
@@ -1285,7 +1277,6 @@ mod tests {
     #[test]
     fn caches_the_range_before_the_first_keyframe() {
         let mut track = offset_tween_track();
-
         let (left, right) = track.find_keyframes(1.0);
 
         assert!(left.is_none());
@@ -1302,7 +1293,6 @@ mod tests {
     #[test]
     fn caches_the_range_after_the_last_keyframe() {
         let mut track = tween_track();
-
         let (left, right) = track.find_keyframes(25.0);
 
         assert_eq!(left.unwrap().time, 20.0);
@@ -1319,7 +1309,6 @@ mod tests {
     #[test]
     fn invalidates_the_cached_tween_range_when_adding_a_keyframe() {
         let mut track = tween_track();
-
         let _ = track.find_keyframes(5.0);
 
         assert_eq!(track.current_tween_range, (0.0, 10.0));
@@ -1340,7 +1329,6 @@ mod tests {
             1.0,
             Easing::Linear,
         );
-
         track.add_tween(
             1.0,
             TrackValue::F32(1.0),
@@ -1387,7 +1375,6 @@ mod tests {
             let q = Quaternion::from_track_value(value).unwrap();
 
             assert!((q.length() - 1.0).abs() < 1e-6);
-
             assert!(q.abs_diff_eq(
                 Quaternion::from_rotation_y(std::f32::consts::FRAC_PI_4),
                 1e-6

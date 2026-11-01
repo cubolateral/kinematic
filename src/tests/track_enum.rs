@@ -54,9 +54,11 @@ impl PlaybackScene {
         let playback = playback().build(scene);
 
         scene.world_2d().add(&playback);
+
         playback.set_mode(PlaybackMode::Loop);
         playback.set_queued_mode(PlaybackMode::PingPong);
         playback.set_fallback_mode(PlaybackMode::Loop);
+
         assert_eq!(playback.get_mode(), PlaybackMode::Loop);
         assert_eq!(playback.get_queued_mode(), PlaybackMode::PingPong);
         assert_eq!(playback.get_fallback_mode(), PlaybackMode::Loop);
@@ -79,29 +81,23 @@ fn track_enum_provides_values_and_variant_metadata() {
         <PlaybackMode as crate::core::TrackEnum>::VARIANTS,
         &["Once", "Loop", "PingPong"]
     );
-
     assert_eq!(
         PlaybackMode::Loop.into_track_value(),
         TrackValue::Enum("Loop")
     );
-
     assert_eq!(
         PlaybackMode::from_track_value(TrackValue::Enum("PingPong")),
         Some(PlaybackMode::PingPong)
     );
-
     assert_eq!(
         PlaybackMode::from_track_value(TrackValue::Enum("Missing")),
         None
     );
-
     assert_eq!(
         Playback::track(0).choices,
         TrackChoices::Enum(&["Once", "Loop", "PingPong"])
     );
-
     assert_eq!(Playback::track(1).choices, Playback::track(0).choices);
-
     assert_eq!(
         PlaybackFallback::track(0).choices,
         Playback::track(0).choices
@@ -114,7 +110,6 @@ fn enum_tracks_are_discrete_and_keep_typed_handler_api() {
         TrackValue::Enum("Once").lerp(&TrackValue::Enum("Loop"), 0.999),
         TrackValue::Enum("Once")
     );
-
     assert_eq!(
         TrackValue::Enum("Once").lerp(&TrackValue::Enum("Loop"), 1.0),
         TrackValue::Enum("Loop")
@@ -135,11 +130,13 @@ fn enum_tracks_are_discrete_and_keep_typed_handler_api() {
     let playback = builder.playback.unwrap();
 
     scene.update(1.999);
+
     assert_eq!(playback.get_mode(), PlaybackMode::Loop);
     assert_eq!(playback.get_queued_mode(), PlaybackMode::PingPong);
     assert_eq!(playback.get_fallback_mode(), PlaybackMode::Loop);
 
     scene.update(2.0);
+
     assert_eq!(playback.get_mode(), PlaybackMode::PingPong);
     assert_eq!(playback.get_queued_mode(), PlaybackMode::Loop);
     assert_eq!(playback.get_fallback_mode(), PlaybackMode::Once);

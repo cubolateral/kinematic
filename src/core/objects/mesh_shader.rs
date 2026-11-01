@@ -87,6 +87,7 @@ impl MeshShaderData {
         let value = value.into().into_track_value();
 
         validate_shader_track_value(&value).unwrap_or_else(|error| panic!("{error}"));
+
         self.uniforms.insert(name, value);
     }
 
@@ -134,7 +135,6 @@ pub(crate) fn effective_mesh_shader(
     }) else {
         return Ok(None);
     };
-
     let owner = world.get::<&MeshShaderData>(lineage[start]).unwrap();
     let mut result = EffectiveMeshShader {
         shader: owner.shader.clone().unwrap(),
@@ -234,6 +234,7 @@ mod tests {
         group.add(&child);
         group.add(&own);
         group.add(&incompatible);
+
         scene.world_3d().add(&group);
 
         let effective = effective_mesh_shader(&scene.world(), child.entity())
@@ -288,8 +289,8 @@ mod tests {
                 let child = cube().mesh_uniform("amount", 0.25_f32).build(scene);
 
                 group.add(&child);
-                scene.world_3d().add(&group);
 
+                scene.world_3d().add(&group);
                 scene.all(|_| {
                     group
                         .uniform("amount", 1.0_f32)

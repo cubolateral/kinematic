@@ -86,11 +86,9 @@ fn draw_image_object(
     opacity: f32,
 ) {
     let source = world.get::<&ImageSource>(entity).unwrap();
-
     let Some(image) = source.image() else {
         return;
     };
-
     let shape = world.get::<&RectShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();

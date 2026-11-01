@@ -31,7 +31,9 @@ fn spatial_handlers_compose_transforms_and_bounds() {
         .build(&mut scene);
 
     parent.add(&child);
+
     canvas.add(&parent);
+
     scene.add_canvas_3d(&canvas);
 
     assert!(
@@ -39,14 +41,11 @@ fn spatial_handlers_compose_transforms_and_bounds() {
             .global_position()
             .abs_diff_eq(vec3(1.0, 4.0, 7.0), 1e-5)
     );
-
     assert!(child.global_scale().abs_diff_eq(vec3(2.0, 3.0, 4.0), 1e-5));
-
     assert!(child.global_rotation().abs_diff_eq(
         Quaternion::from_rotation_z(std::f32::consts::FRAC_PI_2) * Quaternion::from_rotation_y(0.5),
         1e-5
     ));
-
     assert_eq!(child.box_size(), vec3(2.0, 3.0, 4.0));
 }
 
@@ -70,7 +69,6 @@ fn group_origin_moves_3d_children_to_the_selected_edge() {
             .global_position()
             .abs_diff_eq(vec3(-1.0, 0.0, 0.0), 1e-5)
     );
-
     assert_eq!(
         group.get(Transform3D::origin_property()),
         vec3(1.0, 0.0, 0.0)
@@ -85,13 +83,16 @@ fn container_visibility_hides_its_3d_subtree() {
     let child = cube().build(&mut scene);
 
     parent.add(&child);
+
     canvas.add(&parent);
+
     scene.add_canvas_3d(&canvas);
 
     let world = scene.world();
     let mut visible = Vec::new();
 
     visible_subtree_3d(&world, canvas.entity(), &mut visible);
+
     assert!(visible.contains(&canvas.entity()));
     assert!(!visible.contains(&parent.entity()));
     assert!(!visible.contains(&child.entity()));
@@ -136,7 +137,9 @@ fn canvases_require_explicit_resolution_and_own_their_cameras() {
     assert!(invalid.validate().is_err());
     assert!(two.validate().is_ok());
     assert!(three.validate().is_ok());
+
     scene.add_canvas_3d(&three);
+
     assert!(three.validate().is_ok());
 
     let world = scene.world();
@@ -144,7 +147,6 @@ fn canvases_require_explicit_resolution_and_own_their_cameras() {
 
     assert_eq!(camera.camera_position, vec3(0.0, 0.0, 3.0));
     assert!(world.get::<&Camera2D>(two.entity()).is_ok());
-
     assert_eq!(
         world
             .get::<&CanvasSettings>(two.entity())
@@ -208,12 +210,10 @@ fn projection_2d_builder_sizes_the_rect_from_canvas_resolution() {
         world.get::<&RectShape>(projection.entity()).unwrap().size,
         vec2(960.0, 540.0)
     );
-
     assert_eq!(
         world.get::<&Style>(projection.entity()).unwrap().fill,
         Color::TRANSPARENT
     );
-
     assert_eq!(
         world.get::<&RectShape>(projection.entity()).unwrap().round,
         Quad::new(10.0, 20.0, 30.0, 40.0)
@@ -259,14 +259,14 @@ fn spatial_tracks_snapshots_and_lifetime_are_seekable() {
             let cube = cube().build(scene);
 
             canvas.add(&cube);
-            scene.add_canvas_3d(&canvas);
-            cube.save();
 
+            scene.add_canvas_3d(&canvas);
+
+            cube.save();
             cube.position(vec3(2.0, 4.0, 6.0))
                 .duration(2.0)
                 .easing(Easing::Linear)
                 .play();
-
             cube.restore().duration(2.0).easing(Easing::Linear).play();
             cube.remove();
 
@@ -300,8 +300,11 @@ fn spatial_tracks_snapshots_and_lifetime_are_seekable() {
     );
 
     scene.update(4.0);
+
     assert!(!active_subtree(&scene.world(), scene.root().entity()).contains(&cube.entity()));
+
     scene.update(0.0);
+
     assert!(active_subtree(&scene.world(), scene.root().entity()).contains(&cube.entity()));
     assert_eq!(cube.name(), "Prism");
     assert!(scene.pick(Vector2::ZERO).is_none());
@@ -309,6 +312,7 @@ fn spatial_tracks_snapshots_and_lifetime_are_seekable() {
     let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
 
     scene.draw(surface.canvas());
+
     assert!(scene.selection_outline(cube.entity()).is_none());
 }
 
@@ -320,6 +324,7 @@ fn projections_order_dependencies_and_reject_cycles_and_inactive_sources() {
     let projection = projection_3d().source(&source).build(&mut scene);
 
     world.add(&projection);
+
     scene.add_canvas_2d(&source);
     scene.root().view_2d(false).immediate();
 
@@ -333,11 +338,17 @@ fn projections_order_dependencies_and_reject_cycles_and_inactive_sources() {
     ]);
 
     assert!(order_dependencies(&cyclic).unwrap_err().contains("cycle"));
+
     source.remove();
+
     scene.update(0.0);
+
     assert!(canvas_order(&scene).unwrap_err().contains("inactive"));
+
     projection.remove();
+
     scene.update(0.0);
+
     assert_eq!(canvas_order(&scene).unwrap(), vec![world.entity()]);
 }
 
@@ -349,6 +360,7 @@ fn projection_2d_orders_its_canvas_3d_dependency() {
     let projection = projection_2d().source(&world_3d).build(&mut scene);
 
     world_2d.add(&projection);
+
     scene.update(0.0);
 
     assert_eq!(
@@ -368,6 +380,7 @@ fn projections_accept_sources_with_the_same_dimension() {
     let projection_2d = projection_2d().source(&source_2d).build(&mut scene_2d);
 
     output_2d.add(&projection_2d);
+
     scene_2d.update(0.0);
 
     assert_eq!(
@@ -384,6 +397,7 @@ fn projections_accept_sources_with_the_same_dimension() {
     let projection_3d = projection_3d().source(&source_3d).build(&mut scene_3d);
 
     output_3d.add(&projection_3d);
+
     scene_3d.root().view_2d(false).immediate();
     scene_3d.update(0.0);
 
@@ -416,6 +430,7 @@ fn canvas2d_camera_is_scoped_to_its_canvas() {
     let mut surface = skia_safe::surfaces::raster_n32_premul((32, 32)).unwrap();
 
     draw_canvas2d(&scene.world(), source.entity(), surface.canvas());
+
     assert_eq!(surface.peek_pixels().unwrap().get_color((16, 16)).r(), 255);
     assert_eq!(scene.pick(Vector2::ZERO), Some(shape.entity()));
     assert!(scene.pick(vec2(10.0, 10.0)).is_none());
@@ -440,7 +455,9 @@ fn objects_can_ignore_the_2d_camera_with_their_subtree() {
         .build(&mut scene);
 
     fixed.add(&child);
+
     parent.add(&fixed);
+
     canvas.add(&parent);
     canvas.camera_position(vec2(10.0, 0.0)).immediate();
 
@@ -455,7 +472,6 @@ fn objects_can_ignore_the_2d_camera_with_their_subtree() {
     assert_eq!(pixels.get_color((13, 16)).a(), 0);
     assert_eq!(scene.pick(vec2(7.0, 0.0)), Some(child.entity()));
     assert_ne!(scene.pick(vec2(-3.0, 0.0)), Some(child.entity()));
-
     assert_eq!(
         scene.selection_outline(child.entity()).unwrap()[0][0][0],
         0.65625
@@ -480,7 +496,6 @@ fn canvas_camera_tracks_use_the_camera_prefix() {
         .camera_far(200.0)
         .build(&mut scene);
     let world = scene.world();
-
     let camera_2d = world.get::<&Camera2D>(two.entity()).unwrap();
 
     assert_eq!(camera_2d.camera_position, vec2(1.0, 2.0));
@@ -513,7 +528,6 @@ fn canvas_camera_tracks_use_the_camera_prefix() {
 #[test]
 fn camera3d_defaults_to_perspective_mode() {
     assert_eq!(Camera3D::default().camera_mode, Camera3DMode::Perspective);
-
     assert_eq!(
         Camera3D::track(0).choices,
         TrackChoices::Enum(&["Perspective", "Orthogonal"])
@@ -533,7 +547,6 @@ fn canvas3d_focus_camera_moves_and_looks_at_the_target() {
     let camera = world.get::<&Camera3D>(canvas.entity()).unwrap();
 
     assert_eq!(camera.camera_position, position);
-
     assert!(
         (camera.camera_rotation * Vector3::NEG_Z)
             .abs_diff_eq((target - position).normalize(), 1e-5)
@@ -550,7 +563,6 @@ fn orthogonal_camera_projects_and_picks_with_parallel_rays() {
         .build(&mut scene);
 
     canvas.add(&cube);
-
     canvas
         .camera_mode(Camera3DMode::Orthogonal)
         .camera_fov(2.0)
@@ -585,8 +597,11 @@ fn root_view_track_switches_between_builtin_worlds() {
     };
 
     scene.update(0.0);
+
     assert_eq!(scene.view_texture(), world_3d);
+
     scene.update(2.0);
+
     assert_eq!(scene.view_texture(), world_2d);
 }
 
@@ -605,7 +620,9 @@ fn light_objects_follow_3d_visibility_and_animation() {
     group.add(&directional);
     group.add(&point);
     group.add(&spot);
+
     canvas.add(&group);
+
     scene.add_canvas_3d(&canvas);
 
     assert_eq!(point.global_position(), vec3(3.0, 0.0, 0.0));
@@ -616,11 +633,14 @@ fn light_objects_follow_3d_visibility_and_animation() {
     let mut visible = Vec::new();
 
     visible_subtree_3d(&scene.world(), canvas.entity(), &mut visible);
+
     assert!(visible.contains(&directional.entity()));
     assert!(visible.contains(&point.entity()));
     assert!(visible.contains(&spot.entity()));
+
     group.visibility(false).immediate();
 
     visible_subtree_3d(&scene.world(), canvas.entity(), &mut visible);
+
     assert!(!visible.contains(&point.entity()));
 }
