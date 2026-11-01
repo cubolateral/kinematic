@@ -1,5 +1,6 @@
 use crate::editor::documents::{Documents, FileEntry, SceneTemplate};
 use crate::ui::inputs::{self, Action as InputAction};
+use crate::utilities::terminal::open_terminal;
 use dear_imgui_rs::{Condition, MouseButton, Ui};
 use kinematic_ui::widgets;
 use kinematic_ui::{controls, icons, menu};
@@ -597,26 +598,35 @@ impl State {
 
                 None
             } else {
-                widgets::text(ui, "Name");
-                ui.set_next_item_width(width);
-                if ui.is_window_appearing() {
-                    ui.set_keyboard_focus_here();
-                }
-                submit = controls::text_submit(ui, "##Name", &mut dialog.name);
+                submit = kinematic_ui::properties::row(ui, "Name", false, || {
+                    if ui.is_window_appearing() {
+                        ui.set_keyboard_focus_here();
+                    }
+                    controls::text_submit(ui, "##Name", &mut dialog.name)
+                })
+                .changed;
                 submit |= inputs::active(ui, InputAction::Confirm);
 
                 if matches!(dialog.action, Action::Scene) {
-                    widgets::text(ui, "Template");
-
-                    for (label, template) in [
-                        ("No template", SceneTemplate::None),
-                        ("2D template", SceneTemplate::TwoD),
-                        ("3D template", SceneTemplate::ThreeD),
-                    ] {
-                        if controls::radio_button(ui, label, dialog.template == template) {
-                            dialog.template = template;
-                        }
-                    }
+                    kinematic_ui::properties::row(ui, "Template", false, || {
+                        let mut index = match dialog.template {
+                            SceneTemplate::None => 0,
+                            SceneTemplate::TwoD => 1,
+                            SceneTemplate::ThreeD => 2,
+                        };
+                        let changed = controls::choice(
+                            ui,
+                            "##Template",
+                            &mut index,
+                            &["No template", "2D template", "3D template"],
+                        );
+                        dialog.template = [
+                            SceneTemplate::None,
+                            SceneTemplate::TwoD,
+                            SceneTemplate::ThreeD,
+                        ][index];
+                        changed
+                    });
 
                     widgets::message(
                         ui,
@@ -645,8 +655,6 @@ impl State {
                 }
             }
 
-            widgets::separator(ui);
-
             let label = match dialog.action {
                 Action::Delete => "Delete",
                 Action::Rename => "Rename",
@@ -654,15 +662,10 @@ impl State {
                 _ => "Create",
             };
 
-            {
-                let _disabled = ui.begin_disabled_with_cond(validation.is_some());
-
-                submit |= controls::button(ui, label);
-            }
-
-            ui.same_line();
-
-            if controls::button(ui, "Cancel") || inputs::active(ui, InputAction::Cancel) {
+            let action =
+                crate::ui::windows::actions(ui, &[(label, validation.is_none()), ("Cancel", true)]);
+            submit |= action == Some(0);
+            if action == Some(1) || inputs::active(ui, InputAction::Cancel) {
                 finished = true;
 
                 ui.close_current_popup();
@@ -731,97 +734,6 @@ fn protected(path: &Path) -> bool {
 
 fn dialog_name(name: &str, action: Action) -> Result<String, String> {
     filename(name, matches!(action, Action::Scene | Action::Script))
-}
-
-fn open_terminal(folder: &Path) -> Result<std::sync::mpsc::Receiver<String>, String> {
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    use std::process::Command;
-    #[cfg(target_os = "windows")]
-    let result = Command::new("cmd.exe")
-        .args(["/C", "start", "cmd.exe", "/K"])
-        .current_dir(folder)
-        .spawn();
-    #[cfg(target_os = "macos")]
-    let result = Command::new("open")
-        .args(["-a", "Terminal"])
-        .arg(folder)
-        .spawn();
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    let result = [
-        "xdg-terminal-exec",
-        "x-terminal-emulator",
-        "kitty",
-        "alacritty",
-        "ghostty",
-        "foot",
-        "wezterm",
-        "kgx",
-        "ptyxis",
-        "gnome-terminal",
-        "konsole",
-        "xfce4-terminal",
-        "xterm",
-    ]
-    .iter()
-    .find_map(|program| {
-        let mut command = terminal_command(program, folder);
-        command.spawn().ok()
-    })
-    .ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "No supported terminal emulator found in PATH.",
-        )
-    });
-    let child = result.map_err(|error| {
-        format!(
-            "Could not open terminal: {}.",
-            error.to_string().trim_end_matches('.')
-        )
-    })?;
-    let (sender, receiver) = std::sync::mpsc::channel();
-    std::thread::spawn(move || match child.wait_with_output() {
-        Ok(output) if !output.status.success() => {
-            let details = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-            let _ = sender.send(if details.is_empty() {
-                format!("Terminal exited with {}.", output.status)
-            } else {
-                format!("Could not open terminal: {details}")
-            });
-        }
-        Err(error) => {
-            let _ = sender.send(format!("Could not wait for terminal: {error}."));
-        }
-        _ => {}
-    });
-    Ok(receiver)
-}
-
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn terminal_command(program: &str, folder: &Path) -> std::process::Command {
-    let mut command = std::process::Command::new(program);
-    command
-        .current_dir(folder)
-        .stderr(std::process::Stdio::piped());
-    match program {
-        "kitty" => {
-            command.arg("--directory").arg(folder);
-        }
-        "alacritty" | "gnome-terminal" | "xfce4-terminal" | "ghostty" => {
-            command.arg("--working-directory").arg(folder);
-        }
-        "konsole" => {
-            command.arg("--workdir").arg(folder);
-        }
-        "wezterm" => {
-            command.args(["start", "--cwd"]).arg(folder);
-        }
-        "foot" | "kgx" | "ptyxis" => {
-            command.arg("--working-directory").arg(folder);
-        }
-        _ => {}
-    }
-    command
 }
 
 fn filename(name: &str, scene: bool) -> Result<String, String> {
@@ -995,29 +907,6 @@ mod tests {
         assert!(!root.join("destination/b.txt").exists());
         drop(documents);
         std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    #[test]
-    fn terminal_launch_preserves_folder_arguments_and_working_directory() {
-        let folder =
-            std::env::temp_dir().join(format!("kinematic terminal {}", std::process::id()));
-        std::fs::create_dir_all(&folder).unwrap();
-        let kitty = terminal_command("kitty", &folder);
-        assert_eq!(
-            kitty.get_args().collect::<Vec<_>>(),
-            vec![std::ffi::OsStr::new("--directory"), folder.as_os_str()]
-        );
-        let output = terminal_command("sh", &folder)
-            .args(["-c", "pwd"])
-            .output()
-            .unwrap();
-        assert!(output.status.success());
-        assert_eq!(
-            Path::new(String::from_utf8(output.stdout).unwrap().trim()),
-            folder
-        );
-        std::fs::remove_dir(folder).unwrap();
     }
 
     #[test]

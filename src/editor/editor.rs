@@ -1210,6 +1210,35 @@ impl Editor {
         (&self.project.name, self.project.settings)
     }
 
+    pub(crate) fn rename_project(&mut self, name: &str) -> Result<(), String> {
+        if self.is_exporting || self.pending_lua.is_some() {
+            return Err("Finish applying project changes before renaming the project.".into());
+        }
+        let project = self.lua_project.as_mut().ok_or("No Lua project is open.")?;
+        let mut manifest = project.manifest.clone();
+        manifest.name = name.trim().into();
+        manifest.validate(&project.context)?;
+        let documents = self.documents.as_mut().unwrap();
+        if documents
+            .open
+            .get(std::path::Path::new(crate::scripting::MANIFEST))
+            .is_some_and(|document| document.dirty() || document.conflict)
+        {
+            return Err("Save or resolve manifest text edits before renaming the project.".into());
+        }
+        let previous_name = std::mem::replace(&mut project.manifest.name, manifest.name);
+        let was_dirty = documents.project_dirty;
+        documents.project_dirty = true;
+        if let Err(error) = self.save_project() {
+            self.lua_project.as_mut().unwrap().manifest.name = previous_name;
+            self.documents.as_mut().unwrap().project_dirty = was_dirty;
+            return Err(error);
+        }
+        self.project.name = self.lua_project.as_ref().unwrap().manifest.name.clone();
+        self.documents.as_mut().unwrap().status = "Project name saved.".into();
+        Ok(())
+    }
+
     pub(crate) fn request_project_settings(&mut self, settings: ProjectSettings) {
         if self.is_exporting {
             return;

@@ -306,29 +306,47 @@ impl LuaProject {
         name: &str,
         three_dimensional: bool,
     ) -> Result<Self, String> {
-        let root = root.as_ref();
+        Self::create_with_settings(root, name, three_dimensional, ProjectSettings::default())
+    }
 
-        if root.exists()
-            && std::fs::read_dir(root)
-                .map_err(|e| e.to_string())?
-                .next()
-                .is_some()
-        {
-            return Err("Create a project in an empty directory.".into());
+    pub(crate) fn create_with_settings(
+        root: impl AsRef<Path>,
+        name: &str,
+        three_dimensional: bool,
+        settings: ProjectSettings,
+    ) -> Result<Self, String> {
+        let root = root.as_ref();
+        for path in [
+            MANIFEST,
+            "kinematic.ron",
+            ".kinematic/project.ron",
+            "scenes/intro.lua",
+        ] {
+            if root.join(path).try_exists().map_err(|e| e.to_string())? {
+                return Err(format!(
+                    "Project file {path} already exists. Choose another root directory."
+                ));
+            }
         }
 
         std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
 
         let context = ProjectContext::new(root).map_err(|e| e.to_string())?;
+        for folder in ["assets", "scenes", "kinematic"] {
+            let path = context.resolve(folder).map_err(|e| e.to_string())?;
+            if path.try_exists().map_err(|e| e.to_string())? && !path.is_dir() {
+                return Err(format!("Project folder {folder} is occupied by a file."));
+            }
+        }
         let manifest = Manifest {
             version: 1,
             name: name.into(),
             scenes: vec!["scenes/intro.lua".into()],
             audio: Vec::new(),
             legacy_audio: BTreeMap::new(),
-            resolution: (1280, 720),
-            fps: 60,
-            margin: Margin::default(),
+            resolution: settings.resolution,
+            fps: settings.fps,
+            margin: settings.margin,
         };
 
         manifest.validate(&context)?;
@@ -422,6 +440,47 @@ impl LuaProject {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn creation_in_existing_roots_preserves_files_and_saves_selected_settings() {
+        let base =
+            std::env::temp_dir().join(format!("kinematic-project-create-{}", std::process::id()));
+        let root = base.join("Project");
+        std::fs::create_dir_all(root.join("assets")).unwrap();
+        std::fs::write(root.join("notes.txt"), "Keep notes.").unwrap();
+        std::fs::write(root.join("assets/existing.txt"), "Keep asset.").unwrap();
+        let settings = ProjectSettings {
+            resolution: (1080, 1920),
+            fps: 24,
+            ..ProjectSettings::default()
+        };
+        LuaProject::create_with_settings(&root, "Portrait", false, settings).unwrap();
+        let reopened = LuaProject::open(&root).unwrap();
+        assert_eq!(reopened.manifest.settings(), settings);
+        assert_eq!(
+            std::fs::read_to_string(root.join("notes.txt")).unwrap(),
+            "Keep notes."
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("assets/existing.txt")).unwrap(),
+            "Keep asset."
+        );
+        let manifest = std::fs::read(root.join(MANIFEST)).unwrap();
+        let scene = std::fs::read(root.join("scenes/intro.lua")).unwrap();
+        assert!(LuaProject::create(&root, "Overwrite", false).is_err());
+        assert_eq!(std::fs::read(root.join(MANIFEST)).unwrap(), manifest);
+        assert_eq!(std::fs::read(root.join("scenes/intro.lua")).unwrap(), scene);
+        let conflict = base.join("Conflict");
+        std::fs::create_dir_all(conflict.join("scenes")).unwrap();
+        std::fs::write(conflict.join("scenes/intro.lua"), "Keep scene.").unwrap();
+        assert!(LuaProject::create(&conflict, "Conflict", false).is_err());
+        assert!(!conflict.join(MANIFEST).exists());
+        assert_eq!(
+            std::fs::read_to_string(conflict.join("scenes/intro.lua")).unwrap(),
+            "Keep scene."
+        );
+        std::fs::remove_dir_all(base).unwrap();
+    }
 
     #[test]
     fn manifests_default_to_five_percent_and_preserve_legacy_margins() {

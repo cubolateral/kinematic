@@ -17,16 +17,35 @@ and MP4 export.
 cargo run --release
 ```
 
-The editor remembers the current project's directory and reopens it on the
-next launch. Without a saved project, it opens an empty workspace with the
-project creation/opening screen. Closing a project clears the saved current
-project. If the directory becomes unavailable, the editor reports the error
-and lets you open another project. Project files are never deleted by this flow.
+Kinematic restores the screen used when it last closed: an open project is
+reopened, while closing from home starts on home again. If a project is
+unavailable, startup falls back to home. The home screen lists recent projects, searches
+by name and opens projects with a double click. Right-click a project to open,
+rename, duplicate, remove it from the list, copy its path or open a terminal.
+Removing a list entry keeps its files. Unavailable projects keep their saved
+names and appear dimmed with a strikethrough. Each row shows the project format
+version and its last opening time in the local timezone.
 
-Use **Projects → Open / Create Project** to choose a directory. A new project
-contains an editable Lua example, an `assets/` directory and `kinematic/project.ron`.
-The folder browser enables **Select Folder** only for directories containing a
-valid `kinematic/project.ron`. Older project layouts migrate when opened directly.
+Use **Create project** to choose a project path, or **Open project** to open an
+existing directory. The default name is **Project**. Browse selects a parent
+folder and appends the project name in snake case. The last selected folder is
+cached; the path stays empty if no folder is saved or it is unavailable.
+Renaming updates the path until it is edited manually; browsing again restores
+automatic updates. A new project
+contains an editable Lua example, an `assets/` directory and
+`kinematic/project.ron`. Creation accepts any root directory without overwriting
+existing project files, with resolution and FPS presets defaulting to 1280×720
+at 60 FPS. Opening requires a valid `kinematic/project.ron`.
+Its name can also be changed in
+**Project → Project settings**.
+
+Use **Project → Save project** (`Ctrl+S`) to save the project and open files.
+The home icon at the start of the editor toolbar (`Ctrl+Shift+Q`) returns home.
+The top-right close icon (`Ctrl+Q`) exits; the home screen also has an editor settings icon.
+Errors appear in centered message popups.
+
+When opening a project, the folder browser enables **Select Folder** only for
+directories containing a valid `kinematic/project.ron`. Older project layouts migrate when opened directly.
 Change the scene in Code; the preview updates after a short pause. Save persists
 the source files. Closing unsaved buffers or exiting offers Save, Discard and
 Cancel.
@@ -95,7 +114,8 @@ Runnable projects are in [examples/lua](examples/lua): 2D, 3D, simulation
 
 Project sources, assets, `kinematic/project.ron`, runtime metadata under `kinematic/`
 and exports under `output/` belong to the project directory. Global settings,
-window layout, preview volume, text editor zoom and the current project path stay
+window layout, preview volume, text editor zoom, recent project details and the
+last opened project stay
 under `.kinematic` in the
 platform's user data directory:
 

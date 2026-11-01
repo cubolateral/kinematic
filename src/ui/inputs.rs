@@ -60,6 +60,8 @@ pub(super) enum Action {
     Find,
     Save,
     SaveProject,
+    Quit,
+    ProjectList,
     ZoomIn,
     ZoomOut,
     Definition,
@@ -341,6 +343,19 @@ impl Default for InputMap {
                     .trigger(Repeat),
                 Binding::new(Find, CodeEditor, "Find", "Ctrl + F", &[Key::F])
                     .modifiers(KeyMods::CTRL, KeyMods::CTRL),
+                Binding::new(Quit, Editor, "Quit", "Ctrl + Q", &[Key::Q])
+                    .modifiers(KeyMods::CTRL, KeyMods::CTRL),
+                Binding::new(
+                    ProjectList,
+                    Editor,
+                    "Back to projects",
+                    "Ctrl + Shift + Q",
+                    &[Key::Q],
+                )
+                .modifiers(
+                    KeyMods::CTRL | KeyMods::SHIFT,
+                    KeyMods::CTRL | KeyMods::SHIFT,
+                ),
                 Binding::new(SaveProject, Editor, "Save project", "Ctrl + S", &[Key::S])
                     .modifiers(KeyMods::CTRL, KeyMods::CTRL),
                 Binding::new(Save, CodeEditor, "Save file", "Ctrl + S", &[Key::S])
@@ -1138,6 +1153,15 @@ mod tests {
             (Action::Save, Key::S, KeyMods::CTRL, true),
             (Action::SaveProject, Key::S, KeyMods::CTRL, true),
             (Action::SaveProject, Key::S, KeyMods::empty(), false),
+            (Action::Quit, Key::Q, KeyMods::CTRL, true),
+            (Action::Quit, Key::Q, KeyMods::CTRL | KeyMods::SHIFT, false),
+            (
+                Action::ProjectList,
+                Key::Q,
+                KeyMods::CTRL | KeyMods::SHIFT,
+                true,
+            ),
+            (Action::ProjectList, Key::Q, KeyMods::CTRL, false),
             (Action::Save, Key::S, KeyMods::empty(), false),
             (Action::CameraFast, Key::ModShift, KeyMods::SHIFT, true),
             (Action::ToggleMargin, Key::N, KeyMods::empty(), true),

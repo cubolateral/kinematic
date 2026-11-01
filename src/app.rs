@@ -137,8 +137,11 @@ impl App {
 
     fn remember_project(&mut self, editor: Option<&Editor>) {
         if !self.export_only {
+            if let Some(editor) = editor {
+                self.ui.remember_project(editor.context().root());
+            }
             if let Err(error) =
-                crate::storage::save_current_project(editor.map(|e| e.context().root()))
+                crate::storage::save_current_project(editor.map(|editor| editor.context().root()))
             {
                 self.ui.project_error(error);
             }
@@ -361,10 +364,6 @@ impl App {
                 if let Some([x, y]) = editor.take_pending_mouse_warp() {
                     self.sdl.mouse().warp_mouse_in_window(&self.window, x, y);
                 }
-            } else {
-                ui.dockspace()
-                    .build()
-                    .expect("Welcome workspace must be valid.");
             }
 
             self.ui.draw_projects(editor.as_mut(), ui);
@@ -384,8 +383,11 @@ impl App {
                     crate::ui::ProjectAction::Open(root) => {
                         crate::scripting::LuaProject::open(root).map(Some)
                     }
-                    crate::ui::ProjectAction::Create(root, name, three) => {
-                        crate::scripting::LuaProject::create(root, &name, three).map(Some)
+                    crate::ui::ProjectAction::Create(root, name, settings) => {
+                        crate::scripting::LuaProject::create_with_settings(
+                            root, &name, false, settings,
+                        )
+                        .map(Some)
                     }
                 }
                 .and_then(|project| {
@@ -444,6 +446,9 @@ impl App {
             }
         }
 
+        if editor.is_none() {
+            self.remember_project(None);
+        }
         self.ui.reset_project();
 
         if let Some(mut editor) = editor {

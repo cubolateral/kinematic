@@ -7,6 +7,7 @@ pub mod diagnostics;
 pub mod icons;
 pub mod lists;
 pub mod menu;
+pub mod message_box;
 pub mod numbers;
 pub mod properties;
 pub mod shortcut;

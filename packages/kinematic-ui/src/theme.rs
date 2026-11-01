@@ -4,6 +4,9 @@ use dear_imgui_rs::{ColorStackToken, Context, FontId, StyleColor, Ui};
 
 pub const CORNER_RADIUS: f32 = 2.0;
 pub const BORDER_WIDTH: f32 = 1.0;
+pub const WINDOW_PADDING: [f32; 2] = [8.0, 8.0];
+pub const FRAME_PADDING: [f32; 2] = [6.0, 4.0];
+pub const ITEM_SPACING: [f32; 2] = [8.0, 5.0];
 pub const ERROR: [f32; 4] = [0.95, 0.33, 0.33, 1.0];
 pub const WARNING: [f32; 4] = [0.89, 0.80, 0.33, 1.0];
 
@@ -184,9 +187,9 @@ fn apply_geometry(context: &mut Context) {
     style.set_popup_border_size(BORDER_WIDTH);
     style.set_frame_border_size(0.0);
 
-    style.set_window_padding([8.0, 8.0]);
-    style.set_frame_padding([6.0, 4.0]);
-    style.set_item_spacing([8.0, 5.0]);
+    style.set_window_padding(WINDOW_PADDING);
+    style.set_frame_padding(FRAME_PADDING);
+    style.set_item_spacing(ITEM_SPACING);
     style.set_item_inner_spacing([6.0, 4.0]);
 
     style.set_scrollbar_size(12.0);

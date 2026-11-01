@@ -19,6 +19,8 @@ pub(super) struct State {
     pub(super) project_open: bool,
     pub(super) editor_open: bool,
     initialized: bool,
+    name: String,
+    pub(super) name_error: Option<String>,
     resolution: [i32; 2],
     fps: i32,
     margin: Margin,
@@ -88,7 +90,8 @@ pub(super) fn draw(
             .build(|| {
                 if let Some(editor) = editor {
                     if !state.initialized {
-                        let (_, settings) = editor.project_info();
+                        let (name, settings) = editor.project_info();
+                        state.name = name.into();
 
                         state.resolution =
                             [settings.resolution.0 as i32, settings.resolution.1 as i32];
@@ -100,6 +103,12 @@ pub(super) fn draw(
 
                     let project_changed = {
                         let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
+                        let edit = super::properties::row(ui, "Name", false, || {
+                            controls::text_submit(ui, "##Name", &mut state.name)
+                        });
+                        if edit.changed || edit.committed {
+                            state.name_error = editor.rename_project(&state.name).err();
+                        }
                         let defaults = ProjectSettings::default();
                         let resolution_changed = field(
                             ui,

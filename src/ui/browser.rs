@@ -14,6 +14,18 @@ use std::{
 
 use dear_imgui_rs::{ListClipper, MouseButton, TableFlags, Ui};
 
+#[derive(Clone, Copy)]
+pub(super) enum Mode {
+    Directory,
+    Project,
+}
+
+impl Mode {
+    fn accepts(self, path: &Path) -> bool {
+        path.is_dir() && (matches!(self, Self::Directory) || valid_project(path))
+    }
+}
+
 struct Entry {
     path: PathBuf,
     name: String,
@@ -21,6 +33,7 @@ struct Entry {
 }
 
 pub(super) struct State {
+    mode: Mode,
     cwd: PathBuf,
     path: String,
     entries: Vec<Entry>,
@@ -36,7 +49,7 @@ pub(super) struct State {
 }
 
 impl State {
-    pub(super) fn new(path: &str) -> io::Result<Self> {
+    pub(super) fn new(path: &str, mode: Mode) -> io::Result<Self> {
         let cwd = Path::new(path)
             .canonicalize()
             .ok()
@@ -44,6 +57,7 @@ impl State {
             .map(Ok)
             .unwrap_or_else(std::env::current_dir)?;
         let mut state = Self {
+            mode,
             path: cwd.to_string_lossy().into_owned(),
             history: vec![cwd.clone()],
             cwd,
@@ -145,16 +159,19 @@ impl State {
             }
         }
 
-        const TITLE: &str = "Select Project Folder";
+        let title = match self.mode {
+            Mode::Directory => "Select parent folder",
+            Mode::Project => "Select Project Folder",
+        };
 
-        if !ui.is_popup_open(TITLE) {
-            ui.open_popup(TITLE);
+        if !ui.is_popup_open(title) {
+            ui.open_popup(title);
         }
 
         let mut open = true;
 
         {
-            let popup = super::windows::sized_modal(ui, TITLE, &mut open, [760.0, 520.0]);
+            let popup = super::windows::sized_modal(ui, title, &mut open, [760.0, 520.0]);
 
             if let Some(_popup) = popup {
                 for (label, step, enabled) in [
@@ -201,16 +218,21 @@ impl State {
                     }
                 }
 
-                ui.set_next_item_width(-1.0);
-
-                if controls::text_submit(ui, "##BrowserPath", &mut self.path) {
+                let path = kinematic_ui::properties::row(ui, "Directory", false, || {
+                    controls::text_submit(ui, "##BrowserPath", &mut self.path)
+                });
+                if path.changed {
                     self.navigate(&PathBuf::from(&self.path), true);
                 }
-
-                ui.set_next_item_width((ui.content_region_avail_width() - 170.0).max(1.0));
-                controls::text_input(ui, "Search", &mut self.search);
-                ui.same_line();
-                controls::checkbox(ui, "Hidden files", &mut self.hidden);
+                kinematic_ui::properties::row(ui, "Search", false, || {
+                    let width = ui.calc_text_size("Hidden files")[0]
+                        + ui.frame_height()
+                        + ui.clone_style().item_spacing()[0] * 2.0;
+                    ui.set_next_item_width((ui.content_region_avail_width() - width).max(1.0));
+                    let changed = controls::text_input(ui, "##BrowserSearch", &mut self.search);
+                    ui.same_line();
+                    controls::checkbox(ui, "Hidden files", &mut self.hidden) || changed
+                });
 
                 let query = self.search.to_lowercase();
                 let entries: Vec<_> = self
@@ -290,27 +312,20 @@ impl State {
 
                 let target = self.selected.as_ref().unwrap_or(&self.cwd);
                 if self.project.as_ref().is_none_or(|(path, _)| path != target) {
-                    let valid = valid_project(target);
+                    let valid = self.mode.accepts(target);
 
                     self.project = Some((target.clone(), valid));
                 }
                 let valid = self.project.as_ref().is_some_and(|(_, valid)| *valid);
 
-                {
-                    let _disabled = ui.begin_disabled_with_cond(
-                        self.loading.is_some() || self.error.is_some() || !valid,
-                    );
-
-                    if controls::button(ui, "Select Folder") {
-                        ui.close_current_popup();
-
-                        return Some(Some(target.clone()));
-                    }
+                let enabled = self.loading.is_none() && self.error.is_none() && valid;
+                let action =
+                    super::windows::actions(ui, &[("Select Folder", enabled), ("Cancel", true)]);
+                if action == Some(0) {
+                    ui.close_current_popup();
+                    return Some(Some(target.clone()));
                 }
-
-                ui.same_line();
-
-                if controls::button(ui, "Cancel") || inputs::active(ui, InputAction::Cancel) {
+                if action == Some(1) || inputs::active(ui, InputAction::Cancel) {
                     ui.close_current_popup();
 
                     return Some(None);
@@ -368,12 +383,18 @@ mod tests {
             std::env::temp_dir().join(format!("kinematic-browser-project-{}", std::process::id()));
 
         fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("notes.txt"), "Keep.").unwrap();
+        assert!(Mode::Directory.accepts(&root));
+        assert!(!Mode::Project.accepts(&root));
+        assert!(!Mode::Directory.accepts(&root.join("notes.txt")));
         assert!(!valid_project(&root));
 
         let project =
             crate::scripting::LuaProject::create(root.join("valid"), "Test", false).unwrap();
 
         assert!(valid_project(project.context.root()));
+        assert!(Mode::Project.accepts(project.context.root()));
+        assert!(Mode::Directory.accepts(project.context.root()));
         assert!(!valid_project(&project.context.root().join("kinematic")));
 
         let manifest = project.context.root().join(crate::scripting::MANIFEST);
@@ -408,7 +429,7 @@ mod tests {
         context.io_mut().set_display_size([1280.0, 720.0]);
         context.io_mut().set_delta_time(1.0 / 60.0);
 
-        let mut state = State::new(std::env::temp_dir().to_str().unwrap()).unwrap();
+        let mut state = State::new(std::env::temp_dir().to_str().unwrap(), Mode::Project).unwrap();
 
         state.entries = vec![Entry {
             path: state.cwd.join("scene##.lua"),
@@ -454,7 +475,7 @@ mod tests {
         assert_eq!(entries[1].name, "scene.lua");
         assert_eq!(entries[1].path.extension().unwrap(), "lua");
 
-        let mut state = State::new(root.to_str().unwrap()).unwrap();
+        let mut state = State::new(root.to_str().unwrap(), Mode::Directory).unwrap();
         let cwd = state.cwd.clone();
 
         assert!(!state.navigate(&root.join("scene.lua"), true));

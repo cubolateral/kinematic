@@ -65,20 +65,15 @@ fn run() -> Result<(), String> {
     }
 
     let mut app = app::app();
-    let root = if let Some(root) = args.first() {
-        Some(std::path::PathBuf::from(root))
-    } else {
-        match storage::current_project() {
-            Ok(root) => root,
-            Err(error) => {
-                eprintln!("Could not restore current project: {error}.");
-
-                None
-            }
-        }
-    };
-
-    if let Some(root) = root {
+    if let Some(root) = args.first() {
+        app = app.open_project(root);
+    } else if let Some(root) = storage::current_project()
+        .unwrap_or_else(|error| {
+            eprintln!("Could not restore current project: {error}.");
+            None
+        })
+        .filter(|root| root.is_dir())
+    {
         app = app.open_project(root);
     }
 

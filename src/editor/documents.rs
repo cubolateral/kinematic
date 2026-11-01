@@ -51,7 +51,7 @@ pub(crate) struct Documents {
     formatting_previews: BTreeMap<PathBuf, (u64, Option<String>)>,
     last_edit: Instant,
     file_paths: Option<Vec<FileEntry>>,
-    _watcher: notify::RecommendedWatcher,
+    watcher: notify::RecommendedWatcher,
     events: mpsc::Receiver<notify::Result<notify::Event>>,
     external: BTreeSet<PathBuf>,
 }
@@ -63,9 +63,7 @@ impl Documents {
         })
         .map_err(|e| e.to_string())?;
 
-        watcher
-            .watch(context.root(), notify::RecursiveMode::Recursive)
-            .map_err(|e| e.to_string())?;
+        watch_directory(&mut watcher, context.root(), context.root())?;
 
         let (lsp, diagnostics) = match super::lsp::Client::start(context.clone(), definitions) {
             Ok(client) => (Some(client), Vec::new()),
@@ -92,7 +90,7 @@ impl Documents {
             project_dirty: false,
             last_edit: Instant::now(),
             file_paths: None,
-            _watcher: watcher,
+            watcher,
             events,
             external: BTreeSet::new(),
         })
@@ -575,6 +573,22 @@ impl Documents {
 
                     for path in event.paths {
                         if let Ok(path) = path.strip_prefix(self.context.root()) {
+                            if matches!(
+                                event.kind,
+                                notify::EventKind::Create(_)
+                                    | notify::EventKind::Modify(notify::event::ModifyKind::Name(_))
+                            ) {
+                                let full = self.context.root().join(path);
+                                if full.is_dir() {
+                                    if let Err(error) = watch_directory(
+                                        &mut self.watcher,
+                                        self.context.root(),
+                                        &full,
+                                    ) {
+                                        self.diagnostics.push(error);
+                                    }
+                                }
+                            }
                             if watched(path) {
                                 self.file_paths = None;
 
@@ -643,6 +657,35 @@ impl Documents {
         self.revision != self.applied
     }
 }
+
+fn watch_directory(
+    watcher: &mut notify::RecommendedWatcher,
+    root: &Path,
+    directory: &Path,
+) -> Result<(), String> {
+    let relative = directory.strip_prefix(root).map_err(|e| e.to_string())?;
+    if !watched(relative) && relative != Path::new("kinematic") {
+        return Ok(());
+    }
+    if std::fs::symlink_metadata(directory)
+        .map_err(|e| e.to_string())?
+        .file_type()
+        .is_symlink()
+    {
+        return Ok(());
+    }
+    watcher
+        .watch(directory, notify::RecursiveMode::NonRecursive)
+        .map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(directory).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+            watch_directory(watcher, root, &entry.path())?;
+        }
+    }
+    Ok(())
+}
+
 fn watched(path: &Path) -> bool {
     if path == Path::new(crate::scripting::MANIFEST) || path.starts_with("kinematic/scenes") {
         return true;
@@ -663,6 +706,94 @@ fn watched(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn monitoring_skips_ignored_trees_but_keeps_project_files_and_metadata() {
+        let root = std::env::temp_dir().join(format!("kinematic-watch-{}", std::process::id()));
+        for path in [
+            "scenes/nested",
+            "kinematic/scenes",
+            "kinematic/target",
+            "target",
+            ".git",
+        ] {
+            std::fs::create_dir_all(root.join(path)).unwrap();
+        }
+        let (send, receive) = mpsc::channel();
+        let mut watcher = notify::recommended_watcher(move |event| {
+            let _ = send.send(event);
+        })
+        .unwrap();
+        watch_directory(&mut watcher, &root, &root).unwrap();
+        for path in [
+            "kinematic/target/ignored.lua",
+            "target/ignored.lua",
+            ".git/ignored.lua",
+            "scenes/nested/intro.lua",
+            "kinematic/project.ron",
+            "kinematic/scenes/intro.ron",
+        ] {
+            std::fs::write(root.join(path), "Test.").unwrap();
+        }
+        let mut changed = BTreeSet::new();
+        while let Ok(event) = receive.recv_timeout(Duration::from_millis(200)) {
+            let event = event.unwrap();
+            if !matches!(event.kind, notify::EventKind::Access(_)) {
+                changed.extend(event.paths);
+            }
+        }
+        for path in [
+            "scenes/nested/intro.lua",
+            "kinematic/project.ron",
+            "kinematic/scenes/intro.ron",
+        ] {
+            assert!(
+                changed.contains(&root.join(path)),
+                "Missing event for {path}."
+            );
+        }
+        for path in [
+            "kinematic/target/ignored.lua",
+            "target/ignored.lua",
+            ".git/ignored.lua",
+        ] {
+            assert!(
+                !changed.contains(&root.join(path)),
+                "Unexpected event for {path}."
+            );
+        }
+        drop(watcher);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn monitoring_picks_up_created_and_renamed_directories() {
+        let root = std::env::temp_dir().join(format!("kinematic-watch-new-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let mut docs = Documents::new(ProjectContext::new(&root).unwrap(), "").unwrap();
+        let wait_for_change = |docs: &mut Documents, path: &Path| {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while !docs.external.contains(path) && !docs.changed.contains(path) {
+                docs.poll();
+                assert!(
+                    Instant::now() < deadline,
+                    "Missing event for {}.",
+                    path.display()
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        };
+        std::fs::create_dir_all(root.join("new/nested")).unwrap();
+        wait_for_change(&mut docs, Path::new("new"));
+        std::fs::write(root.join("new/nested/intro.lua"), "Original.").unwrap();
+        wait_for_change(&mut docs, Path::new("new/nested/intro.lua"));
+        std::fs::rename(root.join("new"), root.join("moved")).unwrap();
+        wait_for_change(&mut docs, Path::new("moved"));
+        std::fs::write(root.join("moved/nested/intro.lua"), "Updated.").unwrap();
+        wait_for_change(&mut docs, Path::new("moved/nested/intro.lua"));
+        drop(docs);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn auto_save_waits_for_idle_edits_and_skips_conflicts() {

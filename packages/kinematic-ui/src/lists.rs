@@ -144,3 +144,80 @@ pub fn bindings<'a>(ui: &Ui, groups: impl IntoIterator<Item = (&'a str, Vec<(&'a
         }
     }
 }
+
+pub fn project_row(
+    ui: &Ui,
+    name: &str,
+    path: &str,
+    opened_at: &str,
+    version: &str,
+    available: bool,
+) -> bool {
+    let style = ui.clone_style();
+    let padding = [
+        style.frame_padding()[0].max(12.0),
+        style.frame_padding()[1].max(10.0),
+    ];
+    let spacing = style.item_spacing()[1];
+    let position = ui.cursor_screen_pos();
+    let size = [
+        ui.content_region_avail_width(),
+        ui.text_line_height() * 2.0 + spacing + padding[1] * 2.0,
+    ];
+    let _background = ui.push_style_color(StyleColor::Button, [0.0; 4]);
+    let clicked = crate::controls::button_sized(ui, "##Project", size);
+    let draw = ui.get_window_draw_list();
+    let min = [position[0] + padding[0], position[1] + padding[1]];
+    let max_x = position[0] + size[0] - padding[0];
+    let color = ui.get_color_u32(if available {
+        StyleColor::Text
+    } else {
+        StyleColor::TextDisabled
+    });
+    {
+        let _clip = draw.push_clip_rect(min, [max_x, position[1] + size[1]], true);
+        draw.add_text(min, color, name);
+        if !available {
+            let y = min[1] + ui.text_line_height() * 0.5;
+            draw.add_line(
+                [min[0], y],
+                [(min[0] + ui.calc_text_size(name)[0]).min(max_x), y],
+                color,
+            )
+            .build();
+        }
+    }
+    let y = min[1] + ui.text_line_height() + spacing;
+    let metadata = format!("{opened_at} {version}");
+    let metadata_x = (max_x - ui.calc_text_size(&metadata)[0]).max(min[0]);
+    let color = ui.get_color_u32(StyleColor::TextDisabled);
+    {
+        let _clip = draw.push_clip_rect(
+            [min[0], y],
+            [
+                (metadata_x - padding[0]).max(min[0]),
+                y + ui.text_line_height(),
+            ],
+            true,
+        );
+        draw.add_text(
+            [min[0], y],
+            color,
+            format!("{}  {path}", crate::icons::FOLDER),
+        );
+    }
+    {
+        let _clip = draw.push_clip_rect([metadata_x, y], [max_x, y + ui.text_line_height()], true);
+        draw.add_text([metadata_x, y], color, opened_at);
+        draw.add_text(
+            [max_x - ui.calc_text_size(version)[0], y],
+            ui.get_color_u32(if available {
+                StyleColor::Text
+            } else {
+                StyleColor::TextDisabled
+            }),
+            version,
+        );
+    }
+    clicked
+}

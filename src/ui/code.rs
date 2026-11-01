@@ -20,6 +20,7 @@ mod completion;
 mod context_menu;
 mod diagnostics;
 mod files;
+mod presets;
 mod shortcuts;
 
 pub(super) const WINDOW_NAME: &str = "Code";
@@ -29,7 +30,7 @@ pub(super) const CONSOLE_WINDOW: &str = "Console";
 #[derive(Clone)]
 pub(crate) enum ProjectAction {
     Open(PathBuf),
-    Create(PathBuf, String, bool),
+    Create(PathBuf, String, crate::core::ProjectSettings),
     Close,
     Exit,
 }
@@ -822,16 +823,72 @@ impl Tab {
         ui.is_window_focused_with_flags(dear_imgui_rs::FocusedFlags::ROOT_AND_CHILD_WINDOWS)
     }
 }
+struct ProjectForm {
+    name: String,
+    path: String,
+    directory: Option<PathBuf>,
+    manual_path: bool,
+}
+
+impl Default for ProjectForm {
+    fn default() -> Self {
+        Self {
+            name: "Project".into(),
+            path: String::new(),
+            directory: None,
+            manual_path: false,
+        }
+    }
+}
+
+impl ProjectForm {
+    fn update_path(&mut self) {
+        if self.manual_path {
+            return;
+        }
+        let Some(directory) = self.directory.as_ref().filter(|path| path.is_dir()) else {
+            self.path.clear();
+            return;
+        };
+        let characters: Vec<_> = self.name.chars().collect();
+        let mut folder = String::new();
+        for (index, character) in characters.iter().copied().enumerate() {
+            if !character.is_alphanumeric() {
+                if !folder.is_empty() && !folder.ends_with('_') {
+                    folder.push('_');
+                }
+                continue;
+            }
+            if character.is_uppercase() && !folder.is_empty() && !folder.ends_with('_') {
+                let previous = characters[index - 1];
+                let next_is_lowercase = characters.get(index + 1).is_some_and(|c| c.is_lowercase());
+                if previous.is_lowercase() || previous.is_numeric() || next_is_lowercase {
+                    folder.push('_');
+                }
+            }
+            folder.extend(character.to_lowercase());
+        }
+        let folder = folder.trim_end_matches('_');
+        self.path = if folder.is_empty() {
+            String::new()
+        } else {
+            directory.join(folder).to_string_lossy().into_owned()
+        };
+    }
+}
+
 #[derive(Default)]
 pub(super) struct State {
     tabs: BTreeMap<PathBuf, Tab>,
     pub(super) bold_font: Option<dear_imgui_rs::FontId>,
     pub(super) zoom: f32,
     pub(super) projects_open: bool,
+    opening_project: bool,
     root: String,
     browser: Option<browser::State>,
-    name: String,
-    three_d: bool,
+    project_form: ProjectForm,
+    resolution: presets::Resolution,
+    fps: presets::Fps,
     files: files::State,
     pending: Option<Pending>,
     ready: Option<ProjectAction>,
@@ -847,6 +904,16 @@ pub(super) struct State {
     pub(super) project_error: Option<String>,
 }
 impl State {
+    pub(super) fn project_directory(&self) -> Option<PathBuf> {
+        self.project_form.directory.clone()
+    }
+
+    pub(super) fn set_project_directory(&mut self, directory: Option<PathBuf>) {
+        self.project_form.directory = directory.filter(|path| path.is_dir());
+        self.project_form.manual_path = false;
+        self.project_form.update_path();
+    }
+
     pub(super) fn files_focused(&self) -> bool {
         self.files.focused
     }
@@ -979,8 +1046,17 @@ impl State {
         self.diagnostics = diagnostics::Footer::default();
         self.error = None;
         self.focused = false;
-        self.projects_open = true;
+        self.projects_open = false;
+        self.opening_project = false;
         self.browser = None;
+    }
+
+    pub(super) fn request_project(&mut self, action: ProjectAction) {
+        self.pending = Some(Pending::Project(action));
+    }
+
+    pub(super) fn open_project(&mut self) {
+        self.browse(true);
     }
 
     pub fn request_exit(&mut self) {
@@ -992,57 +1068,72 @@ impl State {
     }
 
     pub fn projects(&mut self, mut editor: Option<&mut Editor>, ui: &dear_imgui_rs::Ui) {
-        if self.projects_open {
+        if self.projects_open && self.browser.is_none() {
+            const TITLE: &str = "Create project";
+            if !ui.is_popup_open(TITLE) {
+                self.project_form.update_path();
+                ui.open_popup(TITLE);
+            }
             let mut open = true;
-
-            super::windows::window(ui, "Projects")
-                .opened(&mut open)
-                .build(|| {
-                    widgets::text(ui, "Directory");
-
-                    let style = ui.clone_style();
+            let mut finished = false;
+            if let Some(_modal) = super::windows::modal(ui, TITLE, &mut open) {
+                let browse = super::properties::row(ui, "Project path", false, || {
                     let browse_width =
-                        ui.calc_text_size("Browse")[0] + style.frame_padding()[0] * 2.0;
-
+                        ui.calc_text_size("Browse")[0] + ui.clone_style().frame_padding()[0] * 2.0;
                     ui.set_next_item_width(
-                        (ui.content_region_avail_width() - browse_width - style.item_spacing()[0])
+                        (ui.content_region_avail_width()
+                            - browse_width
+                            - ui.clone_style().item_spacing()[0])
                             .max(1.0),
                     );
-
-                    controls::text_input(ui, "##ProjectDirectory", &mut self.root);
+                    if controls::text_input(ui, "##ProjectPath", &mut self.project_form.path) {
+                        self.project_form.manual_path = true;
+                    }
                     ui.same_line();
-
-                    if controls::button_sized(ui, "Browse", [browse_width, 0.0]) {
-                        self.browse();
-                    }
-
-                    if controls::button(ui, "Open project") {
-                        self.pending = Some(Pending::Project(ProjectAction::Open(
-                            self.root.clone().into(),
-                        )));
-                    }
-
-                    controls::text_input(ui, "Name", &mut self.name);
-                    controls::checkbox(ui, "3D template", &mut self.three_d);
-
-                    if controls::button(ui, "Create project") {
-                        self.pending = Some(Pending::Project(ProjectAction::Create(
-                            self.root.clone().into(),
-                            self.name.clone(),
-                            self.three_d,
-                        )));
-                    }
-
-                    if editor.is_some() {
-                        ui.same_line();
-
-                        if controls::button(ui, "Close project") {
-                            self.pending = Some(Pending::Project(ProjectAction::Close));
-                        }
-                    }
+                    controls::button_sized(ui, "Browse", [browse_width, 0.0])
                 });
-
-            self.projects_open = open;
+                if browse.changed {
+                    self.browse(false);
+                }
+                if super::properties::row(ui, "Name", false, || {
+                    controls::text_input(ui, "##ProjectName", &mut self.project_form.name)
+                })
+                .changed
+                {
+                    self.project_form.update_path();
+                }
+                super::properties::row(ui, "Resolution", false, || {
+                    ui.set_next_item_width(ui.content_region_avail_width());
+                    self.resolution.draw(ui)
+                });
+                super::properties::row(ui, "FPS", false, || {
+                    ui.set_next_item_width(ui.content_region_avail_width());
+                    self.fps.draw(ui)
+                });
+                let valid = !self.project_form.name.trim().is_empty()
+                    && !self.project_form.path.trim().is_empty();
+                match super::windows::actions(ui, &[("Create project", valid), ("Cancel", true)]) {
+                    Some(1) => {
+                        finished = true;
+                        ui.close_current_popup();
+                    }
+                    Some(0) => {
+                        finished = true;
+                        self.request_project(ProjectAction::Create(
+                            self.project_form.path.clone().into(),
+                            self.project_form.name.clone(),
+                            crate::core::ProjectSettings {
+                                resolution: self.resolution.value(),
+                                fps: self.fps.value(),
+                                ..crate::core::ProjectSettings::default()
+                            },
+                        ));
+                        ui.close_current_popup();
+                    }
+                    _ => {}
+                }
+            }
+            self.projects_open = open && !finished;
         }
 
         if let Some(browser) = &mut self.browser {
@@ -1082,7 +1173,11 @@ impl State {
             if let Some(_modal) = super::windows::modal(ui, "Unsaved changes", &mut open) {
                 widgets::text(ui, "Save changes before continuing?");
 
-                if controls::button(ui, "Save") {
+                let action = super::windows::actions(
+                    ui,
+                    &[("Save", true), ("Discard", true), ("Cancel", true)],
+                );
+                if action == Some(0) {
                     let result = editor
                         .as_deref_mut()
                         .map_or(Ok(()), |editor| match &pending {
@@ -1108,16 +1203,12 @@ impl State {
                     }
                 }
 
-                ui.same_line();
-
-                if controls::button(ui, "Discard") {
+                if action == Some(1) {
                     self.finish(pending, editor.as_deref_mut());
                     ui.close_current_popup();
                 }
 
-                ui.same_line();
-
-                if controls::button(ui, "Cancel") {
+                if action == Some(2) {
                     self.pending = None;
 
                     ui.close_current_popup();
@@ -1130,8 +1221,23 @@ impl State {
         }
     }
 
-    fn browse(&mut self) {
-        match browser::State::new(&self.root) {
+    fn browse(&mut self, opening_project: bool) {
+        self.opening_project = opening_project;
+        let mode = if opening_project {
+            browser::Mode::Project
+        } else {
+            browser::Mode::Directory
+        };
+        let path = if opening_project {
+            self.root.clone()
+        } else {
+            std::path::Path::new(&self.project_form.path)
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new(""))
+                .to_string_lossy()
+                .into_owned()
+        };
+        match browser::State::new(&path, mode) {
             Ok(browser) => self.browser = Some(browser),
             Err(error) => {
                 self.project_error = Some(format!("Could not browse directories: {error}."))
@@ -1146,10 +1252,16 @@ impl State {
             if let Some(path) = path.to_str() {
                 self.root = path.to_owned();
                 self.project_error = None;
+                if self.opening_project {
+                    self.request_project(ProjectAction::Open(path.into()));
+                } else {
+                    self.set_project_directory(Some(path.into()));
+                }
             } else {
                 self.project_error = Some("Directory path must be valid UTF-8.".into());
             }
         }
+        self.opening_project = false;
     }
 
     fn finish(&mut self, pending: Pending, editor: Option<&mut Editor>) {
@@ -1655,6 +1767,77 @@ fn diagnostic_location(error: &str) -> Option<(&str, usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::{Position, Settings, State, diagnostic_location, ruler_columns};
+    use std::path::PathBuf;
+
+    #[test]
+    fn confirming_project_creation_closes_the_dialog_and_requests_it_once() {
+        let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
+        let mut context = dear_imgui_rs::Context::create();
+        context.set_ini_filename(None::<&str>).unwrap();
+        let font = crate::ui::theme::initialize(&mut context);
+        context.io_mut().set_display_size([1280.0, 720.0]);
+        context.io_mut().set_delta_time(1.0 / 60.0);
+        context
+            .font_atlas()
+            .try_claim_legacy_renderer()
+            .unwrap()
+            .build();
+        let mut home = crate::ui::home::State::default();
+        let mut state = State::default();
+        state.projects_open = true;
+        state.project_form.path = std::env::temp_dir().to_string_lossy().into_owned();
+        state.project_form.manual_path = true;
+        state.project_form.name = "New project".into();
+        let mut create_position = [0.0; 2];
+        for frame in 0..6 {
+            if frame >= 2 {
+                context.io_mut().add_mouse_pos_event(create_position);
+            }
+            if frame == 3 || frame == 4 {
+                context
+                    .io_mut()
+                    .add_mouse_button_event(dear_imgui_rs::MouseButton::Left, frame == 3);
+            }
+            let ui = context.frame();
+            let _style = kinematic_ui::windows::style(ui);
+            let _font = ui.push_font(font);
+            home.draw(&mut state, ui);
+            state.projects(None, ui);
+            if frame < 4 {
+                assert!(ui.is_popup_open("Create project"));
+                if let Some(_popup) = ui.begin_modal_popup("Create project") {
+                    let style = ui.clone_style();
+                    let right =
+                        ui.window_pos()[0] + ui.window_size()[0] - style.window_padding()[0];
+                    let bottom =
+                        ui.window_pos()[1] + ui.window_size()[1] - style.window_padding()[1];
+                    let button_width =
+                        |label| ui.calc_text_size(label)[0] + style.frame_padding()[0] * 2.0;
+                    create_position = [
+                        right
+                            - button_width("Cancel")
+                            - style.item_spacing()[0]
+                            - button_width("Create project") * 0.5,
+                        bottom - ui.frame_height() * 0.5,
+                    ];
+                }
+            } else {
+                assert!(!state.projects_open);
+                assert!(!ui.is_popup_open("Create project"));
+                if frame == 4 {
+                    assert!(matches!(
+                        state.take_action(),
+                        Some(super::ProjectAction::Create(_, _, _))
+                    ));
+                } else {
+                    assert!(state.take_action().is_none());
+                }
+            }
+            drop(_font);
+            drop(_style);
+            context.end_frame();
+        }
+    }
 
     #[test]
     fn rulers_accept_comma_separated_positive_columns() {
@@ -2553,26 +2736,92 @@ mod tests {
     }
 
     #[test]
-    fn browsing_selects_a_directory_without_opening_and_cancel_preserves_it() {
+    fn project_path_follows_the_name_until_edited_and_browse_restores_it() {
         let mut state = State::default();
+        assert!(state.project_form.path.is_empty());
 
         state.root = std::env::temp_dir().to_str().unwrap().to_owned();
 
-        state.browse();
+        state.browse(false);
         assert!(state.browser.is_some());
 
-        let selected = std::env::temp_dir().join("Project with spaces");
+        let selected =
+            std::env::temp_dir().join(format!("kinematic-project-path-{}", std::process::id()));
+        std::fs::create_dir_all(&selected).unwrap();
 
         state.finish_browse(Some(selected.clone()));
         assert_eq!(state.root, selected.to_str().unwrap());
+        assert_eq!(state.project_form.name, "Project");
+        assert_eq!(
+            PathBuf::from(&state.project_form.path),
+            selected.join("project")
+        );
+        state.project_form.name = "MyHTTP Project".into();
+        state.project_form.update_path();
+        assert_eq!(
+            PathBuf::from(&state.project_form.path),
+            selected.join("my_http_project")
+        );
+        state.project_form.path = selected.join("custom").to_string_lossy().into_owned();
+        state.project_form.manual_path = true;
+        state.project_form.name = "Another Project".into();
+        state.project_form.update_path();
+        assert_eq!(
+            PathBuf::from(&state.project_form.path),
+            selected.join("custom")
+        );
         assert!(state.browser.is_none());
         assert!(state.pending.is_none());
         assert!(state.take_action().is_none());
-        state.browse();
+        state.browse(false);
         state.finish_browse(None);
         assert_eq!(state.root, selected.to_str().unwrap());
+        assert!(state.project_form.manual_path);
+        assert_eq!(state.project_directory(), Some(selected.clone()));
+        state.browse(false);
+        state.finish_browse(Some(selected.clone()));
+        assert_eq!(
+            PathBuf::from(&state.project_form.path),
+            selected.join("another_project")
+        );
+        state.project_form.name = " ".into();
+        state.project_form.update_path();
+        assert!(state.project_form.path.is_empty());
         assert!(state.browser.is_none());
         assert!(state.error.is_none());
+        state.open_project();
+        state.finish_browse(Some(selected.clone()));
+        assert!(
+            matches!(state.pending, Some(super::Pending::Project(super::ProjectAction::Open(ref path))) if path == &selected)
+        );
+        assert!(!state.opening_project);
+        std::fs::remove_dir_all(selected).unwrap();
+    }
+
+    #[test]
+    fn restored_project_directory_is_empty_when_missing_or_unavailable() {
+        let directory =
+            std::env::temp_dir().join(format!("kinematic-project-restore-{}", std::process::id()));
+        let mut state = State::default();
+        state.set_project_directory(None);
+        assert!(state.project_form.path.is_empty());
+        std::fs::create_dir_all(&directory).unwrap();
+        state.set_project_directory(Some(directory.clone()));
+        assert_eq!(
+            PathBuf::from(&state.project_form.path),
+            directory.join("project")
+        );
+        std::fs::remove_dir(&directory).unwrap();
+        state.project_form.update_path();
+        assert!(state.project_form.path.is_empty());
+        state.set_project_directory(Some(directory.clone()));
+        assert!(state.project_directory().is_none());
+        assert!(state.project_form.path.is_empty());
+        std::fs::write(&directory, "File.").unwrap();
+        state.set_project_directory(Some(directory.clone()));
+        assert!(state.project_directory().is_none());
+        assert!(state.project_form.path.is_empty());
+        std::fs::remove_file(directory).unwrap();
     }
 
     #[test]

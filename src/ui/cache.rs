@@ -1,4 +1,6 @@
-use std::{io::ErrorKind, path::Path};
+use std::{collections::BTreeMap, io::ErrorKind, path::Path};
+
+use super::home::ProjectDetails;
 
 use serde::{Deserialize, Serialize};
 
@@ -9,6 +11,9 @@ const CACHE_PATH: &str = "cache/editor.ron";
 pub(super) struct Cache {
     pub audio_volume: i32,
     pub code_zoom: f32,
+    pub project_directory: Option<std::path::PathBuf>,
+    pub recent_projects: Vec<std::path::PathBuf>,
+    pub project_details: BTreeMap<std::path::PathBuf, ProjectDetails>,
 }
 
 impl Default for Cache {
@@ -16,6 +21,9 @@ impl Default for Cache {
         Self {
             audio_volume: 100,
             code_zoom: 0.0,
+            project_directory: None,
+            recent_projects: Vec::new(),
+            project_details: BTreeMap::new(),
         }
     }
 }
@@ -91,6 +99,17 @@ mod tests {
         let cache = Cache {
             audio_volume: 35,
             code_zoom: 4.0,
+            project_directory: Some(root.clone()),
+            recent_projects: vec![root.join("Project")],
+            project_details: [(
+                root.join("Project"),
+                ProjectDetails {
+                    name: "Project".into(),
+                    version: 1,
+                    last_opened: 1793448000,
+                },
+            )]
+            .into(),
         };
         assert_eq!(read(&path).unwrap(), Cache::default());
         write(&cache, &path).unwrap();

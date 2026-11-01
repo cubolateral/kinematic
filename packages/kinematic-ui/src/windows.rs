@@ -2,6 +2,48 @@
 
 use dear_imgui_rs::{Condition, ModalPopupToken, StyleColor, StyleVar, Ui, Window, WindowFlags};
 
+pub fn style(ui: &Ui) -> Vec<dear_imgui_rs::StyleStackToken<'_>> {
+    let mut tokens = [
+        StyleVar::WindowPadding(crate::theme::WINDOW_PADDING),
+        StyleVar::FramePadding(crate::theme::FRAME_PADDING),
+        StyleVar::ItemSpacing(crate::theme::ITEM_SPACING),
+        StyleVar::WindowRounding(crate::theme::CORNER_RADIUS),
+        StyleVar::PopupRounding(crate::theme::CORNER_RADIUS),
+        StyleVar::FrameRounding(crate::theme::CORNER_RADIUS),
+        StyleVar::WindowBorderSize(crate::theme::BORDER_WIDTH),
+        StyleVar::PopupBorderSize(crate::theme::BORDER_WIDTH),
+        StyleVar::FrameBorderSize(0.0),
+    ]
+    .into_iter()
+    .map(|value| ui.push_style_var(value))
+    .collect::<Vec<_>>();
+    tokens.reverse();
+    tokens
+}
+
+pub fn actions(ui: &Ui, actions: &[(&str, bool)]) -> Option<usize> {
+    let style = ui.clone_style();
+    let width = actions
+        .iter()
+        .map(|(label, _)| ui.calc_text_size(label)[0] + style.frame_padding()[0] * 2.0)
+        .sum::<f32>()
+        + style.item_spacing()[0] * actions.len().saturating_sub(1) as f32;
+    crate::widgets::separator(ui);
+    ui.spacing();
+    ui.set_cursor_pos_x(ui.cursor_pos_x() + (ui.content_region_avail_width() - width).max(0.0));
+    let mut clicked = None;
+    for (index, (label, enabled)) in actions.iter().enumerate() {
+        if index > 0 {
+            ui.same_line();
+        }
+        let _disabled = ui.begin_disabled_with_cond(!enabled);
+        if crate::controls::button(ui, label) {
+            clicked = Some(index);
+        }
+    }
+    clicked
+}
+
 pub fn window<'ui>(ui: &'ui Ui, title: &'ui str) -> Window<'ui> {
     center_next(ui);
 
@@ -28,6 +70,15 @@ pub fn sized_modal<'ui>(
     open: &'ui mut bool,
     size: [f32; 2],
 ) -> Option<ModalPopupToken<'ui>> {
+    modal_popup(ui, title, Some(open), size)
+}
+
+pub(crate) fn modal_popup<'ui>(
+    ui: &'ui Ui,
+    title: &'ui str,
+    open: Option<&'ui mut bool>,
+    size: [f32; 2],
+) -> Option<ModalPopupToken<'ui>> {
     center_next(ui);
 
     let auto_height = size[1] == 0.0;
@@ -52,10 +103,15 @@ pub fn sized_modal<'ui>(
         WindowFlags::empty()
     };
 
-    ui.begin_modal_popup_config(title)
-        .opened(open)
-        .flags(flags | WindowFlags::NO_COLLAPSE)
-        .begin()
+    let popup = ui
+        .begin_modal_popup_config(title)
+        .flags(flags | WindowFlags::NO_COLLAPSE | WindowFlags::NO_SAVED_SETTINGS);
+    let popup = if let Some(open) = open {
+        popup.opened(open)
+    } else {
+        popup
+    };
+    popup.begin()
 }
 
 fn center_next(ui: &Ui) {

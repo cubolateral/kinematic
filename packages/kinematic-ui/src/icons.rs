@@ -29,3 +29,13 @@ pub const SCENE: &str = "\u{f008}";
 pub const MUSIC: &str = "\u{f001}";
 
 pub const IMAGE: &str = "\u{f03e}";
+
+pub const PLUS: &str = "\u{f067}";
+pub const FOLDER_OPEN: &str = "\u{f07c}";
+pub const SEARCH: &str = "\u{f002}";
+
+pub const CLOSE: &str = "\u{f00d}";
+pub const SETTINGS: &str = "\u{f013}";
+pub const INFO: &str = "\u{f05a}";
+
+pub const HOME: &str = "\u{f015}";
