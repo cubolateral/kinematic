@@ -1,144 +1,78 @@
+<div align="center">
+
 # Kinematic
 
-Kinematic is an animation editor for projects and scenes written in Lua 5.4.
-Rust implements the editor, ECS, animation scheduler, simulation and 2D/3D
-rendering internally. Kinematic is distributed as an executable, with no Rust
-library or scene API.
+An animation editor for 2D and 3D scenes, with a live preview,
+a visual timeline and audio in the same workspace.
 
-## Install and run
+[Downloads](https://github.com/cubolateral/kinematic/releases) ·
+[Lua API](docs/lua.md) ·
+[Examples](examples/lua) ·
+[Development](DEVELOPMENT.md)
 
-Build from this repository with a Rust toolchain supporting edition 2024,
-CMake and a native C/C++ compiler. SDL3 and Lua are built with the application;
-you do not need a separate Lua installation. The editor requires a desktop
-session supporting OpenGL 3.3. Install FFmpeg on `PATH` for audio-file loading
-and MP4 export.
+</div>
 
-```sh
-cargo run --release
-```
+---
 
-Kinematic restores the screen used when it last closed: an open project is
-reopened, while closing from home starts on home again. If a project is
-unavailable, startup falls back to home. The home screen lists recent projects, searches
-by name and opens projects with a double click. Right-click a project to open,
-rename, duplicate, remove it from the list, copy its path or open a terminal.
-Removing a list entry keeps its files. Unavailable projects keep their saved
-names and appear dimmed with a strikethrough. Each row shows the project format
-version and its last opening time in the local timezone.
+Scenes and animations are written in Lua. The editor provides code diagnostics,
+a preview that updates as you edit, and a timeline for playback and audio.
+Animations can be exported to MP4 with audio.
 
-Use **Create project** to choose a project path, or **Open project** to open an
-existing directory. The default name is **Project**. Browse selects a parent
-folder and appends the project name in snake case. The last selected folder is
-cached; the path stays empty if no folder is saved or it is unavailable.
-Renaming updates the path until it is edited manually; browsing again restores
-automatic updates. A new project
-contains an editable Lua example, an `assets/` directory and
-`kinematic/project.ron`. Creation accepts any root directory without overwriting
-existing project files, with resolution and FPS presets defaulting to 1280×720
-at 60 FPS. Opening requires a valid `kinematic/project.ron`.
-Its name can also be changed in
-**Project → Project settings**.
+## Features
 
-Use **Project → Save project** (`Ctrl+S`) to save the project and open files.
-The home icon at the start of the editor toolbar (`Ctrl+Shift+Q`) returns home.
-The top-right close icon (`Ctrl+Q`) exits; the home screen also has an editor settings icon.
-Errors appear in centered message popups.
+- **2D and 3D scenes.** Shapes, text, code, hierarchical canvases, cameras,
+  projections, custom drawing and shaders.
+- **Animation in Lua.** Property tweens, easing, sequences, parallel tasks and
+  seekable simulations.
+- **Editing and preview.** Code diagnostics, live preview, a shared
+  selection across the scene tree and timeline, and an inspector for adjustments.
+- **Audio.** Procedural audio and imported WAV, MP3, OGG or FLAC files,
+  with waveform previews, trimming, splitting, volume and pan.
+- **Export.** MP4 video with audio and screenshots. Editor
+  overlays stay out of the result.
 
-When opening a project, the folder browser enables **Select Folder** only for
-directories containing a valid `kinematic/project.ron`. Older project layouts migrate when opened directly.
-Change the scene in Code; the preview updates after a short pause. Save persists
-the source files. Closing unsaved buffers or exiting offers Save, Discard and
-Cancel.
+## Scene example
 
-You can also install the executable with `cargo install --path .` and run
-`kinematic`, or open a project directly:
-
-```sh
-cargo run --release -- examples/lua/2d
-cargo run --release -- --new /tmp/my-animation "My animation"
-cargo run --release -- --new /tmp/my-3d-animation "My 3D animation" --3d
-cargo run --release -- --check examples/lua/simulation
-cargo run --release -- --render examples/lua/3d
-```
-
-`--check` constructs and evaluates scenes without opening a window. `--render`
-uses the application renderer and exports MP4 to `output/<project name>.mp4`,
-adding a numeric suffix when an export already exists.
-
-## Write a scene
+This scene moves a circle horizontally over two seconds, then waits for half
+a second.
 
 ```lua
 return function(s)
     local ball = s:circle {
-        id = "ball",
         radius = 24,
         position = k.vec2(-100, 0),
         fill = k.color("#60A5FA"),
     }
+
     s:world_2d():add(ball)
     ball:to {position = k.vec2(100, 0)}:play(2, k.ease.linear)
-    s:event("Pause")
-    s:wait(1)
+    s:wait(0.5)
 end
 ```
 
-The manifest lists scenes in playback order and stores resolution, FPS and
-margins. Configuration defaults to 1280 × 720 at 60 FPS. Edit these values in
-the project settings. Scene entries can remain Lua paths or include UI audio clips.
+More examples cover [2D](examples/lua/2d), [3D](examples/lua/3d),
+[audio](examples/lua/audio) and [simulations](examples/lua/simulation).
 
-Lua supports 2D and 3D objects, hierarchical canvases and projections, property
-tweens, sequential/parallel scheduling, loops, snapshots, reactive signals,
-deterministic random values, custom drawing, shaders, seekable simulations and
-file and procedural audio resources shared by SDL preview and MP4 export.
-Scene Tree, Timeline and Preview share selection. Inspector edits for explicit
-object IDs persist separately from scripts. Code diagnostics and failed reloads
-preserve the last valid preview. The Export menu provides video export and
-screenshots. Export excludes editor overlays.
+## Get started
 
-Drag project WAV, MP3, OGG or FLAC files from Files onto the Timeline's Audio
-track, or use Import audio in its context menu. Imports append after the scene's
-last clip. The single track allows overlaps and displays cached waveforms. Drag a clip to move it or
-its edges to trim without modifying the source. Edits snap to project frames;
-Escape cancels a drag. Ctrl+B splits at the playhead; Delete or Backspace removes
-the selected clip. Right-click a clip for its editing menu. The Audio section
-collapses like the object tracks. Sound adjusts volume/pan and selects clips
-hidden by overlaps; Inspector handles objects only. Audio and object selection
-are independent. Clip edits save atomically when the gesture ends.
+Distributions target **Windows and Linux x64**, with one executable per platform.
+Get available builds from [GitHub Releases](https://github.com/cubolateral/kinematic/releases).
+LuaLS and FFmpeg are included; no separate installation or PATH setup is needed.
+On Linux, give the downloaded file permission to run with `chmod +x`.
 
-See [Lua projects and API](docs/lua.md) for the full workflow, scene API,
-custom objects, shader contracts, persistence and optional Lua Language Server.
-Runnable projects are in [examples/lua](examples/lua): 2D, 3D, simulation
-(including Game of Life), and [audio](examples/lua/audio).
+Open Kinematic, choose **Create project** or **Open project**, and edit a scene
+in Code. Preview the animation, scrub the timeline and use Export to save it.
 
-## Storage
+A desktop session with OpenGL 3.3 and an audio driver is required. Distribution
+targets are Windows 10 22H2 or newer and Linux with glibc 2.35 or newer, using
+the system's graphics, windowing, font and audio libraries.
 
-Project sources, assets, `kinematic/project.ron`, runtime metadata under `kinematic/`
-and exports under `output/` belong to the project directory. Global settings,
-preview volume, text editor zoom, recent project details and the last opened
-project stay under `.kinematic` in the
-platform's user data directory:
+## Documentation
 
-- Linux: `$XDG_DATA_HOME`, or `~/.local/share` when unset.
-- macOS: `~/Library/Application Support`.
-- Windows: `%APPDATA%`.
-
-Window position, size and panel layout are not saved.
-
-## Development
-
-The Rust modules and procedural macros are implementation details. To validate
-changes:
-
-```sh
-cargo fmt --check
-cargo check --workspace
-cargo test --workspace
-```
-
-See [validation](docs/lua-validation.md) and
-[performance measurements](docs/lua-performance.md) for optional graphics tests
-and benchmarks. They do not require publishing a Rust library.
+- [Lua projects and API](docs/lua.md): scenes, objects, animation, audio and shaders.
+- [Example projects](examples/lua): runnable scenes to explore and adapt.
+- [Development guide](DEVELOPMENT.md): setup, tests, distribution and releases.
 
 ## License
 
-MIT.
+[MIT](LICENSE). Bundled tools retain their own licenses.

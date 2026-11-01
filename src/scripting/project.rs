@@ -479,7 +479,7 @@ mod tests {
 
     #[test]
     fn manifests_default_to_five_percent_and_preserve_legacy_margins() {
-        let legacy = include_str!("../../examples/lua/2d/kinematic/project.ron");
+        let legacy = "(version:1,name:\"Legacy\",scenes:[\"intro.lua\"],resolution:(1280,720),fps:60, margin: (0, 0))";
         let manifest: Manifest = ron::from_str(legacy).unwrap();
         assert_eq!(manifest.margin.pixels(manifest.resolution), [0.0; 4]);
         let text = legacy.replace(", margin: (0, 0)", "");

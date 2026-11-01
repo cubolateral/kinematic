@@ -607,6 +607,7 @@ dependencies = [
  "dear-imgui-glow",
  "dear-imgui-rs",
  "dear-imgui-sdl3",
+ "flate2",
  "glam",
  "glow 0.17.0",
  "glow 0.18.0",
@@ -628,6 +629,7 @@ dependencies = [
  "serde_json",
  "skia-safe",
  "syntect",
+ "tar",
  "three-d",
  "two-face",
 ]

@@ -42,7 +42,7 @@ impl Encoder {
         )?));
         let resolution = format!("{}x{}", resolution.0, resolution.1);
         let fps = fps.to_string();
-        let mut child = std::process::Command::new("ffmpeg")
+        let mut child = std::process::Command::new(crate::dependencies::executable("ffmpeg")?)
             .args([
                 "-n",
                 "-f",
@@ -133,7 +133,7 @@ impl Encoder {
         if let Some(mut audio) = self.audio.take() {
             audio.flush()?;
         }
-        let status = std::process::Command::new("ffmpeg")
+        let status = std::process::Command::new(crate::dependencies::executable("ffmpeg")?)
             .arg("-y")
             .arg("-i")
             .arg(self.directory.join("video.mp4"))
@@ -225,12 +225,13 @@ mod tests {
         }
         encoder.finish().unwrap();
         assert!(!directory.exists());
-        let decoded = std::process::Command::new("ffmpeg")
-            .args(["-v", "error", "-i"])
-            .arg(&output)
-            .args(["-map", "0:a:0", "-f", "f32le", "-acodec", "pcm_f32le", "-"])
-            .output()
-            .unwrap();
+        let decoded =
+            std::process::Command::new(crate::dependencies::executable("ffmpeg").unwrap())
+                .args(["-v", "error", "-i"])
+                .arg(&output)
+                .args(["-map", "0:a:0", "-f", "f32le", "-acodec", "pcm_f32le", "-"])
+                .output()
+                .unwrap();
         std::fs::remove_file(output).unwrap();
         assert!(decoded.status.success());
         let actual = decoded

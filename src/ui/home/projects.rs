@@ -110,7 +110,7 @@ mod tests {
         assert!(rename(&root, "../Invalid").is_err());
         rename(&root, "Renamed").unwrap();
         let copy = duplicate(&root).unwrap();
-        assert_eq!(copy, base.join("Project copy 2"));
+        assert_eq!(copy, base.join("Project copy 2").canonicalize().unwrap());
         assert_eq!(
             crate::scripting::LuaProject::open(&copy)
                 .unwrap()

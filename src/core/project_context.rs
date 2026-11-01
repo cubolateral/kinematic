@@ -150,7 +150,7 @@ mod tests {
 
         assert_eq!(
             context.resolve("scenes/intro.lua").unwrap(),
-            root.join("scenes/intro.lua")
+            root.canonicalize().unwrap().join("scenes/intro.lua")
         );
 
         std::fs::remove_dir_all(root).unwrap();

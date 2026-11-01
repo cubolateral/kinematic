@@ -37,21 +37,12 @@ pub(crate) struct Client {
     pub utf8: bool,
     pub messages: Vec<String>,
 }
-fn executable() -> PathBuf {
+fn executable() -> std::io::Result<PathBuf> {
     if let Some(path) = std::env::var_os("KINEMATIC_LUALS") {
-        return path.into();
+        return Ok(path.into());
     }
 
-    if let Some(home) = std::env::var_os("HOME") {
-        let mason = PathBuf::from(home)
-            .join(".local/share/nvim/mason/packages/lua-language-server/lua-language-server");
-
-        if mason.is_file() {
-            return mason;
-        }
-    }
-
-    "lua-language-server".into()
+    crate::dependencies::executable("luals")
 }
 impl Client {
     pub fn start(root: ProjectContext, definitions: &str) -> Result<Self, String> {
@@ -73,13 +64,13 @@ impl Client {
         std::fs::write(cache.join("config.json"), lua_settings(&root).to_string())
             .map_err(|e| e.to_string())?;
 
-        let mut child = Command::new(executable())
+        let mut child = Command::new(executable().map_err(|e| e.to_string())?)
             .arg(format!(
                 "--configpath={}",
-                cache.join("config.json").display()
+                server_path(&cache.join("config.json"))
             ))
-            .arg(format!("--logpath={}", cache.join("logs").display()))
-            .arg(format!("--metapath={}", cache.join("meta").display()))
+            .arg(format!("--logpath={}", server_path(&cache.join("logs"))))
+            .arg(format!("--metapath={}", server_path(&cache.join("meta"))))
             .current_dir(root.root())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -537,12 +528,9 @@ fn write_scene_paths(root: &ProjectContext, paths: &[PathBuf]) -> Result<(), Str
 }
 
 fn luals_plugin(root: &ProjectContext) -> String {
-    let list = serde_json::to_string(
-        &root
-            .root()
-            .join("kinematic/cache/luals/scene-paths.txt")
-            .to_string_lossy(),
-    )
+    let list = serde_json::to_string(&server_path(
+        &root.root().join("kinematic/cache/luals/scene-paths.txt"),
+    ))
     .unwrap();
 
     format!(
@@ -553,8 +541,8 @@ fn luals_plugin(root: &ProjectContext) -> String {
 
 fn lua_settings(root: &ProjectContext) -> Value {
     json!({
-        "runtime": {"version": "Lua 5.4", "plugin": root.root().join("kinematic/cache/luals/components.lua")},
-        "workspace": {"library": [root.root().join("kinematic/cache/luals")], "checkThirdParty": false,
+        "runtime": {"version": "Lua 5.4", "plugin": server_path(&root.root().join("kinematic/cache/luals/components.lua"))},
+        "workspace": {"library": [server_path(&root.root().join("kinematic/cache/luals"))], "checkThirdParty": false,
             "ignoreDir": ["kinematic", "output", "target", ".git"]},
         "completion": {"showWord": "Disable", "workspaceWord": false, "maxSuggestCount": 500, "callSnippet": "Disable"},
         "diagnostics": {"libraryFiles": "Disable", "ignoredFiles": "Disable"},
@@ -618,11 +606,37 @@ fn read_message(reader: &mut impl BufRead) -> Result<Option<Value>, String> {
         .map(Some)
         .map_err(|e| e.to_string())
 }
-pub(crate) fn file_uri(path: &Path) -> String {
-    let mut result = String::from("file://");
+fn server_path(path: &Path) -> String {
+    let path = path.to_string_lossy();
+    #[cfg(windows)]
+    {
+        if let Some(path) = path.strip_prefix(r"\\?\UNC\") {
+            return format!("//{}", path.replace('\\', "/"));
+        }
+        path.strip_prefix(r"\\?\")
+            .unwrap_or(&path)
+            .replace('\\', "/")
+    }
+    #[cfg(not(windows))]
+    path.into_owned()
+}
 
-    for byte in path.to_string_lossy().as_bytes() {
-        if byte.is_ascii_alphanumeric() || b"/-._~:".contains(byte) {
+pub(crate) fn file_uri(path: &Path) -> String {
+    let path = server_path(path);
+    #[cfg(windows)]
+    let path = if path.as_bytes().get(1) == Some(&b':') {
+        format!("/{}{}", path[..1].to_ascii_lowercase(), &path[1..])
+    } else {
+        path
+    };
+    let mut result = String::from(if path.starts_with("//") {
+        "file:"
+    } else {
+        "file://"
+    });
+
+    for byte in path.as_bytes() {
+        if byte.is_ascii_alphanumeric() || b"/-._~".contains(byte) {
             result.push(*byte as char);
         } else {
             result.push_str(&format!("%{byte:02X}"));
@@ -649,7 +663,25 @@ pub(crate) fn uri_path(uri: &str) -> Option<PathBuf> {
         }
     }
 
-    String::from_utf8(result).ok().map(PathBuf::from)
+    let path = String::from_utf8(result).ok()?;
+    #[cfg(windows)]
+    let path = if path.starts_with('/') && path.as_bytes().get(2) == Some(&b':') {
+        path[1..].to_owned()
+    } else if !path.starts_with('/') {
+        format!("//{path}")
+    } else {
+        path
+    };
+    let path = PathBuf::from(path);
+    #[cfg(windows)]
+    return Some(path.canonicalize().unwrap_or_else(|_| {
+        path.parent()
+            .and_then(|parent| parent.canonicalize().ok())
+            .and_then(|parent| path.file_name().map(|name| parent.join(name)))
+            .unwrap_or(path)
+    }));
+    #[cfg(not(windows))]
+    Some(path)
 }
 fn edit_offset(text: &str, position: &Value, utf8: bool) -> Result<usize, String> {
     let line = position["line"]
@@ -847,19 +879,39 @@ mod tests {
 
         assert_eq!(read_message(&mut reader).unwrap(), Some(json!({})));
     }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_paths_are_compatible_with_luals() {
+        let path = std::env::temp_dir().canonicalize().unwrap();
+        let uri = file_uri(&path);
+        assert!(uri.starts_with("file:///"));
+        assert!(!uri.contains("%5C"));
+        assert!(!server_path(&path).contains(r"\\?\"));
+        assert_eq!(uri_path(&uri).unwrap(), path);
+        let missing = path.join("kinematic-unsaved.lua");
+        assert_eq!(uri_path(&file_uri(&missing)).unwrap(), missing);
+        assert_eq!(
+            server_path(Path::new(r"\\?\UNC\server\share")),
+            "//server/share"
+        );
+    }
 }
 
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    #[test]
-    fn real_server_completes_native_fields_and_resolves_module_definitions() {
-        if !executable().is_file()
-            && Command::new(executable())
+    fn server_available() -> bool {
+        executable().is_ok_and(|path| {
+            Command::new(path)
                 .arg("--version")
                 .output()
-                .is_err()
-        {
+                .is_ok_and(|output| output.status.success())
+        })
+    }
+    #[test]
+    fn real_server_completes_native_fields_and_resolves_module_definitions() {
+        if !server_available() {
             eprintln!("LuaLS integration unavailable: executable not installed.");
 
             return;
@@ -1265,11 +1317,7 @@ end
 
     #[test]
     fn real_server_completes_specific_values_and_custom_methods() {
-        if Command::new(executable())
-            .arg("--version")
-            .output()
-            .is_err()
-        {
+        if !server_available() {
             eprintln!("LuaLS integration unavailable: executable not installed.");
 
             return;
@@ -1342,11 +1390,14 @@ return k.object {
             while std::time::Instant::now() < deadline {
                 client.request("textDocument/completion", path, &text, version, 4, column);
 
-                let until = std::time::Instant::now() + std::time::Duration::from_millis(200);
+                // Resolve must use the cache of the last completed request.
+                let until = deadline;
+                let mut received = false;
 
                 while std::time::Instant::now() < until {
                     for reply in client.poll() {
                         if reply.method == "textDocument/completion" && reply.version == version {
+                            received = true;
                             completion = reply.value.clone();
 
                             labels = reply
@@ -1360,7 +1411,7 @@ return k.object {
                         }
                     }
 
-                    if labels.iter().any(|label| label.starts_with(expected)) {
+                    if received {
                         break;
                     }
 
@@ -1370,6 +1421,7 @@ return k.object {
                 if labels.iter().any(|label| label.starts_with(expected)) {
                     break;
                 }
+                std::thread::sleep(std::time::Duration::from_millis(100));
             }
 
             assert!(
@@ -1437,12 +1489,7 @@ return k.object {
 
     #[test]
     fn code_range_annotations_accept_optional_searches_and_nested_lists() {
-        if !executable().is_file()
-            && Command::new(executable())
-                .arg("--version")
-                .output()
-                .is_err()
-        {
+        if !server_available() {
             eprintln!("LuaLS integration unavailable: executable not installed.");
             return;
         }
@@ -1470,7 +1517,7 @@ code:select(42)
         .unwrap();
         let logs = root.join("logs");
         let meta = root.with_extension("meta");
-        let result = Command::new(executable())
+        let result = Command::new(executable().unwrap())
             .arg(format!("--check={}", root.display()))
             .args(["--checklevel=Warning", "--check_format=json"])
             .arg(format!("--logpath={}", logs.display()))

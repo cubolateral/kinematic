@@ -1,6 +1,7 @@
 # Lua projects
 
-Build the editor with `cargo build --release`. Lua 5.4 is embedded; no Lua
+Prepare the checkout as described in [Development](../DEVELOPMENT.md), then
+build the editor with `cargo build --release`. Lua 5.4 is embedded; no Lua
 installation is needed. `cargo run --release` restores the current project,
 or opens an empty workspace when none is saved. Select a project directly with:
 
@@ -12,7 +13,8 @@ cargo run --release -- --check examples/lua/simulation
 cargo run --release -- --render examples/lua/3d
 ```
 
-Rendering needs an OpenGL 3.3 desktop session and FFmpeg on `PATH`. `--check`
+Rendering needs an OpenGL 3.3 desktop session. FFmpeg comes from the prepared
+dependencies or the distributed executable; PATH configuration is not needed. `--check`
 validates construction and evaluation without opening a window; it does not
 validate GLSL compilation or GPU drawing. `--render` uses the application's
 existing SDL/OpenGL/Skia/three-d resources and writes `output/<project name>.mp4`.
@@ -92,9 +94,8 @@ the previous preview visible. Expensive simulation replay proceeds in short
 slices and can be cancelled. Spaces, arrows, B, F and Esc in text inputs do not
 control playback, fullscreen or application exit.
 
-LuaLS is optional for execution. Install it yourself, set `KINEMATIC_LUALS` to
-its executable, use an existing Neovim Mason installation, or put
-`lua-language-server` on `PATH` (in that search order). Nothing is downloaded.
+LuaLS is bundled in distributions; development checkouts prepare it with
+`scripts/distribute.ps1 prepare`. `KINEMATIC_LUALS` can override its executable.
 Each project owns an asynchronous server, with generated API definitions and
 logs in `kinematic/cache/luals`. User LuaLS settings are not overwritten.
 Completion opens automatically while typing, including after `.` and `:`;

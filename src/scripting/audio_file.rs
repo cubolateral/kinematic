@@ -6,31 +6,32 @@ use std::{
 };
 
 pub(super) fn decode(bytes: &[u8], deadline: Instant) -> Result<Vec<[f32; 2]>, String> {
-    let mut child = Command::new("ffmpeg")
-        .args([
-            "-nostdin",
-            "-v",
-            "error",
-            "-protocol_whitelist",
-            "pipe",
-            "-format_whitelist",
-            "wav,mp3,ogg,flac",
-            "-i",
-            "pipe:0",
-            "-map",
-            "0:a:0",
-            "-vn",
-            "-sn",
-            "-dn",
-        ])
-        .args(["-f", "f32le", "-acodec", "pcm_f32le", "-ac", "2", "-ar"])
-        .arg(SAMPLE_RATE.to_string())
-        .arg("pipe:1")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|error| format!("Could not start FFmpeg audio decoder: {error}."))?;
+    let mut child =
+        Command::new(crate::dependencies::executable("ffmpeg").map_err(|e| e.to_string())?)
+            .args([
+                "-nostdin",
+                "-v",
+                "error",
+                "-protocol_whitelist",
+                "pipe",
+                "-format_whitelist",
+                "wav,mp3,ogg,flac",
+                "-i",
+                "pipe:0",
+                "-map",
+                "0:a:0",
+                "-vn",
+                "-sn",
+                "-dn",
+            ])
+            .args(["-f", "f32le", "-acodec", "pcm_f32le", "-ac", "2", "-ar"])
+            .arg(SAMPLE_RATE.to_string())
+            .arg("pipe:1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| format!("Could not start FFmpeg audio decoder: {error}."))?;
     let mut input = child
         .stdin
         .take()
@@ -115,7 +116,7 @@ mod tests {
         assert_eq!(samples.first().unwrap(), &[0.0; 2]);
         assert_eq!(samples.last().unwrap(), &[0.0; 2]);
         for format in ["mp3", "ogg", "flac"] {
-            let encoded = Command::new("ffmpeg")
+            let encoded = Command::new(crate::dependencies::executable("ffmpeg").unwrap())
                 .args(["-v", "error", "-i"])
                 .arg(&fixture)
                 .args(["-f", format, "pipe:1"])
@@ -135,7 +136,7 @@ mod tests {
                 .unwrap_err()
                 .contains("deadline")
         );
-        let oversized = Command::new("ffmpeg")
+        let oversized = Command::new(crate::dependencies::executable("ffmpeg").unwrap())
             .args([
                 "-v",
                 "error",

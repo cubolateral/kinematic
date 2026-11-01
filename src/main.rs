@@ -11,6 +11,7 @@ mod utilities;
 
 mod app;
 mod audio;
+mod dependencies;
 mod storage;
 
 use crate::scripting::LuaProject;
@@ -25,9 +26,13 @@ fn main() {
 fn run() -> Result<(), String> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
 
+    if args.first().is_some_and(|arg| arg == "--self-test") {
+        return dependencies::self_test();
+    }
+
     if args.first().is_some_and(|arg| arg == "--help") {
         println!(
-            "Kinematic [PROJECT]\nKinematic --new DIRECTORY NAME [--3d]\nKinematic --check PROJECT\nKinematic --render PROJECT"
+            "Kinematic [PROJECT]\nKinematic --new DIRECTORY NAME [--3d]\nKinematic --check PROJECT\nKinematic --render PROJECT\nKinematic --self-test"
         );
 
         return Ok(());

@@ -663,27 +663,40 @@ fn watch_directory(
     root: &Path,
     directory: &Path,
 ) -> Result<(), String> {
-    let relative = directory.strip_prefix(root).map_err(|e| e.to_string())?;
-    if !watched(relative) && relative != Path::new("kinematic") {
-        return Ok(());
-    }
-    if std::fs::symlink_metadata(directory)
-        .map_err(|e| e.to_string())?
-        .file_type()
-        .is_symlink()
+    #[cfg(windows)]
     {
-        return Ok(());
-    }
-    watcher
-        .watch(directory, notify::RecursiveMode::NonRecursive)
-        .map_err(|e| e.to_string())?;
-    for entry in std::fs::read_dir(directory).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
-            watch_directory(watcher, root, &entry.path())?;
+        // Windows cannot rename a directory while its descendants have open watch handles.
+        if directory == root {
+            watcher
+                .watch(root, notify::RecursiveMode::Recursive)
+                .map_err(|e| e.to_string())?;
         }
+        Ok(())
     }
-    Ok(())
+    #[cfg(not(windows))]
+    {
+        let relative = directory.strip_prefix(root).map_err(|e| e.to_string())?;
+        if !watched(relative) && relative != Path::new("kinematic") {
+            return Ok(());
+        }
+        if std::fs::symlink_metadata(directory)
+            .map_err(|e| e.to_string())?
+            .file_type()
+            .is_symlink()
+        {
+            return Ok(());
+        }
+        watcher
+            .watch(directory, notify::RecursiveMode::NonRecursive)
+            .map_err(|e| e.to_string())?;
+        for entry in std::fs::read_dir(directory).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+                watch_directory(watcher, root, &entry.path())?;
+            }
+        }
+        Ok(())
+    }
 }
 
 fn watched(path: &Path) -> bool {
@@ -739,7 +752,12 @@ mod tests {
         while let Ok(event) = receive.recv_timeout(Duration::from_millis(200)) {
             let event = event.unwrap();
             if !matches!(event.kind, notify::EventKind::Access(_)) {
-                changed.extend(event.paths);
+                changed.extend(
+                    event
+                        .paths
+                        .into_iter()
+                        .filter(|path| path.strip_prefix(&root).is_ok_and(watched)),
+                );
             }
         }
         for path in [
@@ -771,6 +789,8 @@ mod tests {
         let root = std::env::temp_dir().join(format!("kinematic-watch-new-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let mut docs = Documents::new(ProjectContext::new(&root).unwrap(), "").unwrap();
+        // Test directory watching independently of LuaLS.
+        drop(docs.lsp.take());
         let wait_for_change = |docs: &mut Documents, path: &Path| {
             let deadline = Instant::now() + Duration::from_secs(2);
             while !docs.external.contains(path) && !docs.changed.contains(path) {

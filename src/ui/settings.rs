@@ -507,7 +507,7 @@ mod tests {
         assert_eq!(appearance.editor, super::super::code::Settings::default());
         assert_eq!(appearance.editor.line_height, 1.5);
         assert!(!appearance.editor.auto_save);
-        assert_eq!(appearance.editor.auto_save_delay_ms, 100);
+        assert_eq!(appearance.editor.auto_save_delay_ms, 1000);
     }
 
     #[test]

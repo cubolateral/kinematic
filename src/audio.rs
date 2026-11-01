@@ -1,5 +1,20 @@
 use crate::{core::audio::SAMPLE_RATE, editor::Editor};
 
+pub(crate) fn self_test(samples: &[[f32; 2]]) -> Result<(), String> {
+    let sdl = sdl3::init().map_err(|e| e.to_string())?;
+    let preview = AudioPreview::new(&sdl)?;
+    let samples = samples.iter().flatten().copied().collect::<Vec<_>>();
+    preview
+        .stream
+        .put_data_f32(&samples)
+        .map_err(|e| e.to_string())?;
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    if preview.stream.queued_bytes().map_err(|e| e.to_string())? as usize >= samples.len() * 4 {
+        return Err("Audio device did not consume samples.".into());
+    }
+    Ok(())
+}
+
 pub(crate) struct AudioPreview {
     stream: sdl3::audio::AudioStreamOwner,
     device: sdl3::audio::AudioDevice,

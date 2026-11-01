@@ -445,6 +445,7 @@ mod tests {
         let mut scene = Scene::new();
         let code = code()
             .code("local x = 42\n-- Note.")
+            .language(CodeLanguage::Lua)
             .keyword_color(Color::RED)
             .highlight_color(Color::BLUE)
             .highlights(CodeRanges::new(vec![[[1, 1], [1, 6]]]))
@@ -484,7 +485,10 @@ mod tests {
 
     #[test]
     fn lua_coloring_handles_multiline_literals_comments_and_numeric_operators() {
-        let shape = CodeShape::default();
+        let shape = CodeShape {
+            language: CodeLanguage::Lua,
+            ..Default::default()
+        };
         let source = "local é = 0x1.fp+2 .. 2e-3 --[=[ Comment.\n]=]\n[==[String.]==] 'é\\\"'";
         let colors = syntax_colors(source, &shape, Color::WHITE);
         for (text, expected) in [

@@ -490,7 +490,7 @@ fn verify_export(gl: &glow::Context, target: &Target, preview: &[u8]) {
 
     exporter.shutdown(gl);
 
-    let decoded = std::process::Command::new("ffmpeg")
+    let decoded = std::process::Command::new(crate::dependencies::executable("ffmpeg").unwrap())
         .args(["-v", "error", "-i"])
         .arg(&path)
         .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgba", "-"])
