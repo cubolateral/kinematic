@@ -1,5 +1,37 @@
 use dear_imgui_rs::{StyleColor, StyleVar, Ui};
 
+use crate::motion;
+
+fn animated_frame(
+    ui: &Ui,
+    label: &str,
+    normal: StyleColor,
+    hovered: StyleColor,
+    draw: impl FnOnce() -> bool,
+) -> bool {
+    let (hover_key, amount) = {
+        let _id = ui.push_id(label);
+        let hover_key = ui.get_id("##MotionHovered");
+        let was_hovered = !ui.is_window_appearing()
+            && ui.with_current_state_storage(|storage| storage.get_bool(hover_key, false));
+        let amount = motion::transition(
+            ui,
+            "##FrameHover",
+            f32::from(was_hovered),
+            0.0,
+            motion::CONTROL_DURATION,
+        );
+        (hover_key, amount)
+    };
+    let color = motion::mix(ui.style_color(normal), ui.style_color(hovered), amount);
+    let _normal = ui.push_style_color(normal, color);
+    let _hovered = ui.push_style_color(hovered, color);
+    let clicked = draw();
+    let hovered = ui.is_item_hovered();
+    ui.with_current_state_storage(|mut storage| storage.set_bool(hover_key, hovered));
+    clicked
+}
+
 pub fn text_button(ui: &Ui, label: &str, size: [f32; 2]) -> bool {
     text_button_colored(ui, label, size, StyleColor::Text)
 }
@@ -18,28 +50,48 @@ pub fn text_button_colored(ui: &Ui, label: &str, size: [f32; 2], color: StyleCol
         min[0] + (max[0] - min[0] - text_size[0]) * 0.5,
         min[1] + (max[1] - min[1] - text_size[1]) * 0.5,
     ];
-    let text_color = if ui.is_item_hovered() {
-        StyleColor::TextLink
-    } else {
-        color
-    };
+    let amount = motion::transition(
+        ui,
+        label,
+        f32::from(ui.is_item_hovered()),
+        0.0,
+        motion::CONTROL_DURATION,
+    );
+    let text_color = motion::mix(
+        ui.style_color(color),
+        ui.style_color(StyleColor::TextLink),
+        if ui.is_item_active() { 1.0 } else { amount },
+    );
 
+    let _text = ui.push_style_color(StyleColor::Text, text_color);
     ui.get_window_draw_list()
-        .add_text(text_position, ui.get_color_u32(text_color), label);
+        .add_text(text_position, ui.get_color_u32(StyleColor::Text), label);
 
     clicked
 }
 
 pub fn button(ui: &Ui, label: &str) -> bool {
-    ui.button(label)
+    button_sized(ui, label, [0.0; 2])
 }
 
 pub fn button_sized(ui: &Ui, label: &str, size: [f32; 2]) -> bool {
-    ui.button_with_size(label, size)
+    animated_frame(
+        ui,
+        label,
+        StyleColor::Button,
+        StyleColor::ButtonHovered,
+        || ui.button_with_size(label, size),
+    )
 }
 
 pub fn checkbox(ui: &Ui, label: &str, value: &mut bool) -> bool {
-    ui.checkbox(label, value)
+    animated_frame(
+        ui,
+        label,
+        StyleColor::FrameBg,
+        StyleColor::FrameBgHovered,
+        || ui.checkbox(label, value),
+    )
 }
 
 pub fn text_input(ui: &Ui, label: &str, value: &mut String) -> bool {
@@ -99,7 +151,13 @@ pub fn slider<T: dear_imgui_rs::internal::DataTypeKind>(
 }
 
 pub fn radio_button(ui: &Ui, label: &str, selected: bool) -> bool {
-    ui.radio_button(label, selected)
+    animated_frame(
+        ui,
+        label,
+        StyleColor::FrameBg,
+        StyleColor::FrameBgHovered,
+        || ui.radio_button(label, selected),
+    )
 }
 
 pub fn menu<'ui>(ui: &'ui Ui, label: &str) -> Option<dear_imgui_rs::MenuToken<'ui>> {
@@ -117,15 +175,24 @@ pub fn progress(ui: &Ui, progress: f32, label: &str) {
 }
 
 pub fn icon_toggle(ui: &Ui, label: &str, enabled: bool) -> bool {
+    let amount = {
+        let _id = ui.push_id(label);
+        motion::transition(
+            ui,
+            "##ToggleSelection",
+            f32::from(enabled),
+            f32::from(enabled),
+            motion::CONTROL_DURATION,
+        )
+    };
+    let _text = ui.push_style_color(
+        StyleColor::Text,
+        motion::mix(
+            ui.style_color(StyleColor::TextDisabled),
+            ui.style_color(StyleColor::Text),
+            amount,
+        ),
+    );
     ui.set_next_item_allow_overlap();
-    text_button_colored(
-        ui,
-        label,
-        [ui.frame_height(); 2],
-        if enabled {
-            StyleColor::Text
-        } else {
-            StyleColor::TextDisabled
-        },
-    )
+    text_button_colored(ui, label, [ui.frame_height(); 2], StyleColor::Text)
 }

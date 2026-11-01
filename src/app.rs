@@ -216,6 +216,7 @@ impl App {
             }
         };
         let mut events = self.sdl.event_pump().unwrap();
+        let mut ui_motion = kinematic_ui::motion::Overlays::default();
 
         'running: loop {
             for mut event in events.poll_iter() {
@@ -317,6 +318,7 @@ impl App {
             }
 
             self.ui.draw_projects(editor.as_mut(), ui);
+            ui_motion.draw(ui);
 
             let frame = self
                 .imgui
