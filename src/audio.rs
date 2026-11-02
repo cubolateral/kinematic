@@ -1,6 +1,8 @@
 use crate::{core::audio::SAMPLE_RATE, editor::Editor};
 
 pub(crate) fn self_test(samples: &[[f32; 2]]) -> Result<(), String> {
+    use std::time::{Duration, Instant};
+
     let sdl = sdl3::init().map_err(|e| e.to_string())?;
     let preview = AudioPreview::new(&sdl)?;
     let samples = samples.iter().flatten().copied().collect::<Vec<_>>();
@@ -10,13 +12,23 @@ pub(crate) fn self_test(samples: &[[f32; 2]]) -> Result<(), String> {
         .put_data_f32(&samples)
         .map_err(|e| e.to_string())?;
 
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    preview.stream.flush().map_err(|e| e.to_string())?;
 
-    if preview.stream.queued_bytes().map_err(|e| e.to_string())? as usize >= samples.len() * 4 {
-        return Err("Audio device did not consume samples.".into());
+    let deadline = Instant::now() + Duration::from_secs(3);
+
+    loop {
+        if (preview.stream.queued_bytes().map_err(|e| e.to_string())? as usize)
+            < std::mem::size_of_val(samples.as_slice())
+        {
+            return Ok(());
+        }
+
+        if Instant::now() >= deadline {
+            return Err("Audio device did not consume samples.".into());
+        }
+
+        std::thread::sleep(Duration::from_millis(10));
     }
-
-    Ok(())
 }
 
 pub(crate) struct AudioPreview {
@@ -128,6 +140,12 @@ impl AudioPreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "Requires an SDL audio driver; SDL_AUDIODRIVER=dummy is sufficient."]
+    fn self_test_consumes_a_short_clip() {
+        self_test(&[[0.0; 2]; 12_000]).unwrap();
+    }
 
     #[test]
     #[ignore = "Requires an SDL audio driver; SDL_AUDIODRIVER=dummy is sufficient."]

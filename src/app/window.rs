@@ -57,7 +57,8 @@ impl Chrome {
             (true, true)
         };
 
-        if custom {
+        // Some Wayland compositors use the minimum as the initial floating size.
+        if custom && window.subsystem().current_video_driver() != "wayland" {
             if let Err(error) = window.set_minimum_size(320, 240) {
                 eprintln!("Could not set the minimum window size: {error}.");
             }
@@ -191,8 +192,8 @@ fn session_actions(session: &str) -> (bool, bool) {
 
     for name in session.split(':') {
         match name.trim().to_ascii_lowercase().as_str() {
-            "hyprland" | "niri" => minimize = false,
-            "sway" | "river" | "i3" | "bspwm" | "dwm" => {
+            "niri" => minimize = false,
+            "hyprland" | "sway" | "river" | "i3" | "bspwm" | "dwm" => {
                 minimize = false;
                 maximize = false;
             }
@@ -232,7 +233,7 @@ mod tests {
 
     #[test]
     fn window_actions_follow_the_desktop_session() {
-        assert_eq!(session_actions("Hyprland"), (false, true));
+        assert_eq!(session_actions("Hyprland"), (false, false));
         assert_eq!(session_actions("niri"), (false, true));
         assert_eq!(session_actions("sway"), (false, false));
         assert_eq!(session_actions("GNOME"), (true, true));

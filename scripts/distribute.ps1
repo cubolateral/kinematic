@@ -146,20 +146,21 @@ if ($platform -eq 'windows') {
     }
 }
 
-# The smoke test receives only the executable, an empty user directory and no PATH.
+# The smoke test uses virtual audio, an empty user directory and no PATH.
 $isolated = Join-Path $work ([guid]::NewGuid().ToString())
 New-Item -ItemType Directory $isolated | Out-Null
 $executable = Join-Path $isolated "kinematic$suffix"
 Copy-Item $output $executable
 $saved = @{}
 
-foreach ($key in @('PATH', 'APPDATA', 'XDG_DATA_HOME', 'KINEMATIC_LUALS')) {
+foreach ($key in @('PATH', 'APPDATA', 'XDG_DATA_HOME', 'KINEMATIC_LUALS', 'SDL_AUDIODRIVER')) {
     $saved[$key] = [Environment]::GetEnvironmentVariable($key)
 }
 
 try {
     $env:PATH = ''
     $env:KINEMATIC_LUALS = $null
+    $env:SDL_AUDIODRIVER = 'dummy'
     $env:APPDATA = $isolated
     $env:XDG_DATA_HOME = $isolated
     Push-Location $isolated
