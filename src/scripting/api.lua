@@ -27,9 +27,9 @@ local CodeRangeList = {}
 local Animation = {}
 
 --- Schedules an independent execution at the current scene time.
---- Duration is in seconds and defaults to zero for an instantaneous change. Easing defaults to cubic_in_out; use k.ease for named curves.
+--- Duration is in seconds and defaults to zero for an instantaneous change. Easing accepts only snake_case strings and defaults to "cubic_in_out".
 ---@param duration? number
----@param easing? string
+---@param easing? Kinematic.Easing
 function Animation:play(duration, easing) end
 
 --- Typed handle to an animatable property or one of its scalar channels.
@@ -415,7 +415,7 @@ function Scene:object(definition, options) end
 ---@field default boolean|number|string|Kinematic.Value Required initial value; determines the property type.
 ---@field min? number Optional lower bound for a numeric property.
 ---@field max? number Optional upper bound for a numeric property.
----@field choices? string[] Allowed string values for a string property.
+---@field choices? string[] Allowed snake_case values for a string property.
 --- Declares custom animatable fields from default values and optional numeric bounds or string choices.
 --- The default determines each field type. Custom names must not shadow native properties.
 ---@param fields table<string,Kinematic.PropertyDefinition>

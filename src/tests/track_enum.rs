@@ -79,23 +79,31 @@ impl PlaybackScene {
 fn track_enum_provides_values_and_variant_metadata() {
     assert_eq!(
         <PlaybackMode as crate::core::TrackEnum>::VARIANTS,
-        &["Once", "Loop", "PingPong"]
+        &["once", "loop", "ping_pong"]
     );
     assert_eq!(
         PlaybackMode::Loop.into_track_value(),
-        TrackValue::Enum("Loop")
+        TrackValue::Enum("loop")
     );
     assert_eq!(
-        PlaybackMode::from_track_value(TrackValue::Enum("PingPong")),
+        PlaybackMode::from_track_value(TrackValue::Enum("ping_pong")),
         Some(PlaybackMode::PingPong)
     );
     assert_eq!(
         PlaybackMode::from_track_value(TrackValue::Enum("Missing")),
         None
     );
+
+    for value in ["PingPong", "pingPong", "ping-pong", "PING_PONG"] {
+        assert_eq!(
+            PlaybackMode::from_track_value(TrackValue::Enum(value)),
+            None
+        );
+    }
+
     assert_eq!(
         Playback::track(0).choices,
-        TrackChoices::Enum(&["Once", "Loop", "PingPong"])
+        TrackChoices::Enum(&["once", "loop", "ping_pong"])
     );
     assert_eq!(Playback::track(1).choices, Playback::track(0).choices);
     assert_eq!(
@@ -107,12 +115,12 @@ fn track_enum_provides_values_and_variant_metadata() {
 #[test]
 fn enum_tracks_are_discrete_and_keep_typed_handler_api() {
     assert_eq!(
-        TrackValue::Enum("Once").lerp(&TrackValue::Enum("Loop"), 0.999),
-        TrackValue::Enum("Once")
+        TrackValue::Enum("once").lerp(&TrackValue::Enum("loop"), 0.999),
+        TrackValue::Enum("once")
     );
     assert_eq!(
-        TrackValue::Enum("Once").lerp(&TrackValue::Enum("Loop"), 1.0),
-        TrackValue::Enum("Loop")
+        TrackValue::Enum("once").lerp(&TrackValue::Enum("loop"), 1.0),
+        TrackValue::Enum("loop")
     );
 
     let mut scene = Scene::new();

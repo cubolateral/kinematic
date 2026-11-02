@@ -33,6 +33,6 @@ return function(s)
     })
     s:world_3d():add(object)
 
-    object.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, k.ease.linear)
+    object.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, "linear")
     s:wait(0.5)
 end

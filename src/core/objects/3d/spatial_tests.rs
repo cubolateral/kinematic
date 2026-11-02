@@ -530,7 +530,7 @@ fn camera3d_defaults_to_perspective_mode() {
     assert_eq!(Camera3D::default().camera_mode, Camera3DMode::Perspective);
     assert_eq!(
         Camera3D::track(0).choices,
-        TrackChoices::Enum(&["Perspective", "Orthogonal"])
+        TrackChoices::Enum(&["perspective", "orthogonal"])
     );
 }
 

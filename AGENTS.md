@@ -31,6 +31,7 @@ Kinematic is an animation editor for Lua projects, implemented in Rust. The sour
 ## API and style boundaries
 
 - The binary is the only user interface. Projects and scenes are written exclusively in Lua.
+- Lua enums use only snake_case string values. Reject other spellings and case variants; do not expose enum constants through module tables. Keep generated definitions, examples, and documentation consistent with this rule.
 - Keep application modules and macros internal. Only the UI component crate exposes reusable presentation APIs; do not add a Rust scene declaration API.
 - For crate items, import with use crate::... and do not use absolute paths beginning with ::. Qualified paths are fine for external dependencies.
 - Preserve the separation between project definition, animation evaluation, rendering, and editor controls unless intentionally changing the architecture.

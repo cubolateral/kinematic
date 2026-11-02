@@ -42,7 +42,7 @@ vectors. Interpolating orientations does not represent complete turns. To preser
 turns, use the quaternion handle's rotation method:
 
 ```lua
-cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, k.ease.linear)
+cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, "linear")
 ```
 
 See [Quaternion](../api/Quaternion.md) and

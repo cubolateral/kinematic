@@ -82,8 +82,12 @@ A [Group2D](../api/Group2D.md) or [Group3D](../api/Group3D.md) gives its childre
 shared transform. A [Container2D](../api/Container2D.md) or
 [Container3D](../api/Container3D.md) also lays out children using `gap` and `direction`.
 
+All Lua enum values are `snake_case` strings, including layout directions, camera
+modes, and canvas filters. For example, use `"horizontal_reverse"`, `"orthogonal"`,
+and `"nearest"`. Other spellings and case variants are rejected.
+
 ```lua
-local row = s:container_2d {gap = k.vec2(24, 0), direction = "Horizontal"}
+local row = s:container_2d {gap = k.vec2(24, 0), direction = "horizontal"}
 s:world_2d():add(row)
 
 row:add(s:circle {radius = 30})

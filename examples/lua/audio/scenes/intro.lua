@@ -26,9 +26,9 @@ return function(s)
     content:add(ball)
 
     for i = 1, 3 do
-        ball:to {position = k.vec2((i - 2) * 250, 108)}:play(0.5, k.ease.cubic_in)
+        ball:to {position = k.vec2((i - 2) * 250, 108)}:play(0.5, "cubic_in")
         hit:play {pan = (i - 2) * 0.7}
-        ball:to {position = {y = -120}}:play(0.5, k.ease.cubic_out)
+        ball:to {position = {y = -120}}:play(0.5, "cubic_out")
     end
 
     local recording = s:audio {

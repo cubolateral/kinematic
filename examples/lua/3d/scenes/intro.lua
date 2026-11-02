@@ -29,7 +29,7 @@ return function(s)
     stage:add(s:directional_light {rotation = k.axis_angle(k.vec3(1, 0, 0), -0.5)})
 
     cube:from {scale = {k.vec3(0.1, 0.1, 0.1), k.vec3(1, 1, 1)}}:play(0.6)
-    cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, k.ease.linear)
+    cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, "linear")
     cube:to {albedo = k.color("#A78BFA"), metallic = 0.7}:play(0.8)
     s:wait(0.8)
 

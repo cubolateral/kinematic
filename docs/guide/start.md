@@ -66,8 +66,8 @@ Follow the [2D Shapes example](../examples/2d.md). It creates a circle, adds it 
 <<< ../../examples/lua/2d/scenes/intro.lua
 
 Try changing the destination to `k.vec2(0, -100)` and the duration to `1`. Compare
-`k.ease.linear` with `k.ease.cubic_in_out`. See [Easing](../api/Easing.md) for the full
-list.
+`"linear"` with `"cubic_in_out"`. See
+[Easing](../api/Aliases.md#property-kinematic-easing) for the full list.
 
 ## Export your first MP4
 

@@ -225,6 +225,20 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                 let choices = definition
                     .get::<Option<Vec<String>>>("choices")?
                     .unwrap_or_default();
+
+                if choices.iter().any(|choice| {
+                    choice.split('_').any(|part| {
+                        part.is_empty()
+                            || !part
+                                .bytes()
+                                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+                    })
+                }) {
+                    return Err(mlua::Error::runtime(
+                        "Property choices must be snake_case strings.",
+                    ));
+                }
+
                 let schema = PropertySchema {
                     name,
                     default,

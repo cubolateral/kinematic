@@ -17,7 +17,7 @@ class DocumentationTests(unittest.TestCase):
         block = '''--- Independent canvas.
 ---@class Kinematic.Canvas2D: Kinematic.Object
 ---@field signal fun(self: Kinematic.Canvas2D, callback: fun(object: Kinematic.Canvas2D, frame: {time:number, dt:number})): Kinematic.Signal Runs after evaluation.
----@field filter? Kinematic.Property<'Nearest' | 'Linear'> Sampling mode. Default: "Nearest".
+---@field filter? Kinematic.Property<'nearest' | 'linear'> Sampling mode. Default: "nearest".
 ---@field zoom number Magnification. Default: 1.5. Minimum: 0.001.
 ---@field position Kinematic.Vec2 Initial position. Default: [0, 1].'''
         rendered = '\n'.join(docs.render_api_block(
@@ -25,7 +25,7 @@ class DocumentationTests(unittest.TestCase):
         plain = visible(rendered)
         self.assertIn('frame: {time: number, dt: number})): Signal', plain)
         self.assertIn('Runs after evaluation.', plain)
-        self.assertIn('filter?: Property<\'Nearest\' | \'Linear\'> = "Nearest"', plain)
+        self.assertIn('filter?: Property<\'nearest\' | \'linear\'> = "nearest"', plain)
         self.assertIn('zoom: number = 1.5', plain)
         self.assertIn('Magnification. Minimum: 0.001.', plain)
         self.assertIn('position: Vec2 = {0, 1}', plain)
@@ -42,12 +42,12 @@ class DocumentationTests(unittest.TestCase):
         method = '''--- Schedules an animation.
 ---@generic T
 ---@param self Kinematic.Property<T>
----@param easing? "soft light" | "linear" Interpolation curve.
+---@param easing? "soft_light" | "linear" Interpolation curve.
 ---@return Kinematic.Animation Prepared animation.
 function Property:play(easing) end'''
         rendered = '\n'.join(docs.render_api_block(method, type_names={'Animation'}))
         plain = visible(rendered)
-        self.assertIn('Property:play(easing?: "soft light" | "linear"): Animation', plain)
+        self.assertIn('Property:play(easing?: "soft_light" | "linear"): Animation', plain)
         self.assertIn('Interpolation curve.', plain)
         self.assertIn('Prepared animation.', plain)
         self.assertIn('{#property-play-easing}', rendered)
@@ -62,7 +62,7 @@ function Property:play(easing) end'''
     def test_documented_defaults_preserve_unstructured_prose_and_lua_values(self):
         self.assertEqual(docs.property_default('Visible. Default: false.'), ('false', 'Visible.'))
         self.assertEqual(docs.property_default('Empty. Default: null.'), ('nil', 'Empty.'))
-        for description in ('Default: Nearest.', 'Default: [] (1.00).', 'Uses the default font.'):
+        for description in ('Default: nearest.', 'Default: [] (1.00).', 'Uses the default font.'):
             self.assertEqual(docs.property_default(description), ('', description))
 
     def test_registered_functions_are_preserved_once_with_their_annotations(self):
@@ -76,6 +76,8 @@ function Property:play(easing) end'''
                 self.assertEqual(generated.count(line + '\n'), source.count(line + '\n'))
         self.assertTrue(all(any(block.strip() for block in blocks) for blocks in pages.values()))
         self.assertIn('---@field source Kinematic.AudioResource', '\n'.join(pages['AudioOptions']))
+        self.assertIn('---@alias Kinematic.Easing "linear"|', '\n'.join(pages['Aliases']))
+        self.assertNotIn('Easing', pages)
         self.assertIn('Default: 128. Minimum: 0.', generated)
         self.assertIn('function Text2D:morph(text, group)', '\n'.join(pages['Text2D']))
         self.assertNotIn('function Text2D:morph', '\n'.join(pages['Circle']))

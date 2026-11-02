@@ -2459,9 +2459,9 @@ mod tests {
         let track = <Camera3D as crate::core::Trackable>::track(0);
         let target = TrackTarget::property(std::any::TypeId::of::<Camera3D>(), track);
         let mut edits = InspectorEdits::default();
-        let original = TrackValue::Enum("Perspective");
+        let original = TrackValue::Enum("perspective");
 
-        target.set(&scene.world(), entity, TrackValue::Enum("Orthogonal"));
+        target.set(&scene.world(), entity, TrackValue::Enum("orthogonal"));
 
         edits.record(entity, target.clone(), original.clone());
 

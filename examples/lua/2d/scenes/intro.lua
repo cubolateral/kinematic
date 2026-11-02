@@ -19,7 +19,7 @@ return function(s)
 
     ball:to {opacity = 1}:play(0.5)
     s:wait(0.3)
-    ball:to {position = k.vec2(360, 0)}:play(2, k.ease.cubic_in_out)
+    ball:to {position = k.vec2(360, 0)}:play(2, "cubic_in_out")
     ball:to {fill = k.color("#34D399")}:play(0.5)
     s:wait(0.6)
 

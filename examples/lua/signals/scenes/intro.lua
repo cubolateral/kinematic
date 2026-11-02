@@ -20,7 +20,7 @@ return function(s)
         local angle = phase:get()
         position:set(k.vec2(math.cos(angle) * 170, math.sin(angle) * 170))
     end)
-    phase:to(math.pi * 2):play(3, k.ease.linear)
+    phase:to(math.pi * 2):play(3, "linear")
     orbit_signal:stop()
     s:wait(0.5)
 

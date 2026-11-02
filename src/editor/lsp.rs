@@ -1105,7 +1105,7 @@ mod integration_tests {
         );
 
         let component_path = Path::new("components.lua");
-        let component_text = "\nlocal motion = k.component { speed = {default = 40}, mode = {default = 'Idle', choices = {'Idle', 'Moving'}} }\nreturn { motion = motion }\n";
+        let component_text = "\nlocal motion = k.component { speed = {default = 40}, mode = {default = 'idle', choices = {'idle', 'moving'}} }\nreturn { motion = motion }\n";
 
         std::fs::write(root.join(component_path), component_text).unwrap();
 
@@ -1129,7 +1129,7 @@ return function(s)
   local custom = s:object(definition, {})
   custom.speed:set(20)
   custom.caption:set('World')
-  custom.mode:set('Moving')
+  custom.mode:set('moving')
   custom:signal(function(obj) obj.speed:set(30); obj.position:set(k.vec2(0, 0)) end)
   custom.sped:set(20)
   custom.speed:set('Invalid')

@@ -782,14 +782,6 @@ impl Runtime {
 
         super::audio::register(self, &api)?;
 
-        let easing = lua.create_table()?;
-
-        for ease in Easing::ALL {
-            easing.set(easing_name(ease), format!("{ease:?}"))?;
-        }
-
-        api.set("ease", extension::readonly(lua, easing)?)?;
-
         let api = extension::readonly(lua, api)?;
 
         lua.globals().set("k", api.clone())?;
@@ -916,7 +908,7 @@ pub(super) fn parse_easing(name: Option<String>) -> Result<Easing> {
         None => Ok(Easing::default()),
         Some(name) => Easing::ALL
             .into_iter()
-            .find(|ease| format!("{ease:?}") == name || easing_name(*ease) == name)
+            .find(|ease| easing_name(*ease) == name)
             .ok_or_else(|| mlua::Error::runtime("Unknown easing curve.")),
     }
 }
@@ -1947,7 +1939,7 @@ local counter=k.object {
 return function(s)
     local counter=s:object(counter,{id='counter',fill=k.color('#ff0000')})
     s:world_2d():add(counter)
-    counter:to {speed = 8}:play(3, k.ease.linear)
+    counter:to {speed = 8}:play(3, 'linear')
     s:wait(1)
 end
 "##;
@@ -1991,13 +1983,13 @@ end
             r#"
 return function(s)
     local two = s:canvas_2d {id='two', resolution={2, 2}}
-    local three = s:canvas_3d {id='three', resolution={2, 2}, filter='Linear'}
+    local three = s:canvas_3d {id='three', resolution={2, 2}, filter='linear'}
     s:root():add(two)
     s:root():add(three)
-    assert(two.filter:get() == 'Nearest')
-    assert(three.filter:get() == 'Linear')
-    two:to {filter='Linear'}:play(1, k.ease.linear)
-    three:to {filter='Nearest'}:play(1, k.ease.linear)
+    assert(two.filter:get() == 'nearest')
+    assert(three.filter:get() == 'linear')
+    two:to {filter='linear'}:play(1, 'linear')
+    three:to {filter='nearest'}:play(1, 'linear')
 end
 "#,
         );
@@ -2240,7 +2232,7 @@ end
 
         let mut scene = LuaScene::load(
             ProjectContext::new(&root).unwrap(), "counter.lua",
-            sources("return function(s) local a=s:circle{id='ball',radius=4}; s:world_2d():add(a); a:to{radius=8}:play(1,k.ease.linear) end"),
+            sources("return function(s) local a=s:circle{id='ball',radius=4}; s:world_2d():add(a); a:to{radius=8}:play(1,'linear') end"),
             (100, 100), 60, Margin::default(),
         ).unwrap();
 

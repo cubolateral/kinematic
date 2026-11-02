@@ -26,7 +26,7 @@ const SCENE: &str = r##"
 return function(s)
     local ball = s:circle {id='ball', radius=24, fill=k.color('#60A5FA'), position=k.vec2(-100, 0)}
     s:world_2d():add(ball)
-    ball:to {position = k.vec2(100, 0)}:play(2, k.ease.linear)
+    ball:to {position = k.vec2(100, 0)}:play(2, 'linear')
     s:wait(1)
 end
 "##;
@@ -144,9 +144,9 @@ return function(s)
         obj:uniform('zoom'):set(zoom)
     end)
     s:all(function()
-        world.camera_position:to(k.vec2(100, 50)):play(1, k.ease.linear)
-        world.camera_zoom:to(2):play(1, k.ease.linear)
-        world.camera_rotation:to(0.4):play(1, k.ease.linear)
+        world.camera_position:to(k.vec2(100, 50)):play(1, 'linear')
+        world.camera_zoom:to(2):play(1, 'linear')
+        world.camera_rotation:to(0.4):play(1, 'linear')
     end)
 end
 "#,
@@ -226,8 +226,8 @@ return function(s)
     a.opacity:set(0)
     a.scale:set(k.vec2(0, 0))
     s:all(function()
-        a:to {opacity = 1}:play(1, k.ease.linear)
-        a:to {scale = k.vec2(1, 1)}:play(1, k.ease.linear)
+        a:to {opacity = 1}:play(1, 'linear')
+        a:to {scale = k.vec2(1, 1)}:play(1, 'linear')
     end)
     assert(not pcall(function() return a.fade_in end))
     assert(not pcall(function() return a.grow_in end))
@@ -298,7 +298,7 @@ return function(s)
         if frame.time > 1 then b.opacity:set(0) end
     end)
     a:signal(function(_, frame) if frame.time > 1 then error('Failed frame.') end end)
-    a:to {position = k.vec2(100, 0)}:play(2, k.ease.linear)
+    a:to {position = k.vec2(100, 0)}:play(2, 'linear')
 end
 "#,
     );
@@ -353,7 +353,7 @@ fn quaternion_tweens_keep_full_turns() {
 return function(s)
     local shape=s:sphere {id='spin'}
     s:world_3d():add(shape)
-    shape.rotation:rotate(k.vec3(0,0,1), 2*math.pi):play(1, k.ease.linear)
+    shape.rotation:rotate(k.vec3(0,0,1), 2*math.pi):play(1, 'linear')
 end
 "#,
     );
@@ -380,6 +380,72 @@ fn try_load(text: &str) -> mlua::Result<LuaScene> {
 }
 
 #[test]
+fn lua_enums_only_accept_snake_case_strings() {
+    load(
+        r#"
+assert(k.ease == nil and require('kinematic').ease == nil)
+local style = k.component {
+    mode = {default='in_progress', choices={'in_progress', 'done'}},
+}
+local Custom = k.object {components={style}}
+return function(s)
+    local row = s:container_2d {direction='horizontal_reverse'}
+    assert(row.direction:get() == 'horizontal_reverse')
+    local canvas = s:canvas_3d {filter='linear', camera_mode='orthogonal'}
+    assert(canvas.filter:get() == 'linear' and canvas.camera_mode:get() == 'orthogonal')
+    local custom = s:object(Custom, {})
+    assert(custom.mode:get() == 'in_progress')
+    custom.mode:set('done')
+    row:to {direction='vertical_reverse'}:play(1, 'cubic_in_out')
+end
+"#,
+    );
+
+    for source in [
+        "return function(s) s:circle{}:to{radius=10}:play(1, 'Linear') end",
+        "return function(s) s:circle{}:to{radius=10}:play(1, 'InOutCubic') end",
+        "return function(s) s:circle{}:to{radius=10}:play(1, 'cubicInOut') end",
+        "return function(s) s:circle{}:to{radius=10}:play(1, 'cubic-in-out') end",
+        "return function(s) s:container_2d{direction='HorizontalReverse'} end",
+        "return function(s) s:container_3d{direction='depthReverse'} end",
+        "return function(s) s:canvas_3d{camera_mode='Orthogonal'} end",
+        "return function(s) s:canvas_2d{filter='Linear'} end",
+        "return function(s) s:world_2d().filter:set('Nearest') end",
+        "return function(s) s:world_3d():to{camera_mode='Perspective'}:play() end",
+        "return function(s) s:code{language='Lua'} end",
+        "k.audio_synth{waveform='Sine'}; return function(s) end",
+        "k.audio_synth{preset='Boink'}; return function(s) end",
+        "return function(s) s:view('2D') end",
+    ] {
+        assert!(
+            try_load(source).is_err(),
+            "Accepted an invalid enum: {source}"
+        );
+    }
+
+    for choice in [
+        "InProgress",
+        "inProgress",
+        "in-progress",
+        "in progress",
+        "_idle",
+        "idle_",
+        "in__progress",
+        "",
+    ] {
+        let choice = serde_json::to_string(choice).unwrap();
+        let source = format!(
+            "k.component{{mode={{default={choice},choices={{{choice}}}}}}}; return function(s) end"
+        );
+
+        assert!(
+            try_load(&source).is_err(),
+            "Accepted an invalid enum choice: {source}"
+        );
+    }
+}
+
+#[test]
 fn partial_channels_pairs_and_reusable_definitions_share_native_tracks() {
     let scene = load(
         r#"
@@ -390,11 +456,11 @@ return function(s)
     assert(ball:get('fill').a == 0.5)
     local movement = ball:by {position={x=100}}
     assert(ball:get('position.x') == -200)
-    movement:play(1,k.ease.linear)
-    movement:play(1,k.ease.linear)
+    movement:play(1,'linear')
+    movement:play(1,'linear')
     s:all(function()
-        ball:from {position={x={0,200}},radius={16,39},opacity={0,1}}:play(2,k.ease.linear)
-        ball:to {position={y=50}}:play(2,k.ease.linear)
+        ball:from {position={x={0,200}},radius={16,39},opacity={0,1}}:play(2,'linear')
+        ball:to {position={y=50}}:play(2,'linear')
     end)
 end
 "#,
@@ -456,9 +522,9 @@ return function(s)
     local ball=s:circle{id='ball',position={y=12}}
     s:world_2d():add(ball)
     local destination=ball:to{position={x=10},radius=24}
-    destination:play(1,k.ease.linear)
+    destination:play(1,'linear')
     ball:by{position={x=20}}:play(1)
-    destination:play(1,k.ease.linear)
+    destination:play(1,'linear')
     ball:to{radius=30}:play()
 end
 "#,
@@ -596,10 +662,10 @@ return function(s)
     s:world_2d():add(label)
     local back=label:fade(OLD)
     s:wait(1)
-    label:fade(NEW):play(2,k.ease.EASING)
+    label:fade(NEW):play(2,'EASING')
     assert(label:get('text')==NEW)
     s:wait(1)
-    back:play(2,k.ease.EASING)
+    back:play(2,'EASING')
 end
 "#
     .replace("CONSTRUCTOR", constructor)
@@ -679,7 +745,7 @@ return function(s)
     local formula=s:latex_3d{id='formula',text='x',opacity=0.8,depth=0.25}
     local target=s:latex_3d{id='target',text='x+x+x',depth=0.25}
     s:world_3d():add(formula)
-    formula:fade('x+x+x'):play(2,k.ease.back_out)
+    formula:fade('x+x+x'):play(2,'back_out')
     assert(formula:get('text')=='x+x+x')
     s:wait(1)
     formula:fade('z'):play(0)
@@ -743,8 +809,8 @@ return function(s)
     local change=counter:increment(10)
     assert(counter:get('value')==0 and counter:type_name()=='Counter')
     s:all(function()
-        change:play(2,k.ease.linear)
-        fade:play(1,k.ease.linear)
+        change:play(2,'linear')
+        fade:play(1,'linear')
         ball:from{position={k.vec2(0,0),k.vec2(10,20)}}:play(1)
     end)
     assert(label:get('text')=='New')
@@ -801,7 +867,6 @@ end
         "return function(s) s:text_2d{}:fade(123) end",
         "k.vec2=function() end;return function(s) end",
         "rawset(k,'vec2',false);return function(s) end",
-        "k.ease.linear='Bad';return function(s) end",
         "setmetatable(k,{});return function(s) end",
     ] {
         assert!(
@@ -821,7 +886,7 @@ return function(s)
     local bounds=o:bounds();local size=o:box_size()
     assert(bounds.x==10 and bounds.y==20 and bounds.width==30 and size.x==30 and size.y==40)
     assert(k.quad(1,2,3,4).b==2 and math.abs(k.color(0.1,0.2,0.3,0.4).b-0.3)<0.00001)
-    s:canvas_3d{camera_fov=10,camera_mode='Orthogonal'}:to{camera_fov=20}:play(1)
+    s:canvas_3d{camera_fov=10,camera_mode='orthogonal'}:to{camera_fov=20}:play(1)
     k.mesh{vertices={{0,0,0},{1,0,0},{0,1,0}},indices={1,2,3}}
 end
 "#,
@@ -851,7 +916,7 @@ return function(s)
     channel:inputs{x=ball:prop('position.x')}
     local empty=s:object(k.object{inputs={},update=function(state,frame,inputs) assert(next(inputs)==nil) end},{})
     s:world_2d():add(ball);s:world_2d():add(counter);s:world_2d():add(channel);s:world_2d():add(empty)
-    ball:to{position={x=10}}:play(1,k.ease.linear)
+    ball:to{position={x=10}}:play(1,'linear')
     counter:signal(function(self) assert(self:state().result==6) end)
     channel:signal(function(self) assert(math.abs(self:state().x-ball:get('position.x'))<0.001) end)
 end
@@ -924,8 +989,8 @@ return function(s)
     })
     s:world_3d():add(mesh)
     s:all(function()
-        mesh:from{uniforms={pulse={0,6}}}:play(3,k.ease.linear)
-        mesh:to{pulse=10,position={x=2}}:play(3,k.ease.linear)
+        mesh:from{uniforms={pulse={0,6}}}:play(3,'linear')
+        mesh:to{pulse=10,position={x=2}}:play(3,'linear')
     end)
     local bounds=mesh:bounds()
     assert(bounds.width==0)
@@ -955,13 +1020,13 @@ fn snapshots_capture_the_scheduling_position_without_changing_builder_values() {
 return function(s)
     local ball=s:circle{id='ball',radius=10}
     s:world_2d():add(ball)
-    ball:to{radius=30}:play(1,k.ease.linear)
+    ball:to{radius=30}:play(1,'linear')
     assert(ball:get('radius')==30)
     ball:save()
-    ball:to{radius=50}:play(1,k.ease.linear)
+    ball:to{radius=50}:play(1,'linear')
     local restore=ball:restore()
     assert(ball:get('radius')==50)
-    restore:play(1,k.ease.linear)
+    restore:play(1,'linear')
 end
 "#,
     );
@@ -1008,10 +1073,10 @@ return function(s)
     s:world_{dimension}():add(label)
     local back=label:morph('aba')
     s:wait(1)
-    label:morph('aac'):play(2,k.ease.linear)
+    label:morph('aac'):play(2,'linear')
     assert(label:get('text')=='aac')
     s:wait(1)
-    back:play(2,k.ease.linear)
+    back:play(2,'linear')
 end
 "#
         );
@@ -1066,7 +1131,7 @@ fn morph_moves_shared_glyphs_without_crossfading_them() {
         ("latex_2d", r"x\qquad\qquad", r"\qquad\qquad x"),
     ] {
         let source = format!(
-            "return function(s) local t=s:{constructor}{{id='label',text={},size=32,opacity=0.8}} s:world_2d():add(t) t:morph({}):play(2,k.ease.linear) end",
+            "return function(s) local t=s:{constructor}{{id='label',text={},size=32,opacity=0.8}} s:world_2d():add(t) t:morph({}):play(2,'linear') end",
             serde_json::to_string(old).unwrap(),
             serde_json::to_string(new).unwrap(),
         );

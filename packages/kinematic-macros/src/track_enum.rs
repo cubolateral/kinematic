@@ -26,6 +26,31 @@ pub fn derive_track_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStr
     }
 
     let variant_names: Vec<_> = variants.iter().map(|variant| &variant.ident).collect();
+    let variant_values: Vec<_> = variant_names
+        .iter()
+        .map(|ident| {
+            let name = ident.to_string();
+            let characters: Vec<_> = name.chars().collect();
+            let mut value = String::new();
+
+            for (index, character) in characters.iter().enumerate() {
+                if character.is_uppercase()
+                    && index > 0
+                    && (characters[index - 1].is_lowercase()
+                        || characters[index - 1].is_numeric()
+                        || characters
+                            .get(index + 1)
+                            .is_some_and(|next| next.is_lowercase()))
+                {
+                    value.push('_');
+                }
+
+                value.extend(character.to_lowercase());
+            }
+
+            value
+        })
+        .collect();
     let mut generics = input.generics.clone();
 
     generics
@@ -46,14 +71,14 @@ pub fn derive_track_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStr
 
             fn into_track_value(self) -> crate::core::TrackValue {
                 crate::core::TrackValue::Enum(match self {
-                    #(Self::#variant_names => stringify!(#variant_names)),*
+                    #(Self::#variant_names => #variant_values),*
                 })
             }
 
             fn from_track_value(value: crate::core::TrackValue) -> Option<Self> {
                 match value {
                     crate::core::TrackValue::Enum(value) => match value {
-                        #(stringify!(#variant_names) => Some(Self::#variant_names),)*
+                        #(#variant_values => Some(Self::#variant_names),)*
                         _ => None,
                     },
                     _ => None,
@@ -62,7 +87,7 @@ pub fn derive_track_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStr
         }
 
         impl #impl_generics crate::core::TrackEnum for #name #type_generics #where_clause {
-            const VARIANTS: &'static [&'static str] = &[#(stringify!(#variant_names)),*];
+            const VARIANTS: &'static [&'static str] = &[#(#variant_values),*];
         }
     }
     .into()

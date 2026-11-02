@@ -578,10 +578,10 @@ fn camera_value(camera: &mut crate::core::components::Camera3D, name: &str, valu
     use crate::core::components::Camera3DMode;
 
     match (name, value) {
-        ("camera_mode", TrackValue::Enum("Perspective")) => {
+        ("camera_mode", TrackValue::Enum("perspective")) => {
             camera.camera_mode = Camera3DMode::Perspective
         }
-        ("camera_mode", TrackValue::Enum("Orthogonal")) => {
+        ("camera_mode", TrackValue::Enum("orthogonal")) => {
             camera.camera_mode = Camera3DMode::Orthogonal
         }
         ("camera_fov", TrackValue::F32(value)) => camera.camera_fov = *value,

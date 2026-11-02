@@ -35,7 +35,7 @@ rotation uses a quaternion.
 | --- | --- |
 | `camera_position` | Position in canvas space. |
 | `camera_rotation` | View orientation. |
-| `camera_mode` | `Perspective` or `Orthogonal`. |
+| `camera_mode` | `perspective` or `orthogonal`. |
 | `camera_fov` | Vertical field of view in radians, or orthographic view height. |
 | `camera_near` / `camera_far` | Clipping planes. |
 
@@ -64,7 +64,7 @@ immediate, and `camera_fov` changes meaning with the mode. Do not interpolate th
 numeric value across modes as if it represented the same view.
 
 ```lua
-world.camera_mode:set("Orthogonal")
+world.camera_mode:set("orthogonal")
 world.camera_fov:set(6)
 ```
 

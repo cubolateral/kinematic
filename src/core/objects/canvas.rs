@@ -33,7 +33,7 @@ pub struct CanvasSettings {
     /// Color used to clear the canvas before drawing its children.
     #[track]
     pub clear: Color,
-    /// Sampling used by previews and projections of this canvas. Defaults to Nearest.
+    /// Sampling used by previews and projections of this canvas. Defaults to "nearest".
     #[track]
     pub filter: CanvasFilter,
 

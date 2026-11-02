@@ -40,9 +40,18 @@ declarations in one table are errors.
 ## Duration and easing
 
 `play()` and `play(0)` apply changes instantly. `play(seconds,easing)` uses a duration
-in seconds and a built-in easing curve. The default is `cubic_in_out`. `k.ease.linear`
-keeps a constant speed, while `k.ease.cubic_out` slows near the end. See
-[Easing](../api/Easing.md) for the available curves.
+in seconds and an easing curve named by a `snake_case` string. The default is
+`"cubic_in_out"`. `"linear"` keeps a constant speed, while `"cubic_out"` slows near the end. See
+[Easing](../api/Aliases.md#property-kinematic-easing) for the available curves.
+
+```lua
+ball:to {radius = 50}:play(1, "cubic_out")
+```
+
+The curve families are `quad`, `cubic`, `quart`, `quint`, `sine`, `expo`, `circ`,
+`back`, `elastic`, and `bounce`. Each supports `_in` (accelerates at the start),
+`_out` (decelerates at the end), and `_in_out` (both). Use `"linear"` for constant speed.
+Only the documented spellings are accepted.
 
 An animation definition exposes only `play`. Do not chain `to` or object methods on it.
 To combine movements, schedule them in scopes.

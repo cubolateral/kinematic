@@ -62,9 +62,9 @@ return function(s)
     }
     content:add(screen)
     s:all(function()
-        card:to {uniforms = {pulse = 12}}:play(3, k.ease.linear)
-        cube:to {uniforms = {pulse = 12}}:play(3, k.ease.linear)
-        cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, k.ease.linear)
+        card:to {uniforms = {pulse = 12}}:play(3, "linear")
+        cube:to {uniforms = {pulse = 12}}:play(3, "linear")
+        cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, "linear")
     end)
     s:wait(0.8)
 

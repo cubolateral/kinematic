@@ -50,10 +50,13 @@ A component declares animatable fields. The `default` value determines each fiel
 type. `min` and `max` constrain numbers, while `choices` restricts strings. Field names
 cannot shadow built-in object fields.
 
+String enums declared with `choices` accept only `snake_case` values, such as
+`"solid"` or `"in_progress"`. Other spellings are rejected.
+
 ```lua
 local progress = k.component {
     value = {default = 0, min = 0, max = 1},
-    style = {default = "Solid", choices = {"Solid", "Outline"}},
+    style = {default = "solid", choices = {"solid", "outline"}},
     offset = {default = k.vec2(0, 0)},
 }
 

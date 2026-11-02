@@ -13,31 +13,13 @@ pub fn definitions() -> String {
 
     value_definitions(&mut output);
 
-    output.push_str("--- Named easing curves accepted by Animation:play. The default is cubic_in_out.\n---@class Kinematic.Easing\n");
+    let easing = Easing::ALL
+        .into_iter()
+        .map(|easing| format!("\"{}\"", super::runtime::easing_name(easing)))
+        .collect::<Vec<_>>()
+        .join("|");
 
-    for easing in Easing::ALL {
-        let name = super::runtime::easing_name(easing);
-        let description = if name == "linear" {
-            "Linear easing with constant speed.".to_owned()
-        } else {
-            let (family, behavior) = if let Some(family) = name.strip_suffix("_in_out") {
-                (
-                    family,
-                    "accelerates at the start and decelerates at the end",
-                )
-            } else if let Some(family) = name.strip_suffix("_in") {
-                (family, "accelerates at the start")
-            } else {
-                (name.strip_suffix("_out").unwrap(), "decelerates at the end")
-            };
-
-            format!("Native {family} curve that {behavior}.")
-        };
-
-        output.push_str(&format!("---@field {name} string {description}\n"));
-    }
-
-    output.push_str("k.ease = {}\n\n");
+    output.push_str(&format!("--- Easing curve names accepted by Animation:play. The default is \"cubic_in_out\".\n---@alias Kinematic.Easing {easing}\n\n"));
 
     spatial_definitions(&mut output, &restricted);
 
@@ -495,10 +477,15 @@ mod tests {
 
         for easing in Easing::ALL {
             assert!(definitions.contains(&format!(
-                "---@field {} string ",
+                "\"{}\"",
                 super::super::runtime::easing_name(easing)
             )));
         }
+
+        assert!(definitions.contains("---@alias Kinematic.Easing \"linear\"|"));
+        assert!(definitions.contains("---@param easing? Kinematic.Easing"));
+        assert!(!definitions.contains("k.ease"));
+        assert!(!definitions.contains("---@class Kinematic.Easing"));
 
         for block in definitions
             .split("\n\n")
