@@ -79,8 +79,7 @@ fn lua_simulation_startup_and_frames() {
 
     std::fs::write(
         root.join("scenes/intro.lua"),
-        include_str!("../examples/lua/simulation/scenes/life.lua")
-            .replace("s:wait(3)", "s:wait(10)"),
+        include_str!("tests/fixtures/life.lua").replace("s:wait(3)", "s:wait(10)"),
     )
     .unwrap();
     std::fs::create_dir_all(root.join("kinematic/cache")).unwrap();

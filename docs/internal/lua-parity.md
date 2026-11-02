@@ -1,7 +1,9 @@
+> Historical engineering record. Commands and measurements describe the recorded revision. See the [current guide](../guide/start.md) for current usage.
+
 # Lua implementation inventory
 
-Projects and scenes are written in Lua. Rust source remains authoritative for
-the internal runtime and the object metadata exposed to Lua.
+Projects and scenes are written in Lua. Rust source remains authoritative for the
+internal runtime and the object metadata exposed to Lua.
 
 | Family | Internal runtime family |
 | --- | --- |
@@ -17,8 +19,9 @@ the internal runtime and the object metadata exposed to Lua.
 | Resources | Images, fonts, LaTeX, CanvasTexture, ProjectionSource, ImageShader, MeshShader, uniforms, mesh geometry, materials and lights. |
 | Extension | Lua components and objects, custom 2D paths and 3D meshes. |
 
-Native property names, types, limits and choices must come from generated
-metadata, rather than a second handwritten catalogue. The internal hecs, Skia, glam and three-d dependencies have no public Rust API.
+Native property names, types, limits and choices must come from generated metadata,
+rather than a second handwritten catalogue. The internal hecs, Skia, glam and three-d
+dependencies have no public Rust API.
 
-Built-in effects and particle transitions were removed by the maintainer.
-Animate opacity, position, scale and other tracks explicitly in Lua.
+Built-in effects and particle transitions were removed by the maintainer. Animate
+opacity, position, scale and other tracks explicitly in Lua.

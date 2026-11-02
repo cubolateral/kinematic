@@ -1,0 +1,1 @@
+(version: 1, name: "text", scenes: ["scenes/intro.lua"], resolution: (1280, 720), fps: 30, margin: (0, 0))

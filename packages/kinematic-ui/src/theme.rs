@@ -2,7 +2,7 @@
 
 use dear_imgui_rs::{ColorStackToken, Context, FontId, StyleColor, Ui};
 
-pub const CORNER_RADIUS: f32 = 2.0;
+pub const CORNER_RADIUS: f32 = 4.0;
 pub const BORDER_WIDTH: f32 = 1.0;
 pub const WINDOW_PADDING: [f32; 2] = [8.0, 8.0];
 pub const FRAME_PADDING: [f32; 2] = [6.0, 4.0];
@@ -40,9 +40,9 @@ pub struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Self {
-            background: [0.0, 0.0, 0.0, 1.0],
+            background: [10.0 / 255.0, 10.0 / 255.0, 10.0 / 255.0, 1.0],
             accent: [0.0, 0.549, 1.0, 1.0],
-            contrast: 1.0,
+            contrast: 0.5,
             scale: 1.0,
         }
     }

@@ -8,3 +8,18 @@
 # Ignore generated project metadata.
 **/kinematic/*
 !/examples/lua/*/kinematic/project.ron
+
+# Documentation dependencies, generated API and media.
+/docs/node_modules
+/docs/api
+/docs/public
+/docs/.vitepress/cache
+/docs/.vitepress/.temp
+/docs/.vitepress/dist
+/examples/lua/*/output
+
+# Python documentation tooling caches.
+__pycache__/
+
+# Documentation staging and local validation.
+/docs/.cache

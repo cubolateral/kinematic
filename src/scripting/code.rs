@@ -963,10 +963,7 @@ end
 
         load(&source).unwrap();
 
-        let scene = load(include_str!(
-            "../../examples/lua/2d/scenes/code_languages.lua"
-        ))
-        .unwrap();
+        let scene = load(include_str!("../tests/fixtures/code_languages.lua")).unwrap();
 
         for time in [1.5, 9.5, 18.5, 0.0, scene.duration()] {
             scene.update(time).unwrap();
@@ -975,7 +972,7 @@ end
 
     #[test]
     fn example_and_generated_function_documentation_include_working_code() {
-        let scene = load(include_str!("../../examples/lua/2d/scenes/code.lua")).unwrap();
+        let scene = load(include_str!("../tests/fixtures/code.lua")).unwrap();
 
         for time in [0.0, 1.0, scene.duration(), 2.0] {
             scene.update(time).unwrap();

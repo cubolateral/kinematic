@@ -1,64 +1,39 @@
-local geometry = k.mesh {
-    vertices = {{-1,-1,0}, {1,-1,0}, {0,1,0}, {0,0,1.6}},
-    indices = {1,3,2, 1,2,4, 2,3,4, 3,1,4},
-}
-
-local shader = k.mesh_shader {
-    fragment = [[
-        uniform vec4 materialColor;
-        uniform float pulse;
-        in vec3 k_world_position;
-        out vec4 outColor;
-        void main() {
-            float light = 0.65 + 0.35 * sin(k_world_position.y * 3.0 + pulse);
-            outColor = vec4(materialColor.rgb * light, materialColor.a);
-        }
-    ]],
-}
-
-local sculpture = k.object {
-    dimension = 3,
-    bounds = function()
-        return {x = -1, y = -1, z = -1.6, width = 2, height = 2, depth = 3.2}
-    end,
-    draw = function(ctx)
-        ctx:mesh(geometry)
-    end,
-}
-
 return function(s)
-    s:view("3d")
+    local world = s:world_2d()
+    world:add(s:rect {size = k.vec2(1280, 720), fill = k.color("#000000")})
 
-    s:world_3d().camera_position:set(k.vec3(0, 0, 7))
+    local content = s:group_2d {id = "content"}
+    world:add(content)
 
-    local mesh = s:object(sculpture, {
-        id = "sculpture", albedo = k.color("#60A5FA"),
-        shader = shader, uniforms = {pulse = 0},
-        position = k.vec3(-1.5, 0, 0),
-    })
-
-    s:world_3d():add(mesh)
-
-    local badge = s:canvas_2d {id = "badge", resolution = {128, 128}}
-
-    s:root():add(badge)
-
-    badge:add(s:circle {id = "badge_dot", radius = 40, fill = k.color("#FBBF24")})
-
-    local screen = s:projection_3d {
-        id = "badge_screen", source = badge:texture(),
-        size = k.vec2(1, 1), position = k.vec3(0, 1.6, 0),
+    local stage = s:canvas_3d {
+        id = "stage",
+        resolution = {900, 450},
+        camera_position = k.vec3(0, 0, 7),
     }
+    s:root():add(stage)
 
-    s:world_3d():add(screen)
+    local screen = s:projection_2d {
+        id = "screen",
+        source = stage:texture(),
+        size = k.vec2(900, 450),
+    }
+    content:add(screen)
 
-    s:all(function()
-        mesh:to {position = k.vec3(1.5, 0, 0)}:play(3, k.ease.sine_in_out)
+    local cube = s:cube {
+        id = "cube",
+        size = k.vec3(1.5, 1.5, 1.5),
+        albedo = k.color("#008CFF"),
+        roughness = 0.4,
+    }
+    stage:add(cube)
+    stage:add(s:directional_light {rotation = k.axis_angle(k.vec3(1, 0, 0), -0.5)})
 
-        mesh:to {rotation = k.axis_angle(k.vec3(0, 1, 0), math.pi)}:play(3)
+    cube:from {scale = {k.vec3(0.1, 0.1, 0.1), k.vec3(1, 1, 1)}}:play(0.6)
+    cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, k.ease.linear)
+    cube:to {albedo = k.color("#A78BFA"), metallic = 0.7}:play(0.8)
+    s:wait(0.8)
 
-        mesh:to {uniforms = {pulse = 6}}:play(3)
-    end)
-
-    s:wait(0.5)
+    s:wait(0.6)
+    content:to {opacity = 0}:play(0.5)
+    s:wait(0.2)
 end

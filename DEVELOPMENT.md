@@ -1,7 +1,7 @@
 # Developing Kinematic
 
 This guide covers local development, validation, distribution and releases.
-For scene authoring, see [Lua projects and API](docs/lua.md). Read
+For scene authoring, see [Lua projects and API](docs/guide/start.md). Read
 [AGENTS.md](AGENTS.md) for architecture boundaries and contributor conventions.
 
 ## Prerequisites
@@ -15,7 +15,7 @@ session with OpenGL 3.3 and an audio driver.
 
 Install Visual Studio 2022 Build Tools or Visual Studio with the **Desktop
 development with C++** workload and a Windows SDK. Use the MSVC Rust toolchain.
-Windows PowerShell 5.1 is sufficient for the preparation and distribution script;
+Windows PowerShell 5.1 is sufficient for the preparation and distribution script.
 PowerShell 7 also works.
 
 Distribution builds additionally require LLVM/Clang and Python 3. Skia has no
@@ -83,7 +83,7 @@ cargo run -- examples/lua/audio
 
 Development builds run the extracted tools directly from `target/runtime/`.
 They do not embed the compressed archive on every rebuild. SDL3, Lua and Skia
-are linked statically; distribution builds also link the Windows C runtime
+are linked statically. Distribution builds also link the Windows C runtime
 statically. System graphics, windowing, font and audio libraries remain supplied
 by the operating system. Rust dependencies are pinned by `Cargo.lock`.
 
@@ -92,7 +92,7 @@ set `KINEMATIC_LUALS` to its executable. Distribution validation clears this
 override to verify the bundled server.
 
 The binary is the only application interface. Projects and scenes are written
-in Lua; Rust modules and procedural macros are internal implementation details.
+in Lua. Rust modules and procedural macros are internal implementation details.
 Use the existing UI components and architecture described in `AGENTS.md`.
 
 ### Command-line operations
@@ -123,10 +123,10 @@ cargo test --workspace --locked
 ```
 
 Prepare dependencies before running LuaLS integration tests. Tests requiring
-additional graphics or audio setup are marked as ignored; passing the ordinary
+additional graphics or audio setup are marked as ignored. Passing the ordinary
 suite does not replace distribution validation. See
-[graphics validation](docs/lua-validation.md) and
-[performance measurements](docs/lua-performance.md) for those checks.
+[graphics validation](docs/internal/lua-validation.md) and
+[performance measurements](docs/internal/lua-performance.md) for those checks.
 
 Pushes and pull requests run formatting, checking and tests on both Windows and
 Linux. Tag builds also generate and validate the distributions.
@@ -191,7 +191,7 @@ SDL_AUDIODRIVER=dummy LIBGL_ALWAYS_SOFTWARE=1 \
 ```
 
 CI uses Xvfb/Mesa on Linux, a pinned Mesa software OpenGL build on Windows, and
-SDL's dummy audio driver on both. The dummy driver checks the playback pipeline;
+SDL's dummy audio driver on both. The dummy driver checks the playback pipeline.
 listen to playback on a real audio device before publishing.
 
 ### Runtime dependency cache
@@ -206,7 +206,7 @@ manifest and packaging script. It is independent of the editor version, so
 editor versions with the same dependency packaging reuse the installation.
 A file lock, staging directory, completion marker and atomic rename protect
 against concurrent launches and interrupted extraction. Deleting the cache is
-safe; the executable rebuilds it on demand without a network connection.
+safe. The executable rebuilds it on demand without a network connection.
 
 ### Update bundled tools
 
@@ -216,7 +216,7 @@ platforms. Preserve licenses and upstream documentation in the bundle.
 
 The FFmpeg GPL build includes libx264. Preserve its license and corresponding
 source availability when redistributing. Its monthly upstream assets have a
-two-year retention period; update or mirror the exact assets before expiry.
+two-year retention period. Update or mirror the exact assets before expiry.
 Upstream sources: [LuaLS](https://github.com/LuaLS/lua-language-server) and
 [FFmpeg build recipes and retention policy](https://github.com/BtbN/FFmpeg-Builds).
 
@@ -224,7 +224,7 @@ Upstream sources: [LuaLS](https://github.com/LuaLS/lua-language-server) and
 
 1. Update `workspace.package.version` in `Cargo.toml` to `X.Y.Z`.
 2. Run `cargo check --workspace` to update `Cargo.lock`.
-3. Run the validation commands and `dist` on Windows and Linux; check actual
+3. Run the validation commands and `dist` on Windows and Linux. Check actual
    playback and inspect the exported video.
 4. Commit the version change and push the commit, then create and push its tag:
 
@@ -252,8 +252,8 @@ version and its last opening time in the local timezone.
 Use **Create project** to choose a project path, or **Open project** to open an
 existing directory. The default name is **Project**. Browse selects a parent
 folder and appends the project name in snake case. The last selected folder is
-cached; the path stays empty if no folder is saved or it is unavailable.
-Renaming updates the path until it is edited manually; browsing again restores
+cached. The path stays empty if no folder is saved or it is unavailable.
+Renaming updates the path until it is edited manually. Browsing again restores
 automatic updates. A new project
 contains an editable Lua example, an `assets/` directory and
 `kinematic/project.ron`. Creation accepts any root directory without overwriting
@@ -264,25 +264,24 @@ Its name can also be changed in
 
 Use **Project → Save project** (`Ctrl+S`) to save the project and open files.
 The home icon at the start of the editor toolbar (`Ctrl+Shift+Q`) returns home.
-The top-right close icon (`Ctrl+Q`) exits; the home screen also has an editor settings icon.
+The top-right close icon (`Ctrl+Q`) exits. The home screen also has an editor settings icon.
 Errors appear in centered message popups.
 
 When opening a project, the folder browser enables **Select Folder** only for
 directories containing a valid `kinematic/project.ron`. Older project layouts migrate when opened directly.
-Change the scene in Code; the preview updates after a short pause. Save persists
+Change the scene in Code. The preview updates after a short pause. Save persists
 the source files. Closing unsaved buffers or exiting offers Save, Discard and
 Cancel.
 
 The manifest lists scenes in playback order and stores resolution, FPS and
-margins. New projects default to 1280 x 720 at 60 FPS. Inspector edits for
-explicit object IDs persist separately from Lua source; Scene Tree, Timeline
+margins. New projects default to 1280 x 720 at 60 FPS. Inspector edits are temporary and reset on playback, seek, or reload. Scene Tree, Timeline
 and Preview share object selection. Failed reloads preserve the last valid preview.
 
 Import WAV, MP3, OGG or FLAC files through the Timeline or drag them from Files.
-Move, trim and split clips without modifying their sources; edits snap to
+Move, trim, and split clips without modifying their sources. Edits snap to
 project frames. Sound controls clip volume and pan. The Export menu provides
 video export and screenshots, excluding editor overlays. See
-[Lua projects and API](docs/lua.md) for scene authoring and the full audio workflow.
+[Lua projects and API](docs/guide/start.md) for scene authoring and the full audio workflow.
 
 ## Storage
 
@@ -297,3 +296,8 @@ platform's user data directory:
 - Windows: `%APPDATA%`.
 
 Window position, size and panel layout are not saved.
+
+## Documentation
+
+Website tooling, dependencies and development instructions live in
+[docs/README.md](docs/README.md).

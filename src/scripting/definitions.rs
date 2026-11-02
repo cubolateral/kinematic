@@ -3,7 +3,10 @@ use crate::core::{Easing, Scene, TrackLimits, TrackTarget, TrackValue};
 
 /// Generates LuaLS definitions from the same object metadata used by the runtime.
 pub fn definitions() -> String {
-    let mut output = include_str!("api.lua").to_owned();
+    let (shared, restricted): (Vec<_>, Vec<_>) = include_str!("api.lua")
+        .split("\n\n")
+        .partition(|block| restricted_method(block).is_none());
+    let mut output = shared.join("\n\n");
 
     output.push('\n');
     output.push_str(include_str!("property.lua"));
@@ -36,6 +39,8 @@ pub fn definitions() -> String {
 
     output.push_str("k.ease = {}\n\n");
 
+    spatial_definitions(&mut output, &restricted);
+
     let mut classes = std::collections::BTreeSet::new();
     let objects = native::objects()
         .into_iter()
@@ -62,7 +67,21 @@ pub fn definitions() -> String {
         if new_class {
             documentation(&mut output, object.documentation);
 
-            output.push_str(&format!("---@class Kinematic.{class}: Kinematic.Object\n"));
+            let base = if world
+                .get::<&crate::core::components::Transform3D>(entity)
+                .is_ok()
+            {
+                "Spatial3D"
+            } else if world
+                .get::<&crate::core::components::Transform2D>(entity)
+                .is_ok()
+            {
+                "Spatial2D"
+            } else {
+                "Object"
+            };
+
+            output.push_str(&format!("---@class Kinematic.{class}: Kinematic.{base}\n"));
             output.push_str(&format!("---@field signal fun(self:Kinematic.{class}, callback:fun(object:Kinematic.{class}, frame:Kinematic.Frame)):Kinematic.Signal Runs a callback after scene evaluation at each frame; returns a signal that can be stopped.\n"));
 
             for field in &fields {
@@ -75,6 +94,17 @@ pub fn definitions() -> String {
             }
 
             output.push_str(&format!("local {class} = {{}}\n\n"));
+
+            for block in &restricted {
+                let name = restricted_method(block).unwrap();
+
+                if !spatial_method(name) && accepts_method(name, &world, entity) {
+                    output.push_str(
+                        &block.replace("function Object:", &format!("function {class}:")),
+                    );
+                    output.push_str("\n\n");
+                }
+            }
 
             for method in object.methods {
                 documentation(&mut output, method.documentation);
@@ -113,14 +143,75 @@ pub fn definitions() -> String {
         }
     }
 
-    for &(name, _, _, _) in super::adapters::ANCHORS {
-        output.push_str(&format!("--- Returns the {name} anchor of the bounding box in parent coordinates.\n---@return Kinematic.Value\nfunction Object:{name}() end\n\n--- Returns the local position that places the {name} anchor at position.\n---@param position Kinematic.Value Target position in parent coordinates.\n---@return Kinematic.Value\nfunction Object:{name}_to(position) end\n\n"));
-    }
-
     output.push_str("return k\n");
 
     output
 }
+fn spatial_method(name: &str) -> bool {
+    matches!(
+        name,
+        "global_position" | "global_rotation" | "global_scale" | "box_size" | "global_opacity"
+    )
+}
+
+fn spatial_definitions(output: &mut String, restricted: &[&str]) {
+    for (class, three_d) in [("Spatial2D", false), ("Spatial3D", true)] {
+        output.push_str(&format!("--- Shared spatial queries for compatible objects.\n---@class Kinematic.{class}: Kinematic.Object\nlocal {class} = {{}}\n\n"));
+
+        for block in restricted {
+            let name = restricted_method(block).unwrap();
+
+            if spatial_method(name) && (name != "global_opacity" || !three_d) {
+                output.push_str(&block.replace("function Object:", &format!("function {class}:")));
+                output.push_str("\n\n");
+            }
+        }
+
+        for &(name, _, _, z) in super::adapters::ANCHORS {
+            if z == 0.0 || three_d {
+                output.push_str(&format!("--- Returns the {name} anchor of the bounding box in parent coordinates.\n---@return Kinematic.Value\nfunction {class}:{name}() end\n\n--- Returns the local position that places the {name} anchor at position.\n---@param position Kinematic.Value Target position in parent coordinates.\n---@return Kinematic.Value\nfunction {class}:{name}_to(position) end\n\n"));
+            }
+        }
+    }
+}
+
+// Keep receiver restrictions aligned with the runtime component checks.
+fn restricted_method(block: &str) -> Option<&str> {
+    let name = block.split("function Object:").nth(1)?.split('(').next()?;
+
+    matches!(
+        name,
+        "texture"
+            | "focus_camera"
+            | "get_pixel_color"
+            | "global_opacity"
+            | "global_position"
+            | "global_rotation"
+            | "global_scale"
+            | "box_size"
+            | "inputs"
+            | "state"
+            | "update"
+            | "checkpoint"
+            | "mutate"
+    )
+    .then_some(name)
+}
+
+fn accepts_method(name: &str, world: &hecs::World, entity: hecs::Entity) -> bool {
+    use crate::core::{components::*, objects::*};
+
+    match name {
+        "texture" => world.get::<&CanvasSettings>(entity).is_ok(),
+        "focus_camera" => world.get::<&Camera3D>(entity).is_ok(),
+        "get_pixel_color" => world.get::<&ImageSource>(entity).is_ok(),
+        "inputs" | "state" | "update" | "checkpoint" | "mutate" => {
+            world.get::<&Simulation>(entity).is_ok()
+        }
+        _ => false,
+    }
+}
+
 fn value_definitions(output: &mut String) {
     for (class, channels) in [
         ("Vec2", "xy"),
@@ -386,17 +477,20 @@ mod tests {
         }
 
         assert!(!definitions.contains("Scene:native"));
+        assert!(definitions.contains("function Canvas3D:focus_camera("));
+        assert!(definitions.contains("function Image2D:get_pixel_color("));
+        assert!(definitions.contains("function Script2D:checkpoint("));
+        assert!(!definitions.contains("function Circle:focus_camera("));
+        assert!(definitions.contains("function Spatial3D:front("));
+        assert!(!definitions.contains("function Spatial2D:front("));
+        assert!(!definitions.contains("function Object:focus_camera("));
 
         for name in ["to", "by", "from"] {
             assert!(!definitions.contains(&format!("function Animation:{name}(")));
         }
 
         for name in super::super::runtime::OBJECT_METHODS {
-            assert!(
-                definitions.contains(&format!("function Object:{name}("))
-                    || definitions.contains(&format!("function Animation:{name}(")),
-                "{name}"
-            );
+            assert!(definitions.contains(&format!(":{name}(")), "{name}");
         }
 
         for easing in Easing::ALL {

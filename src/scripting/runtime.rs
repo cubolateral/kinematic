@@ -2160,7 +2160,7 @@ end
 
     #[test]
     fn life_and_manual_operations_reproduce_playback_seek_and_reload() {
-        let source = include_str!("../../examples/lua/simulation/scenes/life.lua");
+        let source = include_str!("../tests/fixtures/life.lua");
         let state = |scene: &LuaScene, id: &str| {
             scene
                 .scene

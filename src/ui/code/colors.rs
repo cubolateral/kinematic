@@ -59,11 +59,15 @@ pub(in crate::ui) struct Colors {
 
 impl Default for Colors {
     fn default() -> Self {
-        let mut palette = kinematic_ui::code::palette();
+        let mut colors = Self::from_palette(Theme::Custom, &kinematic_ui::code::palette());
+        colors.apply(Theme::OneDark);
+        colors.set(
+            PaletteColor::Background,
+            [10.0 / 255.0, 10.0 / 255.0, 10.0 / 255.0, 1.0],
+        );
+        colors.theme = Theme::OneDark;
 
-        palette.set(PaletteColor::Background, packed(0x1e1e1e));
-
-        Self::from_palette(Theme::Custom, &palette)
+        colors
     }
 }
 

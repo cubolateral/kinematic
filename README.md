@@ -6,7 +6,7 @@ An animation editor for 2D and 3D scenes, with a live preview,
 a visual timeline and audio in the same workspace.
 
 [Downloads](https://github.com/cubolateral/kinematic/releases) ·
-[Lua API](docs/lua.md) ·
+[Documentation](https://cubolateral.github.io/kinematic/) ·
 [Examples](examples/lua) ·
 [Development](DEVELOPMENT.md)
 
@@ -45,20 +45,21 @@ return function(s)
     }
     s:world_2d():add(ball)
 
-    ball:to { position = k.vec2(100, 0) }:play(1)
+    ball:to { position = k.vec2(100, 0) }:play(2)
 
-    s:wait(1)
+    s:wait(0.5)
 end
 ```
 
 More examples cover [2D](examples/lua/2d), [3D](examples/lua/3d),
-[audio](examples/lua/audio) and [simulations](examples/lua/simulation).
+[audio](examples/lua/audio) and [simulations](examples/lua/simulation). The [gallery](docs/examples/index.md) also covers
+Code, LaTeX, signals, custom objects, cameras, procedural drawing and shaders.
 
 ## Get started
 
 Distributions target **Windows and Linux x64**, with one executable per platform.
 Get available builds from [GitHub Releases](https://github.com/cubolateral/kinematic/releases).
-LuaLS and FFmpeg are included; no separate installation or PATH setup is needed.
+LuaLS and FFmpeg are included. No separate installation or PATH setup is needed.
 On Linux, give the downloaded file permission to run with `chmod +x`.
 
 Open Kinematic, choose **Create project** or **Open project**, and edit a scene
@@ -70,7 +71,8 @@ the system's graphics, windowing, font and audio libraries.
 
 ## Documentation
 
-- [Lua projects and API](docs/lua.md): scenes, objects, animation, audio and shaders.
+- [Documentation](https://cubolateral.github.io/kinematic/): guides, tutorials and generated Lua API.
+- [Guide sources](docs/guide/start.md): documentation maintained in this repository.
 - [Example projects](examples/lua): runnable scenes to explore and adapt.
 - [Development guide](DEVELOPMENT.md): setup, tests, distribution and releases.
 

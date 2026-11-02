@@ -8,7 +8,7 @@ interaction belongs in the panel modules. Reusable presentation belongs in
 ## Module map
 
 - `browser.rs`: Internal folder picker with asynchronous listing and navigation.
-- `theme.rs`: Persisted appearance settings and application font assets; delegates styling to `kinematic_ui::theme`.
+- `theme.rs`: Persisted appearance settings and application font assets. Delegates styling to `kinematic_ui::theme`.
 - `workspace.rs`: Default docking layout. It refers to panels through their
   `WINDOW_NAME` constants.
 - `inputs.rs`: Action bindings, modifier matching, and shortcut display names.
@@ -20,12 +20,12 @@ interaction belongs in the panel modules. Reusable presentation belongs in
 - `code/files.rs`: Project file tree, context menu, and file operation dialogs.
 - `scene_tree.rs`: Active scene hierarchy and entity selection.
 - `inspector.rs`: Selected entity inspection.
-- `sound.rs`: Independent audio selection and volume/pan editing, including obscured overlaps.
+- `inspector/audio.rs`: Independent audio selection and volume/pan editing, including obscured overlaps.
 - `export.rs`: Export menu, screenshots and progress.
 - `preview/`: Canvas preview, zoom/pan, playback controls, hit testing, and fullscreen presentation.
 - `timeline/`: Timeline composition and its independent responsibilities.
 
-The Home bar shows editor settings; the project bar shows the project, editor,
+The Home bar shows editor settings. The project bar shows the project, editor,
 and export menus. Window controls share that bar. SDL handles dragging and edge
 resizing, with native decorations retained if hit testing is unavailable.
 On Linux, button availability follows the desktop session because SDL does not
@@ -66,7 +66,7 @@ To add a panel:
 
 Use `kinematic_ui::windows::panel` for docked panels, `windows::window` for
 floating windows, `windows::modal` for dialogs, and `windows::sized_modal` when
-a dialog needs a specific size. These templates own positioning and sizing;
+a dialog needs a specific size. These templates own positioning and sizing.
 callers supply content and actions. Keep them independent of editor and project types.
 Context menus and inline code assistance keep their contextual anchors.
 
@@ -80,7 +80,7 @@ Run `cargo fmt --check`, `cargo check --workspace`, and
 
 The keymap follows VS Code on Linux for the editor features available here.
 Editor Settings → Shortcuts lists both application commands and the CTE editing
-bindings. `Ctrl+P` searches project files; arrows choose a result and Enter opens
+bindings. `Ctrl+P` searches project files. Arrows choose a result and Enter opens
 it. `Ctrl+G` accepts a one-based `line:column`. Closing an editor uses the existing
 unsaved-changes dialog. Formatting uses LuaLS without saving the file.
 
@@ -102,7 +102,7 @@ word navigation may look to the left. Drag selection keeps the text cursor
 until the mouse button is released, even outside the editor.
 
 The current CTE API cannot create arbitrary additional carets. Multi-cursor
-selection uses `Ctrl+D` and `Ctrl+Shift+L`; custom range edits (word deletion,
+selection uses `Ctrl+D` and `Ctrl+Shift+L`. Custom range edits (word deletion,
 line duplication/insertion, cutting whole lines, and explicit comment chords) collapse to one caret.
 Vertical caret insertion, column selection, workspace search, rename/refactoring,
 and a command palette are not implemented.

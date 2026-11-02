@@ -384,9 +384,9 @@ impl LuaProject {
         manifest.validate(&context)?;
 
         let script = if three_dimensional {
-            include_str!("../../examples/lua/3d/scenes/intro.lua")
+            include_str!("../templates/scene_3d.lua")
         } else {
-            include_str!("../../examples/lua/2d/scenes/intro.lua")
+            include_str!("../templates/scene_2d.lua")
         };
 
         atomic_write(

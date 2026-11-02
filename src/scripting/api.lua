@@ -342,10 +342,10 @@ function Object:global_rotation() end
 ---@return number
 function Object:global_opacity() end
 
---- Samples a 2D image object at a local position and returns its color.
+--- Samples a 2D or 3D image object at a local vec2 position and returns its color.
 --- Requires an image source on the object.
----@param position Kinematic.Value
----@return Kinematic.Value
+---@param position Kinematic.Vec2
+---@return Kinematic.Color
 function Object:get_pixel_color(position) end
 
 --- Creates an animation moving a 3D canvas camera to position and aiming at target.
@@ -375,7 +375,7 @@ function Object:checkpoint() end
 ---@param callback fun(state:table)
 function Object:mutate(callback) end
 
---- Returns the live texture produced by a canvas or projection object.
+--- Returns the live texture produced by a canvas object.
 --- Use it as another object source or shader texture input.
 ---@return Kinematic.Texture
 function Object:texture() end
@@ -613,15 +613,15 @@ function k.mesh_shader(options) end
 
 --- Optional resource configuration shared by native object constructors.
 ---@class Kinematic.ResourceOptions
----@field source? Kinematic.Image|Kinematic.Texture Image resource or live canvas texture.
----@field font? Kinematic.Font Font resource for text drawing.
+---@field source? Kinematic.Image|Kinematic.Texture Image resource for image objects, or live canvas texture for projection objects.
+---@field font? Kinematic.Font Project font for Text2D, Text3D, or Code; LaTeX uses its mathematical fonts.
 ---@field shader? Kinematic.Shader Image or mesh shader resource.
----@field uniforms? table<string,number|Kinematic.Value> Initial typed shader uniform values.
----@field textures? table<string,Kinematic.Texture> Named live textures used by the shader.
----@field resolution? integer[] Canvas texture width and height in pixels.
----@field pixels_per_unit? number Texture pixels per local canvas unit.
----@field segments? integer Fixed geometry subdivision count for a sphere.
----@field shader_padding? number Extra local padding around an image shader drawing.
+---@field uniforms? table<string,boolean|number|Kinematic.Value> Initial typed shader uniform values; requires shader.
+---@field textures? table<string,Kinematic.Texture> Named live textures for image shaders; bindings require shader.
+---@field resolution? integer[] Required width and height for additional canvases, each 1–8192 pixels.
+---@field pixels_per_unit? number Image/projection pixels per local 3D unit; positive and finite, default 256.
+---@field segments? integer Fixed sphere subdivision count, 3–256; default 32.
+---@field shader_padding? number Extra image capture or mesh bounds padding; finite and nonnegative, default 0.
 ---@alias Kinematic.Paint Kinematic.Value|{from:number[],to:number[],colors:Kinematic.Value[]}
 
 --- Local 2D drawing context available only during scripted draw callbacks.
