@@ -13,6 +13,7 @@ interaction belongs in the panel modules. Reusable presentation belongs in
   `WINDOW_NAME` constants.
 - `inputs.rs`: Action bindings, modifier matching, and shortcut display names.
 - `settings.rs`: Separate Project settings and Editor settings windows opened from the menus.
+- `title_bar.rs`: Shared window controls, Home settings, and the empty region used for system window dragging. SDL operations stay in `src/app/window.rs`.
 - `code.rs`: Lua buffers, file tabs, focus, and inline LuaLS assistance.
 - `code/diagnostics.rs`: Converts runtime/LuaLS messages into UI diagnostics and routes clicked locations.
 - `code/shortcuts.rs`: VS Code Linux editing overrides, command chords, and keyboard navigation.
@@ -23,6 +24,15 @@ interaction belongs in the panel modules. Reusable presentation belongs in
 - `export.rs`: Export menu, screenshots and progress.
 - `preview/`: Canvas preview, zoom/pan, playback controls, hit testing, and fullscreen presentation.
 - `timeline/`: Timeline composition and its independent responsibilities.
+
+The Home bar shows editor settings; the project bar shows the project, editor,
+and export menus. Window controls share that bar. SDL handles dragging and edge
+resizing, with native decorations retained if hit testing is unavailable.
+On Linux, button availability follows the desktop session because SDL does not
+expose the compositor's individual window management capabilities.
+During native move and resize loops, `src/app/live_redraw.rs` requests UI frames
+on SDL expose notifications. It reuses the current scene textures without
+advancing the animation evaluator or export frames.
 
 The Timeline is split as follows:
 

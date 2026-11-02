@@ -8,6 +8,7 @@ OpenGL, or export loop.
   font assets and serialized preferences.
 - `windows`: Docked panels, centered floating windows, tabs, and dialogs.
 - `controls`: Buttons, choices, text and color inputs, sliders, menus, and progress.
+- `title_bar`: Window control buttons and their platform layout. The caller supplies available actions and applies window state changes.
 - `properties`: Label/value rows, component groups, reset buttons, sections,
   read-only values, and sliders. Shared by Inspector, Sound, and Settings.
 - `numbers`: Typed numeric drags, arrow-key editing, and display precision.

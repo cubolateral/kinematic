@@ -632,6 +632,7 @@ dependencies = [
  "tar",
  "three-d",
  "two-face",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

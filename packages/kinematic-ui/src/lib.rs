@@ -15,6 +15,7 @@ pub mod shortcut;
 pub mod status_bar;
 pub mod theme;
 pub mod timeline;
+pub mod title_bar;
 pub mod tree;
 pub mod widgets;
 pub mod windows;

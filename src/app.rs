@@ -2,6 +2,9 @@ use glow::HasContext;
 
 use crate::{editor::Editor, ui::Ui};
 
+mod live_redraw;
+mod window;
+
 pub struct App {
     ui: Ui,
     imgui_renderer: dear_imgui_glow::GlowRenderer,
@@ -11,6 +14,7 @@ pub struct App {
     skia_context: skia_safe::gpu::DirectContext,
     _gl_context: sdl3::video::GLContext,
     window: sdl3::video::Window,
+    window_chrome: window::Chrome,
     sdl: sdl3::Sdl,
     lua_project: Option<Result<crate::scripting::LuaProject, String>>,
     export_only: bool,
@@ -31,13 +35,14 @@ impl App {
         gl_attributes.set_context_version(3, 3);
         gl_attributes.set_context_profile(sdl3::video::GLProfile::Core);
 
-        let window = video_subsystem
+        let mut window = video_subsystem
             .window("Kinematic", 1280, 720)
             .position_centered()
             .resizable()
             .opengl()
             .build()
             .unwrap();
+        let window_chrome = window::Chrome::new(&mut window);
         let gl_context = window.gl_create_context().unwrap();
 
         window.gl_make_current(&gl_context).unwrap();
@@ -111,6 +116,7 @@ impl App {
             imgui,
             sdl,
             window,
+            window_chrome,
             _gl_context: gl_context,
             gl,
             skia_context,
@@ -167,6 +173,52 @@ impl App {
             .expect("Three-d must initialize against the SDL context.")
     }
 
+    fn draw_ui(
+        &mut self,
+        editor: &mut Option<Editor>,
+        ui_motion: &mut kinematic_ui::motion::Overlays,
+    ) {
+        crate::renderer::target::reset_gl(&self.gl, self.window.size());
+
+        unsafe {
+            self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            self.gl.clear(glow::COLOR_BUFFER_BIT);
+        }
+
+        self.ui.prepare_documents(&self.imgui, editor.as_ref());
+        self.ui.apply_scale(&mut self.imgui);
+        self.imgui_sdl.new_frame(&mut self.imgui).unwrap();
+        self.ui
+            .set_window_controls(self.window_chrome.controls(&self.window));
+
+        let ui = self.imgui.frame();
+
+        if let Some(editor) = editor.as_mut() {
+            self.ui.draw(editor, ui);
+
+            if let Some([x, y]) = editor.take_pending_mouse_warp() {
+                self.sdl.mouse().warp_mouse_in_window(&self.window, x, y);
+            }
+        }
+
+        self.ui.draw_projects(editor.as_mut(), ui);
+
+        ui_motion.draw(ui);
+
+        self.window_chrome.update(
+            &self.window,
+            self.ui.window_drag_area(ui),
+            ui.current_font_size() / 16.0,
+        );
+
+        let frame = self
+            .imgui
+            .render(self.imgui_renderer.renderer_consumer().unwrap());
+
+        self.imgui_renderer.render(frame).unwrap();
+        self.window.gl_swap_window();
+    }
+
     /// Runs the configured project editor.
     pub fn run(&mut self) {
         let three_context = self.three_context();
@@ -216,10 +268,17 @@ impl App {
             }
         };
         let mut events = self.sdl.event_pump().unwrap();
+        let mut pending_events = Vec::new();
         let mut ui_motion = kinematic_ui::motion::Overlays::default();
 
         'running: loop {
-            for mut event in events.poll_iter() {
+            live_redraw::poll(
+                self.window.id(),
+                || self.draw_ui(&mut editor, &mut ui_motion),
+                || pending_events.extend(events.poll_iter()),
+            );
+
+            for mut event in pending_events.drain(..) {
                 normalize_key_event(&mut event);
 
                 self.imgui_sdl
@@ -228,6 +287,12 @@ impl App {
 
                 match event {
                     sdl3::event::Event::Quit { .. } => self.ui.request_exit(),
+
+                    sdl3::event::Event::Window {
+                        window_id,
+                        win_event: sdl3::event::WindowEvent::CloseRequested,
+                        ..
+                    } if window_id == self.window.id() => self.ui.request_exit(),
 
                     _ => {}
                 }
@@ -273,19 +338,12 @@ impl App {
 
                 crate::renderer::target::reset_gl(&self.gl, self.window.size());
 
-                unsafe {
-                    self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
-                    self.gl.clear(glow::COLOR_BUFFER_BIT);
-                }
-
                 editor.draw(
                     &mut self.skia_context,
                     &self.gl,
                     self.window.size(),
                     self.ui.render_mode(),
                 );
-
-                crate::renderer::target::reset_gl(&self.gl, self.window.size());
             }
 
             if self.export_only && editor.as_ref().is_none_or(|editor| !editor.is_exporting()) {
@@ -307,30 +365,15 @@ impl App {
                 break 'running;
             }
 
-            self.ui.prepare_documents(&self.imgui, editor.as_ref());
-            self.ui.apply_scale(&mut self.imgui);
-            self.imgui_sdl.new_frame(&mut self.imgui).unwrap();
+            self.draw_ui(&mut editor, &mut ui_motion);
 
-            let ui = self.imgui.frame();
-
-            if let Some(editor) = &mut editor {
-                self.ui.draw(editor, ui);
-
-                if let Some([x, y]) = editor.take_pending_mouse_warp() {
-                    self.sdl.mouse().warp_mouse_in_window(&self.window, x, y);
+            if let Some(action) = self.ui.take_window_action() {
+                if action == kinematic_ui::title_bar::Action::Close {
+                    self.ui.request_exit();
+                } else if let Err(error) = self.window_chrome.apply(&mut self.window, action) {
+                    self.ui.project_error(error);
                 }
             }
-
-            self.ui.draw_projects(editor.as_mut(), ui);
-
-            ui_motion.draw(ui);
-
-            let frame = self
-                .imgui
-                .render(self.imgui_renderer.renderer_consumer().unwrap());
-
-            self.imgui_renderer.render(frame).unwrap();
-            self.window.gl_swap_window();
 
             if let Some(action) = self.ui.take_project_action() {
                 let result = match action {

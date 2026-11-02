@@ -15,6 +15,7 @@ mod scene_tree;
 mod settings;
 mod theme;
 mod timeline;
+mod title_bar;
 mod workspace;
 
 use crate::editor::Editor;
@@ -41,6 +42,7 @@ pub(crate) struct Ui {
     settings: settings::State,
     timeline: timeline::State,
     scene_tree: scene_tree::State,
+    title_bar: title_bar::State,
 }
 
 fn draw_top_bar(
@@ -49,10 +51,13 @@ fn draw_top_bar(
     code: &mut code::State,
     settings: &mut settings::State,
     messages: &mut message_box::State,
+    title_bar: &mut title_bar::State,
 ) -> bool {
     let Some(_bar) = ui.begin_main_menu_bar() else {
         return false;
     };
+
+    title_bar.begin(ui);
 
     {
         let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
@@ -64,11 +69,29 @@ fn draw_top_bar(
         inputs::tooltip(ui, InputAction::ProjectList, "Home");
     }
 
-    draw_project_menu(settings, editor, messages, ui);
+    let menu_width =
+        ui.calc_text_size("ProjectEditorExport")[0] + ui.clone_style().frame_padding()[0] * 6.0;
+    let controls_width = if title_bar.controls.macos {
+        0.0
+    } else {
+        title_bar.controls.width(ui)
+    };
+    let available = ui.window_size()[0] - ui.cursor_pos()[0] - controls_width;
+    let started = if available < menu_width + ui.frame_height() {
+        if let Some(_menu) = controls::menu(ui, "Menu") {
+            draw_project_menu(settings, editor, messages, ui);
 
-    let started = export::draw(editor, ui);
+            export::draw(editor, ui)
+        } else {
+            false
+        }
+    } else {
+        draw_project_menu(settings, editor, messages, ui);
 
-    draw_bar_actions(code, settings, false, ui);
+        export::draw(editor, ui)
+    };
+
+    title_bar.finish(ui, None);
 
     started
 }
@@ -79,11 +102,6 @@ fn draw_project_menu(
     messages: &mut message_box::State,
     ui: &dear_imgui_rs::Ui,
 ) {
-    widgets::horizontal_border(
-        ui,
-        ui.window_pos()[1] + ui.window_size()[1] - kinematic_ui::theme::BORDER_WIDTH,
-    );
-
     if let Some(_menu) = controls::menu(ui, "Project") {
         {
             let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
@@ -109,38 +127,6 @@ fn draw_project_menu(
             settings.editor_open = true;
         }
     }
-}
-
-fn draw_bar_actions(
-    code: &mut code::State,
-    settings: &mut settings::State,
-    home: bool,
-    ui: &dear_imgui_rs::Ui,
-) {
-    let width = ui.frame_height();
-    let spacing = ui.clone_style().item_spacing()[0];
-    let count = if home { 2.0 } else { 1.0 };
-
-    ui.set_cursor_pos_x(
-        ui.window_size()[0]
-            - ui.clone_style().window_padding()[0]
-            - width * count
-            - spacing * (count - 1.0),
-    );
-
-    if home {
-        if controls::text_button(ui, kinematic_ui::icons::SETTINGS, [width; 2]) {
-            settings.editor_open = true;
-        }
-
-        ui.same_line();
-    }
-
-    if controls::text_button(ui, kinematic_ui::icons::CLOSE, [width; 2]) {
-        code.request_exit();
-    }
-
-    inputs::tooltip(ui, InputAction::Quit, "Quit");
 }
 
 impl Ui {
@@ -195,6 +181,7 @@ impl Ui {
             settings: settings::State::default(),
             timeline: timeline::State::default(),
             scene_tree: scene_tree::State::default(),
+            title_bar: title_bar::State::default(),
         }
     }
 
@@ -227,6 +214,8 @@ impl Ui {
             && inputs::active(ui, InputAction::ToggleFullscreen);
 
         if self.is_fullscreen {
+            self.title_bar.drag_area = None;
+
             if !editor.is_exporting() && inputs::active(ui, InputAction::SaveProject) {
                 if let Err(error) = save_project(editor) {
                     self.messages.show(Kind::Error, error);
@@ -250,6 +239,7 @@ impl Ui {
             &mut self.code,
             &mut self.settings,
             &mut self.messages,
+            &mut self.title_bar,
         );
 
         if export_started {
@@ -343,7 +333,9 @@ impl Ui {
             let _border = ui.push_style_var(dear_imgui_rs::StyleVar::WindowBorderSize(0.0));
 
             if let Some(_bar) = ui.begin_main_menu_bar() {
-                draw_bar_actions(&mut self.code, &mut self.settings, true, ui);
+                self.title_bar.begin(ui);
+                self.title_bar
+                    .finish(ui, Some(&mut self.settings.editor_open));
             }
         }
 
@@ -416,6 +408,18 @@ impl Ui {
 
     pub(crate) fn request_exit(&mut self) {
         self.code.request_exit();
+    }
+
+    pub(crate) fn set_window_controls(&mut self, controls: kinematic_ui::title_bar::Controls) {
+        self.title_bar.controls = controls;
+    }
+
+    pub(crate) fn take_window_action(&mut self) -> Option<kinematic_ui::title_bar::Action> {
+        self.title_bar.action.take()
+    }
+
+    pub(crate) fn window_drag_area(&self, ui: &dear_imgui_rs::Ui) -> Option<[[f32; 2]; 2]> {
+        self.title_bar.drag_area(ui)
     }
 
     pub(crate) fn take_project_action(&mut self) -> Option<ProjectAction> {
