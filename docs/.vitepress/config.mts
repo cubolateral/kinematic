@@ -4,16 +4,18 @@ import { readdirSync } from 'node:fs'
 const repository = 'https://github.com/cubolateral/kinematic'
 const version = process.env.DOCS_VERSION || 'Development'
 const groups = [
-  ['Get started', [['First steps', 'start'], ['Projects and scenes', 'projects'], ['Editor', 'editor']]],
-  ['Objects and composition', [['Objects and hierarchy', 'objects'], ['2D graphics', 'graphics-2d'], ['3D graphics', 'graphics-3d'], ['Text', 'text'], ['LaTeX', 'latex'], ['Code', 'code'], ['Cameras', 'cameras'], ['Canvases and projections', 'canvases']]],
-  ['Animation and custom objects', [['Animation', 'animation'], ['Signals', 'signals'], ['Custom objects', 'custom-objects'], ['Simulation', 'simulation'], ['Procedural drawing', 'drawing'], ['Shaders', 'shaders']]],
-  ['Production', [['Audio', 'audio'], ['Export and CLI', 'export'], ['Troubleshooting', 'troubleshooting'], ['Contributing', 'contributing'], ['Versions and migrations', 'versions']]],
+  ['Get started', [['First steps', 'start'], ['Editor', 'editor'], ['Lua conventions', 'lua'], ['Projects and scenes', 'projects']]],
+  ['Animate and compose', [['Animation', 'animation'], ['Easing', 'easing'], ['Sequences and events', 'sequences'], ['Objects and hierarchy', 'objects'], ['Coordinates and anchors', 'coordinates'], ['Groups and layout', 'layout']]],
+  ['Scene content', [['2D graphics', 'graphics-2d'], ['Text', 'text'], ['Images', 'images'], ['LaTeX', 'latex'], ['Code', 'code'], ['Audio', 'audio'], ['Export and CLI', 'export']]],
+  ['Go further', [['Signals', 'signals'], ['Random', 'random'], ['3D graphics', 'graphics-3d'], ['Cameras', 'cameras'], ['Canvases and projections', 'canvases'], ['Custom objects', 'custom-objects'], ['Procedural drawing', 'drawing'], ['Simulation', 'simulation'], ['Shaders', 'shaders']]],
+  ['Reference and help', [['Troubleshooting', 'troubleshooting'], ['Contributing', 'contributing'], ['Versions and migrations', 'versions']]],
 ] as const
 export default defineConfig({
   appearance: 'force-dark',
   lang: 'en-US', title: 'Kinematic', description: 'Animation with Lua, from your first project to the API reference.',
   base: process.env.DOCS_BASE || '/kinematic/',
-  srcExclude: ['internal/**', 'README.md', '.cache/**', 'node_modules/**'],
+  head: [['link', { rel: 'icon', type: 'image/svg+xml', href: `${process.env.DOCS_BASE || '/kinematic/'}logo.svg` }]],
+  srcExclude: ['internal/**', 'README.md', 'guide/projects/**', '.cache/**', 'node_modules/**'],
   markdown: {
     languages: ['lua', 'rust', 'glsl'], languageAlias: { ron: 'rust' },
     config(md) {
@@ -21,6 +23,8 @@ export default defineConfig({
     },
   },
   themeConfig: {
+    logo: { src: '/logo.svg', alt: 'Kinematic' },
+    siteTitle: false,
     search: {
       provider: 'local',
       options: { translations: {
@@ -52,6 +56,6 @@ export default defineConfig({
     outline: { level: [2, 3], label: 'On this page' },
     docFooter: { prev: 'Previous', next: 'Next' },
     editLink: { pattern: `${repository}/edit/${process.env.DOCS_REF || 'main'}/docs/:path`, text: 'Edit this page on GitHub' },
-    footer: { message: `Documentation: ${version}. Code and examples are licensed under MIT.` },
+    footer: { message: `Documentation · ${version} · MIT license` },
   },
 })

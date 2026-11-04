@@ -1,130 +1,158 @@
+---
+pageClass: guide-page
+---
+
 # Shaders
 
-Shaders can process a captured image or replace a mesh material program. These paths
-have different contracts. Choose based on the input your program needs, not only the
-dimensions of the final composition.
+A shader computes colors on the GPU. Use an image shader to process a captured object
+or draw a procedural image on a 2D plane. Use a mesh shader to shade 3D geometry using
+its positions and normals. Lua supplies uniforms that you can animate like properties.
 
-## Textures and uniforms
+## Draw a Mandelbrot set on a plane
 
-Load images with `k.image(path)` and fonts with `k.font(path)`. Canvases provide
-textures through `texture()`. Resources and their bytes are immutable within an applied
-revision. Canvas dependencies cannot form cycles or cross scenes.
+Each pixel represents a complex number `c`. Starting at zero, repeatedly compute
+`z = z² + c`. Points that escape the radius-2 boundary receive a color based on their
+iteration count. Points that remain inside after 200 steps are black.
 
-Declare uniforms and textures in the options before animating them, for example
-`uniforms={pulse=0}` and `textures={other=canvas:texture()}`. `object:uniform("pulse")`
-returns a handle. `object:to {uniforms={pulse=6}}:play(3)` animates it without
-conflicting with regular properties. Uniforms support booleans, numbers, vectors,
-quaternions, quads, and colors. Strings and enums have no GLSL representation.
+<GuideDemo name="shader-mandelbrot" caption="A full-frame Mandelbrot view magnifies its boundary 128 times in black and blue.">
 
-## Image shaders
-
-`k.image_shader {source=glsl}` or `{path="assets/image.glsl"}` accepts a complete GLSL
-3.30 fragment shader, including `#version`. If both fields are set, the file takes
-priority. Set `shader` on the object and use `shader_padding` to expand the capture for
-blur or glow.
-
-The engine provides `k_image`, `k_resolution` in pixels, `k_time` in scene seconds, and
-`k_alpha`. UV `(0,0)` is the bottom-left pixel. Input and output use premultiplied-alpha
-sRGB RGBA. Preserve this format when changing colors.
-
-<<< ../../examples/lua/shaders/scenes/intro.lua
-
-## Mesh shaders
-
-`k.mesh_shader {fragment=glsl,vertex=optional_glsl}` also accepts `fragment_path` and
-`vertex_path`. File paths take priority over source strings. Omit `#version` from mesh
-sources. The default vertex stage provides `k_world_position`, `k_normal`, and `k_uv`.
-
-A custom vertex stage uses the `position` attribute and may use `normal` and
-`uv_coordinates`. It must actively use `modelMatrix` and `viewProjection`. Optional
-engine uniforms include `normalMatrix`, `viewMatrix`, `projectionMatrix`,
-`cameraPosition`, `sceneTime`, linear `materialColor`, `hasNormal`, and `hasUv`.
-
-Custom shaders replace built-in lighting. Children inherit group shaders and uniforms. A
-local shader takes priority, and compatible local uniforms replace inherited values. GPU
-deformation does not update CPU geometry bounds. Adjust padding when needed for
-selection and culling.
-
-The [shader project](../examples/shaders.md) demonstrates both contracts. `--check` does
-not compile GLSL. Run `--render` and inspect the frames. Compilation errors leave the
-last valid preview in place.
-
-## Set a shader on an instance
-
-Create the resource once and provide its bindings in the object options. File paths are
-relative to the project root. Resource contents are frozen into the applied revision.
-
+<!-- focus: shader-mandelbrot -->
 ```lua
-local shader = k.mesh_shader {
-    fragment_path = "assets/material.glsl",
+local plane = s:rect {
+    size = k.vec2(960, 540),
+    shader = fractal,
+    uniforms = { zoom = 1 },
 }
+s:world_2d():add(plane)
 
-local cube = s:cube {
-    shader = shader,
-    uniforms = {pulse = 0},
-    textures = {},
-}
-s:world_3d():add(cube)
-
-cube:uniform("pulse"):to(6):play(2)
+plane:uniform("zoom"):to(128):play(2, "quart_in_out")
+plane:uniform("zoom"):to(1):play(2, "quart_in_out")
 ```
 
-The GLSL declaration for `pulse` must match the binding type. An unknown or incompatible
-uniform does not become an object property. Regular properties and uniforms use separate
-namespaces: `object:prop("position")` accesses a built-in property, while
-`object:uniform("pulse")` accesses a shader binding.
+<template #source>
 
-## Values, colors, and interpolation
+<!-- demo: shader-mandelbrot -->
+<<< ./projects/shaders/scenes/01-shader-mandelbrot.lua
 
-Numbers, booleans, and supported composite values are converted to matching uniforms.
-Mesh material colors use linear space. Captured images use the premultiplied sRGB format
-described above. Mixing these formats can produce incorrect brightness or edges.
+</template>
 
-Animate declared values with `to`, `by`, or `from`, using `uniforms={...}` in the
-destination. Preparing an animation does not replace the shader resource. Canvas
-textures are bindings for image shaders. The current mesh path does not configure
-samplers through `textures`, so do not assume the same binding works for both contracts.
-Program sources and textures belong to the revision. They are not channels that change
-each frame.
+</GuideDemo>
 
-## Custom vertex shaders
+The rectangle matches the guide resolution, 960 × 540. Adjust its size to your project
+resolution to fill another frame. Its white fill supplies alpha coverage. The shader replaces its
+RGB with the fractal. Expand **Complete scene** for the full program. Its central
+calculation is:
 
-A custom vertex shader can deform geometry or change its transform, but must preserve
-the attribute and matrix contract. It must actively use `modelMatrix` and
-`viewProjection`. Declaring a uniform that the compiler removes does not meet this
-requirement.
+```glsl
+vec2 c = vec2(-0.7435, 0.1314) + (uv - 0.5) * vec2(3.5556, 2.0) / zoom;
+vec2 z = vec2(0.0);
+int steps = 0;
+for (int i = 0; i < 200; i++) {
+    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
+    if (dot(z, z) > 4.0) break;
+    steps++;
+}
+```
 
-If the fragment shader reads `k_world_position`, `k_normal`, or `k_uv`, the vertex
-shader must provide matching outputs. Do not include `#version` in mesh sources. The
-engine assembles the version and final program.
+`uv` covers the captured image from zero to one. Dividing the offset by `zoom` shows a
+smaller region of the complex plane, magnifying its detail without resizing the object.
+The view zooms up to 128× around a detailed boundary point. Quartic easing makes
+the wide zoom range easier to follow. The fixed iteration limit bounds work per pixel.
+Very deep zooms need more iterations and eventually more numeric precision.
 
-CPU geometry bounds do not follow GPU deformation. Set bounds and padding so selection,
-framing, and culling account for the visible result. Changing uniforms should not
-rebuild the mesh.
+## Bind and animate uniforms
 
-## Inheritance, capture, and render cost
+The shader declares `uniform float zoom`, and the object supplies `uniforms = {zoom = 1}`.
+Their types must agree. `plane:uniform("zoom")` returns the binding's property handle.
+Animating it updates the GPU value without recreating the shader.
 
-Children can inherit a compatible shader set on a group. A child shader takes priority,
-and compatible local uniforms replace inherited ones. This does not unify the image and
-mesh contracts.
+Use `to`, `by`, or `from` as for ordinary properties. To change several bindings at
+once, use `plane:to {uniforms = {zoom = 2}}:play(2)`. Uniforms have their own namespace
+and do not become built-in object fields.
 
-`shader_padding` expands the capture for effects that need pixels beyond the object. Use
-only the space needed for blur or glow, since large captures cost more to render. An
-effect that reads another canvas texture adds a render dependency, which must not create
-a cycle.
+## Image coordinates and transparency
 
-## Validate and troubleshoot
+`k.image_shader` takes a complete GLSL 3.30 fragment shader, including `#version 330 core`.
+You can keep it in a file with `k.image_shader {path = "assets/fractal.glsl"}`.
+Paths are relative to the project root.
 
-1. Run `--check` to find construction and binding problems.
-2. Run `--render` with OpenGL 3.3 available to compile and draw the program.
-3. Check frames at the start, middle, and end. Animated uniforms can reveal issues a poster does not show.
-4. Check transparency and edges against the final composition background.
+| Input | Meaning |
+| --- | --- |
+| `k_image` | The object's captured image. |
+| `k_resolution` | Capture dimensions in pixels. |
+| `k_time` | Evaluated scene time in seconds. |
+| `k_alpha` | Object opacity, already included in the captured image. |
 
-Compilation errors preserve the previous preview revision. A visible preview does not
-prove that new source was applied. Read the status and diagnostics. During export,
-resources remain fixed to the applied revision.
+UV `(0, 0)` is the bottom-left corner. Captures use premultiplied-alpha sRGB RGBA.
+The example samples alpha from `k_image` and multiplies the generated RGB by it.
+Do not multiply captured colors by `k_alpha` again.
 
-The [shader project](../examples/shaders.md) compares image and mesh shaders. The
-[custom object project](../examples/custom-object.md) shows how to provide custom
-geometry before adding GPU programs. See [Shader](../api/Shader.md),
-[ResourceOptions](../api/ResourceOptions.md), and [k](../api/k.md).
+Blur or glow that samples neighboring pixels may need extra `shader_padding` to avoid
+cut edges. Larger captures cost more to render.
+
+## Animate a surface pattern in 3D
+
+This sphere has flowing bands calculated from world position. A nested sine bends
+them around the surface, while an animated phase moves the pattern through one full
+cycle. A simple normal-based light calculation reveals the sphere's shape.
+
+<GuideDemo name="shader-surface" caption="Blue and white bands flow over a shaded sphere in a continuous loop.">
+
+<!-- focus: shader-surface -->
+```lua
+local sphere = s:sphere {
+    radius = 0.8,
+    segments = 64,
+    shader = material,
+    uniforms = { phase = 0 },
+}
+s:world_3d():add(sphere)
+
+sphere:uniform("phase"):to(math.pi * 2):play(2, "linear")
+```
+
+<template #source>
+
+<!-- demo: shader-surface -->
+<<< ./projects/shaders/scenes/02-shader-surface.lua
+
+</template>
+
+</GuideDemo>
+
+The pattern uses `k_world_position`, and its light uses `k_normal`. Expand the scene
+for the complete GLSL. These lines control the pattern and its edge softness:
+
+```glsl
+float wave = sin(p.y * 16.0 + 3.0 * sin(p.x * 5.0 + phase));
+float band = smoothstep(-0.2, 0.2, wave);
+```
+
+Increasing `16.0` makes more bands. Increasing `3.0` bends them more strongly. The
+sphere stays still, so every visible change comes from the shader. Phase advances by
+one full turn with linear easing and no final pause, making the video repeat smoothly.
+
+Mesh sources omit `#version` because the engine assembles the program. The default
+vertex stage supplies `k_world_position`, `k_normal`, and `k_uv`. Custom mesh shaders
+replace built-in lighting. Scene lights do not affect this example's explicit light
+calculation.
+
+## Additional textures and vertices
+
+An image shader can sample another canvas through a named sampler and an object binding
+such as `textures = {other = canvas:texture()}`. Dependencies must stay within the scene
+and cannot form cycles. The current mesh path does not bind samplers through `textures`.
+
+A custom vertex stage uses `vertex` or `vertex_path`. It must actively use `modelMatrix`
+and `viewProjection`, and supply the outputs its fragment shader reads. GPU deformation
+does not update CPU bounds. See [Shader](../api/Shader.md) for the full contract.
+
+## Check the result
+
+`--check` validates scene construction and bindings but does not compile GLSL. Render
+the scene to test the program, including transparent edges and the extremes of animated
+uniforms. Shader source and resources stay fixed within an applied revision.
+
+A failed shader edit preserves the last valid preview. Read the diagnostics if the
+image does not change after an edit. Use uniforms for animation rather than reloading
+source every frame.

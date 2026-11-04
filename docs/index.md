@@ -23,3 +23,24 @@ features:
     details: Run focused examples of built-in objects, components, and custom objects.
     link: /examples/
 ---
+
+<script setup>
+import { withBase } from 'vitepress'
+</script>
+
+## Make your first animation
+
+Create a circle, give it a color, and schedule movement. Each step in
+[first steps](guide/start.md) has its own result to compare with your scene.
+
+<figure>
+<video controls autoplay loop muted playsinline preload="metadata" :poster="withBase('/previews/guide-first-combined.png')" :src="withBase('/previews/guide-first-combined.mp4')" aria-label="A circle moves and changes color." style="width:100%"></video>
+</figure>
+
+## Choose a learning path
+
+1. Learn [Lua essentials](guide/lua.md) and build your [first scene](guide/start.md).
+2. Arrange [objects](guide/objects.md) using [coordinates](guide/coordinates.md), [layout](guide/layout.md), and [images](guide/images.md).
+3. Control [animation](guide/animation.md), [easing](guide/easing.md), and [sequences](guide/sequences.md).
+4. Add [3D](guide/graphics-3d.md), [canvas composition](guide/canvases.md), or [custom behavior](guide/custom-objects.md).
+5. Review the result in the [editor](guide/editor.md) and [export a video](guide/export.md).

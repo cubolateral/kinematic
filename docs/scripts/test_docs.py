@@ -10,6 +10,88 @@ spec.loader.exec_module(docs)
 
 
 class DocumentationTests(unittest.TestCase):
+    def test_guide_projects_preserve_manual_edits_and_scene_order(self):
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / 'guide/projects/start'
+            (project / 'scenes').mkdir(parents=True)
+            (project / 'kinematic').mkdir()
+            first = project / 'scenes/01-first.lua'
+            second = project / 'scenes/02-second.lua'
+            first.write_text('return function(s) end\n')
+            second.write_text('return function(s) s:wait(1) end\n')
+            manifest = project / 'kinematic/project.ron'
+            manifest.write_text('(scenes: ["scenes/01-first.lua", "scenes/02-second.lua"])')
+            page = root / 'guide/start.md'
+            blocks = [f'<GuideDemo name="{name}"{attributes}>\n<!-- demo: {name} -->\n'
+                      f'<<< ./projects/start/scenes/{scene.name}\n</GuideDemo>'
+                      for name, attributes, scene in [('first', ' still', first), ('second', '', second)]]
+            page.write_text('\n'.join(blocks))
+            (root / 'guide/help.md').write_text('```md\n' + blocks[0] + '\n```\n')
+            second.write_text('return function(s) s:wait(2) end\n')
+            before = {path: path.read_bytes() for path in (first, second, manifest)}
+
+            with patch.object(docs, 'DOCS', root), patch.object(docs, 'run') as run:
+                self.assertEqual(docs.guide_projects(), [project])
+                self.assertEqual(docs.guide_demos(), [
+                    ('guide-first', project, first, True),
+                    ('guide-second', project, second, False),
+                ])
+                docs.examples(guide_only=True)
+                run.assert_called_once_with(docs.binary(), '--check', str(project))
+                self.assertEqual(before, {path: path.read_bytes() for path in before})
+
+                page.write_text('\n'.join(blocks).replace('name="first"', 'name="different"'))
+                with self.assertRaisesRegex(AssertionError, 'preview and source'):
+                    docs.guide_demos()
+                page.write_text('\n'.join(blocks).replace('01-first.lua', 'missing.lua'))
+                with self.assertRaisesRegex(AssertionError, 'missing scene'):
+                    docs.guide_demos()
+
+    def test_media_selects_each_scene_only_in_a_temporary_project_copy(self):
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / 'guide/projects/start'
+            (project / 'kinematic').mkdir(parents=True)
+            (project / 'scenes').mkdir()
+            (project / 'assets').mkdir()
+            (project / 'assets/photo.jpg').write_bytes(b'Image bytes.')
+            first = project / 'scenes/01-first.lua'
+            second = project / 'scenes/02-second.lua'
+            first.write_text('return function(s) end\n')
+            second.write_text('return function(s) s:wait(2) end\n')
+            manifest = project / 'kinematic/project.ron'
+            original = '(scenes: ["scenes/01-first.lua", "scenes/02-second.lua"])'
+            manifest.write_text(original)
+            rendered = []
+
+            def fake_run(*args):
+                if args[1] == '--render':
+                    copied = Path(args[2])
+                    rendered.append((copied / 'kinematic/project.ron').read_text())
+                    self.assertEqual((copied / 'assets/photo.jpg').read_bytes(), b'Image bytes.')
+                    (copied / 'output').mkdir()
+                    (copied / 'output/video.mp4').write_bytes(b'Video bytes.')
+                else:
+                    self.assertEqual(args[0], 'ffmpeg')
+                    Path(args[-1]).write_bytes(b'Poster bytes.')
+
+            sources = [('guide-first', project, first, True), ('guide-second', project, second, False)]
+            with patch.object(docs, 'DOCS', root), patch.object(docs, 'media_sources', return_value=sources), \
+                    patch.object(docs, 'run', side_effect=fake_run), patch.object(docs, 'verify_media'):
+                docs.media(guide_only=True)
+
+            self.assertEqual(rendered, ['(scenes: ["scenes/01-first.lua"])',
+                                        '(scenes: ["scenes/02-second.lua"])'])
+            self.assertEqual(manifest.read_text(), original)
+            self.assertFalse((root / 'public/previews/guide-first.mp4').exists())
+            self.assertTrue((root / 'public/previews/guide-first.png').is_file())
+            self.assertTrue((root / 'public/previews/guide-second.mp4').is_file())
+
     def test_api_signatures_preserve_types_and_descriptions_in_compact_highlighted_entries(self):
         def visible(markup):
             return html.unescape(re.sub(r'<[^>]+>', '', markup))
@@ -60,6 +142,8 @@ function Property:play(easing) end'''
         self.assertNotIn('function Property', plain)
 
     def test_documented_defaults_preserve_unstructured_prose_and_lua_values(self):
+        self.assertEqual(docs.property_default('Pose. Default: [0.0, 1.0, 0.5].'),
+                         ('{0, 1, 0.5}', 'Pose.'))
         self.assertEqual(docs.property_default('Visible. Default: false.'), ('false', 'Visible.'))
         self.assertEqual(docs.property_default('Empty. Default: null.'), ('nil', 'Empty.'))
         for description in ('Default: nearest.', 'Default: [] (1.00).', 'Uses the default font.'):

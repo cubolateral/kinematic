@@ -42,6 +42,34 @@ impl App {
             .opengl()
             .build()
             .unwrap();
+        let icon = skia_safe::Image::from_encoded(skia_safe::Data::new_copy(include_bytes!(
+            "../assets/brand/logo.png"
+        )))
+        .expect("Application icon must decode.");
+        let info = skia_safe::ImageInfo::new(
+            (icon.width(), icon.height()),
+            skia_safe::ColorType::RGBA8888,
+            skia_safe::AlphaType::Unpremul,
+            None,
+        );
+        let mut pixels = vec![0; info.compute_min_byte_size()];
+        assert!(icon.read_pixels(
+            &info,
+            &mut pixels,
+            info.min_row_bytes(),
+            (0, 0),
+            skia_safe::image::CachingHint::Allow,
+        ));
+        let surface = sdl3::surface::Surface::from_data(
+            &mut pixels,
+            icon.width() as u32,
+            icon.height() as u32,
+            info.min_row_bytes() as u32,
+            sdl3::pixels::PixelFormat::RGBA32,
+        )
+        .expect("Application icon surface must be valid.");
+        window.set_icon(surface);
+
         let window_chrome = window::Chrome::new(&mut window);
         let gl_context = window.gl_create_context().unwrap();
 

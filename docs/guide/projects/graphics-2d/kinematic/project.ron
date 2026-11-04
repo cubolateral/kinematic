@@ -1,0 +1,10 @@
+(
+    version: 1,
+    name: "Guide — 2D graphics",
+    scenes: [
+        "scenes/01-shape-filter.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

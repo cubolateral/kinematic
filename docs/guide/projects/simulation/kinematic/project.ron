@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Simulation",
+    scenes: [
+        "scenes/01-simulation-step.lua",
+        "scenes/02-simulation-mutate.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

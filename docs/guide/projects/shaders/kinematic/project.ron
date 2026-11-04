@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Shaders",
+    scenes: [
+        "scenes/01-shader-mandelbrot.lua",
+        "scenes/02-shader-surface.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

@@ -1,4 +1,52 @@
+---
+pageClass: guide-page
+---
+
 # Troubleshooting
+
+## An image looks stretched
+
+**Symptom:** a cat looks too wide or too tall after loading.
+
+**Check:** compare the source width-to-height ratio with the Image object's `size`.
+
+**Cause:** a custom size or unequal scale changes the source aspect ratio.
+
+**Fix:** use `height = width * source_height / source_width`, then apply the same scale
+to both axes. See [images](images.md).
+
+## A signal jumps when it stops
+
+**Symptom:** an object snaps back at `signal:stop()`.
+
+**Check:** compare the last derived position with its underlying track value.
+
+**Cause:** signal writes last only for the evaluated frame.
+
+**Fix:** schedule a base value matching the signal's endpoint, or keep the relationship
+active. See [temporary writes](signals.md#temporary-writes).
+
+## A Code edit changes the wrong characters
+
+**Symptom:** a replacement targets an unexpected part of the displayed source.
+
+**Check:** inspect the 1-based start and exclusive end, and any edits before this one.
+
+**Cause:** ranges store coordinates and do not follow changed text.
+
+**Fix:** clear old emphasis and query again after editing. See [Code ranges](code.md#ranges-do-not-follow-edits).
+
+## Random results change unexpectedly
+
+**Symptom:** rebuilding or seeking produces a different arrangement or trajectory.
+
+**Check:** seed, number and order of draws, and whether the generator lives in state.
+
+**Cause:** changing the sequence changes later draws. A generator outside simulation
+state does not participate in checkpoint reconstruction.
+
+**Fix:** use stable ordered arrays, fork independent effects, and preserve the simulation
+generator in state. See [random](random.md).
 
 ## An object is missing
 

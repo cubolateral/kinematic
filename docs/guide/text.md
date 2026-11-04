@@ -1,50 +1,137 @@
+---
+pageClass: guide-page
+---
+
 # Text
 
-Use `text_2d` and `text_3d` to add ordinary text to a scene. These are graphic objects,
-not editor input fields. Use [LaTeX](latex.md) for mathematical expressions and
-[Code](code.md) for syntax-highlighted source and range-based edits.
+Use `text_2d` for titles, labels, and paragraphs. Start with the text and its size.
+Then choose whether a content change should move matching letters or replace the whole
+block. Use [LaTeX](latex.md) for formulas and [Code](code.md) for highlighted source.
 
-## Content, fonts, and size
+## Create a title
 
-`text` contains the string and can include line breaks. `size` sets the type size in
-local units. `align` ranges from -1 (left) to 1 (right), with 0 centered. `thickness`
-expands glyph strokes.
+Attach the title to the 2D world, just like a shape. `size` uses local canvas units.
+`fill` controls the glyph color. The built-in font is Hack.
 
-Text objects use Hack by default in this checkout. To make your project independent of
-build paths, load a project TTF or OTF with `k.font(path)` and pass it as `font=...`.
-The example includes the font and its licenses. Include both the file and its license
-when you distribute the project. The font resource cannot be animated.
+<GuideDemo name="text-title" caption="A centered title in the built-in font." still>
 
-## Transitions
+<!-- demo: text-title -->
+<<< ./projects/text/scenes/01-text-title.lua
 
-`text:morph(new_text,group?)` moves matching glyphs and fades in or out the rest.
-`group=true` matches words and symbols as groups. The default is false. Call `play` to
-schedule the transition. Available methods depend on the object type:
+</GuideDemo>
 
-| Type | Transitions |
-| --- | --- |
-| Text2D | morph and fade. |
-| Text3D | morph. |
+## Compare morph modes
 
-`fade` on Text2D crossfades the entire text block. Do not assume Text3D has the same
-methods just because the objects share content properties.
+Both videos begin with `Hello, world!` and end with `Hello, wonderful world!`.
+Only the grouping flag changes. `play` schedules the transition over one second.
 
-<<< ../../examples/lua/text/scenes/intro.lua
+### Match glyphs: group = false
 
-The [text project](../examples/text.md) demonstrates the text object and its
-transitions. The first morph preserves matching glyphs, while the following fade
-replaces the whole block.
+<GuideDemo name="text-morph-false" caption="Individual matching glyphs move into their new positions.">
 
-## Composition and 3D
+<!-- focus: text-morph-false -->
+```lua
+title:morph("Hello, wonderful world!"):play(1)
+```
 
-Bounds depend on the text and font. Use anchors in parent coordinates and leave room for
-both strings during a transition. Line breaks change the bounding box, so `position`
-does not mean the position of the first character.
+<template #source>
 
-Text3D uses `vec3`, quaternions, and material properties. Apparent size depends on the
-camera. For text that stays the same size in the frame, use a 2D object in the
-composition. For a panel in space, use Text3D or project a 2D texture into 3D.
+<!-- demo: text-morph-false -->
+<<< ./projects/text/scenes/02-text-morph-false.lua
 
-See [Text2D](../api/Text2D.md), [Text2DOptions](../api/Text2DOptions.md),
-[Text3D](../api/Text3D.md), and [Text3DOptions](../api/Text3DOptions.md). Render the
-project to check the font, glyph matching, and readability at the final resolution.
+</template>
+
+</GuideDemo>
+
+### Match groups: group = true
+
+<GuideDemo name="text-morph-true" caption="Matching groups move together, while changed groups fade.">
+
+<!-- focus: text-morph-true -->
+```lua
+title:morph("Hello, wonderful world!", true):play(1)
+```
+
+<template #source>
+
+<!-- demo: text-morph-true -->
+<<< ./projects/text/scenes/03-text-morph-true.lua
+
+</template>
+
+</GuideDemo>
+
+With `false`, matching letters move individually into their new positions. With `true`,
+the inserted `wonderful` appears as a group while matching words stay together. The matching greeting
+stays recognizable in both versions.
+
+## Fade between titles
+
+Use `fade` for a new heading that does not need a letter-by-letter relationship. It
+crossfades the complete old and new blocks, including any letters they share.
+
+<GuideDemo name="text-fade" caption="The greeting crossfades to “This is a faded text!”.">
+
+<!-- focus: text-fade -->
+```lua
+title:fade("This is a faded text!"):play(1)
+```
+
+<template #source>
+
+<!-- demo: text-fade -->
+<<< ./projects/text/scenes/04-text-fade.lua
+
+</template>
+
+</GuideDemo>
+
+## Align multiple lines
+
+Use `\n` for a line break. `align` positions lines within their text block: `-1` is
+left, `0` is center, and `1` is right. It does not align the block with other objects.
+Use [anchors](coordinates.md#bounds-and-anchors-use-different-spaces) for that.
+
+<GuideDemo name="text-alignment" caption="Left, middle, and right blocks show the three line alignments." still>
+
+<!-- demo: text-alignment -->
+<<< ./projects/text/scenes/05-text-alignment.lua
+
+</GuideDemo>
+
+## Use a project font
+
+Put a TTF or OTF file in your assets and load it once. Paths are relative to the project
+root. Include its license when distributing the project.
+
+```lua
+local heading_font = k.font("assets/heading.ttf")
+local title = s:text_2d {
+    text = "A new chapter",
+    font = heading_font,
+    size = 56,
+    fill = k.color("#FFFFFF"),
+}
+s:world_2d():add(title)
+```
+
+The font is a resource, not an animated channel. Changing the text, size, or font can
+change bounds. `thickness` expands glyph strokes. Check alignment after such changes.
+
+## Text in 3D
+
+Use `text_3d` to place text in space. A full turn makes the perspective visible
+from every angle. Its size uses spatial units, and `albedo` supplies its material color. An unlit material keeps it readable without adding lights.
+
+<GuideDemo name="text-spatial" caption="The text completes a full turn in a continuous five-second loop.">
+
+<!-- demo: text-spatial -->
+<<< ./projects/text/scenes/06-text-spatial.lua
+
+</GuideDemo>
+
+Camera distance changes the apparent size. Keep labels in 2D when they should stay
+fixed on screen. Position uses `vec3`, and rotation uses a quaternion.
+
+Text2D supports `morph` and `fade`. Text3D supports `morph` only.
+See [Text2D](../api/Text2D.md) and [Text3D](../api/Text3D.md) for their options.

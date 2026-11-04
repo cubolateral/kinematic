@@ -1,0 +1,10 @@
+(
+    version: 1,
+    name: "Guide — Custom objects",
+    scenes: [
+        "scenes/01-custom-meter.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

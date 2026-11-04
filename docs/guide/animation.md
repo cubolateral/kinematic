@@ -1,20 +1,32 @@
+---
+pageClass: guide-page
+---
+
 # Animation
+
+An animation describes how a property changes over time. Create an object, attach it,
+and schedule a destination with `play`. Lua prepares the timeline. It does not run a
+frame loop while the video plays.
 
 ## Properties, channels, and values
 
-Each type exposes animatable properties generated from its runtime fields.
-`ball.position` is a handle, while `ball.position:get()` returns a value. Use
-`ball:get("position")` to read by name, or `ball:prop("position.x")` to access a
-channel, including when a property name conflicts with a method.
+`ball.position` is a property handle. `ball.position:get()` reads its value. A channel
+such as `ball.position.x` changes only one part of a vector. Use `set` for an immediate
+construction value and `to` with `play` for a timed change:
 
-`set` changes a value immediately during scene construction. Inside a signal, the change
-is temporary and applies only to the evaluated frame. Types, limits, and choices are
-validated. See the [API reference](../api/index.md) for each type's options.
+```lua
+ball.position.x:set(-200)
+
+ball.position.x:to(200):play(2, "linear")
+```
+
+This moves from left to right over two seconds, leaving Y unchanged. `set` is not a
+timed transition. For computed values at each evaluated frame, see [signals](signals.md).
 
 ## Prepare and schedule animations
 
-`to`, `by`, and `from` return reusable animation definitions. Preparing one does not
-change the object or the timeline. Call `play` to schedule it:
+`to`, `by`, and `from` prepare animation definitions. Nothing is scheduled until `play`.
+A definition can be reused:
 
 ```lua
 local step = ball:by {position = {x = 100}}
@@ -23,84 +35,111 @@ step:play(1)
 step:play(1)
 ```
 
-Each animation moves the ball by 100 units. Its implicit starting value is resolved at
-the scheduled time. Reusing `to` repeats the absolute destination, while reusing `by`
-repeats the increment.
+Each play adds 100 units. Its implicit starting value is resolved at the scheduled
+time, rather than being frozen when `step` is created.
 
 | Operation | Example | Meaning |
 | --- | --- | --- |
-| `to` | `ball:to {radius=50}` | Absolute destination. |
-| `by` | `ball:by {radius=10}` | Relative change. |
-| `from` | `ball:from {radius={20,50}}` | Explicit start and end values. |
+| `to` | `ball:to {radius = 50}` | Move to an absolute destination. |
+| `by` | `ball:by {radius = 10}` | Add a relative amount. |
+| `from` | `ball:from {radius = {20, 50}}` | Supply both endpoints explicitly. |
 
-Omitted channels are not animated. For vector pairs, use
-`position={k.vec2(0,0),k.vec2(100,50)}` or `position={x={0,100}}`. Overlapping
-declarations in one table are errors.
+Omitted channels keep their existing values. For example,
+`ball:from {position = {x = {-120, 240}}}:play(2)` specifies X's endpoints while
+preserving Y. Do not declare the same channel twice in one animation table.
+
+## Compare destinations and increments
+
+Both circles begin at X = -256. The white circle plays the same destination twice.
+The blue circle plays the same increment twice. Watch what happens in the second
+second.
+
+<GuideDemo name="animation-modes" caption="Top: repeating to stays at zero. Bottom: repeating by adds another 256 units.">
+
+<!-- focus: animation-modes -->
+```lua
+s:all(function()
+    s:chain(function()
+        target.position.x:to(0):play(1, "linear")
+        target.position.x:to(0):play(1, "linear")
+    end)
+    s:chain(function()
+        increment.position.x:by(256):play(1, "linear")
+        increment.position.x:by(256):play(1, "linear")
+    end)
+end)
+```
+
+<template #source>
+
+<!-- demo: animation-modes -->
+<<< ./projects/animation/scenes/01-animation-modes.lua
+
+</template>
+
+</GuideDemo>
+
+`chain` keeps each pair sequential. `all` starts the two chains together. The
+[sequences guide](sequences.md) explains these scheduling scopes in detail.
 
 ## Duration and easing
 
-`play()` and `play(0)` apply changes instantly. `play(seconds,easing)` uses a duration
-in seconds and an easing curve named by a `snake_case` string. The default is
-`"cubic_in_out"`. `"linear"` keeps a constant speed, while `"cubic_out"` slows near the end. See
-[Easing](../api/Aliases.md#property-kinematic-easing) for the available curves.
+`play(seconds, easing)` schedules a duration in seconds. `play()` and `play(0)` apply
+the change instantly. The default easing is `"cubic_in_out"`. Use `"linear"` for a
+constant speed or `"cubic_out"` to slow near the destination.
 
 ```lua
 ball:to {radius = 50}:play(1, "cubic_out")
 ```
 
-The curve families are `quad`, `cubic`, `quart`, `quint`, `sine`, `expo`, `circ`,
-`back`, `elastic`, and `bounce`. Each supports `_in` (accelerates at the start),
-`_out` (decelerates at the end), and `_in_out` (both). Use `"linear"` for constant speed.
-Only the documented spellings are accepted.
-
-An animation definition exposes only `play`. Do not chain `to` or object methods on it.
-To combine movements, schedule them in scopes.
+See [easing](easing.md) to compare curves. Easing names are exact `snake_case` strings.
+An animation definition exposes `play`, not additional object methods: schedule the
+next animation on the object itself.
 
 ## Sequences, parallel work, and loops
 
-| Scope | Effect on the parent timeline |
-| --- | --- |
-| `s:chain(function() ... end)` | Schedules operations one after another. |
-| `s:all(function() ... end)` | Starts child operations together and advances by the longest duration. |
-| `s:parallel(function() ... end)` | Schedules operations without advancing or extending the parent. |
-| `s:loop(function() ... end)` | Repeats a finite, positive-duration cycle without advancing the parent. |
+A normal `play` advances the scheduling cursor. `all` waits for its longest child.
+`parallel` and `loop` leave the parent cursor unchanged. Use the
+[sequences and events guide](sequences.md) for runnable comparisons and editable pauses.
 
+## Return to a saved pose
+
+Capture a pose before a temporary change. `restore` returns to that captured state.
+`reset` returns to the constructor values. Here the saved position is left of center,
+while the constructor position is the center.
+
+<GuideDemo name="animation-snapshot" caption="The circle grows and moves, restores its left pose, then resets to the center.">
+
+<!-- focus: animation-snapshot -->
 ```lua
-s:all(function()
-    ball:to {position = k.vec2(200, 0)}:play(2)
-    ball:to {fill = k.color("#34D399")}:play(0.5)
-end)
+ball.position.x:set(-256)
+local pose = ball:snapshot()
 
-s:wait(0.5)
+ball:to { position = { x = 256 }, radius = 64 }:play(1)
+ball:restore(pose):play(1)
+ball:reset():play(1)
 ```
 
-This example lasts 2.5 seconds. Inside `parallel`, operations run in sequence unless
-grouped with `all`. Reserve time in the parent so parallel work appears in the video.
+<template #source>
 
-A `loop` callback runs once to prepare a cycle that repeats for the object's lifetime.
-Do not create, attach, or remove objects, or schedule audio, inside the cycle. Nested
-loops and ambiguous concurrent writes in repeated scopes are rejected. Do not use a Lua
-`while true` loop for animation.
+<!-- demo: animation-snapshot -->
+<<< ./projects/animation/scenes/02-animation-snapshot.lua
 
-## Timeline events and independent tracks
+</template>
 
-`s:event("Reading")` creates an editable pause on the timeline. `s:wait(seconds)`
-creates a fixed pause. Use events to adjust pacing without changing values in code.
-
-`s:track(initial,id)` creates an independent property. It supports `get`, `set`, `to`,
-`by`, `from`, and `signal`, including vector channels. Use it for a shared phase or
-parameter that drives signals. The optional ID preserves its identity across reloads.
+</GuideDemo>
 
 ## Snapshots and time
 
-`object:snapshot()` captures animatable fields, dynamic properties, and uniforms.
-`restore(snapshot):play(1)` animates the object back to that snapshot. `save()` pushes a
-snapshot, and `restore():play(1)` pops it. `reset():play()` uses the constructor's
-initial values. A snapshot belongs to the object that created it.
+Snapshots include animatable fields, dynamic properties, and uniforms. They belong to
+the object that created them. `save()` pushes a snapshot. `restore():play(1)` pops it.
+Property snapshots do not replace [simulation state](simulation.md).
 
-<<< ../../examples/lua/drawing/scenes/intro.lua
+## Timeline events and independent tracks
 
-The scene is evaluated at the requested time without drawing earlier frames. Removals
-happen over time, and simulations rebuild state with fixed steps and checkpoints.
-Drawing never advances animation. Learn more about [simulation](simulation.md) and
-[composition](objects.md).
+Use `s:event("Reading")` for a pause you can adjust in Timeline, or `s:wait(seconds)`
+for a fixed pause. See [editable pauses](sequences.md#editable-pauses).
+
+`s:track(initial, id)` creates an independent animated property. Use it for a shared
+parameter that drives several [signals](signals.md), without adding a visible object.
+The optional ID preserves its identity across reloads.

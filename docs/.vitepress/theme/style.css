@@ -153,6 +153,16 @@ button:not(.VPSwitch),
   background: var(--vp-c-default-1);
 }
 
+.VPFooter {
+  padding: 18px 24px;
+}
+
+.VPFooter .message {
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
 .VPFeatures .VPFeature .box {
   padding: 16px;
 }
@@ -388,4 +398,24 @@ html {
 
 ::-webkit-scrollbar-thumb:active {
   background: var(--vp-c-default-1);
+}
+
+/* Reading rhythm is limited to the guide. */
+.guide-page .vp-doc h2 {
+  margin-top: 48px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.guide-page .vp-doc h3 {
+  margin-top: 32px;
+}
+
+.guide-page .vp-doc p,
+.guide-page .vp-doc li {
+  line-height: 1.85;
+}
+
+.guide-page .vp-doc div[class*='language-'] pre {
+  padding-block: 20px;
 }

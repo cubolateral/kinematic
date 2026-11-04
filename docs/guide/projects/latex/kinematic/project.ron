@@ -1,0 +1,14 @@
+(
+    version: 1,
+    name: "Guide — LaTeX",
+    scenes: [
+        "scenes/01-latex-formula.lua",
+        "scenes/02-latex-morph-false.lua",
+        "scenes/03-latex-morph-true.lua",
+        "scenes/04-latex-fade.lua",
+        "scenes/05-latex-spatial.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

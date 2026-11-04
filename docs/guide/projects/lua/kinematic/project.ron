@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Lua conventions",
+    scenes: [
+        "scenes/01-lua-row.lua",
+        "scenes/02-lua-channel.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

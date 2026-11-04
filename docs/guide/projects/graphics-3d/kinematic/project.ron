@@ -1,0 +1,14 @@
+(
+    version: 1,
+    name: "Guide — 3D graphics",
+    scenes: [
+        "scenes/01-lit-cube.lua",
+        "scenes/02-light-directional.lua",
+        "scenes/03-light-point.lua",
+        "scenes/04-light-spot.lua",
+        "scenes/05-material-compare.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

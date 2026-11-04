@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Animation",
+    scenes: [
+        "scenes/01-animation-modes.lua",
+        "scenes/02-animation-snapshot.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

@@ -1,0 +1,20 @@
+(
+    version: 1,
+    name: "Guide — Code",
+    scenes: [
+        "scenes/01-code-hello.lua",
+        "scenes/02-code-ranges.lua",
+        "scenes/03-code-select.lua",
+        "scenes/04-code-highlight.lua",
+        "scenes/05-code-insert.lua",
+        "scenes/06-code-replace.lua",
+        "scenes/07-code-replace-all.lua",
+        "scenes/08-code-erase.lua",
+        "scenes/09-code-morph-characters.lua",
+        "scenes/10-code-morph-groups.lua",
+        "scenes/11-code-fade.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

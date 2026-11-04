@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Procedural drawing",
+    scenes: [
+        "scenes/01-drawing-path.lua",
+        "scenes/02-drawing-clip.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

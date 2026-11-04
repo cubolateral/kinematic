@@ -1,3 +1,7 @@
+---
+pageClass: guide-page
+---
+
 # Objects and composition
 
 ## Create and attach objects
@@ -6,22 +10,26 @@ A constructor such as `s:circle {...}` creates data and returns a typed handle. 
 object starts inactive. It joins scene evaluation, drawing, and selection only after you
 attach it to an active tree:
 
-```lua
-local circle = s:circle {id = "circle", radius = 30}
+Use `add` at the time the object should appear and `remove` when its lifetime should
+end. The following scene demonstrates both operations.
 
-s:wait(1)
-s:world_2d():add(circle)
+## Watch a lifetime
 
-s:wait(1)
-circle:remove()
+Creating an object is separate from activating it. This scene is empty for one second,
+shows the circle for one second, then becomes empty again.
 
-s:wait(1)
-```
+<GuideDemo name="object-lifetime" caption="The circle is active only between seconds one and two.">
 
-Here, the circle appears from 1 to 2 seconds. `remove` ends the subtree's lifetime
-without deleting its entities or hierarchy links. Seeking to an earlier time restores
-it. `remove_children` ends the lifetimes of its children. Inactive objects are ignored
-by evaluation, rendering, selection, and editor views.
+<!-- demo: object-lifetime -->
+<<< ./projects/objects/scenes/01-object-lifetime.lua
+
+</GuideDemo>
+
+Seek backward to 1.5 seconds: the circle returns. Removal ends its lifetime rather than
+deleting the entity. Try moving `add` before the first wait to make it visible at zero.
+
+Use [coordinates and anchors](coordinates.md) to reason about local transforms, and
+[groups and layout](layout.md) to arrange and fade compositions.
 
 ## Hierarchy and draw order
 
@@ -42,69 +50,45 @@ also applies, so list order does not replace spatial depth.
 local properties and lifetime. It does not animate a parent change. Since transforms are
 local, changing an ancestor can change an object's visible position.
 
+## Control an overlap
+
+Sibling order determines drawing when 2D objects share the same stacking priority.
+Change the order after attaching to choose which silhouette covers the other.
+
+<GuideDemo name="object-order" caption="Blue covers white on the left. Moving white to the top reverses the overlap on the right." still>
+
+<!-- demo: object-order -->
+<<< ./projects/objects/scenes/02-object-order.lua
+
+</GuideDemo>
+
+The circles keep their local coordinates. `move_to_top` changes order among siblings.
+It does not move geometry. Try reparenting the white circle to another transformed group to see why
+preserving a local position can change its visible position.
+
 ## Coordinates and transforms
 
-The default 2D view is centered at the origin, with positive X to the right and positive
-Y downward. Positions and sizes use logical canvas units. In 3D, positive Y points up
-and the default camera looks along negative Z.
-
-A local transform combines position, rotation, and scale with the transforms of its
-ancestors. 2D rotation uses radians, and 3D rotation uses quaternions.
-`global_position`, `global_rotation`, `global_scale`, and `global_matrix` return the
-composed result. `global_opacity` is available in 2D.
-
-Constructors accept complete values or partial channels. For example, `position={x=100}`
-keeps the other default values. Vectors have `x/y/z` channels, colors have `r/g/b/a`,
-and quads have `a/b/c/d`.
+Objects use local coordinates relative to their parent. Moving or rotating a group
+transforms its children together. Learn how axes, rotations, and inherited transforms
+work in [coordinates and anchors](coordinates.md).
 
 ## Bounds and anchors
 
-`bounds()` returns the local bounding box with `x`, `y`, `width`, and `height`. In 3D it
-also includes `z` and `depth`. The box can be offset from the origin. `box_size()`
-returns only its dimensions.
-
-`middle`, `left`, `right`, `top`, `bottom`, and the corner anchors return points in
-parent coordinates. 3D objects also provide `front`, `back`, and combined anchors. Each
-anchor has a `*_to(point)` query that calculates the local position needed to place it
-at the target:
-
-```lua
-circle.position:set(circle:left_to(k.vec2(-200, 0)))
-```
-
-Local bounds are not the same as anchors transformed into parent coordinates. Custom Lua
-objects must report bounds that match their drawing so selection and layout work
-correctly.
+Bounds describe local geometry. Anchors help align it in parent coordinates. See the
+[anchor comparison](coordinates.md#bounds-and-anchors-use-different-spaces) before
+aligning objects with different sizes.
 
 ## Groups, containers, and layout
 
-A [Group2D](../api/Group2D.md) or [Group3D](../api/Group3D.md) gives its children a
-shared transform. A [Container2D](../api/Container2D.md) or
-[Container3D](../api/Container3D.md) also lays out children using `gap` and `direction`.
-
-All Lua enum values are `snake_case` strings, including layout directions, camera
-modes, and canvas filters. For example, use `"horizontal_reverse"`, `"orthogonal"`,
-and `"nearest"`. Other spellings and case variants are rejected.
-
-```lua
-local row = s:container_2d {gap = k.vec2(24, 0), direction = "horizontal"}
-s:world_2d():add(row)
-
-row:add(s:circle {radius = 30})
-row:add(s:rect {size = k.vec2(70, 60)})
-```
-
-Available directions, including reverse directions and the 3D depth axis, are listed in
-the generated options. Layout uses the children’s sizes. Use a group when you want to
-control positions yourself.
+Use a group for manually placed children with a shared transform, or a container to
+arrange them automatically. The [layout guide](layout.md) demonstrates directions,
+gaps, and ordering with the same set of objects.
 
 ## Opacity and composition
 
-A container's opacity composites its subtree once. This differs from applying the same
-opacity to each overlapping child individually. To render a texture for reuse, combine a
-canvas with a projection as shown in the [composition
-project](../examples/composition.md).
+A container's opacity composites its whole subtree once. Fading overlapping children
+individually produces a different result. Compare both in
+[groups and layout](layout.md#fade-a-complete-composition).
 
-The [2D shapes project](../examples/2d.md) demonstrates object lifetime and motion. The
-[Object API reference](../api/Object.md) describes shared operations and their
-requirements.
+Use [canvases and projections](canvases.md) to combine 2D and 3D through rendered
+textures. See the [Object reference](../api/Object.md) for hierarchy queries and methods.

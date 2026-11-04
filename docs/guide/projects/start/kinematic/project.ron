@@ -1,0 +1,13 @@
+(
+    version: 1,
+    name: "Guide — Get started",
+    scenes: [
+        "scenes/01-first-circle.lua",
+        "scenes/02-first-style.lua",
+        "scenes/03-first-motion.lua",
+        "scenes/04-first-combined.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

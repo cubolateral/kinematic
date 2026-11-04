@@ -1,0 +1,15 @@
+(
+    version: 1,
+    name: "Guide — Text",
+    scenes: [
+        "scenes/01-text-title.lua",
+        "scenes/02-text-morph-false.lua",
+        "scenes/03-text-morph-true.lua",
+        "scenes/04-text-fade.lua",
+        "scenes/05-text-alignment.lua",
+        "scenes/06-text-spatial.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

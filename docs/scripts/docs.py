@@ -154,6 +154,8 @@ def property_default(description):
     def lua_literal(value):
         if value is None:
             return 'nil'
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
         if isinstance(value, list):
             return '{' + ', '.join(lua_literal(item) for item in value) + '}'
         if isinstance(value, dict):
@@ -278,6 +280,7 @@ def render_api_block(block, include_aliases=False, type_names=()):
 
 def generate():
     source = run(binary(), '--lua-definitions', capture_output=True, text=True).stdout
+    source = re.sub(r'`(-?\d+)\.0`', r'`\1`', source)
     destination = DOCS / 'api'
     destination.mkdir(exist_ok=True)
     for old in destination.glob('*.md'):
@@ -298,6 +301,8 @@ def generate():
         (destination / f'{name}.md').write_text('\n'.join(text))
     (destination / 'index.md').write_text('\n'.join(index) + '\n')
     (DOCS / 'public').mkdir(exist_ok=True)
+    logo = (ROOT / 'assets/brand/logo.svg').read_text().replace('#000000', '#ffffff')
+    (DOCS / 'public/logo.svg').write_text(logo)
     downloads = DOCS / 'public/downloads'
     if downloads.exists():
         shutil.rmtree(downloads)
@@ -322,34 +327,88 @@ def projects():
     return sorted(p.parent.parent for p in EXAMPLES.glob('*/kinematic/project.ron'))
 
 
-def examples():
-    for project in projects():
+def guide_projects():
+    """Find the editable, versioned project for each guide topic."""
+    return sorted(p.parent.parent for p in (DOCS / 'guide/projects').glob('*/kinematic/project.ron'))
+
+
+def guide_demos():
+    """Pair each page preview with its scene without modifying project sources."""
+    demos = []
+    names = set()
+    for page in sorted((DOCS / 'guide').glob('*.md')):
+        content = re.sub(r'^```[^\n]*\n.*?^```[ \t]*$', '', page.read_text(),
+                         flags=re.MULTILINE | re.DOTALL)
+        for name, attributes, body in re.findall(
+                r'<GuideDemo name="([a-z0-9-]+)"([^>]*)>(.*?)</GuideDemo>',
+                content, re.DOTALL):
+            assert name not in names, f'Duplicate guide demo: {name}.'
+            names.add(name)
+            sources = re.findall(r'<!-- demo: ([a-z0-9-]+) -->\s*<<< ([^\n]+)', body)
+            assert len(sources) == 1 and sources[0][0] == name, \
+                f'{page}: preview and source must share the name {name}.'
+            project = DOCS / 'guide/projects' / page.stem
+            scene = (page.parent / sources[0][1].strip()).resolve()
+            assert scene.is_relative_to((project / 'scenes').resolve()) and scene.is_file(), \
+                f'{page}: missing scene in {project}: {sources[0][1]}.'
+            manifest = (project / 'kinematic/project.ron').read_text()
+            scene_list = re.search(r'scenes:\s*\[(.*?)\]', manifest, re.DOTALL)
+            assert scene_list and json.dumps(scene.relative_to(project.resolve()).as_posix()) in scene_list[1], \
+                f'{page}: scene is not listed in the project manifest: {scene.name}.'
+            demos.append((f'guide-{name}', project, scene, bool(re.search(r'\bstill\b', attributes))))
+    return demos
+
+
+def examples(guide_only=False):
+    guide_demos()
+    for project in ([] if guide_only else projects()) + guide_projects():
         run(binary(), '--check', str(project))
 
 
-def media():
+def media_sources(guide_only=False):
+    return ([(project.name, project, None, False) for project in projects()] if not guide_only else []) + guide_demos()
+
+
+def media(guide_only=False):
     destination = DOCS / 'public/previews'
     destination.mkdir(parents=True, exist_ok=True)
-    names = {project.name for project in projects()}
+    sources = media_sources(guide_only)
+    names = {name for name, _, _, _ in sources}
     for stale in destination.iterdir():
+        if guide_only and not stale.stem.startswith('guide-'):
+            continue
         if stale.suffix in {'.png', '.mp4'} and stale.stem not in names:
             stale.unlink()
-    for project in projects():
-        # Render a clean temporary copy: never rename or remove a user's exports.
-        temporary = DOCS / '.cache/media' / project.name
+    for name, project, scene, still in sources:
+        # Render one scene from a temporary copy without changing the source project.
+        temporary = DOCS / '.cache/media' / name
         if temporary.exists():
             shutil.rmtree(temporary)
         shutil.copytree(project, temporary, ignore=shutil.ignore_patterns('output', 'cache', 'overrides.ron'))
+        if scene is not None:
+            manifest = temporary / 'kinematic/project.ron'
+            relative = scene.relative_to(project.resolve()).as_posix()
+            manifest.write_text(re.sub(r'scenes:\s*\[.*?\]',
+                                       lambda _: f'scenes: [{json.dumps(relative)}]',
+                                       manifest.read_text(), count=1, flags=re.DOTALL))
         run(binary(), '--render', str(temporary))
         video, = (temporary / 'output').glob('*.mp4')
-        shutil.copyfile(video, destination / f'{project.name}.mp4')
-        run('ffmpeg', '-v', 'error', '-y', '-ss', '1.5', '-i', str(video), '-frames:v', '1', str(destination / f'{project.name}.png'))
-    verify_media()
+        if still:
+            (destination / f'{name}.mp4').unlink(missing_ok=True)
+        else:
+            shutil.copyfile(video, destination / f'{name}.mp4')
+        poster = destination / f'{name}.png'
+        poster.unlink(missing_ok=True)
+        timestamp = '0' if still else '1.0' if name.startswith('guide-') else '1.5'
+        run('ffmpeg', '-v', 'error', '-y', '-ss', timestamp,
+            '-i', str(video), '-frames:v', '1', str(poster))
+        assert poster.is_file(), f'{name}: no frame at the poster timestamp.'
+    verify_media(guide_only)
 
 
-def verify_media():
-    for project in projects():
-        video = DOCS / f'public/previews/{project.name}.mp4'
+def verify_media(guide_only=False):
+    for name, project, _, still in media_sources(guide_only):
+        video = DOCS / f'public/previews/{name}.{"png" if still else "mp4"}'
         info = json.loads(run('ffprobe', '-v', 'error', '-show_streams', '-of', 'json',
                               str(video), capture_output=True, text=True).stdout)
         stream, = [s for s in info['streams'] if s['codec_type'] == 'video']
@@ -357,10 +416,14 @@ def verify_media():
         width, height = re.search(r'resolution:\s*\((\d+),\s*(\d+)\)', manifest).groups()
         fps = re.search(r'fps:\s*(\d+)', manifest)[1]
         assert (stream['width'], stream['height']) == (int(width), int(height)), project
-        assert stream['r_frame_rate'] == f'{fps}/1', project
-        assert int(stream['nb_frames']) > 0, project
+        if not still:
+            assert stream['r_frame_rate'] == f'{fps}/1', project
+            assert int(stream['nb_frames']) > 0, project
         # Decode every frame and sample, including frames after the poster timestamp.
         run('ffmpeg', '-v', 'error', '-xerror', '-i', str(video), '-f', 'null', '-')
+    if guide_only:
+        print('Decoded guide images and videos. Checked dimensions and video FPS.')
+        return
     video = DOCS / 'public/previews/audio.mp4'
     samples = run('ffmpeg', '-v', 'error', '-i', str(video), '-f', 'f32le', '-ac', '2',
                   '-ar', '48000', 'pipe:1', capture_output=True).stdout
@@ -430,4 +493,11 @@ def links():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['generate', 'examples', 'media', 'verify_media', 'links'])
-    globals()[parser.parse_args().command]()
+    parser.add_argument('--guide-only', action='store_true', help='Validate or render only guide demos.')
+    args = parser.parse_args()
+    if args.guide_only and args.command not in {'examples', 'media', 'verify_media'}:
+        parser.error('--guide-only requires examples, media, or verify_media.')
+    if args.command in {'examples', 'media', 'verify_media'}:
+        globals()[args.command](args.guide_only)
+    else:
+        globals()[args.command]()

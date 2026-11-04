@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Signals",
+    scenes: [
+        "scenes/01-signal-follow.lua",
+        "scenes/02-signal-stop.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

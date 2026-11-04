@@ -1,4 +1,25 @@
+---
+pageClass: guide-page
+---
+
 # 2D graphics
+
+## Build a card and soften its edge
+
+A rectangle can combine rounded corners, a fill, and an independent outline. Animate
+one filter at a time to see how it changes the silhouette.
+
+<GuideDemo name="shape-filter" caption="The rounded card blurs and becomes sharp again.">
+
+<!-- demo: shape-filter -->
+<<< ./projects/graphics-2d/scenes/01-shape-filter.lua
+
+</GuideDemo>
+
+Blur softens the outline as well as the fill and extends beyond the original edge.
+Try `shadow_offset = k.vec2(12, 12)`, `shadow_blur = 8`, and a nontransparent
+`shadow_color` in the constructor for a shadow instead. Compare at final output size.
+See the dedicated [images guide](images.md) for photos and pixel sampling.
 
 ## Shapes and lines
 
@@ -16,8 +37,8 @@ defaults and limits.
 local card = s:rect {
     size = k.vec2(320, 160),
     round = k.quad(12, 12, 12, 12),
-    fill = k.color("#1E293B"),
-    stroke = k.color("#38BDF8"),
+    fill = k.color("#0A0A0A"),
+    stroke = k.color("#FFFFFF"),
     stroke_width = 2,
 }
 s:world_2d():add(card)
@@ -28,14 +49,10 @@ bottom edges aligned.
 
 ## Images
 
-`k.image("assets/photo.png")` loads an immutable resource for the current revision. Add
-it to a scene with `s:image_2d {source=image}`. Asset paths are relative to the project
-and remain fixed during export. Images are limited to 64 MiB and 16 million decoded
-pixels. `get_pixel_color` requires an image source and reads a local position.
-
-Use `source=canvas:texture()` with projections to display content rendered on another
-canvas. Canvas dependencies are checked. Cycles and references between scenes are
-rejected.
+Load an immutable resource with `k.image`, then display it with `image_2d` or
+`image_3d`. The dedicated [images guide](images.md) covers dimensions, proportions,
+style, transparency, animation, and source pixel sampling with supplied photos.
+Use [canvases and projections](canvases.md) for a live rendered texture.
 
 ## Text and code objects
 

@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Random",
+    scenes: [
+        "scenes/01-random-seeds.lua",
+        "scenes/02-random-distribution.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

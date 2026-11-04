@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/brand/logo.png" alt="Kinematic logo" width="128">
+
 # Kinematic
 
 An animation editor for 2D and 3D scenes, with a live preview,

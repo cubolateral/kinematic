@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Objects and composition",
+    scenes: [
+        "scenes/01-object-lifetime.lua",
+        "scenes/02-object-order.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

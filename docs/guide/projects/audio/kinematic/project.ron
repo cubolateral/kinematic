@@ -1,0 +1,10 @@
+(
+    version: 1,
+    name: "Guide — Audio",
+    scenes: [
+        "scenes/01-audio-impact.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

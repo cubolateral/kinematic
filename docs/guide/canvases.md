@@ -1,8 +1,50 @@
+---
+pageClass: guide-page
+---
+
 # Canvases and projections
 
 A canvas is an independent view with its own camera and texture. A projection displays
 that texture as an object in another world. Use this to place 3D content in a 2D
 composition or show a 2D panel in 3D space.
+
+## Display a 2D panel in 3D
+
+Render a circle into a 2D canvas, then use that texture on a spatial rectangle.
+The dark panel distinguishes the source canvas from the surrounding 3D view.
+
+<GuideDemo name="canvas-panel" caption="A blue circle rendered in 2D appears on a rotating panel in 3D.">
+
+<!-- demo: canvas-panel -->
+<<< ./projects/canvases/scenes/01-canvas-panel.lua
+
+</GuideDemo>
+
+The source canvas has a 16:9 ratio. Increase only projection size to enlarge the
+panel in space, or source resolution to add texture pixels. Changing the camera of the
+source changes the image on the panel. Changing the destination camera changes how the
+whole panel is viewed.
+
+## Trace the source to the screen
+
+Build the source first, then connect its texture to an object in the destination world.
+
+```text
+Root → Canvas3D → Group (Sphere + Text3D) → Texture → Projection2D → 2D world → Frame.
+```
+
+<GuideDemo name="canvas-projection" caption="A blue sphere and 3D label rotate together inside a 2D projection.">
+
+<!-- demo: canvas-projection -->
+<<< ./projects/canvases/scenes/02-canvas-projection.lua
+
+</GuideDemo>
+
+The sphere and label belong to a group in the source canvas. The projection belongs to the destination and
+controls the displayed rectangle. Try reducing only the source resolution to `{80, 60}`:
+the displayed dimensions stay the same, while texture detail decreases. Match both aspect
+ratios to preserve proportions. Reverse the dimensions using Canvas2D and Projection3D
+for a panel in space.
 
 ## The root, worlds, and additional canvases
 
@@ -55,8 +97,6 @@ dependencies in order.
 [Projection2D](../api/Projection2D.md) displays a texture as a rectangle in the 2D
 world. [Projection3D](../api/Projection3D.md) displays it in 3D space. The projection's
 dimension belongs to the destination, so the source canvas can use the other dimension.
-
-<<< ../../examples/lua/composition/scenes/intro.lua
 
 The [composition project](../examples/composition.md) displays a 3D texture in a 2D
 world. The sphere and cube rotate and move in their source canvas, while the projection

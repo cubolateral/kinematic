@@ -1,4 +1,26 @@
+---
+pageClass: guide-page
+---
+
 # Audio
+
+## Put sound at the moment of impact
+
+Schedule a sound immediately after the motion reaches its target. Leave time for the
+release so the sound does not stop at the scene boundary. Unmute the player to hear this demo.
+
+<GuideDemo name="audio-impact" caption="The first arrival plays on the left. The second arrival plays on the right.">
+
+<!-- demo: audio-impact -->
+<<< ./projects/audio/scenes/01-audio-impact.lua
+
+</GuideDemo>
+
+`play` on the audio player does not advance time. Each override belongs only to that
+occurrence. Change `pan` to zero to center both sounds, or `gain` to `0.1` to reduce
+their level. Synthesis follows attack → decay → sustain during hold → release.
+Increasing release requires more time after the final hit. A file resource can replace
+the synth without changing this scheduling pattern.
 
 ## Audio resources and Lua players
 
@@ -47,10 +69,8 @@ spatial audio.
 
 ## Sync sound with motion
 
-Schedule audio at the matching point in a visual sequence, as in the [audio
-project](../examples/audio.md):
-
-<<< ../../examples/lua/audio/scenes/intro.lua
+The first demo calls `hit:play` after each movement. Audio does not advance the
+scheduling cursor, so the next movement can start at the same moment as the sound.
 
 For a simulated collision, declare the player as an input and call `inputs.hit:play
 {gain=0.15}` from the update callback. Playback uses the fixed-step time. Replay

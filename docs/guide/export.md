@@ -1,4 +1,23 @@
+---
+pageClass: guide-page
+---
+
 # Export and command line
+
+## Review a first export
+
+1. Set resolution and FPS in Project settings and save the project.
+2. Wait for code changes to apply successfully. Resolve any diagnostics.
+3. Choose **Export → Export** for the project or **Export scene** for the current scene.
+4. Open the resulting MP4 in `output/` and check its first frame, motion, ending, and sound.
+
+Try changing 960 × 540 to 1920 × 1080 while keeping scene coordinates unchanged. The
+output has more pixels and a different visible canvas area at the same 2D camera zoom.
+Recheck framing. Changing FPS changes temporal sampling and simulation steps. A
+60 FPS export samples motion twice as often as a 30 FPS export of equal duration.
+
+Editor margins, selection outlines, navigation cameras, and preview volume are inspection
+settings. They do not become part of the exported frame or audio mix.
 
 ## Resolution, frame rate, and MP4
 

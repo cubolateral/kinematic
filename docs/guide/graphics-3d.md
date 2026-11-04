@@ -1,4 +1,26 @@
+---
+pageClass: guide-page
+---
+
 # 3D graphics
+
+## Build a lit scene
+
+Start with a world, a primitive, and a light. Use a slow rotation to reveal how the
+material responds across the surface.
+
+<GuideDemo name="lit-cube" caption="A complete turn reveals the cube faces under the default world lighting.">
+
+<!-- demo: lit-cube -->
+<<< ./projects/graphics-3d/scenes/01-lit-cube.lua
+
+</GuideDemo>
+
+`unlit = true` makes color independent of lights. Try it first, then return to lit
+rendering and compare roughness `0.1` with `0.9`. Metallic changes how the surface
+reflects light. Roughness changes how concentrated those reflections are. Keep framing
+and lighting fixed when comparing materials. Point lights vary with position, while
+spot lights also restrict their cone. The options for each light are type-specific.
 
 ## Primitives and presets
 
@@ -28,6 +50,126 @@ The [3D project](../examples/3d.md) demonstrates a material and lighting. See
 [PointLight3D](../api/PointLight3D.md), and [SpotLight3D](../api/SpotLight3D.md) for
 their options.
 
+## Choose a light
+
+Directional, point, and spot lights use different spatial models. The three videos
+below use a red pyramid, a green cube, and a blue sphere to show each light. Lights must be
+attached to the canvas containing the objects they illuminate.
+
+### Directional: one direction everywhere
+
+A directional light has parallel rays along its local negative Z axis. Position does
+not affect its illumination. Rotating the light changes which surfaces receive light. In this example the light stays
+fixed while the group of shapes rotates.
+
+<GuideDemo name="light-directional" caption="Three colored shapes rotate together under a fixed directional light.">
+
+<!-- focus: light-directional -->
+```lua
+local light = s:directional_light {
+    rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
+}
+world:add(light)
+```
+
+<template #source>
+
+<!-- demo: light-directional -->
+<<< ./projects/graphics-3d/scenes/02-light-directional.lua
+
+</template>
+
+</GuideDemo>
+
+Use this for distant, consistent illumination, such as sunlight across a diagram.
+Changing `intensity` adjusts its strength without altering direction.
+
+### Point: a source at a position
+
+A point light shines in all directions from its position. Here it moves across the
+shapes. The small white marker shows the light's location, while distance falloff
+makes nearby surfaces brighter.
+
+<GuideDemo name="light-point" caption="A moving point light brightens the surfaces nearest to its white position marker.">
+
+<!-- focus: light-point -->
+```lua
+local light = s:point_light {
+    position = k.vec3(-1.75, 0.75, 1.75),
+    intensity = 5,
+    quadratic = 0.25,
+}
+```
+
+<template #source>
+
+<!-- demo: light-point -->
+<<< ./projects/graphics-3d/scenes/03-light-point.lua
+
+</template>
+
+</GuideDemo>
+
+Falloff is `1 / (constant + linear × distance + quadratic × distance²)`. The defaults
+are `constant = 1`, `linear = 0`, and `quadratic = 0`, so distance falloff must be
+configured explicitly. This example sets `quadratic = 0.25`.
+
+### Spot: a directed cone
+
+A spotlight combines a position with a cone along its local negative Z axis. Rotate
+it to aim the cone and use `cutoff`, in radians, to control its half-angle. The narrow
+cone below sweeps across the row.
+
+<GuideDemo name="light-spot" caption="The spotlight cone sweeps across the three colored shapes.">
+
+<!-- focus: light-spot -->
+```lua
+local light = s:spot_light {
+    position = k.vec3(0, 0, 2),
+    rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
+    intensity = 5,
+    quadratic = 0.1,
+    cutoff = 0.4,
+}
+s:world_3d():add(light)
+
+light.rotation:to(k.axis_angle(k.vec3(0, 1, 0), 1)):play(2)
+light.rotation:to(k.axis_angle(k.vec3(0, 1, 0), -1)):play(2)
+```
+
+<template #source>
+
+<!-- demo: light-spot -->
+<<< ./projects/graphics-3d/scenes/04-light-spot.lua
+
+</template>
+
+</GuideDemo>
+
+Increase `cutoff` to illuminate a wider area. Like point lights, spotlights have
+configurable distance falloff. Both position and orientation matter when aiming them.
+A custom mesh shader replaces the built-in lighting calculation.
+
+See [DirectionalLight3D](../api/DirectionalLight3D.md),
+[PointLight3D](../api/PointLight3D.md), and [SpotLight3D](../api/SpotLight3D.md) for options.
+
+
+## Compare materials under the same light
+
+A material comparison is easier when geometry, camera, and light stay fixed.
+
+<GuideDemo name="material-compare" caption="Left: default dielectric. Middle: rough metal. Right: unlit white." still>
+
+<!-- demo: material-compare -->
+<<< ./projects/graphics-3d/scenes/05-material-compare.lua
+
+</GuideDemo>
+
+The right sphere ignores the light and shows a flat color. Change only roughness on the
+left sphere for a direct comparison of highlight spread. A metallic surface also needs
+suitable illumination to remain readable. Increasing albedo is not a substitute for
+framing a light.
+
 ## Cameras
 
 Every 3D canvas has a camera. Its position, orientation, projection mode, field of view,
@@ -42,7 +184,7 @@ vectors. Interpolating orientations does not represent complete turns. To preser
 turns, use the quaternion handle's rotation method:
 
 ```lua
-cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, "linear")
+cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(2, "linear")
 ```
 
 See [Quaternion](../api/Quaternion.md) and
@@ -66,7 +208,5 @@ canvas and the 2D world contains a projection that displays it. See [canvases an
 projections](canvases.md) for resolution, dependencies, and lifetime. Texture resolution
 determines its pixels, while projection `size` determines its area in the composition.
 Avoid texture cycles and do not share a texture across scenes.
-
-<<< ../../examples/lua/composition/scenes/intro.lua
 
 Continue with [custom drawing and shaders](drawing.md).

@@ -1,72 +1,127 @@
+---
+pageClass: guide-page
+---
+
 # Simulation
 
-## Objects with state
+Ordinary animations are functions of time: Kinematic can evaluate a property at two
+seconds without playing the preceding frames. A simulation is different. Its next
+state depends on what happened before, such as velocity, collisions, or an accumulated
+trail. It stores that history and replays fixed steps when you seek.
 
-Simulations belong to objects declared with `k.object`. The [custom objects
-guide](custom-objects.md) covers definitions, instances, components, properties,
-methods, bounds, and drawing. The [signals guide](signals.md) covers temporary changes
-that do not accumulate state. This page focuses on fixed steps, dependencies, and
-seeking through time.
+Use [animation](animation.md) for known destinations and [signals](signals.md) for
+values calculated directly from time. Use simulation in a [custom object](custom-objects.md)
+when that calculation needs the previous state.
 
-## State and fixed steps
+## Integrate speed into position
 
-An object with `state` and `update(state,frame,inputs)` keeps state per instance. The
-runtime updates it at a fixed step derived from the project FPS, including when you
-seek. Each instance gets its own copy of the initial state, and `state()` returns
-another copy for inspection.
+This particle adds `speed × dt` to its position on every step. The speed is an animated
+property, sampled through `inputs`. Its trail records where the particle has been.
+Drawing only reads those points.
 
-The [reproducible walk project](../examples/simulation.md) accumulates a path using a
-random generator stored in state:
+<GuideDemo name="simulation-step" caption="The trail accumulates while the particle slows from 160 to 60 units per second.">
 
-<<< ../../examples/lua/simulation/scenes/intro.lua
+<!-- focus: simulation-step -->
+```lua
+update = function(state, frame, inputs)
+    state.x = state.x + inputs.speed * frame.dt
+    state.trail[#state.trail + 1] = state.x
+    if #state.trail > 120 then
+        table.remove(state.trail, 1)
+    end
+end,
+```
 
-Do not use draw time or monitor refresh rate to update physics. Drawing reads copies of
-evaluated properties and state, and should produce the same result for the same
-evaluation.
+<template #source>
 
-## Inputs and dependencies
+<!-- demo: simulation-step -->
+<<< ./projects/simulation/scenes/01-simulation-step.lua
 
-Declare `inputs={speed="speed"}` for a property on the same object,
-`inputs={speed=other.speed}` for a property handle, or `inputs={source=other}` for
-another simulation's copied state. Use `object:inputs({...})` to configure inputs after
-construction. Audio players can also be inputs.
+</template>
 
-Dependencies are sampled at each fixed step, not only at the final seek time.
-Dependencies update before their dependents, and cycles are rejected. Omitted inputs
-conservatively use the object's own properties. `inputs={}` declares no dependencies.
+</GuideDemo>
 
-## Checkpoints and mutations
+The step duration comes from the project FPS, not the monitor refresh rate. At one
+second, the particle has traveled about 160 units. During the next second, each step
+reads the changing speed. It does not apply the final speed to the entire history.
+The example keeps at most 120 trail points so the state does not grow indefinitely.
 
-`auto_update:set(false)` disables automatic updates. `update()` schedules one explicit
-step, `checkpoint()` schedules a snapshot to speed up reconstruction, and
-`mutate(function(state) ... end)` schedules a state change. Each operation uses the
-current timeline time.
+Expand **Complete scene** to see the property, dependency, bounds, and drawing callback.
+Seek to two seconds, back to zero, and then to two seconds again: the trail should agree.
 
-When seeking backward, the engine restores a compatible checkpoint and replays the steps
-it needs. Changes to logic, initial state, seed, FPS, lifetime, inputs, or operations
-invalidate the affected history and its dependents. Visual-only changes preserve
-compatible checkpoints. Current invalidation replays an affected instance from the
-beginning. It does not update each segment incrementally.
+## Declare dependencies
 
-## Callback restrictions
+`inputs` tells the engine which values influence the next state. Use local property
+names, property handles, or another simulation's copied state:
 
-Update and mutate run in an isolated, read-only environment. They cannot capture mutable
-external values. Put mutable data in `state` and external relationships in `inputs`.
-`require` accepts pure helpers in this restricted environment, and exported functions
-follow the same closure validation. Cycles, mutable exports, and writes to globals are
-rejected.
+```lua
+inputs = {speed = "speed"},
+```
 
-State can contain finite scalars, simple tables with string or integer keys, vector and
-color values, quaternions, quads, Random values, and immutable image, font, mesh, and
-matrix handles. Copies preserve random state. Cyclic or shared tables, metatables,
-functions, and unsupported userdata are errors. The maximum nesting depth is 64.
+After creating an instance, `ball:inputs({speed = other.speed})` can bind it to another
+object's speed. Dependencies are evaluated before their dependents. Cycles are rejected.
+Omitting `inputs` conservatively includes the object's own properties. `inputs = {}`
+declares no dependencies.
 
-## Reproducible randomness
+Keep changing data in `state`. A mutable variable captured outside `update` would not
+be restored when seeking, so simulation callbacks reject such captures.
 
-Use `k.random(seed)` in state. `number` returns a value in [0,1). `range` and
-`range_integer` use an exclusive upper bound. Other methods include `chance`, `normal`,
-`choose`, `choose_multiple`, and `shuffle`. `fork(key)` derives an independent generator
-without consuming the parent. See [Random](../api/Random.md).
+## Schedule a state change
 
-`math.random` is unavailable in simulation callbacks. Construction uses a fixed initial
-seed. Prefer ordered arrays when iteration order affects numeric results.
+Use `mutate` for an event that changes state at a known time. Here the particle returns
+to the left and clears its trail after one second. The operation is part of the
+timeline, so seeking across it reproduces the same reset.
+
+<GuideDemo name="simulation-mutate" caption="At one second, the position and trail reset. Integration then continues.">
+
+<!-- focus: simulation-mutate -->
+```lua
+s:wait(1)
+ball:mutate(function(state)
+    state.x = -240
+    state.trail = {}
+end)
+s:wait(1)
+```
+
+<template #source>
+
+<!-- demo: simulation-mutate -->
+<<< ./projects/simulation/scenes/02-simulation-mutate.lua
+
+</template>
+
+</GuideDemo>
+
+`ball:state()` returns a copy for inspection. Editing that copy does not change the
+simulation. Property `reset` and snapshots also do not reset simulated state. Use a
+scheduled mutation for that behavior.
+
+## Checkpoints and seeking
+
+`ball:checkpoint()` schedules a saved state at the current time. It can reduce the
+work needed to reconstruct later frames. It does not create a visible effect. On a
+backward seek, the engine restores a compatible checkpoint and replays the needed steps.
+
+Changes to logic, initial state, FPS, lifetime, dependencies, or scheduled operations
+invalidate affected history. Visual properties that are not simulation inputs can
+preserve compatible checkpoints. Keep dependencies explicit for expensive simulations.
+
+For manual stepping, set `ball.auto_update:set(false)` and call `ball:update()` at
+the timeline times where a step should occur. Ordinary simulations can leave automatic
+updates enabled.
+
+## Reproducible state
+
+State supports finite scalar values, simple tables, supported vectors and colors,
+Random values, and immutable resource handles. Functions, metatables, cyclic or shared
+tables, and unsupported userdata are rejected. Each instance receives its own copy.
+
+For randomness, put `k.random(seed)` in state and draw values inside `update`. Checkpoints
+then preserve the random sequence. Do not use `math.random`, sample random values in
+`draw`, or recreate the generator at every step. See [Random](random.md).
+
+Update and mutate run in an isolated environment. Pure helper modules are allowed.
+Mutable exports and writes to globals are not. If a result changes when seeking, check
+state, inputs, and randomness before adding checkpoints. Checkpoints accelerate correct
+reconstruction. They cannot repair undeclared dependencies.

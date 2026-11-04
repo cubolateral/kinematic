@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Easing",
+    scenes: [
+        "scenes/01-easing-compare.lua",
+        "scenes/02-easing-overshoot.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

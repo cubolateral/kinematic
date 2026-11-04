@@ -19,6 +19,35 @@ impl State {
         }
     }
 
+    pub fn logo(&self, ui: &Ui) {
+        let [x, y] = ui.cursor_screen_pos();
+        let frame = ui.frame_height();
+        let size = ui.calc_text_size(icons::HOME)[0];
+        let padding = (frame - size) * 0.5;
+        let point = |px: f32, py: f32| {
+            [
+                x + padding + (px - 0.125) * size / 0.75,
+                y + padding + (py - 0.125) * size / 0.75,
+            ]
+        };
+        let color = ui.style_color(dear_imgui_rs::StyleColor::Text);
+        let draw = ui.get_window_draw_list();
+
+        draw.add_rect(point(0.125, 0.125), point(0.3125, 0.875), color)
+            .filled(true)
+            .build();
+        draw.add_triangle(
+            point(0.875, 0.875),
+            point(0.875, 0.125),
+            point(0.3125, 0.5),
+            color,
+        )
+        .filled(true)
+        .build();
+        ui.dummy([frame; 2]);
+        ui.same_line();
+    }
+
     pub fn finish(&mut self, ui: &Ui, settings_open: Option<&mut bool>) {
         let spacing = ui.clone_style().item_spacing()[0];
         let settings_width = if settings_open.is_some() {

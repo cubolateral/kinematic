@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Canvases and projections",
+    scenes: [
+        "scenes/01-canvas-panel.lua",
+        "scenes/02-canvas-projection.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

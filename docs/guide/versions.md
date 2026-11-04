@@ -1,3 +1,7 @@
+---
+pageClass: guide-page
+---
+
 # Versions and migrations
 
 ## Identify the documentation version
@@ -13,30 +17,25 @@ complete artifact containing development, stable, and tagged versions. Publishin
 development does not remove stable docs. API source links use the documented tag or
 revision.
 
-## Releases and editorial fixes
+## Migrate a project
 
-The release workflow validates Windows and Linux builds and creates a draft for a
-Cargo-compatible `vX.Y.Z` tag. A maintainer reviews and publishes the draft manually.
-The documentation workflow runs after publication and reads the stable tag. It does not
-rely on a second workflow being triggered by a draft created with `GITHUB_TOKEN`.
+1. Match the documentation menu to the application version you are running.
+2. Copy the project before opening it in a newer version, including its scene metadata.
+3. Read the migrations below and update affected Lua calls.
+4. Open the copy, resolve diagnostics, seek through each scene, and export a short check.
+5. Compare timing, event pauses, fonts, and audio before adopting the migrated copy.
 
-`docs/editorial.json` maps a tag to the full SHA of a commit containing corrected
-guides. Add the mapping and run the workflow manually. The fix can then be reproduced in
-later publications, while versions without a mapping keep the guides from their own tag.
-Runtime code, metadata, examples, and API sources still come from the stable tag. This
-allows explanations and links to be corrected without releasing an executable or
-presenting the development API as stable. Changes to the API or example behavior require
-a new application release.
-
-Before the first release with compatible documentation infrastructure, automation
-publishes only the development site. Tags that predate `--lua-definitions` are not
-presented as complete generated API references.
+The manifest's `version: 1` describes its file format, not the application release.
+Choose a tagged documentation copy when maintaining an older executable. Publication
+and editorial-fix procedures are described under [contributing](contributing.md#publish-with-github-pages).
 
 ## Existing migrations
 
 ### Audio
 
-The old `s:sound {...}` API was replaced with a resource and a player:
+The old `s:sound {...}` API was replaced with a resource and a player. Previously,
+synthesis parameters and playback were combined in the sound declaration. Now create the
+samples separately and schedule a player:
 
 ```lua
 local source = k.audio_synth {

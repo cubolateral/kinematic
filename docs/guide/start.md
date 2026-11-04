@@ -1,4 +1,11 @@
+---
+pageClass: guide-page
+---
+
 # Get started
+
+This guide assumes you know basic programming. If Lua is new to you, the
+[Lua conventions](lua.md) page covers the syntax used here.
 
 Kinematic is an animation editor for projects written in Lua 5.4. It runs your scene
 code, prepares animations, and evaluates the result at any point on the timeline.
@@ -31,78 +38,121 @@ To build from source, see [contributing](contributing.md).
 4. Use **Timeline** to choose a time. Press Space to play or pause when focus is outside a text field.
 5. Press `Ctrl+S` to save. Code changes update the preview after about 400 ms without typing. You do not need to save before previewing them.
 
+Guide previews use a 960 × 540 canvas at 30 FPS. Choose these values in Project
+settings to match their framing, or keep your own project settings and compare behavior.
+
 Take the [editor tour](editor.md) and learn about [project
 reloads](projects.md#reloads-and-revisions).
 
-## Lua essentials
+## Create and attach a circle
 
-A scene returns one function. The `s` parameter represents the scene, and `k` provides
-value and resource constructors. `local` declares a variable, `{}` creates a table, and
-`:` calls a method with its object as the first argument.
+Replace `scenes/intro.lua` with this scene. `s` is the scene passed to your function.
+`k` supplies values such as colors and vectors. A constructor creates an inactive object.
+`add` makes it visible in the world at the current timeline time.
 
+<GuideDemo name="first-circle" caption="A white circle at the center of the frame." still>
+
+<!-- demo: first-circle -->
+<<< ./projects/start/scenes/01-first-circle.lua
+
+</GuideDemo>
+
+The origin is at the center. Positive X points right and positive Y points down.
+This is a static image, so it needs no duration or wait. Try doubling `radius` to make the circle twice as wide without changing its center.
+
+## Give it an appearance
+
+Change just the constructor to control geometry and style. The outline has its own color
+and width, independently of the fill.
+
+<GuideDemo name="first-style" caption="A circle with a white outline and transparent fill." still>
+
+<!-- focus: first-style -->
 ```lua
-return function(s)
-    local ball = s:circle {
-        radius = 30,
-        fill = k.color("#38BDF8"),
-    }
-    s:world_2d():add(ball)
-
-    ball:to {position = k.vec2(200, 0)}:play(2)
-    s:wait(0.5)
-end
+s:circle {
+    fill = k.color("#00000000"),
+    stroke = k.color("#FFFFFF"),
+    stroke_width = 8,
+}
 ```
 
-`k.vec2` creates a value, while `s:circle` creates an object. `add` attaches the object
-to the scene hierarchy and gives it a lifetime. `to` prepares an animation, and
-`play(2)` schedules it for two seconds. `wait` reserves time without adding motion. Lua
-does not run the application loop.
+<template #source>
 
-## Your first 2D animation
+<!-- demo: first-style -->
+<<< ./projects/start/scenes/02-first-style.lua
 
-Follow the [2D Shapes example](../examples/2d.md). It creates a circle, adds it to the
-2D world, and animates its position, color, and opacity.
+</template>
 
-<<< ../../examples/lua/2d/scenes/intro.lua
+</GuideDemo>
 
-Try changing the destination to `k.vec2(0, -100)` and the duration to `1`. Compare
-`"linear"` with `"cubic_in_out"`. See
-[Easing](../api/Aliases.md#property-kinematic-easing) for the full list.
+The radius measures from center to edge. Change only `stroke_width` to `12` and compare
+the border while keeping the radius and fill unchanged.
+
+## Move over time
+
+`to` describes a destination. It does not run an animation. `play(1)` schedules that
+change over one second and advances the scene's scheduling cursor.
+
+<GuideDemo name="first-motion" caption="The circle travels from left to right with smooth easing, then holds.">
+
+<!-- focus: first-motion -->
+```lua
+ball:to { position = k.vec2(256, 0) }:play(1)
+```
+
+<template #source>
+
+<!-- demo: first-motion -->
+<<< ./projects/start/scenes/03-first-motion.lua
+
+</template>
+
+</GuideDemo>
+
+The circle covers 512 units in one second, then holds for one second. Change
+`play(1)` to `play(2)` to double the movement duration over the same distance. Use [easing](easing.md) to change speed within the movement.
+
+## Combine movement and color
+
+Put several destinations in one animation table to change position, radius, and fill together.
+
+<GuideDemo name="first-combined" caption="The circle moves right, grows, and turns blue together, then holds.">
+
+<!-- focus: first-combined -->
+```lua
+ball:to {
+    radius = 128,
+    position = { x = 256 },
+    fill = k.color("#008CFF"),
+}:play(1)
+```
+
+<template #source>
+
+<!-- demo: first-combined -->
+<<< ./projects/start/scenes/04-first-combined.lua
+
+</template>
+
+</GuideDemo>
+
+All three properties change over one second. The whole scene lasts two seconds,
+including the final pause. Try changing `play(1)` to `play(1/2)` to shorten the transition.
 
 ## Export your first MP4
 
-When the preview is ready, choose **Export → Export**. The video is saved to
-`output/<project name>.mp4`. Export uses the applied revision, even when the code has
-not been saved. Temporary Inspector changes are discarded. Choose **Cancel** in the
-Export menu to stop.
-
-To export from the command line while a graphical session is available:
+Choose **Export → Export**. Open `output/<project name>.mp4` and check the movement,
+color change, and final pause. Export uses the applied revision, including unsaved code
+that has successfully updated the preview. Temporary Inspector changes are discarded.
+Choose **Cancel** in the Export menu to stop.
 
 ```sh
 kinematic --render path/to/project
 ```
 
-See [export](export.md) for details about audio, revisions, and resolution.
+See [export](export.md) for scene exports, audio, and resolution. The complete
+[2D Shapes example](../examples/2d.md) remains available as a project to explore.
 
-## A first look at 3D
-
-Use `s:world_3d():add(...)` to add spatial objects and `s:view("3d")` to select the 3D
-world. The camera looks along negative Z, with positive Y pointing up. Rotations use
-quaternions:
-
-```lua
-return function(s)
-    s:view("3d")
-    local cube = s:cube {
-        albedo = k.color("#38BDF8"),
-        unlit = true,
-    }
-    s:world_3d():add(cube)
-
-    cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3)
-    s:wait(0.5)
-end
-```
-
-Explore the [3D primitives project](../examples/3d.md), which displays a built-in cube
-on its own canvas. Continue with [objects and composition](objects.md).
+Continue with [animation](animation.md), then [sequences](sequences.md) and
+[objects](objects.md). Explore [Text](text.md) and [LaTeX](latex.md) when adding labels
+and formulas to your scenes.

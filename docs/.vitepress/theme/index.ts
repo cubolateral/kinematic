@@ -1,4 +1,6 @@
 import DefaultTheme from 'vitepress/theme'
+import type { Theme } from 'vitepress'
+import GuideDemo from './GuideDemo.vue'
 import './style.css'
 
 const BACKGROUND = [10, 10, 10] as const
@@ -30,4 +32,9 @@ function applyTheme() {
 
 if (typeof document !== 'undefined') applyTheme()
 
-export default DefaultTheme
+export default {
+  extends: DefaultTheme,
+  enhanceApp({ app }) {
+    app.component('GuideDemo', GuideDemo)
+  },
+} satisfies Theme

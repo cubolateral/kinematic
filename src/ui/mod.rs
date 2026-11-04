@@ -58,6 +58,7 @@ fn draw_top_bar(
     };
 
     title_bar.begin(ui);
+    title_bar.logo(ui);
 
     {
         let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
@@ -334,6 +335,7 @@ impl Ui {
 
             if let Some(_bar) = ui.begin_main_menu_bar() {
                 self.title_bar.begin(ui);
+                self.title_bar.logo(ui);
                 self.title_bar
                     .finish(ui, Some(&mut self.settings.editor_open));
             }

@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Groups and layout",
+    scenes: [
+        "scenes/01-layout-directions.lua",
+        "scenes/02-layout-opacity.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

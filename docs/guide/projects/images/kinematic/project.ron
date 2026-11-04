@@ -1,0 +1,14 @@
+(
+    version: 1,
+    name: "Guide — Images",
+    scenes: [
+        "scenes/01-image-load.lua",
+        "scenes/02-image-aspect.lua",
+        "scenes/03-image-motion.lua",
+        "scenes/04-image-spatial.lua",
+        "scenes/05-image-sample.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

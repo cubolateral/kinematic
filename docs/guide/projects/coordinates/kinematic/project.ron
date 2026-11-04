@@ -1,0 +1,11 @@
+(
+    version: 1,
+    name: "Guide — Coordinates, transforms, and anchors",
+    scenes: [
+        "scenes/01-local-transform.lua",
+        "scenes/02-anchor-edge.lua",
+    ],
+    resolution: (960, 540),
+    fps: 30,
+    margin: (0, 0),
+)

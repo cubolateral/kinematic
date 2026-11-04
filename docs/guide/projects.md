@@ -1,4 +1,28 @@
+---
+pageClass: guide-page
+---
+
 # Projects and scenes
+
+## See how scenes form a video
+
+If `intro.lua` lasts two seconds and `outro.lua` lasts three, manifest order produces:
+
+```text
+Project time:  0                 2                          5
+Scenes:       [ Intro: 2 s.    ][ Outro: 3 s.              ]
+Local time:    0 → 2             0 → 3
+```
+
+Add both relative paths to `scenes` in that order. Each scene starts with its own local
+time zero. Project audio clips use absolute project time. Reverse the list to reverse
+the order of the exported scenes.
+
+To inspect reload behavior, change a circle's radius from `30` to `60` without saving.
+After the pending update completes, Preview shows the larger circle. Next enter an
+invalid radius such as `"large"`: the error appears, while the larger circle remains
+from the last applied revision. Correct the value, wait for a successful update, then
+save. Previewing, applying, and saving are separate operations.
 
 ## Project structure
 
@@ -40,7 +64,7 @@ new revision and does not change an export already in progress.
 
 ```lua
 -- modules/colors.lua.
-return {accent = k.color("#38BDF8")}
+return {accent = k.color("#4080FF")}
 ```
 
 ```lua
@@ -48,6 +72,7 @@ local colors = require("modules.colors")
 
 return function(s)
     s:world_2d():add(s:circle {fill = colors.accent})
+
     s:wait(1)
 end
 ```

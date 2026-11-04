@@ -1,95 +1,127 @@
+---
+pageClass: guide-page
+---
+
 # LaTeX
 
-`latex_2d` and `latex_3d` turn mathematical expressions into geometry. They use RaTeX
-and KaTeX fonts included with Kinematic. TeX is not run on your system. Use these
-objects for equations and mathematical symbols, [Text](text.md) for prose, and
-[Code](code.md) for source code.
+Use `latex_2d` for mathematical notation. Kinematic builds formula geometry with RaTeX
+and the bundled KaTeX fonts. A separate TeX installation is not needed. Start with a
+formula, then use `morph` to develop it or `fade` to introduce a different expression.
 
 ## Create a formula
 
-Pass an expression in the `text` field without `$` delimiters. `size` sets its size in
-local units, and `thickness` expands the strokes. The 2D object has fill and outline
-properties. The 3D object uses material properties.
+Pass the expression in `text`, without `$` delimiters. Lua long strings (`[[...]]`)
+keep backslashes intact, so `\frac` needs only one backslash in the source.
 
+<GuideDemo name="latex-formula" caption="The Pythagorean theorem rendered from the expression below." still>
+
+<!-- demo: latex-formula -->
+<<< ./projects/latex/scenes/01-latex-formula.lua
+
+</GuideDemo>
+
+`size` controls the typography in local units. Position, opacity, and anchors work as
+for other 2D objects. Fractions and exponents can extend above and below the baseline.
+
+## Compare morph modes
+
+Both videos change mean velocity into mean acceleration. Only the grouping flag changes.
+Compare the paths of matching glyphs with the behavior of complete layout groups.
+
+### Match glyphs: group = false
+
+<GuideDemo name="latex-morph-false" caption="Individual matching glyphs move into their new positions.">
+
+<!-- focus: latex-morph-false -->
 ```lua
-local formula = s:latex_2d {
-    text = [[\frac{a}{b} + \sqrt{x}]],
-    size = 64,
-    fill = k.color("#FFFFFF"),
-}
-s:world_2d():add(formula)
+formula:morph(
+    [[\text{mean acceleration} = \frac{\Delta\text{velocity}}{\Delta\text{time}}]],
+    false):play(1)
 ```
 
-Lua's long string syntax `[[...]]` avoids doubling backslashes. With a quoted string,
-use `"\\frac{a}{b}"` for the same input. A formula is a regular scene object. Attach it
-to a world or group, then use its position, scale, opacity, bounds, and anchors.
+<template #source>
 
-## Syntax and compatibility
+<!-- demo: latex-morph-false -->
+<<< ./projects/latex/scenes/02-latex-morph-false.lua
 
-The renderer supports a subset of mathematical display-style syntax. Do not pass
-`\\documentclass`, preambles, auxiliary files, or TeX package commands. Installing TeX
-does not add support. An invalid or unsupported expression can fail when its geometry is
-requested, including when it is used later in a transition.
+</template>
 
-Check expressions in the Kinematic version you plan to use. `--check` verifies
-construction and evaluation. Render the scene to inspect geometry and appearance.
-Support for an individual command does not mean full LaTeX documents are compatible.
+</GuideDemo>
 
-## Morph and fade
+### Match groups: group = true
 
-`formula:morph(new_text, group?)` prepares a transition that moves matching glyphs and
-fades in or out the rest. With `group=true`, words and symbols are matched as groups
-instead of individual glyphs. The default is false.
+<GuideDemo name="latex-morph-true" caption="Matching groups move together, while changed groups fade.">
 
-`formula:fade(new_text)` prepares a crossfade of the full expression. Both methods
-return an animation definition. Call `:play(duration,easing)` to schedule it. Creating
-the definition does not change the formula or timeline.
+<!-- focus: latex-morph-true -->
+```lua
+formula:morph(
+    [[\text{mean acceleration} = \frac{\Delta\text{velocity}}{\Delta\text{time}}]],
+    true):play(1)
+```
 
-<<< ../../examples/lua/latex/scenes/intro.lua
+<template #source>
 
-The [LaTeX project](../examples/latex.md) keeps the formula centered, changes terms with
-morph, and then replaces the block with fade. Color and opacity use regular property
-animations.
+<!-- demo: latex-morph-true -->
+<<< ./projects/latex/scenes/03-latex-morph-true.lua
 
-## Position and bounds
+</template>
 
-Bounds depend on the expression. Fractions, radicals, and exponents change its height
-and width. Use `bounds`, `box_size`, and anchors to align a formula with other objects.
-During a transition, allow room for both the old and new expression. Do not size the
-layout for only the initial text.
+</GuideDemo>
 
-Font size and scale are separate controls. `size` affects typography geometry, while
-`scale` transforms the object and its descendants. Avoid compensating for a distant
-camera with very large text without checking the final resolution and readability.
+With `false`, matching symbols can travel separately between the expressions. With `true`,
+the renderer matches whole layout groups, including fraction and script structure.
+A changed group can fade instead of separating into individual glyphs.
+
+## Fade to a new formula
+
+Use `fade` when two expressions should replace one another as complete blocks. Their
+opacities overlap during the transition. Matching glyphs do not move between formulas.
+
+<GuideDemo name="latex-fade" caption="One equation crossfades into another without matching their terms.">
+
+<!-- focus: latex-fade -->
+```lua
+formula:fade([[x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}]]):play(1)
+```
+
+<template #source>
+
+<!-- demo: latex-fade -->
+<<< ./projects/latex/scenes/04-latex-fade.lua
+
+</template>
+
+</GuideDemo>
+
+Both transitions return animation definitions. Use `play(duration, easing)` to schedule
+them, just as with property animations. Use ordinary `to` animations for position,
+color, or opacity rather than changing the expression to create those effects.
+
+## Supported syntax
+
+The renderer accepts a subset of mathematical display-style syntax, not full LaTeX
+documents. Do not include preambles, `\documentclass`, or package-loading commands.
+Installing TeX does not extend the supported syntax.
+
+If a formula fails, first check balanced braces and backslashes. A quoted Lua string
+needs `"\\frac{a}{b}"`. A long string needs `[[\frac{a}{b}]]`. Try the shortest failing
+expression to isolate an unsupported command. Check every destination formula too,
+since transitions also need to build geometry.
 
 ## Formulas in 3D
 
-`latex_3d` uses `vec3` position and scale, a quaternion, and material properties. Attach
-it to the 3D world or a 3D canvas. Its apparent size depends on the camera:
+Use `latex_3d` to place a formula in space. A full turn makes the perspective visible
+from every angle. Its size uses spatial units, and `albedo` supplies its material color. An unlit material keeps it readable without adding lights.
 
-```lua
-local formula = s:latex_3d {
-    text = [[e^{i\pi}+1=0]],
-    size = 1,
-    albedo = k.color("#FFFFFF"),
-    unlit = true,
-}
-s:world_3d():add(formula)
-s:view("3d")
+<GuideDemo name="latex-spatial" caption="The formula completes a full turn in a continuous five-second loop.">
 
-formula:morph("a^2+b^2=c^2"):play(1)
-```
+<!-- demo: latex-spatial -->
+<<< ./projects/latex/scenes/05-latex-spatial.lua
 
-LaTeX2D and LaTeX3D provide morph and fade. Do not assume other text objects share this
-list. Text3D, for example, has morph but no fade method. The [generated API
-reference](../api/Latex2D.md) lists each type separately.
+</GuideDemo>
 
-## Performance and troubleshooting
+Camera distance changes the apparent size. Keep labels in 2D when they should stay
+fixed on screen. Position uses `vec3`, and rotation uses a quaternion.
 
-The renderer reuses mathematical geometry. A sequence of large or very different
-expressions increases preparation and render time. Test with a shorter expression to
-find a problematic command. Check escaped backslashes, balanced braces, and the absence
-of document delimiters.
-
-See [Latex2D](../api/Latex2D.md), [Latex2DOptions](../api/Latex2DOptions.md),
-[Latex3D](../api/Latex3D.md), and [Latex3DOptions](../api/Latex3DOptions.md).
+Latex2D and Latex3D support both `morph` and `fade`. See
+[Latex2D](../api/Latex2D.md) and [Latex3D](../api/Latex3D.md) for their options.
