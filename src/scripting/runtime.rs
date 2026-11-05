@@ -1976,6 +1976,51 @@ end
     }
 
     #[test]
+    fn canvas_ambient_lighting_animates_and_seeks_independently() {
+        use crate::core::{objects::AmbientLight3D, types::Color};
+
+        let scene = load(
+            r##"
+return function(s)
+    local world = s:world_3d()
+    local other = s:canvas_3d {
+        id = 'other',
+        ambient_color = k.color('#0000FF'),
+        ambient_intensity = 0.2,
+    }
+    s:root():add(other)
+    assert(math.abs(world.ambient_intensity:get() - 0.4) < 0.000001)
+    world:to {
+        ambient_color = k.color('#FF0000'),
+        ambient_intensity = 0,
+    }:play(2, 'linear')
+end
+"##,
+        );
+
+        for (time, intensity, color) in [
+            (2.0, 0.0, Color::RED),
+            (1.0, 0.2, Color::new(1.0, 0.5, 0.5, 1.0)),
+            (0.0, 0.4, Color::WHITE),
+        ] {
+            scene.update(time).unwrap();
+
+            let world = scene.scene.world();
+            let ambient = world
+                .get::<&AmbientLight3D>(scene.scene.world_3d().entity())
+                .unwrap();
+            let other = world
+                .get::<&AmbientLight3D>(scene.entity("other").unwrap())
+                .unwrap();
+
+            assert!((ambient.ambient_intensity - intensity).abs() < 1e-6);
+            assert_eq!(ambient.ambient_color, color);
+            assert_eq!(other.ambient_intensity, 0.2);
+            assert_eq!(other.ambient_color, Color::BLUE);
+        }
+    }
+
+    #[test]
     fn canvas_filters_are_animatable_enums_in_lua() {
         use crate::core::objects::{CanvasFilter, CanvasSettings};
 

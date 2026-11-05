@@ -52,9 +52,43 @@ their options.
 
 ## Choose a light
 
-Directional, point, and spot lights use different spatial models. The three videos
-below use a red pyramid, a green cube, and a blue sphere to show each light. Lights must be
-attached to the canvas containing the objects they illuminate.
+Ambient light sets the canvas's uniform illumination. Directional, point, and spot
+lights use different spatial models. The examples below use a pyramid, a cube,
+and a sphere to show each effect. Light objects must be attached to the
+canvas containing the objects they illuminate.
+
+### Ambient: uniform canvas lighting
+
+Each 3D canvas owns `ambient_color` and `ambient_intensity`. The defaults are white
+and `0.4`. Ambient light illuminates every surface uniformly, independent of position
+or orientation. Intensity must be nonnegative; color alpha does not affect lighting.
+
+<GuideDemo name="light-ambient" caption="Three white shapes rotate as ambient light dims, brightens, then shifts through red, green, and blue.">
+
+<!-- focus: light-ambient -->
+```lua
+s:world_3d().ambient_intensity:to(0):play(1)
+s:wait(0.5)
+s:world_3d().ambient_intensity:to(1):play(1)
+
+s:world_3d().ambient_color:to(k.color("#FF0000")):play(1)
+s:world_3d().ambient_color:to(k.color("#00FF00")):play(1)
+s:world_3d().ambient_color:to(k.color("#0000FF")):play(1)
+```
+
+<template #source>
+
+<!-- demo: light-ambient -->
+<<< ./projects/graphics-3d/scenes/02-light-ambient.lua
+
+</template>
+
+</GuideDemo>
+
+The example keeps the automatic directional light, which remains active even when
+ambient intensity is zero. Add a directional light with `intensity = 0` to disable
+that fallback and isolate ambient lighting. These properties also apply to separate `canvas_3d`
+objects. See [Canvas3D](../api/Canvas3D.md) and [Canvas3DOptions](../api/Canvas3DOptions.md).
 
 ### Directional: one direction everywhere
 
@@ -69,13 +103,13 @@ fixed while the group of shapes rotates.
 local light = s:directional_light {
     rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
 }
-world:add(light)
+s:world_3d():add(light)
 ```
 
 <template #source>
 
 <!-- demo: light-directional -->
-<<< ./projects/graphics-3d/scenes/02-light-directional.lua
+<<< ./projects/graphics-3d/scenes/03-light-directional.lua
 
 </template>
 
@@ -104,7 +138,7 @@ local light = s:point_light {
 <template #source>
 
 <!-- demo: light-point -->
-<<< ./projects/graphics-3d/scenes/03-light-point.lua
+<<< ./projects/graphics-3d/scenes/04-light-point.lua
 
 </template>
 
@@ -140,7 +174,7 @@ light.rotation:to(k.axis_angle(k.vec3(0, 1, 0), -1)):play(2)
 <template #source>
 
 <!-- demo: light-spot -->
-<<< ./projects/graphics-3d/scenes/04-light-spot.lua
+<<< ./projects/graphics-3d/scenes/05-light-spot.lua
 
 </template>
 
@@ -161,7 +195,7 @@ A material comparison is easier when geometry, camera, and light stay fixed.
 <GuideDemo name="material-compare" caption="Left: default dielectric. Middle: rough metal. Right: unlit white." still>
 
 <!-- demo: material-compare -->
-<<< ./projects/graphics-3d/scenes/05-material-compare.lua
+<<< ./projects/graphics-3d/scenes/06-material-compare.lua
 
 </GuideDemo>
 

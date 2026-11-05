@@ -10,11 +10,11 @@ use crate::core::{
         MeshProgramCache, RenderContext3D,
     },
     objects::{
-        CanvasDimension, CanvasSettings, CanvasTexture, DirectionalLightKind, ImageShaderData,
-        ImageShaderImage, Light3D, LightAttenuation, PointLightKind, SpotLightCone, SpotLightKind,
-        draw_canvas2d_with_shader_images, draw_image_shader_source, effective_mesh_shader,
-        global_matrix3d, global_rotation3d, global_transform, image_shader_bounds,
-        object_follows_camera,
+        AmbientLight3D, CanvasDimension, CanvasSettings, CanvasTexture, DirectionalLightKind,
+        ImageShaderData, ImageShaderImage, Light3D, LightAttenuation, PointLightKind,
+        SpotLightCone, SpotLightKind, draw_canvas2d_with_shader_images, draw_image_shader_source,
+        effective_mesh_shader, global_matrix3d, global_rotation3d, global_transform,
+        image_shader_bounds, object_follows_camera,
     },
 };
 use crate::renderer::editor_guides::{EditorGuideRenderer, EditorGuides3D};
@@ -43,7 +43,6 @@ pub(crate) struct Canvases {
     target_usage: HashMap<CanvasTexture, u64>,
     geometry_usage: HashMap<GeometryKey, u64>,
     physical: three_d::PhysicalMaterial,
-    ambient: three_d::AmbientLight,
     sun: three_d::DirectionalLight,
     editor_guides: EditorGuideRenderer,
     context: three_d::Context,
@@ -71,7 +70,6 @@ impl Canvases {
             target_usage: HashMap::new(),
             geometry_usage: HashMap::new(),
             physical: three_d::PhysicalMaterial::default(),
-            ambient: three_d::AmbientLight::new(&context, 0.4, three_d::Srgba::WHITE),
             sun: three_d::DirectionalLight::new(
                 &context,
                 2.0,
@@ -289,7 +287,8 @@ impl Canvases {
         visible_subtree_3d(&world, entity, &mut self.visible);
 
         let lights = scene_lights(&world, &self.visible, &self.context)?;
-        let mut light_refs: Vec<&dyn three_d::Light> = vec![&self.ambient];
+        let ambient = ambient_light(&world, entity, &self.context)?;
+        let mut light_refs: Vec<&dyn three_d::Light> = vec![&ambient];
 
         if lights.is_empty() {
             light_refs.push(&self.sun);
@@ -457,7 +456,8 @@ impl Canvases {
                     visible_subtree_3d(&world, *entity, &mut self.visible);
 
                     let lights = scene_lights(&world, &self.visible, context)?;
-                    let mut light_refs: Vec<&dyn three_d::Light> = vec![&self.ambient];
+                    let ambient = ambient_light(&world, *entity, context)?;
+                    let mut light_refs: Vec<&dyn three_d::Light> = vec![&ambient];
 
                     if lights.is_empty() {
                         light_refs.push(&self.sun);
@@ -701,6 +701,33 @@ impl Drop for Canvases {
             programs.clear();
         }
     }
+}
+
+fn ambient_light(
+    world: &hecs::World,
+    entity: hecs::Entity,
+    context: &three_d::Context,
+) -> Result<three_d::AmbientLight, String> {
+    let ambient = world
+        .get::<&AmbientLight3D>(entity)
+        .map_err(|_| "Canvas ambient lighting is missing.")?;
+
+    if !ambient.ambient_intensity.is_finite() || ambient.ambient_intensity < 0.0 {
+        return Err("Ambient light intensity must be finite and nonnegative.".into());
+    }
+
+    let color = three_d::Srgba::new(
+        light_channel(ambient.ambient_color.r),
+        light_channel(ambient.ambient_color.g),
+        light_channel(ambient.ambient_color.b),
+        255,
+    );
+
+    Ok(three_d::AmbientLight::new(
+        context,
+        ambient.ambient_intensity,
+        color,
+    ))
 }
 
 fn scene_lights(

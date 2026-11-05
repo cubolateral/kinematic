@@ -1,14 +1,35 @@
-use kinematic_macros::{Node, Object};
+use kinematic_macros::{Node, Object, Trackable};
 
 use crate::core::{
     Tween,
     components::{__KinematicCamera3DTweenFields, Camera3D, Draw3D},
-    types::{Quaternion, Vector3},
+    types::{Color, Quaternion, Vector3},
 };
 
 use super::super::canvas::{
     CanvasDimension, CanvasSettings, CanvasTexture, scene_identity, validate_canvas,
 };
+
+/// Uniform ambient lighting owned by a three-dimensional canvas.
+#[derive(Clone, Trackable)]
+pub struct AmbientLight3D {
+    /// Ambient light color. Alpha does not affect lighting.
+    #[track]
+    pub ambient_color: Color,
+    /// Nonnegative ambient light intensity multiplier.
+    #[track(min = 0.0)]
+    pub ambient_intensity: f32,
+}
+
+impl Default for AmbientLight3D {
+    fn default() -> Self {
+        Self {
+            ambient_color: Color::WHITE,
+            ambient_intensity: 0.4,
+        }
+    }
+}
+
 /// Independent 3D perspective viewport with its own camera.
 #[derive(Object, Node)]
 #[object(spatial = "none", builder = "canvas_3d", image_shader)]
@@ -18,6 +39,8 @@ pub struct Canvas3D {
     #[trackable]
     pub camera: Camera3D,
     #[trackable]
+    pub ambient: AmbientLight3D,
+    #[trackable]
     pub draw: Draw3D,
 }
 
@@ -26,6 +49,7 @@ impl Default for Canvas3D {
         Self {
             settings: CanvasSettings::new(CanvasDimension::Three),
             camera: Camera3D::default(),
+            ambient: AmbientLight3D::default(),
             draw: Draw3D::default(),
         }
     }

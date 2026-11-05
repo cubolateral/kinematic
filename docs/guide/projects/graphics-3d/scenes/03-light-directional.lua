@@ -1,15 +1,14 @@
 return function(s)
 	s:view("3d")
-	local world = s:world_3d()
-	world.camera_position:set(k.vec3(0, 0, 5))
+	s:world_3d().camera_position:set(k.vec3(0, 0, 5))
 
 	local light = s:directional_light {
 		rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
 	}
-	world:add(light)
+	s:world_3d():add(light)
 
 	local group = s:group_3d {}
-	world:add(group)
+	s:world_3d():add(group)
 
 	group:add(s:pyramid {
 		position = k.vec3(-1.5, 0, 0),
