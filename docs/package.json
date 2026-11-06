@@ -3,12 +3,13 @@
   "private": true,
   "scripts": {
     "docs:generate": "python3 scripts/docs.py generate",
-    "docs:dev": "npm run docs:generate && vitepress dev .",
-    "docs:build": "npm run docs:generate && vitepress build . && python3 scripts/docs.py links",
+    "docs:dev": "vitepress dev .",
+    "docs:build": "vitepress build . && python3 scripts/docs.py links",
     "docs:preview": "vitepress preview .",
     "docs:examples": "python3 scripts/docs.py examples",
     "docs:media": "python3 scripts/docs.py media",
-    "docs:test": "python3 -m unittest discover -s scripts -p 'test_docs.py'"
+    "docs:test": "python3 -m unittest discover -s scripts -p 'test_docs.py'",
+    "docs:update": "python3 scripts/docs.py update"
   },
   "devDependencies": {
     "vitepress": "1.6.4"

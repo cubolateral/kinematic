@@ -8,12 +8,12 @@ pageClass: guide-page
 
 The menu and footer identify development or the stable documentation. `/dev/` follows
 the default branch. `/stable/` documents the latest published release, with API pages
-and projects generated from its tag. The application version is set in
+and previews saved in its tag. The application version is set in
 `workspace.package.version`. The manifest remains at `version: 1` while that format is
 supported.
 
-Each compatible tag also has a copy under `/versions/vX.Y.Z/`. Automation builds a
-complete artifact containing development, stable, and tagged versions. Publishing
+Each tag containing versioned documentation assets also has a copy under
+`/versions/vX.Y.Z/`. Automation builds a complete artifact containing development, stable, and tagged versions. Publishing
 development does not remove stable docs. API source links use the documented tag or
 revision.
 

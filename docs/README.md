@@ -4,14 +4,9 @@ This directory contains the VitePress site, its dependencies, scripts, tests, an
 configuration. The GitHub Actions workflow lives at `.github/workflows/docs.yml`, where
 GitHub requires it.
 
-From the repository root, prepare the runtime as described in
-[DEVELOPMENT.md](../DEVELOPMENT.md), then build the application:
-
-```sh
-cargo build --locked
-```
-
-Run the site commands from `docs/`:
+The generated API, Lua definitions, preview videos, posters, and static assets are
+versioned in `api/` and `public/`. Viewing or building the site needs only Node.js 22
+or later and Python 3.12:
 
 ```sh
 cd docs
@@ -19,20 +14,27 @@ npm ci
 npm run docs:dev
 ```
 
-Open the address printed in the terminal. To generate previews and build a validated
-static site, make sure FFmpeg and ffprobe are on your PATH and an OpenGL session is
-available:
+After changing the Lua API, renderer, or example projects, update the generated files
+locally before committing:
 
 ```sh
-npm run docs:media
+npm run docs:update
+npm run docs:test
 npm run docs:build
-npm run docs:preview
 ```
 
-`npm run docs:test` checks API generation and version publishing. `npm run
-docs:examples` runs `--check` on each project. Previews, API pages, and caches are
-generated locally and ignored by Git. Temporary files go in `.cache/`, and the static
-site goes in `.vitepress/dist/`.
+`docs:update` prepares the runtime, builds the application with Cargo, validates the
+example projects, generates the API, and exports videos and posters. It needs the
+native dependencies in [DEVELOPMENT.md](../DEVELOPMENT.md), PowerShell 7, FFmpeg and
+ffprobe on PATH, and a working OpenGL session. Review and commit changes under
+`api/` and `public/` together with their sources.
+
+`docs:dev` and `docs:build` use the versioned files directly. The GitHub documentation
+workflow tests and builds the static site without Cargo, FFmpeg, or rendering. Temporary
+files go in `.cache/`, and the static site goes in `.vitepress/dist/`.
+
+For individual updates, `docs:generate` regenerates the API using an already-built
+binary, `docs:examples` validates projects, and `docs:media` exports previews.
 
 See the [contribution guide](guide/contributing.md) for API documentation, version
 configuration, and GitHub Pages publishing.

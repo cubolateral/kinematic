@@ -150,7 +150,7 @@ function Property:play(easing) end'''
             self.assertEqual(docs.property_default(description), ('', description))
 
     def test_registered_functions_are_preserved_once_with_their_annotations(self):
-        source = docs.run(docs.binary(), '--lua-definitions', capture_output=True, text=True).stdout
+        source = (docs.DOCS / 'public/kinematic.lua').read_text()
         pages = docs.api_pages(source)
         generated = '\n'.join('\n'.join(blocks) for blocks in pages.values())
         for line in source.splitlines():
@@ -192,6 +192,8 @@ function Property:play(easing) end'''
                 root = Path(temporary)
                 for name, content in {
                     'docs/index.md': 'Corrected guide.',
+                    'docs/api/Scene.md': 'https://github.com/owner/repo/blob/main/src/api.lua',
+                    'docs/public/kinematic.lua': 'Tagged Lua definitions.',
                     'docs/editorial.json': json.dumps({editorial_tag: 'a' * 40} if editorial_tag else {}),
                     'docs/package.json': '{}', 'docs/package-lock.json': '{}',
                     'docs/scripts/docs.py': '', 'docs/scripts/test_docs.py': '', 'docs/scripts/docs_release.py': '',
@@ -200,11 +202,12 @@ function Property:play(easing) end'''
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text(content)
                 (root / 'docs/node_modules').mkdir()
-                (root / 'target/runtime').mkdir(parents=True)
                 def execute(*args, cwd=root, **kwargs):
+                    self.assertNotIn(args[0], ('cargo', 'pwsh', 'xvfb-run'))
+                    self.assertNotIn(args, [('npm', 'run', 'docs:examples'), ('npm', 'run', 'docs:media')])
                     result = ''
                     if args[:3] == ('gh', 'api', '--paginate'):
-                        result = 'v0.1.0\n'
+                        result = 'v0.0.1\nv0.1.0\n'
                     elif args[:2] == ('gh', 'api'):
                         result = json.dumps({'tag_name': 'v0.1.0'})
                     elif args[:2] == ('git', 'archive'):
@@ -213,13 +216,17 @@ function Property:play(easing) end'''
                         with tarfile.open(fileobj=buffer, mode='w') as archive:
                             archive.add(root / 'docs/index.md', arcname='docs/index.md')
                             archive.add(root / 'docs/editorial.json', arcname='docs/editorial.json')
+                            archive.add(root / 'docs/api', arcname='docs/api')
+                            archive.add(root / 'docs/public', arcname='docs/public')
                         result = buffer.getvalue()
-                    elif args[:2] == ('git', 'show'):
-                        result = '--lua-definitions'
+                    elif args[:2] == ('git', 'ls-tree'):
+                        result = '' if args[4] == 'v0.0.1' else 'docs/public/kinematic.lua'
                     elif args[:3] == ('git', 'worktree', 'add'):
                         checkout = Path(args[-2])
                         (checkout / 'docs').mkdir(parents=True)
                         (checkout / 'docs/index.md').write_text('Tagged guide.')
+                        docs.shutil.copytree(root / 'docs/api', checkout / 'docs/api')
+                        docs.shutil.copytree(root / 'docs/public', checkout / 'docs/public')
                         (checkout / 'src').mkdir()
                         (checkout / 'src/api.lua').write_text('Tagged runtime.')
                     elif args == ('npm', 'run', 'docs:build'):
@@ -229,6 +236,9 @@ function Property:play(easing) end'''
                     return docs.subprocess.CompletedProcess(args, 0, result)
                 with patch.object(docs_release, 'ROOT', root), patch.object(docs_release, 'run', execute), patch.dict(docs.os.environ, {'GH_REPO': 'owner/kinematic'}):
                     docs_release.build()
+                self.assertFalse((root / 'docs/.cache/releases/v0.0.1').exists())
+                self.assertIn('/blob/v0.1.0/src/', (root / 'docs/.cache/releases/v0.1.0/docs/api/Scene.md').read_text())
+                self.assertEqual((root / 'docs/.cache/releases/v0.1.0/docs/public/kinematic.lua').read_text(), 'Tagged Lua definitions.')
                 self.assertEqual((root / 'docs/.cache/pages/stable/index.html').read_text(), expected)
                 self.assertEqual((root / 'docs/.cache/pages/versions/v0.1.0/index.html').read_text(), expected)
                 self.assertEqual((root / 'docs/.cache/releases/v0.1.0/src/api.lua').read_text(), 'Tagged runtime.')

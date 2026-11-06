@@ -45,8 +45,13 @@ jobs:
       - name: Install Linux build and graphics dependencies
         if: runner.os == 'Linux'
         run: |
+          curl --fail --silent --show-error https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /usr/share/keyrings/llvm.asc > /dev/null
+          echo 'deb [signed-by=/usr/share/keyrings/llvm.asc] https://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main' | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build pkg-config libfontconfig1-dev libfreetype6-dev libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev xvfb
+          sudo apt-get install -y clang-20 libclang-20-dev cmake ninja-build pkg-config libfontconfig1-dev libfreetype6-dev libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev xvfb
+          echo 'CC=clang-20' >> "$GITHUB_ENV"
+          echo 'CXX=clang++-20' >> "$GITHUB_ENV"
+          echo 'LIBCLANG_PATH=/usr/lib/llvm-20/lib' >> "$GITHUB_ENV"
 
       - name: Prepare dependencies
         shell: pwsh

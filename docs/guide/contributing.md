@@ -12,39 +12,40 @@ native dependencies and distribution.
 
 ## Run the documentation site locally
 
-Build the Rust application from the repository root, then run npm commands from `docs/`.
-Install Node.js 22 or later, Python 3.12, and FFmpeg/ffprobe on PATH to generate and
-check preview videos and posters. Prepare the runtime as described in DEVELOPMENT and
-build the binary before generating the API:
+Install Node.js 22 or later and Python 3.12, then run npm commands from `docs/`:
 
 ```sh
-cargo build --locked
 cd docs
 npm ci
 npm run docs:dev
 ```
 
+API pages, Lua definitions, videos, posters, and static assets are versioned. The site
+uses these files directly, so editing prose and building the site do not need Rust or
+OpenGL.
+
 The site extends the VitePress theme with Kinematic's colors, corner radii, borders,
 and control states from `packages/kinematic-ui/src/theme.rs`. Shared styles and the
 JetBrains Mono font are configured in `docs/.vitepress/theme/`. Navigation, layout,
 search, and syntax highlighting use VitePress components. Font licenses are in
-`assets/fonts/`. `docs:dev`
-generates the API before starting the server. If Rust metadata or Lua annotations
-change, rebuild the binary and run `npm run docs:generate` again.
+`assets/fonts/`.
+
+Before committing changes to the Lua API, renderer, or example projects, prepare the
+native dependencies from DEVELOPMENT.md and make PowerShell 7, FFmpeg, ffprobe, and
+an OpenGL session available. Run:
 
 ```sh
+npm run docs:update
 npm run docs:test
-
-npm run docs:examples
-npm run docs:media
-
 npm run docs:build
 npm run docs:preview
 ```
 
-`docs:media` needs OpenGL and audio configured. `docs:build` checks internal links,
-anchors, and assets. Generate media before the build because example pages use real
-videos and posters.
+`docs:update` prepares the runtime, builds the application, validates examples,
+generates the API, and renders all previews. Review and commit the generated files
+with their sources. `docs:build` uses the saved files and checks internal links,
+anchors, and assets. For focused local updates, `docs:generate` regenerates the API
+from an already-built binary and `docs:media` renders previews.
 
 Environment variables: `KINEMATIC_BIN` selects a built binary, `DOCS_BASE` changes the
 base path (default `/kinematic/`), `DOCS_VERSION` identifies the version, and `DOCS_REF`
@@ -60,8 +61,8 @@ combines these annotations with `src/scripting/api.lua` and `property.lua`. It d
 use rustdoc.
 
 Document objects, fields, and methods next to their declarations. Update Lua annotations
-for shared operations. Do not edit `docs/api/` or `docs/public/`: they are generated and
-ignored by Git. Avoid maintaining duplicate property or default lists, and do not expose
+for shared operations. Do not edit `docs/api/` or `docs/public/`: they are generated
+locally and versioned in Git. Avoid maintaining duplicate property or default lists, and do not expose
 Rust types for documentation.
 
 Tests check function and field presence, method isolation by type, and reproducible
@@ -74,7 +75,7 @@ original Lua files.
 Each project under `examples/lua/` contains a manifest, scene files, and only the assets
 it needs. The generator discovers manifests. Keep generated caches and output files out
 of the source projects. Videos and images are rendered from clean copies under `docs/.cache/media/`
-and stay out of Git.
+and copied to the versioned `docs/public/previews/` directory.
 
 Review each example's opening, development, and ending, along with readability, motion,
 audio, and shaders. `--check` does not replace watching the render. For Rust changes,
@@ -96,14 +97,16 @@ stable when a release is available, and to development before the first release.
 
 The existing release workflow continues to create drafts after validating executables.
 Publishing the draft starts the stable documentation build, which checks out the
-matching tag. The workflow does not depend on an event created with `GITHUB_TOKEN` to
-continue.
+matching tag and uses its saved API and previews, without compiling Rust or rendering.
+Tags created before generated documentation was versioned are skipped. The workflow
+does not depend on an event created with `GITHUB_TOKEN` to continue.
 
 To republish an editorial fix, run **Documentation** manually. Add the tag and full
 editorial commit SHA to `docs/editorial.json`, for example a `vX.Y.Z` key with a
 40-character SHA, then run the workflow. The site continues to identify the application
-tag. API pages, examples, and previews come from that tag, while other versions keep
-their own guides. See [versions](versions.md) for the full contract.
+tag. Prepare the editorial revision from that tag, regenerate any affected API or
+previews locally, and commit the generated files. Other versions keep their own guides.
+See [versions](versions.md) for the full contract.
 
 ## Write a practical guide section
 
@@ -143,7 +146,8 @@ longer loops. Omit final waits when an animation closes a continuous loop.
 Use `npm run docs:examples -- --guide-only` to validate the source projects without
 exporting. When ready, `npm run docs:media -- --guide-only` renders one scene at a time
 from clean temporary copies under `docs/.cache/media/`. It changes the scene list only
-in those copies. Generated previews stay under `docs/public/previews/` and outside Git.
+in those copies. Generated previews stay under `docs/public/previews/` and must be
+committed with their source scenes.
 
 Keep required assets inside the topic project. Images uses
 `docs/guide/projects/images/assets/` for both scene resources and downloadable photos.

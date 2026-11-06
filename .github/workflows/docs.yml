@@ -28,8 +28,6 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -38,14 +36,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install native and graphics dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build pkg-config libfontconfig1-dev libfreetype6-dev libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libwayland-dev libxkbcommon-dev libegl1-mesa-dev libgl1-mesa-dev xvfb ffmpeg
-      - name: Prepare runtime
-        shell: pwsh
-        run: ./scripts/distribute.ps1 prepare
-      - run: cargo build --locked
       - run: npm ci
         working-directory: docs
       - name: Detect a stable version with generated documentation
@@ -57,22 +47,18 @@ jobs:
           tags=$(gh api --paginate "repos/$GH_REPO/releases" --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name')
           if [ -n "$tags" ]; then
             tag=$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name)
-            if git show "$tag:src/main.rs" | rg -q -- --lua-definitions; then
+            if git cat-file -e "$tag:docs/public/kinematic.lua"; then
               echo 'DOCS_STABLE_AVAILABLE=true' >> "$GITHUB_ENV"
             fi
           fi
       - name: Validate and build development documentation
         env:
-          SDL_AUDIODRIVER: dummy
-          LIBGL_ALWAYS_SOFTWARE: '1'
           DOCS_BASE: /${{ github.event.repository.name }}/dev/
           DOCS_VERSION: Development
           DOCS_REF: ${{ github.sha }}
         run: |
           export DOCS_REF="$(git rev-parse HEAD)"
           npm --prefix docs run docs:test
-          npm --prefix docs run docs:examples
-          xvfb-run -a npm --prefix docs run docs:media
           npm --prefix docs run docs:build
           mkdir -p docs/.cache/pages/dev
           cp -a docs/.vitepress/dist/. docs/.cache/pages/dev/
@@ -81,8 +67,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          SDL_AUDIODRIVER: dummy
-          LIBGL_ALWAYS_SOFTWARE: '1'
         run: |
           python3 docs/scripts/docs_release.py
           python3 docs/scripts/docs_landing.py docs/.cache/pages

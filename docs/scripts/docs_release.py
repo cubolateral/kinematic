@@ -28,9 +28,10 @@ def build():
     for tag in tags:
         if not re.fullmatch(r'v\d+\.\d+\.\d+(?:[-+][\w.-]+)?', tag):
             raise ValueError(f'Unsupported release tag: {tag}.')
-        main = run('git', 'show', f'{tag}:src/main.rs', capture_output=True, text=True).stdout
-        if '--lua-definitions' not in main:
-            print(f'Skipping {tag}: predates generated Lua documentation.')
+        files = run('git', 'ls-tree', '-r', '--name-only', tag, 'docs/public/kinematic.lua',
+                    capture_output=True, text=True).stdout
+        if not files.strip():
+            print(f'Skipping {tag}: predates versioned documentation assets.')
             continue
         checkout = ROOT / 'docs/.cache/releases' / tag
         run('git', 'worktree', 'add', '--detach', str(checkout), tag)
@@ -49,16 +50,12 @@ def build():
             destination = checkout / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, destination)
+        for page in (checkout / 'docs/api').glob('*.md'):
+            page.write_text(page.read_text().replace('/blob/main/src/', f'/blob/{tag}/src/')
+                            .replace('/tree/main/src/', f'/tree/{tag}/src/'))
         (checkout / 'docs/node_modules').symlink_to(ROOT / 'docs/node_modules', target_is_directory=True)
-        (checkout / 'target').mkdir(exist_ok=True)
-        environment = dict(os.environ, CARGO_TARGET_DIR=str(ROOT / 'target'),
-                           KINEMATIC_BIN=str(ROOT / 'target/debug/kinematic'),
-                           DOCS_VERSION=tag, DOCS_REF=tag)
-        run('pwsh', '-File', 'scripts/distribute.ps1', 'prepare', cwd=checkout, env=environment)
-        run('cargo', 'build', '--locked', cwd=checkout, env=environment)
-        for command in ('docs:test', 'docs:examples'):
-            run('npm', 'run', command, cwd=checkout / 'docs', env=environment)
-        run('xvfb-run', '-a', 'npm', 'run', 'docs:media', cwd=checkout / 'docs', env=environment)
+        environment = dict(os.environ, DOCS_VERSION=tag, DOCS_REF=tag)
+        run('npm', 'run', 'docs:test', cwd=checkout / 'docs', env=environment)
         variants = [f'versions/{tag}'] + (['stable'] if tag == latest else [])
         for variant in variants:
             environment['DOCS_BASE'] = f'/{repository.split("/")[1]}/{variant}/'

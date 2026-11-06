@@ -10,10 +10,8 @@
 !/examples/lua/*/kinematic/project.ron
 !/docs/guide/projects/*/kinematic/project.ron
 
-# Documentation dependencies, generated API and media.
+# Documentation dependencies and build output.
 /docs/node_modules
-/docs/api
-/docs/public
 /docs/.vitepress/cache
 /docs/.vitepress/.temp
 /docs/.vitepress/dist

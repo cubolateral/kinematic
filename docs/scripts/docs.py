@@ -278,6 +278,14 @@ def render_api_block(block, include_aliases=False, type_names=()):
     return text
 
 
+def update():
+    run('pwsh', '-File', 'scripts/distribute.ps1', 'prepare')
+    run('cargo', 'build', '--locked')
+    examples()
+    generate()
+    media()
+
+
 def generate():
     source = run(binary(), '--lua-definitions', capture_output=True, text=True).stdout
     source = re.sub(r'`(-?\d+)\.0`', r'`\1`', source)
@@ -492,7 +500,7 @@ def links():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['generate', 'examples', 'media', 'verify_media', 'links'])
+    parser.add_argument('command', choices=['update', 'generate', 'examples', 'media', 'verify_media', 'links'])
     parser.add_argument('--guide-only', action='store_true', help='Validate or render only guide demos.')
     args = parser.parse_args()
     if args.guide_only and args.command not in {'examples', 'media', 'verify_media'}:
