@@ -3,15 +3,21 @@ use crate::core::{Easing, Scene, TrackLimits, TrackTarget, TrackValue};
 
 /// Generates LuaLS definitions from the same object metadata used by the runtime.
 pub fn definitions() -> String {
-    let (shared, restricted): (Vec<_>, Vec<_>) = include_str!("api.lua")
+    definitions_from_sources(include_str!("api.lua"), include_str!("property.lua"))
+}
+
+fn definitions_from_sources(api: &str, properties: &str) -> String {
+    let api = api.replace("\r\n", "\n");
+    let properties = properties.replace("\r\n", "\n");
+    let (shared, restricted): (Vec<_>, Vec<_>) = api
         .split("\n\n")
         .partition(|block| restricted_method(block).is_none());
     let mut output = shared.join("\n\n");
 
     output.push('\n');
-    output.push_str(include_str!("property.lua"));
+    output.push_str(&properties);
 
-    value_definitions(&mut output);
+    value_definitions(&mut output, &properties);
 
     let easing = Easing::ALL
         .into_iter()
@@ -194,7 +200,7 @@ fn accepts_method(name: &str, world: &hecs::World, entity: hecs::Entity) -> bool
     }
 }
 
-fn value_definitions(output: &mut String) {
+fn value_definitions(output: &mut String, methods: &str) {
     for (class, channels) in [
         ("Vec2", "xy"),
         ("Vec3", "xyz"),
@@ -246,8 +252,6 @@ fn value_definitions(output: &mut String) {
                 ));
             }
         }
-
-        let methods = include_str!("property.lua");
 
         output.push_str(&format!("local {class}Property = {{}}\n\n"));
         output.push_str(
@@ -400,6 +404,23 @@ fn builder_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn definitions_are_independent_of_source_line_endings() {
+        let api = include_str!("api.lua").replace("\r\n", "\n");
+        let properties = include_str!("property.lua").replace("\r\n", "\n");
+        let expected = definitions_from_sources(&api, &properties);
+        let windows = definitions_from_sources(
+            &api.replace('\n', "\r\n"),
+            &properties.replace('\n', "\r\n"),
+        );
+
+        assert_eq!(windows, expected);
+        assert!(!windows.contains('\r'));
+        assert!(windows.contains("---@class Kinematic.CodeRange\n"));
+        assert!(windows.contains("function Canvas3D:focus_camera("));
+        assert!(windows.contains("---@return Kinematic.Vec2\nfunction Vec2Property:get()"));
+    }
 
     #[test]
     fn definitions_document_registered_objects_tracks_and_methods() {

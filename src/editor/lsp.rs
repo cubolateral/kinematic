@@ -885,6 +885,7 @@ mod tests {
         assert!(!uri.contains("%5C"));
         assert!(!server_path(&path).contains(r"\\?\"));
         assert_eq!(uri_path(&uri).unwrap(), path);
+        assert_eq!(uri_path(&uri.replace("%3A", "%3a")).unwrap(), path);
 
         let missing = path.join("kinematic-unsaved.lua");
 
@@ -899,6 +900,9 @@ mod tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
+
+    // LuaLS uses fixed temporary socket names on Windows.
+    static SERVER: std::sync::Mutex<()> = std::sync::Mutex::new(());
     fn server_available() -> bool {
         executable().is_ok_and(|path| {
             Command::new(path)
@@ -909,6 +913,8 @@ mod integration_tests {
     }
     #[test]
     fn real_server_completes_native_fields_and_resolves_module_definitions() {
+        let _server = SERVER.lock().unwrap_or_else(|error| error.into_inner());
+
         if !server_available() {
             eprintln!("LuaLS integration unavailable: executable not installed.");
 
@@ -1310,6 +1316,8 @@ end
 
     #[test]
     fn real_server_completes_specific_values_and_custom_methods() {
+        let _server = SERVER.lock().unwrap_or_else(|error| error.into_inner());
+
         if !server_available() {
             eprintln!("LuaLS integration unavailable: executable not installed.");
 
@@ -1480,6 +1488,8 @@ return k.object {
 
     #[test]
     fn code_range_annotations_accept_optional_searches_and_nested_lists() {
+        let _server = SERVER.lock().unwrap_or_else(|error| error.into_inner());
+
         if !server_available() {
             eprintln!("LuaLS integration unavailable: executable not installed.");
 
@@ -1526,8 +1536,13 @@ code:select(42)
                 |error| panic!("{error}: {}", String::from_utf8_lossy(&result.stdout)),
             ))
             .unwrap();
-        let diagnostics = report[&file_uri(&path)]
-            .as_array()
+        let path = path.canonicalize().unwrap();
+        let diagnostics = report
+            .as_object()
+            .unwrap()
+            .iter()
+            .find(|(uri, _)| uri_path(uri).as_ref() == Some(&path))
+            .and_then(|(_, diagnostics)| diagnostics.as_array())
             .unwrap_or_else(|| panic!("{report}"));
 
         assert_eq!(diagnostics.len(), 1, "{report}");
