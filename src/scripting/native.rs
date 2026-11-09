@@ -32,6 +32,7 @@ pub(crate) fn objects() -> Vec<NativeObject> {
         native::<Circle>(),
         native::<Ellipse>(),
         native::<Rect>(),
+        native::<Triangle>(),
         native::<RegularPolygon2D>(),
         native::<Line2D>(),
         native::<Image2D>(),
@@ -97,8 +98,6 @@ pub(crate) fn objects() -> Vec<NativeObject> {
             });
         };
     }
-
-    preset!("triangle", RegularPolygon2D, 3);
 
     preset!("square", RegularPolygon2D, 4);
 

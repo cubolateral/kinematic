@@ -12,6 +12,7 @@ mod projection_2d;
 mod rect;
 mod regular_polygon_2d;
 pub(crate) mod text_2d;
+mod triangle;
 
 pub use canvas_2d::*;
 pub use circle::*;
@@ -26,3 +27,4 @@ pub use projection_2d::*;
 pub use rect::*;
 pub use regular_polygon_2d::*;
 pub use text_2d::*;
+pub use triangle::*;

@@ -9,7 +9,7 @@ internal runtime and the object metadata exposed to Lua.
 | --- | --- |
 | Application | Executable, Lua project loading, project settings, export. |
 | Values | Vector2, Vector3, Quaternion, Color, Quad, geometry Rect, Random, Easing. |
-| 2D objects | Circle, Ellipse, Rect, RegularPolygon2D, Line2D, Image2D, Text2D, Latex2D, Group2D, Container2D, Canvas2D, Projection2D. |
+| 2D objects | Circle, Ellipse, Rect, Triangle, RegularPolygon2D, Line2D, Image2D, Text2D, Latex2D, Group2D, Container2D, Canvas2D, Projection2D. |
 | 3D objects | Sphere, Torus, Prism, Pyramid, Plane, RegularPolygon3D, Line3D, Image3D, Text3D, Latex3D, Light3D, Group3D, Container3D, Canvas3D, Projection3D. |
 | Components | Transform2D/3D, Style, Filter, Draw2D/3D, Camera2D/3D, Material, View, Inspection, Simulation. |
 | Properties | Macro-generated TrackableInfo/TrackInfo, TrackHandle, subchannels, shader uniforms, standalone tracks. |

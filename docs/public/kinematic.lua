@@ -1663,6 +1663,56 @@ local Rect = {}
 ---@return Kinematic.Rect object Handle exposing animatable properties and object methods.
 function Scene:rect(options) end
 
+--- Built-in triangle scene object with an independently animatable apex.
+---@class Kinematic.Triangle: Kinematic.Spatial2D
+---@field signal fun(self:Kinematic.Triangle, callback:fun(object:Kinematic.Triangle, frame:Kinematic.Frame)):Kinematic.Signal Runs a callback after scene evaluation at each frame; returns a signal that can be stopped.
+---@field size Kinematic.Vec2Property Base width and height in local coordinates. Default: [256, 256].
+---@field apex Kinematic.Property<number> Horizontal apex position from left (0) to right (1). Default: 0.5. Minimum: 0. Maximum: 1.
+---@field fill Kinematic.ColorProperty Color used to fill the style. Default: [1, 1, 1, 1].
+---@field stroke Kinematic.ColorProperty Color used to outline the style. Default: [1, 1, 1, 1].
+---@field stroke_width Kinematic.Property<number> Width used to outline the style. Default: 0. Minimum: 0.
+---@field position Kinematic.Vec2Property Position of the entity. Default: [0, 0].
+---@field origin Kinematic.Vec2Property Pivot relative to half the entity size. Values are not clamped. Default: [0, 0].
+---@field scale Kinematic.Vec2Property Scale of the entity on each axis. Default: [1, 1].
+---@field rotation Kinematic.Property<number> Rotation of the entity in radians. Default: 0.
+---@field visibility Kinematic.Property<boolean> Whether this entity and, for containers, its subtree are drawn. Default: true.
+---@field opacity Kinematic.Property<number> Transparency applied while drawing this entity, from `0` to `1`. Default: 1. Minimum: 0. Maximum: 1.
+---@field z_index Kinematic.Property<integer> Stacking order among sibling objects. Higher values are drawn in front. Default: 0.
+---@field follows_camera Kinematic.Property<boolean> Whether this entity and its subtree are affected by the canvas camera. Default: true.
+---@field blur Kinematic.Property<number> Gaussian blur sigma in local canvas units. Default: 0. Minimum: 0.
+---@field shadow_offset Kinematic.Vec2Property Shadow offset in local canvas units. Default: [0, 0].
+---@field shadow_blur Kinematic.Property<number> Shadow blur sigma in local canvas units. Default: 0. Minimum: 0.
+---@field shadow_color Kinematic.ColorProperty Shadow color. Default: [0, 0, 0, 0].
+local Triangle = {}
+
+--- Initial properties and resources for triangle.
+---@class Kinematic.TriangleOptions: Kinematic.ResourceOptions
+---@field id? string Stable identifier used to preserve object identity across reloads.
+---@field name? string Display name in the scene tree.
+---@field size? Kinematic.Vec2|{x?:number,y?:number} Base width and height in local coordinates. Default: [256, 256].
+---@field apex? number Horizontal apex position from left (0) to right (1). Default: 0.5. Minimum: 0. Maximum: 1.
+---@field fill? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Color used to fill the style. Default: [1, 1, 1, 1].
+---@field stroke? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Color used to outline the style. Default: [1, 1, 1, 1].
+---@field stroke_width? number Width used to outline the style. Default: 0. Minimum: 0.
+---@field position? Kinematic.Vec2|{x?:number,y?:number} Position of the entity. Default: [0, 0].
+---@field origin? Kinematic.Vec2|{x?:number,y?:number} Pivot relative to half the entity size. Values are not clamped. Default: [0, 0].
+---@field scale? Kinematic.Vec2|{x?:number,y?:number} Scale of the entity on each axis. Default: [1, 1].
+---@field rotation? number Rotation of the entity in radians. Default: 0.
+---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
+---@field opacity? number Transparency applied while drawing this entity, from `0` to `1`. Default: 1. Minimum: 0. Maximum: 1.
+---@field z_index? integer Stacking order among sibling objects. Higher values are drawn in front. Default: 0.
+---@field follows_camera? boolean Whether this entity and its subtree are affected by the canvas camera. Default: true.
+---@field blur? number Gaussian blur sigma in local canvas units. Default: 0. Minimum: 0.
+---@field shadow_offset? Kinematic.Vec2|{x?:number,y?:number} Shadow offset in local canvas units. Default: [0, 0].
+---@field shadow_blur? number Shadow blur sigma in local canvas units. Default: 0. Minimum: 0.
+---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
+
+--- Built-in triangle scene object with an independently animatable apex.
+--- Creates the object with the supplied initial properties at the current schedule time.
+---@param options Kinematic.TriangleOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Triangle object Handle exposing animatable properties and object methods.
+function Scene:triangle(options) end
+
 --- Built-in regular polygon scene object.
 ---@class Kinematic.RegularPolygon2D: Kinematic.Spatial2D
 ---@field signal fun(self:Kinematic.RegularPolygon2D, callback:fun(object:Kinematic.RegularPolygon2D, frame:Kinematic.Frame)):Kinematic.Signal Runs a callback after scene evaluation at each frame; returns a signal that can be stopped.
@@ -3114,34 +3164,6 @@ local SpotLight3D = {}
 ---@param options Kinematic.SpotLight3DOptions Initial properties, name, identifier, and resources.
 ---@return Kinematic.SpotLight3D object Handle exposing animatable properties and object methods.
 function Scene:spot_light(options) end
-
---- Initial properties and resources for triangle.
----@class Kinematic.RegularPolygon2DOptions_triangle: Kinematic.ResourceOptions
----@field id? string Stable identifier used to preserve object identity across reloads.
----@field name? string Display name in the scene tree.
----@field size? Kinematic.Vec2|{x?:number,y?:number} Geometry dimensions in local coordinates. Default: [256, 256].
----@field sides? integer Number of sides of the regular polygon, between 3 and 256. Default: 3. Minimum: 3. Maximum: 256.
----@field fill? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Color used to fill the style. Default: [1, 1, 1, 1].
----@field stroke? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Color used to outline the style. Default: [1, 1, 1, 1].
----@field stroke_width? number Width used to outline the style. Default: 0. Minimum: 0.
----@field position? Kinematic.Vec2|{x?:number,y?:number} Position of the entity. Default: [0, 0].
----@field origin? Kinematic.Vec2|{x?:number,y?:number} Pivot relative to half the entity size. Values are not clamped. Default: [0, 0].
----@field scale? Kinematic.Vec2|{x?:number,y?:number} Scale of the entity on each axis. Default: [1, 1].
----@field rotation? number Rotation of the entity in radians. Default: 0.
----@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
----@field opacity? number Transparency applied while drawing this entity, from `0` to `1`. Default: 1. Minimum: 0. Maximum: 1.
----@field z_index? integer Stacking order among sibling objects. Higher values are drawn in front. Default: 0.
----@field follows_camera? boolean Whether this entity and its subtree are affected by the canvas camera. Default: true.
----@field blur? number Gaussian blur sigma in local canvas units. Default: 0. Minimum: 0.
----@field shadow_offset? Kinematic.Vec2|{x?:number,y?:number} Shadow offset in local canvas units. Default: [0, 0].
----@field shadow_blur? number Shadow blur sigma in local canvas units. Default: 0. Minimum: 0.
----@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
-
---- Built-in regular polygon scene object.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.RegularPolygon2DOptions_triangle Initial properties, name, identifier, and resources.
----@return Kinematic.RegularPolygon2D object Handle exposing animatable properties and object methods.
-function Scene:triangle(options) end
 
 --- Initial properties and resources for square.
 ---@class Kinematic.RegularPolygon2DOptions_square: Kinematic.ResourceOptions

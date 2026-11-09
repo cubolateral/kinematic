@@ -2,7 +2,7 @@ use crate::{
     core::{
         ProjectContext,
         components::Transform2D,
-        objects::{CircleShape, ObjectHandler},
+        objects::{CircleShape, ObjectHandler, TriangleShape},
     },
     scripting::{LuaScene, Sources},
 };
@@ -1640,4 +1640,29 @@ end
     assert_eq!(mix(&scene), valid);
 
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn triangle_apex_uses_native_tracks_and_seek() {
+    let scene = load(
+        r#"
+return function(s)
+    local triangle = s:triangle {id='triangle', size=k.vec2(200, 100), apex=0}
+    assert(not pcall(function() return triangle.sides end))
+    s:world_2d():add(triangle)
+    triangle:to {apex=1}:play(2, 'linear')
+end
+"#,
+    );
+    let entity = scene.entity("triangle").unwrap();
+
+    for (time, expected) in [(0.0, 0.0), (1.0, 0.5), (2.0, 1.0), (0.0, 0.0)] {
+        scene.update(time).unwrap();
+
+        let world = scene.scene().world();
+        let shape = world.get::<&TriangleShape>(entity).unwrap();
+
+        assert_eq!(shape.size, crate::core::types::vec2(200.0, 100.0));
+        assert_eq!(shape.apex, expected);
+    }
 }

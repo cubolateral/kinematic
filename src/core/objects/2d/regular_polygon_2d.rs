@@ -97,11 +97,6 @@ impl Default for RegularPolygon2D {
     }
 }
 
-/// Creates a three-sided [`RegularPolygon2D`] builder.
-pub fn triangle() -> RegularPolygon2DBuilder {
-    regular_polygon_2d().sides(3)
-}
-
 /// Creates a four-sided [`RegularPolygon2D`] builder.
 pub fn square() -> RegularPolygon2DBuilder {
     regular_polygon_2d().sides(4)

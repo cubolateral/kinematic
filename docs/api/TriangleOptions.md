@@ -3,7 +3,7 @@ editLink: false
 outline: 2
 ---
 
-# RegularPolygon2DOptions_triangle
+# TriangleOptions
 
 ::: v-pre
 
@@ -51,7 +51,7 @@ Display name in the scene tree.
 
 <div class="api-description">
 
-Geometry dimensions in local coordinates.
+Base width and height in local coordinates.
 
 </div>
 
@@ -59,11 +59,11 @@ Geometry dimensions in local coordinates.
 
 <section class="api-member">
 
-### <code class="api-signature"><span class="api-name">sides</span><span class="api-punctuation">?</span><span class="api-punctuation">: </span><span class="api-type-name">integer</span><span class="api-punctuation"> = </span><span class="api-literal">3</span></code> {#property-sides}
+### <code class="api-signature"><span class="api-name">apex</span><span class="api-punctuation">?</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation"> = </span><span class="api-literal">0.5</span></code> {#property-apex}
 
 <div class="api-description">
 
-Number of sides of the regular polygon, between 3 and 256. Minimum: 3. Maximum: 256.
+Horizontal apex position from left (0) to right (1). Minimum: 0. Maximum: 1.
 
 </div>
 

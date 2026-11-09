@@ -259,6 +259,26 @@ Creates the object with the supplied initial properties at the current schedule 
 
 <section class="api-method">
 
+## <code class="api-signature"><a class="api-type-name" href="Scene.html">Scene</a><span class="api-punctuation">:</span><span class="api-function">triangle</span><span class="api-punctuation">(</span><span class="api-parameter">options</span><span class="api-punctuation">: </span><a class="api-type-name" href="TriangleOptions.html">TriangleOptions</a><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Triangle.html">Triangle</a></code> {#scene-triangle-options}
+
+<div class="api-description">
+
+Built-in triangle scene object with an independently animatable apex.
+Creates the object with the supplied initial properties at the current schedule time.
+
+<div class="api-arguments">
+
+- <span class="api-parameter">options</span>: Initial properties, name, identifier, and resources.
+- **Returns:** object Handle exposing animatable properties and object methods.
+
+</div>
+
+</div>
+
+</section>
+
+<section class="api-method">
+
 ## <code class="api-signature"><a class="api-type-name" href="Scene.html">Scene</a><span class="api-punctuation">:</span><span class="api-function">regular_polygon_2d</span><span class="api-punctuation">(</span><span class="api-parameter">options</span><span class="api-punctuation">: </span><a class="api-type-name" href="RegularPolygon2DOptions.html">RegularPolygon2DOptions</a><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="RegularPolygon2D.html">RegularPolygon2D</a></code> {#scene-regular_polygon_2d-options}
 
 <div class="api-description">
@@ -796,26 +816,6 @@ Creates the object with the supplied initial properties at the current schedule 
 <div class="api-description">
 
 Light shining in a cone along its local negative Z axis.
-Creates the object with the supplied initial properties at the current schedule time.
-
-<div class="api-arguments">
-
-- <span class="api-parameter">options</span>: Initial properties, name, identifier, and resources.
-- **Returns:** object Handle exposing animatable properties and object methods.
-
-</div>
-
-</div>
-
-</section>
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Scene.html">Scene</a><span class="api-punctuation">:</span><span class="api-function">triangle</span><span class="api-punctuation">(</span><span class="api-parameter">options</span><span class="api-punctuation">: </span><a class="api-type-name" href="RegularPolygon2DOptions_triangle.html">RegularPolygon2DOptions_triangle</a><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="RegularPolygon2D.html">RegularPolygon2D</a></code> {#scene-triangle-options}
-
-<div class="api-description">
-
-Built-in regular polygon scene object.
 Creates the object with the supplied initial properties at the current schedule time.
 
 <div class="api-arguments">

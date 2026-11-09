@@ -23,8 +23,8 @@ See the dedicated [images guide](images.md) for photos and pixel sampling.
 
 ## Shapes and lines
 
-Use `circle`, `ellipse`, `rect`, `regular_polygon_2d`, and `line_2d` to create built-in
-geometry. `triangle` and `square` are polygon presets. Each constructor has its own
+Use `circle`, `ellipse`, `rect`, `triangle`, `regular_polygon_2d`, and `line_2d` to create
+built-in geometry. `square` is a regular polygon preset. Each constructor has its own
 options, listed under [Scene](../api/Scene.md). Check the type reference before using
 fields from another shape.
 
@@ -43,6 +43,22 @@ local card = s:rect {
 }
 s:world_2d():add(card)
 ```
+
+`triangle` creates a dedicated [Triangle](../api/Triangle.md). Its `size` sets the base
+width and height. The animatable `apex` ranges from `0` (tip above the left end of the
+base) to `1` (above the right end), defaulting to `0.5` (centered). The triangle points
+up by default; use `rotation` to change its direction. A centered apex creates an
+isosceles triangle; set height to width times `math.sqrt(3) / 2` for an equilateral one.
+
+```lua
+local triangle = s:triangle { size = k.vec2(240, 180), apex = 0.5 }
+s:world_2d():add(triangle)
+triangle:to { apex = 1 }:play(1)
+```
+
+Previously, `triangle` was a regular polygon preset pointing right. It now points up
+and no longer exposes `sides`. Use `regular_polygon_2d { sides = 3 }` for the previous
+geometry or to animate the number of sides. `triangle_3d` remains a polygon preset.
 
 The [layout example](../examples/layout.md) animates rectangles while keeping their
 bottom edges aligned.

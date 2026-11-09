@@ -95,7 +95,6 @@ Methods are registered for specific types. Requirements for `Object` operations 
 - [RegularPolygon2D](RegularPolygon2D.md).
 - [RegularPolygon2DOptions](RegularPolygon2DOptions.md).
 - [RegularPolygon2DOptions_square](RegularPolygon2DOptions_square.md).
-- [RegularPolygon2DOptions_triangle](RegularPolygon2DOptions_triangle.md).
 - [RegularPolygon3D](RegularPolygon3D.md).
 - [RegularPolygon3DOptions](RegularPolygon3DOptions.md).
 - [RegularPolygon3DOptions_circle_3d](RegularPolygon3DOptions_circle_3d.md).
@@ -123,6 +122,8 @@ Methods are registered for specific types. Requirements for `Object` operations 
 - [Texture](Texture.md).
 - [Torus](Torus.md).
 - [TorusOptions](TorusOptions.md).
+- [Triangle](Triangle.md).
+- [TriangleOptions](TriangleOptions.md).
 - [Vec2](Vec2.md).
 - [Vec2Property](Vec2Property.md).
 - [Vec3](Vec3.md).
