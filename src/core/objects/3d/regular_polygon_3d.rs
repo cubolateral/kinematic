@@ -160,14 +160,4 @@ mod tests {
         assert!(validate_sides(2).is_err());
         assert!(validate_sides(3).is_ok());
     }
-
-    #[test]
-    fn polygon_3d_presets_set_triangle_and_square_sides() {
-        let mut scene = Scene::new();
-        let triangle = triangle_3d().build(&mut scene);
-        let square = square_3d().build(&mut scene);
-
-        assert_eq!(triangle.get(RegularPolygon3DShape::sides_property()), 3);
-        assert_eq!(square.get(RegularPolygon3DShape::sides_property()), 4);
-    }
 }

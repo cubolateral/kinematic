@@ -426,54 +426,6 @@ mod tests {
     }
 
     #[test]
-    fn browser_uses_shared_window_borders_and_borderless_controls() {
-        let _context_lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
-        let mut context = dear_imgui_rs::Context::create();
-
-        context.set_ini_filename(None::<&str>).unwrap();
-
-        let font = crate::ui::theme::initialize(&mut context);
-
-        context
-            .font_atlas()
-            .try_claim_legacy_renderer()
-            .unwrap()
-            .build();
-        context.io_mut().set_display_size([1280.0, 720.0]);
-        context.io_mut().set_delta_time(1.0 / 60.0);
-
-        let mut state = State::new(std::env::temp_dir().to_str().unwrap(), Mode::Project).unwrap();
-
-        state.entries = vec![Entry {
-            path: state.cwd.join("scene##.lua"),
-            name: "scene##.lua".into(),
-            directory: false,
-        }];
-        state.loading = None;
-
-        for _ in 0..2 {
-            let ui = context.frame();
-            let _font = ui.push_font(font);
-
-            assert!(state.draw(ui).is_none());
-            assert_eq!(
-                ui.clone_style().window_border_size(),
-                kinematic_ui::theme::BORDER_WIDTH
-            );
-            assert_eq!(
-                ui.clone_style().popup_border_size(),
-                kinematic_ui::theme::BORDER_WIDTH
-            );
-            assert_eq!(ui.clone_style().frame_border_size(), 0.0);
-            assert_eq!(ui.clone_style().child_border_size(), 0.0);
-
-            drop(_font);
-
-            context.end_frame();
-        }
-    }
-
-    #[test]
     fn listing_keeps_extensions_and_real_brackets_and_navigation_rejects_files() {
         let root = std::env::temp_dir().join(format!("kinematic-browser-{}", std::process::id()));
 

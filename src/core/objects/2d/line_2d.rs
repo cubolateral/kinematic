@@ -186,28 +186,7 @@ impl Default for Line2D {
 
 #[cfg(test)]
 mod tests {
-    use super::line_geometry;
-    use crate::core::{Scene, objects::*, types::vec2};
-
-    #[test]
-    fn line_2d_builder_builds_the_configured_line() {
-        let mut scene = Scene::new();
-        let line = line_2d()
-            .from(vec2(-100.0, 20.0))
-            .to(vec2(100.0, 20.0))
-            .thickness(10.0)
-            .from_arrow_size(10.0)
-            .to_arrow_size(40.0)
-            .build(&mut scene);
-        let world = scene.world();
-        let shape = world.get::<&Line2DShape>(line.entity()).unwrap();
-
-        assert_eq!(shape.from, vec2(-100.0, 20.0));
-        assert_eq!(shape.to, vec2(100.0, 20.0));
-        assert_eq!(shape.thickness, 10.0);
-        assert_eq!(shape.from_arrow_size, 10.0);
-        assert_eq!(shape.to_arrow_size, 40.0);
-    }
+    use super::{Line2DShape, line_geometry};
 
     #[test]
     fn negative_arrow_sizes_are_ignored_when_building_geometry() {

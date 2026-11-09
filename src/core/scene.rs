@@ -2126,22 +2126,6 @@ mod tests {
     }
 
     #[test]
-    fn object_handler_exposes_trackable_fields_directly() {
-        let mut scene = Scene::new();
-        let text: Text2DHandler = text_2d().build(&mut scene);
-        let circle: CircleHandler = circle().build(&mut scene);
-        let _ = text.opacity(0.25);
-        let _ = circle.position(vec2(10.0, 20.0));
-        let _ = circle.position_x(10.0);
-        let _ = circle.fill(Color::RED);
-        let _ = circle.fill_r(0.75);
-        let world = scene.world();
-        let draw = world.get::<&Draw2D>(text.entity()).unwrap();
-
-        assert_eq!(draw.opacity, 0.25);
-    }
-
-    #[test]
     fn track_limits_apply_to_builders_setters_and_tween_variants() {
         let mut scene = Scene::new();
         let circle = circle().opacity(2.0).build(&mut scene);

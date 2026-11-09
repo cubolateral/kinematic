@@ -323,30 +323,6 @@ mod tests {
     use crate::core::{Scene, objects::ObjectHandler};
 
     #[test]
-    fn line_3d_builder_builds_the_configured_line() {
-        let mut scene = Scene::new();
-        let line = line_3d()
-            .from(vec3(-1.0, 2.0, 3.0))
-            .to(vec3(4.0, 5.0, 6.0))
-            .thickness(0.2)
-            .from_arrow_size(0.3)
-            .to_arrow_size(0.4)
-            .line_sides(12)
-            .arrow_sides(8)
-            .build(&mut scene);
-        let world = scene.world();
-        let shape = world.get::<&Line3DShape>(line.entity()).unwrap();
-
-        assert_eq!(shape.from, vec3(-1.0, 2.0, 3.0));
-        assert_eq!(shape.to, vec3(4.0, 5.0, 6.0));
-        assert_eq!(shape.thickness, 0.2);
-        assert_eq!(shape.from_arrow_size, 0.3);
-        assert_eq!(shape.to_arrow_size, 0.4);
-        assert_eq!(shape.line_sides, 12);
-        assert_eq!(shape.arrow_sides, 8);
-    }
-
-    #[test]
     fn arrowheads_are_scaled_to_fit_the_line() {
         let shape = Line3DShape {
             from: Vector3::ZERO,

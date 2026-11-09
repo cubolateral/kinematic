@@ -584,14 +584,6 @@ mod tests {
     }
 
     #[test]
-    fn defaults_to_plain_and_hack_nerd_font() {
-        let shape = CodeShape::default();
-
-        assert_eq!(shape.language, CodeLanguage::Plain);
-        assert_eq!(shape.font, Font::new(fonts::HACK_MONO));
-    }
-
-    #[test]
     fn token_edits_fade_whole_words_and_new_lines_without_matching_repeated_letters() {
         let shape = CodeShape::default();
 

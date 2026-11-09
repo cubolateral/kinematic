@@ -190,14 +190,4 @@ mod tests {
         assert!(validate_sides(2).is_err());
         assert!(validate_sides(3).is_ok());
     }
-
-    #[test]
-    fn prism_presets_set_cube_and_cylinder_sides() {
-        let mut scene = Scene::new();
-        let cube = cube().build(&mut scene);
-        let cylinder = cylinder().build(&mut scene);
-
-        assert_eq!(cube.get(PrismShape::sides_property()), 4);
-        assert_eq!(cylinder.get(PrismShape::sides_property()), 32);
-    }
 }

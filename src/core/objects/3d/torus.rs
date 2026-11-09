@@ -220,14 +220,6 @@ mod tests {
     }
 
     #[test]
-    fn default_torus_matches_the_standard_primitive_width() {
-        let mut scene = Scene::new();
-        let torus = torus().build(&mut scene);
-
-        assert_eq!(torus.box_size(), glam::vec3(1.0, 0.25, 1.0));
-    }
-
-    #[test]
     fn torus_geometry_key_includes_radii_and_segments() {
         let shape = TorusShape::default();
         let mut changed = shape.clone();

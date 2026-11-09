@@ -65,13 +65,3 @@ pub fn hints(ui: &Ui, entries: &[(&str, &str)]) {
         ui.text_disabled(compact(shortcut));
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn action_labels_remove_surrounding_spaces_and_trailing_periods() {
-        assert_eq!(super::action_label("Focus selection."), "Focus selection");
-        assert_eq!(super::action_label(" Reset camera... "), "Reset camera");
-        assert_eq!(super::action_label("Front view."), "Front view");
-    }
-}

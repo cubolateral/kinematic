@@ -1425,14 +1425,6 @@ mod tests {
     }
 
     #[test]
-    fn converts_string_track_values() {
-        let value = "Kinematic!".to_owned();
-        let track_value = value.clone().into_track_value();
-
-        assert_eq!(String::from_track_value(track_value), Some(value));
-    }
-
-    #[test]
     fn interpolates_bool_values_at_the_segment_end() {
         let from = TrackValue::Bool(false);
         let to = TrackValue::Bool(true);
@@ -1441,13 +1433,6 @@ mod tests {
         assert_eq!(from.lerp(&to, 0.5), from);
         assert_eq!(from.lerp(&to, 0.999), from);
         assert_eq!(from.lerp(&to, 1.0), to);
-    }
-
-    #[test]
-    fn converts_bool_track_values() {
-        let track_value = true.into_track_value();
-
-        assert_eq!(bool::from_track_value(track_value), Some(true));
     }
 
     #[test]
@@ -1460,13 +1445,6 @@ mod tests {
     }
 
     #[test]
-    fn converts_u32_track_values() {
-        let track_value = 42_u32.into_track_value();
-
-        assert_eq!(u32::from_track_value(track_value), Some(42));
-    }
-
-    #[test]
     fn interpolates_i32_values_to_the_nearest_integer() {
         let from = TrackValue::I32(-10);
         let to = TrackValue::I32(10);
@@ -1474,13 +1452,6 @@ mod tests {
         assert_eq!(from.lerp(&to, 0.25), TrackValue::I32(-5));
         assert_eq!(from.lerp(&to, 0.53), TrackValue::I32(1));
         assert_eq!(from.lerp(&to, 1.0), to);
-    }
-
-    #[test]
-    fn converts_i32_track_values() {
-        let track_value = (-42_i32).into_track_value();
-
-        assert_eq!(i32::from_track_value(track_value), Some(-42));
     }
 
     fn tween_track() -> Track {

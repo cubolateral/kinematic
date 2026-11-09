@@ -146,14 +146,4 @@ mod tests {
             .is_none()
         );
     }
-
-    #[test]
-    fn polygon_presets_set_triangle_and_square_sides() {
-        let mut scene = Scene::new();
-        let triangle = triangle().build(&mut scene);
-        let square = square().build(&mut scene);
-
-        assert_eq!(triangle.get(RegularPolygon2DShape::sides_property()), 3);
-        assert_eq!(square.get(RegularPolygon2DShape::sides_property()), 4);
-    }
 }

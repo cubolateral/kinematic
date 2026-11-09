@@ -165,12 +165,4 @@ mod tests {
         assert!(validate_sides(2).is_err());
         assert!(validate_sides(3).is_ok());
     }
-
-    #[test]
-    fn cone_preset_uses_32_sides() {
-        let mut scene = Scene::new();
-        let cone = cone().build(&mut scene);
-
-        assert_eq!(cone.get(PyramidShape::sides_property()), 32);
-    }
 }

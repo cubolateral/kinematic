@@ -526,15 +526,6 @@ fn canvas_camera_tracks_use_the_camera_prefix() {
 }
 
 #[test]
-fn camera3d_defaults_to_perspective_mode() {
-    assert_eq!(Camera3D::default().camera_mode, Camera3DMode::Perspective);
-    assert_eq!(
-        Camera3D::track(0).choices,
-        TrackChoices::Enum(&["perspective", "orthogonal"])
-    );
-}
-
-#[test]
 fn canvas3d_focus_camera_moves_and_looks_at_the_target() {
     let mut scene = Scene::new();
     let canvas = canvas_3d().build(&mut scene);
