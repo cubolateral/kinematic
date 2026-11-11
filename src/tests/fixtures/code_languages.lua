@@ -1,4 +1,4 @@
-return function(s)
+return function()
     local examples = {
         {language = "python", source = 'def hello(name):\n    return f"Hello, {name}!"\n\nprint(hello("Kinematic"))'},
         {language = "rust", source = 'fn main() {\n    let value: u32 = 42;\n    println!("{value}");\n}'},
@@ -10,7 +10,7 @@ return function(s)
     }
 
     for _, example in ipairs(examples) do
-        local code = s:code {
+        local code = k.code{
             id = "code_" .. example.language,
             name = example.language,
             language = example.language,
@@ -19,11 +19,11 @@ return function(s)
             opacity = 0,
         }
 
-        s:world_2d():add(code)
+        k.world_2d():add(code)
 
         code:to {opacity = 1}:play(1)
 
-        s:wait(1)
+        k.wait(1)
 
         code:to {opacity = 0}:play(1)
         code:remove()

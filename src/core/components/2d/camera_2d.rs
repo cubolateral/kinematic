@@ -4,6 +4,7 @@ use crate::core::{objects::GlobalTransform, types::Vector2};
 
 /// View transformation owned by a two-dimensional canvas.
 #[derive(Clone, Debug, Trackable)]
+#[trackable(name = "Camera 2D")]
 pub struct Camera2D {
     /// Position observed at the center of the viewport.
     #[track]

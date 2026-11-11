@@ -1,12 +1,12 @@
-return function(s)
-	local code = s:code {
+return function()
+	local code = k.code{
 		code = [=[
 local message = "Hello, Kinematic!"
 print(message)]=],
 		language = "lua",
 	}
-	s:world_2d():add(code)
+	k.world_2d():add(code)
 
 	code:erase(code:lines(2)):play(1)
-	s:wait(1)
+	k.wait(1)
 end

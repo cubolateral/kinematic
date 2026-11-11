@@ -17,6 +17,7 @@ Methods are registered for specific types. Requirements for `Object` operations 
 - [AudioPlaybackOptions](AudioPlaybackOptions.md).
 - [AudioResource](AudioResource.md).
 - [AudioSynthOptions](AudioSynthOptions.md).
+- [BoxValue](BoxValue.md).
 - [Canvas2D](Canvas2D.md).
 - [Canvas2DOptions](Canvas2DOptions.md).
 - [Canvas3D](Canvas3D.md).
@@ -63,8 +64,13 @@ Methods are registered for specific types. Requirements for `Object` operations 
 - [Matrix](Matrix.md).
 - [Mesh](Mesh.md).
 - [Object](Object.md).
-- [ObjectDefinition](ObjectDefinition.md).
+- [Object2DDefinition](Object2DDefinition.md).
+- [Object2DOptions](Object2DOptions.md).
+- [Object3DDefinition](Object3DDefinition.md).
+- [Object3DOptions](Object3DOptions.md).
 - [ObjectOptions](ObjectOptions.md).
+- [Panel](Panel.md).
+- [PanelOptions](PanelOptions.md).
 - [Path](Path.md).
 - [Plane](Plane.md).
 - [PlaneOptions](PlaneOptions.md).
@@ -89,8 +95,6 @@ Methods are registered for specific types. Requirements for `Object` operations 
 - [Quaternion](Quaternion.md).
 - [QuaternionProperty](QuaternionProperty.md).
 - [Random](Random.md).
-- [Rect](Rect.md).
-- [RectOptions](RectOptions.md).
 - [RectValue](RectValue.md).
 - [RegularPolygon2D](RegularPolygon2D.md).
 - [RegularPolygon2DOptions](RegularPolygon2DOptions.md).
@@ -101,11 +105,12 @@ Methods are registered for specific types. Requirements for `Object` operations 
 - [RegularPolygon3DOptions_square_3d](RegularPolygon3DOptions_square_3d.md).
 - [RegularPolygon3DOptions_triangle_3d](RegularPolygon3DOptions_triangle_3d.md).
 - [ResourceOptions](ResourceOptions.md).
-- [Scene](Scene.md).
 - [Script2D](Script2D.md).
 - [Script2DOptions](Script2DOptions.md).
+- [Script2DView](Script2DView.md).
 - [Script3D](Script3D.md).
 - [Script3DOptions](Script3DOptions.md).
+- [Script3DView](Script3DView.md).
 - [Shader](Shader.md).
 - [Signal](Signal.md).
 - [Snapshot](Snapshot.md).

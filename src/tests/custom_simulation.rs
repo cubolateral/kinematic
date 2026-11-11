@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use crate::test_support::*;
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Settings")]
 struct Settings {
     #[track]
     color: Color,

@@ -168,7 +168,7 @@ pub(crate) fn self_test() -> Result<(), String> {
     fn check() -> Result<(), Box<dyn std::error::Error>> {
         let root = std::env::current_dir()?.join(format!("smoke-{}", std::process::id()));
         let project = LuaProject::create(&root, "Smoke", false)?;
-        let script = "return function(s) local f=k.audio_file('assets/tone.wav'); s:audio{source=f}:play(); s:wait(0.25) end\n";
+        let script = "return function() local f=k.load_audio('assets/tone.wav'); k.audio{source=f}:play(); k.wait(0.25) end\n";
 
         fs::write(root.join("scenes/intro.lua"), script)?;
 

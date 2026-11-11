@@ -8,6 +8,7 @@ use crate::core::{
 use kinematic_macros::{Object, Trackable};
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Prism Shape")]
 pub struct PrismShape {
     /// Geometry dimensions in local coordinates.
     #[track]

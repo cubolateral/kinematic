@@ -1,14 +1,14 @@
-return function(s)
-	local world = s:world_2d()
+return function()
+	local world = k.world_2d()
 
-	local picture = s:image_2d {
-		source = k.image("assets/cat-closeup.jpg"),
+	local picture = k.image_2d{
+		source = k.load_image("assets/cat-closeup.jpg"),
 		size = k.vec2(320, 320),
 		position = k.vec2(-180, 0),
 	}
 	world:add(picture)
 
-	local cursor = s:circle {
+	local cursor = k.circle{
 		radius = 10,
 		fill = k.color("#00000000"),
 		stroke = k.color("#FFFFFF"),
@@ -16,13 +16,13 @@ return function(s)
 	}
 	world:add(cursor)
 
-	local swatch = s:rect {
+	local swatch = k.panel{
 		size = k.vec2(160, 160),
 		position = k.vec2(180, 0),
 	}
 	world:add(swatch)
 
-	local point = s:track(k.vec2(-120, -80))
+	local point = k.track(k.vec2(-120, -80))
 
 	cursor:signal(function(object)
 		local p = point:get()

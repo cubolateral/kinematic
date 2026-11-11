@@ -361,19 +361,6 @@ impl Documents {
                     clip.file = next;
                 }
             }
-
-            manifest.legacy_audio = std::mem::take(&mut manifest.legacy_audio)
-                .into_iter()
-                .map(|(path, mut clips)| {
-                    for clip in &mut clips {
-                        if let Some(next) = files::renamed_path(&clip.file, from, to) {
-                            clip.file = next;
-                        }
-                    }
-
-                    (files::renamed_path(&path, from, to).unwrap_or(path), clips)
-                })
-                .collect();
         })?;
 
         self.file_paths = None;

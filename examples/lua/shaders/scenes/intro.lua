@@ -1,8 +1,8 @@
-return function(s)
-    local world = s:world_2d()
-    world:add(s:rect {size = k.vec2(1280, 720), fill = k.color("#000000")})
+return function()
+    local world = k.world_2d()
+    world:add(k.panel{size = k.vec2(1280, 720), fill = k.color("#000000")})
 
-    local content = s:group_2d {id = "content"}
+    local content = k.group_2d{id = "content"}
     world:add(content)
 
     local image_shader = k.image_shader {
@@ -20,7 +20,7 @@ return function(s)
         }
         ]],
     }
-    local card = s:rect {
+    local card = k.panel{
         id = "card",
         size = k.vec2(300, 260),
         position = k.vec2(-250, 0),
@@ -41,34 +41,34 @@ return function(s)
         }
         ]],
     }
-    local stage = s:canvas_3d {
+    local stage = k.canvas_3d{
         id = "stage",
         resolution = {400, 400},
         camera_position = k.vec3(0, 0, 5),
     }
-    s:root():add(stage)
+    k.root():add(stage)
 
-    local cube = s:cube {
+    local cube = k.cube{
         id = "cube",
         shader = mesh_shader,
         uniforms = {pulse = 0},
     }
     stage:add(cube)
 
-    local screen = s:projection_2d {
+    local screen = k.projection_2d{
         source = stage:texture(),
         size = k.vec2(400, 400),
         position = k.vec2(260, 0),
     }
     content:add(screen)
-    s:all(function()
+    k.all(function()
         card:to {uniforms = {pulse = 12}}:play(3, "linear")
         cube:to {uniforms = {pulse = 12}}:play(3, "linear")
         cube.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, "linear")
     end)
-    s:wait(0.8)
+    k.wait(0.8)
 
-    s:wait(0.6)
+    k.wait(0.6)
     content:to {opacity = 0}:play(0.5)
-    s:wait(0.2)
+    k.wait(0.2)
 end

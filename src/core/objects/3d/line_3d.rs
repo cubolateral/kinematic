@@ -6,6 +6,7 @@ use crate::core::{
 use kinematic_macros::{Object, Trackable};
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Line 3D Shape")]
 /// Geometry of a 3D line, including optional arrowheads at either end.
 pub struct Line3DShape {
     /// Starting point in local coordinates.

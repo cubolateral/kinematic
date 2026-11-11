@@ -11,7 +11,7 @@ same panels you will use while building an animation.
 ## Select an object
 
 Click an active object in Preview, or its entry in Scene Tree or Timeline. The other
-selection views follow it and Inspector shows its properties. Pause at a time when the
+selection views follow it and Inspector shows its properties grouped by component name. Pause at a time when the
 object exists. An object outside its lifetime will not be available to select.
 
 Try selecting the circle from [first steps](start.md), then seek beyond a scheduled
@@ -59,7 +59,7 @@ Use the ruler to seek. The arrow keys move between frames, and Space toggles pla
 Project scene order comes from the manifest. Focus a scene to limit the visible and
 audible range without changing its clips. Press `L` to loop playback in the editor.
 
-Use `s:event("Reading")` to add a named pause that you can adjust on the timeline.
+Use `k.event("Reading")` to add a named pause that you can adjust on the timeline.
 Resolve pending source edits before changing events. Event times are saved in the [scene
 metadata](projects.md#reloads-and-revisions).
 

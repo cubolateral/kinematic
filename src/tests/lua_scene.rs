@@ -23,11 +23,11 @@ fn load(text: &str) -> LuaScene {
     .unwrap()
 }
 const SCENE: &str = r##"
-return function(s)
-    local ball = s:circle {id='ball', radius=24, fill=k.color('#60A5FA'), position=k.vec2(-100, 0)}
-    s:world_2d():add(ball)
+return function()
+    local ball = k.circle{id='ball', radius=24, fill=k.color('#60A5FA'), position=k.vec2(-100, 0)}
+    k.world_2d():add(ball)
     ball:to {position = k.vec2(100, 0)}:play(2, 'linear')
-    s:wait(1)
+    k.wait(1)
 end
 "##;
 
@@ -100,7 +100,7 @@ fn reload_preserves_ids_and_rejects_invalid_candidates() {
 
 #[test]
 fn signal_errors_do_not_commit_partial_writes() {
-    let source=SCENE.replace("s:wait(1)", "ball:signal(function(obj, frame) obj.radius:set(99); if frame.time > 2 then error('Failed') end end); s:wait(1)");
+    let source=SCENE.replace("k.wait(1)", "ball:signal(function(obj, frame) obj.radius:set(99); if frame.time > 2 then error('Failed') end end); k.wait(1)");
     let scene = load(&source);
 
     assert!(scene.update(2.5).is_err());
@@ -127,9 +127,9 @@ in vec2 k_uv;
 out vec4 k_color;
 void main() { k_color = vec4(center.x, zoom / viewport.x, k_uv.x, 1.0); }
 ]]}
-return function(s)
-    local world = s:world_2d()
-    local fractal = s:rect {
+return function()
+    local world = k.world_2d()
+    local fractal = k.panel{
         id = 'mandelbrot', size = k.vec2(640, 480), shader = shader,
         uniforms = {center = k.vec2(-0.5, 0), zoom = 1, viewport = k.vec2(640, 480)},
     }
@@ -143,7 +143,7 @@ return function(s)
         obj:uniform('center'):set(k.vec2(-0.5 + position.x / 200, -position.y / 200))
         obj:uniform('zoom'):set(zoom)
     end)
-    s:all(function()
+    k.all(function()
         world.camera_position:to(k.vec2(100, 50)):play(1, 'linear')
         world.camera_zoom:to(2):play(1, 'linear')
         world.camera_rotation:to(0.4):play(1, 'linear')
@@ -184,7 +184,7 @@ fn duplicate_ids_and_infinite_loops_are_diagnostics() {
         LuaScene::load(
             ProjectContext::new(".").unwrap(),
             "intro.lua",
-            sources(&SCENE.replace("s:wait(1)", "s:circle {id='ball'}")),
+            sources(&SCENE.replace("k.wait(1)", "k.circle{id='ball'}")),
             (640, 480),
             60,
             crate::core::Margin::default()
@@ -208,11 +208,11 @@ fn duplicate_ids_and_infinite_loops_are_diagnostics() {
 fn hierarchy_anchors_and_manual_animation_share_native_behavior() {
     let scene = load(
         r#"
-return function(s)
-    local group = s:group_2d {id='group', position=k.vec2(50, 0)}
-    local a = s:circle {id='a', position=k.vec2(10, 20), radius=2}
-    local b = s:circle {id='b'}
-    s:world_2d():add(group)
+return function()
+    local group = k.group_2d{id='group', position=k.vec2(50, 0)}
+    local a = k.circle{id='a', position=k.vec2(10, 20), radius=2}
+    local b = k.circle{id='b'}
+    k.world_2d():add(group)
     group:add(a)
     group:insert(b, 1)
     assert(group:get_child(2):type_name() == 'Circle')
@@ -220,18 +220,18 @@ return function(s)
     assert(a:left().x == 8 and a:top().y == 18)
     assert(a:left_to(k.vec2(0, 0)).x == 2)
     assert(a:global_position().x == 60)
-    local cube = s:cube {id='cube', position=k.vec3(3, 4, 5), size=k.vec3(2, 2, 2)}
-    s:world_3d():add(cube)
+    local cube = k.cube{id='cube', position=k.vec3(3, 4, 5), size=k.vec3(2, 2, 2)}
+    k.world_3d():add(cube)
     assert(cube:top_front().y == 5 and cube:top_front().z == 6)
     a.opacity:set(0)
     a.scale:set(k.vec2(0, 0))
-    s:all(function()
+    k.all(function()
         a:to {opacity = 1}:play(1, 'linear')
         a:to {scale = k.vec2(1, 1)}:play(1, 'linear')
     end)
     assert(not pcall(function() return a.fade_in end))
     assert(not pcall(function() return a.grow_in end))
-    s:wait(1)
+    k.wait(1)
 end
 "#,
     );
@@ -256,10 +256,10 @@ fn removing_a_shader_on_reload_removes_its_components() {
     use crate::core::objects::MeshShaderData;
 
     let source = r#"
-return function(s)
-    local shape = s:sphere {id='shape', shader=k.mesh_shader {fragment='out vec4 outColor; void main() { outColor=vec4(1.0); }'}}
-    s:world_3d():add(shape)
-    s:wait(1)
+return function()
+    local shape = k.sphere{id='shape', shader=k.mesh_shader {fragment='out vec4 outColor; void main() { outColor=vec4(1.0); }'}}
+    k.world_3d():add(shape)
+    k.wait(1)
 end
 "#;
     let mut scene = load(source);
@@ -287,11 +287,11 @@ end
 fn a_failed_frame_restores_previous_tracks_and_successful_signals() {
     let scene = load(
         r#"
-return function(s)
-    local a = s:circle {id='a', radius=10}
-    local b = s:circle {id='b', radius=20}
-    s:world_2d():add(a)
-    s:world_2d():add(b)
+return function()
+    local a = k.circle{id='a', radius=10}
+    local b = k.circle{id='b', radius=20}
+    k.world_2d():add(a)
+    k.world_2d():add(b)
     a:signal(function(obj, frame)
         obj.radius:set(10 + frame.time)
         b.radius:set(20 + frame.time)
@@ -350,9 +350,9 @@ end
 fn quaternion_tweens_keep_full_turns() {
     let scene = load(
         r#"
-return function(s)
-    local shape=s:sphere {id='spin'}
-    s:world_3d():add(shape)
+return function()
+    local shape=k.sphere{id='spin'}
+    k.world_3d():add(shape)
     shape.rotation:rotate(k.vec3(0,0,1), 2*math.pi):play(1, 'linear')
 end
 "#,
@@ -384,16 +384,16 @@ fn lua_enums_only_accept_snake_case_strings() {
     load(
         r#"
 assert(k.ease == nil and require('kinematic').ease == nil)
-local style = k.component {
+local style = k.component('Style', {
     mode = {default='in_progress', choices={'in_progress', 'done'}},
-}
-local Custom = k.object {components={style}}
-return function(s)
-    local row = s:container_2d {direction='horizontal_reverse'}
+})
+local Custom = k.object_2d('Custom', {components={style}})
+return function()
+    local row = k.container_2d{direction='horizontal_reverse'}
     assert(row.direction:get() == 'horizontal_reverse')
-    local canvas = s:canvas_3d {filter='linear', camera_mode='orthogonal'}
+    local canvas = k.canvas_3d{filter='linear', camera_mode='orthogonal'}
     assert(canvas.filter:get() == 'linear' and canvas.camera_mode:get() == 'orthogonal')
-    local custom = s:object(Custom, {})
+    local custom = Custom({})
     assert(custom.mode:get() == 'in_progress')
     custom.mode:set('done')
     row:to {direction='vertical_reverse'}:play(1, 'cubic_in_out')
@@ -402,20 +402,20 @@ end
     );
 
     for source in [
-        "return function(s) s:circle{}:to{radius=10}:play(1, 'Linear') end",
-        "return function(s) s:circle{}:to{radius=10}:play(1, 'InOutCubic') end",
-        "return function(s) s:circle{}:to{radius=10}:play(1, 'cubicInOut') end",
-        "return function(s) s:circle{}:to{radius=10}:play(1, 'cubic-in-out') end",
-        "return function(s) s:container_2d{direction='HorizontalReverse'} end",
-        "return function(s) s:container_3d{direction='depthReverse'} end",
-        "return function(s) s:canvas_3d{camera_mode='Orthogonal'} end",
-        "return function(s) s:canvas_2d{filter='Linear'} end",
-        "return function(s) s:world_2d().filter:set('Nearest') end",
-        "return function(s) s:world_3d():to{camera_mode='Perspective'}:play() end",
-        "return function(s) s:code{language='Lua'} end",
-        "k.audio_synth{waveform='Sine'}; return function(s) end",
-        "k.audio_synth{preset='Boink'}; return function(s) end",
-        "return function(s) s:view('2D') end",
+        "return function() k.circle{}:to{radius=10}:play(1, 'Linear') end",
+        "return function() k.circle{}:to{radius=10}:play(1, 'InOutCubic') end",
+        "return function() k.circle{}:to{radius=10}:play(1, 'cubicInOut') end",
+        "return function() k.circle{}:to{radius=10}:play(1, 'cubic-in-out') end",
+        "return function() k.container_2d{direction='HorizontalReverse'} end",
+        "return function() k.container_3d{direction='depthReverse'} end",
+        "return function() k.canvas_3d{camera_mode='Orthogonal'} end",
+        "return function() k.canvas_2d{filter='Linear'} end",
+        "return function() k.world_2d().filter:set('Nearest') end",
+        "return function() k.world_3d():to{camera_mode='Perspective'}:play() end",
+        "return function() k.code{language='Lua'} end",
+        "k.audio_synth{waveform='Sine'}; return function() end",
+        "k.audio_synth{preset='Boink'}; return function() end",
+        "return function() k.view('2D') end",
     ] {
         assert!(
             try_load(source).is_err(),
@@ -435,7 +435,7 @@ end
     ] {
         let choice = serde_json::to_string(choice).unwrap();
         let source = format!(
-            "k.component{{mode={{default={choice},choices={{{choice}}}}}}}; return function(s) end"
+            "k.component('Custom', {{ mode={{default={choice},choices={{{choice}}}}}}}); return function() end"
         );
 
         assert!(
@@ -449,16 +449,16 @@ end
 fn partial_channels_pairs_and_reusable_definitions_share_native_tracks() {
     let scene = load(
         r#"
-return function(s)
-    local ball = s:circle {id='ball',radius=16,position={x=-200},scale={y=2},fill={a=0.5}}
-    s:world_2d():add(ball)
+return function()
+    local ball = k.circle{id='ball',radius=16,position={x=-200},scale={y=2},fill={a=0.5}}
+    k.world_2d():add(ball)
     assert(ball:get('position').y == 0 and ball:get('scale').x == 1)
     assert(ball:get('fill').a == 0.5)
     local movement = ball:by {position={x=100}}
     assert(ball:get('position.x') == -200)
     movement:play(1,'linear')
     movement:play(1,'linear')
-    s:all(function()
+    k.all(function()
         ball:from {position={x={0,200}},radius={16,39},opacity={0,1}}:play(2,'linear')
         ball:to {position={y=50}}:play(2,'linear')
     end)
@@ -518,9 +518,9 @@ end
 fn omitted_channels_do_not_create_tracks_and_to_keeps_its_absolute_destination() {
     let scene = load(
         r#"
-return function(s)
-    local ball=s:circle{id='ball',position={y=12}}
-    s:world_2d():add(ball)
+return function()
+    local ball=k.circle{id='ball',position={y=12}}
+    k.world_2d():add(ball)
     local destination=ball:to{position={x=10},radius=24}
     destination:play(1,'linear')
     ball:by{position={x=20}}:play(1)
@@ -569,10 +569,10 @@ end
 fn animation_definitions_only_expose_play() {
     load(
         r#"
-return function(s)
-    local ball=s:circle{}
-    local label=s:text_2d{}
-    local phase=s:track(0)
+return function()
+    local ball=k.circle{}
+    local label=k.text_2d{}
+    local phase=k.track(0)
     local animations={
         ball:to{radius=24}, ball:by{radius=2}, ball:from{radius={16,24}},
         ball.radius:to(24), ball.radius:by(2), ball.radius:from({16,24}),
@@ -605,7 +605,7 @@ fn malformed_pairs_channels_overlaps_and_limits_are_rejected() {
         "ball:to{position=k.vec2(1,2),['position.x']=3}",
         "ball:by{rotation=k.quat(0,0,0,1)}",
     ] {
-        let source = format!("return function(s) local ball=s:circle{{}}; {declaration} end");
+        let source = format!("return function() local ball=k.circle{{}}; {declaration} end");
 
         assert!(
             try_load(&source).is_err(),
@@ -619,11 +619,11 @@ fn malformed_pairs_channels_overlaps_and_limits_are_rejected() {
         "fill={a=false}",
         "position={z=1}",
     ] {
-        assert!(try_load(&format!("return function(s) s:circle{{{fields}}} end")).is_err());
+        assert!(try_load(&format!("return function() k.circle{{{fields}}} end")).is_err());
     }
 
-    assert!(try_load("return function(s) end, 'Extra'").is_err());
-    assert!(try_load("return {build=function(s) end,name='Old'}").is_err());
+    assert!(try_load("return function() end, 'Extra'").is_err());
+    assert!(try_load("return {build=function() end,name='Old'}").is_err());
 }
 
 #[test]
@@ -657,14 +657,14 @@ fn check_text_fade(
     };
 
     let source = r#"
-return function(s)
-    local label=s:CONSTRUCTOR{id='label',text=OLD,size=32,opacity=0.8}
-    s:world_2d():add(label)
+return function()
+    local label=k.CONSTRUCTOR{id='label',text=OLD,size=32,opacity=0.8}
+    k.world_2d():add(label)
     local back=label:fade(OLD)
-    s:wait(1)
+    k.wait(1)
     label:fade(NEW):play(2,'EASING')
     assert(label:get('text')==NEW)
-    s:wait(1)
+    k.wait(1)
     back:play(2,'EASING')
 end
 "#
@@ -741,13 +741,13 @@ fn latex_3d_fade_tracks_formulas_progress_and_bounds() {
 
     let scene = load(
         r#"
-return function(s)
-    local formula=s:latex_3d{id='formula',text='x',opacity=0.8,depth=0.25}
-    local target=s:latex_3d{id='target',text='x+x+x',depth=0.25}
-    s:world_3d():add(formula)
+return function()
+    local formula=k.latex_3d{id='formula',text='x',opacity=0.8,depth=0.25}
+    local target=k.latex_3d{id='target',text='x+x+x',depth=0.25}
+    k.world_3d():add(formula)
     formula:fade('x+x+x'):play(2,'back_out')
     assert(formula:get('text')=='x+x+x')
-    s:wait(1)
+    k.wait(1)
     formula:fade('z'):play(0)
 end
 "#,
@@ -786,40 +786,39 @@ end
         }
     }
 
-    assert!(try_load("return function(s) s:latex_2d{}:fade(123) end").is_err());
-    assert!(try_load("return function(s) s:latex_3d{}:fade(123) end").is_err());
+    assert!(try_load("return function() k.latex_2d{}:fade(123) end").is_err());
+    assert!(try_load("return function() k.latex_3d{}:fade(123) end").is_err());
 }
 
 #[test]
 fn callbacks_snapshot_camera_and_native_methods_return_definitions() {
     let scene = load(
         r#"
-local Counter=k.object{
-    name='Counter',components={k.component{value={default=0}}},
-    methods={increment=function(self,amount) return self:by{value=amount} end},
-}
-return function(s)
-    local ball=s:circle{id='ball',radius=10}
-    local counter=s:object(Counter,{id='counter'})
-    local label=s:text_2d{id='label',text='Old',opacity=0.8}
-    s:world_2d():add(ball);s:world_2d():add(counter);s:world_2d():add(label)
+local Counter=k.object_2d('Counter', {components={k.component('Custom', { value={default=0}})},
+    increment=function(self,amount) return self:by{value=amount} end,
+})
+return function()
+    local ball=k.circle{id='ball',radius=10}
+    local counter=Counter({id='counter'})
+    local label=k.text_2d{id='label',text='Old',opacity=0.8}
+    k.world_2d():add(ball);k.world_2d():add(counter);k.world_2d():add(label)
     local snap=ball:snapshot();ball:save()
     local fade=label:fade('New')
     assert(label:get('text')=='Old')
     local change=counter:increment(10)
     assert(counter:get('value')==0 and counter:type_name()=='Counter')
-    s:all(function()
+    k.all(function()
         change:play(2,'linear')
         fade:play(1,'linear')
         ball:from{position={k.vec2(0,0),k.vec2(10,20)}}:play(1)
     end)
     assert(label:get('text')=='New')
-    s:chain(function() ball:by{radius=10}:play(1);ball:restore(snap):play(1) end)
+    k.chain(function() ball:by{radius=10}:play(1);ball:restore(snap):play(1) end)
     ball:restore():play(0)
     ball:reset():play()
-    local camera=s:world_3d():focus_camera{position=k.vec3(0,2,7),target=k.vec3(0,0,0)}
-    s:parallel(function() camera:play(2) end)
-    s:view('3d')
+    local camera=k.world_3d():focus_camera{position=k.vec3(0,2,7),target=k.vec3(0,0,0)}
+    k.parallel(function() camera:play(2) end)
+    k.view('3d')
 end
 "#,
     );
@@ -863,11 +862,11 @@ end
     );
 
     for source in [
-        "local O=k.object{methods={to=function() end}};return function(s) end",
-        "return function(s) s:text_2d{}:fade(123) end",
-        "k.vec2=function() end;return function(s) end",
-        "rawset(k,'vec2',false);return function(s) end",
-        "setmetatable(k,{});return function(s) end",
+        "local O=k.object_2d('O', {to=function() end});return function() end",
+        "return function() k.text_2d{}:fade(123) end",
+        "k.vec2=function() end;return function() end",
+        "rawset(k,'vec2',false);return function() end",
+        "setmetatable(k,{});return function() end",
     ] {
         assert!(
             try_load(source).is_err(),
@@ -880,23 +879,23 @@ end
 fn bounds_channels_mesh_indices_and_orthogonal_height_are_typed() {
     let scene = load(
         r#"
-local O=k.object{bounds=function() return {x=10,y=20,width=30,height=40} end}
-return function(s)
-    local o=s:object(O,{id='object'})
-    local bounds=o:bounds();local size=o:box_size()
+local O=k.object_2d('O', {on_bounds=function(self)  return k.rect(10, 20, 30, 40) end})
+return function()
+    local o=O({id='object'})
+    local bounds=o:on_bounds();local size=o:box_size()
     assert(bounds.x==10 and bounds.y==20 and bounds.width==30 and size.x==30 and size.y==40)
     assert(k.quad(1,2,3,4).b==2 and math.abs(k.color(0.1,0.2,0.3,0.4).b-0.3)<0.00001)
-    s:canvas_3d{camera_fov=10,camera_mode='orthogonal'}:to{camera_fov=20}:play(1)
+    k.canvas_3d{camera_fov=10,camera_mode='orthogonal'}:to{camera_fov=20}:play(1)
     k.mesh{vertices={{0,0,0},{1,0,0},{0,1,0}},indices={1,2,3}}
 end
 "#,
     );
 
-    assert!(try_load("return function(s) s:world_3d():to{camera_fov=10}:play(1) end").is_err());
+    assert!(try_load("return function() k.world_3d():to{camera_fov=10}:play(1) end").is_err());
     assert_eq!(scene.scene().name(), "intro");
     assert!(
         try_load(
-            "return function(s) k.mesh{vertices={{0,0,0},{1,0,0},{0,1,0}},indices={0,1,2}} end"
+            "return function() k.mesh{vertices={{0,0,0},{1,0,0},{0,1,0}},indices={0,1,2}} end"
         )
         .is_err()
     );
@@ -906,16 +905,16 @@ end
 fn simulation_modules_inputs_and_reload_keep_explicit_deterministic_state() {
     let script = r#"
 local definitions=require('objects.counter')
-return function(s)
-    local ball=s:circle{id='ball'}
-    local counter=s:object(definitions,{id='counter',speed=3})
-    local channel=s:object(k.object{
+return function()
+    local ball=k.circle{id='ball'}
+    local counter=definitions({id='counter',speed=3})
+    local channel=k.object_2d('Channel', {
         state={x=0},inputs={},
-        update=function(state,frame,inputs) state.x=inputs.x end,
-    },{id='channel'})
+        on_update=function(self,frame,inputs) local state=self.state; state.x=inputs.x end,
+    })({id='channel'})
     channel:inputs{x=ball:prop('position.x')}
-    local empty=s:object(k.object{inputs={},update=function(state,frame,inputs) assert(next(inputs)==nil) end},{})
-    s:world_2d():add(ball);s:world_2d():add(counter);s:world_2d():add(channel);s:world_2d():add(empty)
+    local empty=k.object_2d('Empty', {inputs={},on_update=function(self,frame,inputs) local state=self.state; assert(next(inputs)==nil) end})({})
+    k.world_2d():add(ball);k.world_2d():add(counter);k.world_2d():add(channel);k.world_2d():add(empty)
     ball:to{position={x=10}}:play(1,'linear')
     counter:signal(function(self) assert(self:state().result==6) end)
     channel:signal(function(self) assert(math.abs(self:state().x-ball:get('position.x'))<0.001) end)
@@ -930,13 +929,13 @@ end
     sources.insert(
         "objects/counter.lua".into(),
         r#"
-return k.object{
-    components={k.component{speed={default=1}}},state={result=0},
-    update=function(state,frame,inputs)
+return k.object_2d('Custom 2D', {
+    components={k.component('Custom', { speed={default=1}})},state={result=0},
+    on_update=function(self,frame,inputs) local state=self.state;
         local helpers=require('utils.math')
         state.result=helpers.double(inputs.speed)
     end,
-}
+})
 "#
         .into(),
     );
@@ -982,17 +981,17 @@ return k.object{
 fn uniform_destinations_do_not_collide_with_object_properties() {
     let scene = load(
         r#"
-local Mesh=k.object{dimension=3,components={k.component{pulse={default=2}}}}
-return function(s)
-    local mesh=s:object(Mesh,{
+local Mesh=k.object_3d('Mesh', {components={k.component('Custom', { pulse={default=2}})}})
+return function()
+    local mesh=Mesh({
         id='mesh',shader=k.mesh_shader{fragment='uniform float pulse;out vec4 outColor;void main(){outColor=vec4(pulse);}'},uniforms={pulse=0},
     })
-    s:world_3d():add(mesh)
-    s:all(function()
+    k.world_3d():add(mesh)
+    k.all(function()
         mesh:from{uniforms={pulse={0,6}}}:play(3,'linear')
         mesh:to{pulse=10,position={x=2}}:play(3,'linear')
     end)
-    local bounds=mesh:bounds()
+    local bounds=mesh:on_bounds()
     assert(bounds.width==0)
 end
 "#,
@@ -1008,7 +1007,11 @@ end
         crate::core::TrackValue::F32(3.0)
     );
     assert_eq!(
-        world.get::<&crate::core::Properties>(entity).unwrap().0["pulse"].1,
+        world
+            .get::<&crate::core::Properties>(entity)
+            .unwrap()
+            .fields["pulse"]
+            .1,
         crate::core::TrackValue::F32(6.0)
     );
 }
@@ -1017,9 +1020,9 @@ end
 fn snapshots_capture_the_scheduling_position_without_changing_builder_values() {
     let scene = load(
         r#"
-return function(s)
-    local ball=s:circle{id='ball',radius=10}
-    s:world_2d():add(ball)
+return function()
+    local ball=k.circle{id='ball',radius=10}
+    k.world_2d():add(ball)
     ball:to{radius=30}:play(1,'linear')
     assert(ball:get('radius')==30)
     ball:save()
@@ -1068,14 +1071,14 @@ fn text_and_latex_morph_schedule_reusable_tasks_and_seek_in_both_dimensions() {
     ] {
         let source = format!(
             r#"
-return function(s)
-    local label=s:{constructor}{{id='label',text='aba'}}
-    s:world_{dimension}():add(label)
+return function()
+    local label=k.{constructor}{{id='label',text='aba'}}
+    k.world_{dimension}():add(label)
     local back=label:morph('aba')
-    s:wait(1)
+    k.wait(1)
     label:morph('aac'):play(2,'linear')
     assert(label:get('text')=='aac')
-    s:wait(1)
+    k.wait(1)
     back:play(2,'linear')
 end
 "#
@@ -1115,7 +1118,7 @@ end
 
         assert!(
             try_load(&format!(
-                "return function(s) s:{constructor}{{}}:morph(123) end"
+                "return function() k.{constructor}{{}}:morph(123) end"
             ))
             .is_err()
         );
@@ -1131,7 +1134,7 @@ fn morph_moves_shared_glyphs_without_crossfading_them() {
         ("latex_2d", r"x\qquad\qquad", r"\qquad\qquad x"),
     ] {
         let source = format!(
-            "return function(s) local t=s:{constructor}{{id='label',text={},size=32,opacity=0.8}} s:world_2d():add(t) t:morph({}):play(2,'linear') end",
+            "return function() local t=k.{constructor}{{id='label',text={},size=32,opacity=0.8}} k.world_2d():add(t) t:morph({}):play(2,'linear') end",
             serde_json::to_string(old).unwrap(),
             serde_json::to_string(new).unwrap(),
         );
@@ -1190,33 +1193,33 @@ fn morph_moves_shared_glyphs_without_crossfading_them() {
 fn reparent_moves_subtrees_and_preserves_lifetimes() {
     let scene = load(
         r#"
-return function(s)
-    local left = s:group_2d {id='left', position=k.vec2(10, 0)}
-    local right = s:group_2d {id='right', position=k.vec2(20, 0)}
-    s:world_2d():add(left)
-    s:world_2d():add(right)
-    local ball = s:circle {id='ball', position=k.vec2(3, 0)}
-    s:wait(1)
+return function()
+    local left = k.group_2d{id='left', position=k.vec2(10, 0)}
+    local right = k.group_2d{id='right', position=k.vec2(20, 0)}
+    k.world_2d():add(left)
+    k.world_2d():add(right)
+    local ball = k.circle{id='ball', position=k.vec2(3, 0)}
+    k.wait(1)
     left:add(ball)
-    s:wait(1)
+    k.wait(1)
     ball:remove()
-    s:wait(1)
+    k.wait(1)
     ball:reparent(right)
     ball:reparent(right)
     assert(#left:children() == 0 and #right:children() == 1)
     assert(ball:global_position().x == 23 and ball.position:get().x == 3)
     left:reparent(right)
-    assert(#right:children() == 2 and #s:world_2d():children() == 1)
+    assert(#right:children() == 2 and #k.world_2d():children() == 1)
     local function rejects(callback, message)
         local ok, err = pcall(callback)
         assert(not ok and string.find(tostring(err), message, 1, true))
     end
     rejects(function() right:reparent(left) end, 'cycle')
     rejects(function() right:reparent(right) end, 'itself')
-    rejects(function() ball:reparent(s:world_3d()) end, 'Cannot mix 2D and 3D')
-    rejects(function() ball:reparent(s:root()) end, 'Only canvases')
+    rejects(function() ball:reparent(k.world_3d()) end, 'Cannot mix 2D and 3D')
+    rejects(function() ball:reparent(k.root()) end, 'Only canvases')
     assert(#right:children() == 2 and #left:children() == 0)
-    local inactive = s:circle {id='inactive'}
+    local inactive = k.circle{id='inactive'}
     inactive:reparent(left)
     assert(#left:children() == 1)
 end
@@ -1240,17 +1243,17 @@ end
 fn sound_resources_schedule_without_advancing_or_mutating_defaults() {
     let scene = load(
         r#"
-return function(s)
+return function()
     local unused=k.audio_synth{preset='whoosh'}
     local source=k.audio_synth{preset='boink'}
     assert(source.duration>0)
-    local boink=s:audio{source=source,gain=0.2}
+    local boink=k.audio{source=source,gain=0.2}
     boink:play()
     boink:play{gain=0.15,pan=-0.5}
-    s:wait(0.5)
+    k.wait(0.5)
     boink:play()
-    s:all(function(s) s:wait(1); boink:play() end)
-    s:wait(0.5)
+    k.all(function() k.wait(1); boink:play() end)
+    k.wait(0.5)
 end
 "#,
     );
@@ -1281,19 +1284,19 @@ end
 #[test]
 fn simulation_sounds_survive_seek_checkpoints_and_reload_without_duplicates() {
     let script = r#"
-return function(s)
-    local hit=s:audio{source=k.audio_synth{preset='click'}}
-    local simulation=k.object{state={n=0},inputs={},update=function(state,frame,inputs)
+return function()
+    local hit=k.audio{source=k.audio_synth{preset='click'}}
+    local simulation=k.object_2d('Simulation', {state={n=0},inputs={},on_update=function(self,frame,inputs) local state=self.state;
         state.n=state.n+1
         if frame.index%30==0 then
             inputs.hit:play()
             inputs.hit:play{pan=0.5}
         end
-    end}
-    local object=s:object(simulation,{id='simulation'})
+    end})
+    local object=simulation({id='simulation'})
     object:inputs{hit=hit}
-    s:world_2d():add(object)
-    s:wait(5)
+    k.world_2d():add(object)
+    k.wait(5)
 end
 "#;
     let mut scene = load(script);
@@ -1356,13 +1359,13 @@ end
 fn explicit_simulation_updates_at_the_same_step_keep_each_sound() {
     let scene = load(
         r#"
-return function(s)
-    local sound=s:audio{source=k.audio_synth{preset='click'}}
-    local object=s:object(k.object{inputs={},update=function(state,frame,inputs) inputs.sound:play() end},{auto_update=false})
+return function()
+    local sound=k.audio{source=k.audio_synth{preset='click'}}
+    local object=k.object_2d('Object', {inputs={},on_update=function(self,frame,inputs) local state=self.state; inputs.sound:play() end})({auto_update=false})
     object:inputs{sound=sound}
-    s:world_2d():add(object)
+    k.world_2d():add(object)
     object:update(); object:update(); object:checkpoint()
-    s:wait(1)
+    k.wait(1)
 end
 "#,
     );
@@ -1412,7 +1415,7 @@ fn sound_validation_and_failed_simulation_leave_no_partial_events() {
             LuaScene::load(
                 ProjectContext::new(".").unwrap(),
                 "intro.lua",
-                sources(&format!("return function(s) k.audio_synth{options} end")),
+                sources(&format!("return function() k.audio_synth{options} end")),
                 (640, 480),
                 60,
                 crate::core::Margin::default()
@@ -1422,7 +1425,7 @@ fn sound_validation_and_failed_simulation_leave_no_partial_events() {
     }
 
     let shared = load(
-        "return function(s) local sound=s:audio{source=k.audio_synth{attack=1,decay=1,hold=7,release=1}}; for i=1,20 do sound:play() end end",
+        "return function() local sound=k.audio{source=k.audio_synth{attack=1,decay=1,hold=7,release=1}}; for i=1,20 do sound:play() end end",
     );
     let audio = shared.scene().audio.borrow();
 
@@ -1436,15 +1439,15 @@ fn sound_validation_and_failed_simulation_leave_no_partial_events() {
 
     let scene = load(
         r#"
-return function(s)
-    local sound=s:audio{source=k.audio_synth{preset='click'}}
-    local object=s:object(k.object{inputs={},update=function(state,frame,inputs)
+return function()
+    local sound=k.audio{source=k.audio_synth{preset='click'}}
+    local object=k.object_2d('Object', {inputs={},on_update=function(self,frame,inputs) local state=self.state;
         inputs.sound:play()
         if frame.index==10 then error('Failed step.') end
-    end},{})
+    end})({})
     object:inputs{sound=sound}
-    s:world_2d():add(object)
-    s:wait(1)
+    k.world_2d():add(object)
+    k.wait(1)
 end
 "#,
     );
@@ -1460,12 +1463,12 @@ end
 #[test]
 fn sound_tails_extend_the_scene_without_advancing_the_animator() {
     assert_eq!(
-        load("return function(s) s:audio{source=k.audio_synth{}} end").duration(),
+        load("return function() k.audio{source=k.audio_synth{}} end").duration(),
         0.0
     );
 
     let scene = load(
-        "return function(s) local tone=s:audio{source=k.audio_synth{waveform='triangle',frequency=220,attack=0.01,decay=0.02,hold=0.03,release=0.04}}; tone:play(); tone:play(); s:wait(0.01); tone:play() end",
+        "return function() local tone=k.audio{source=k.audio_synth{waveform='triangle',frequency=220,attack=0.01,decay=0.02,hold=0.03,release=0.04}}; tone:play(); tone:play(); k.wait(0.01); tone:play() end",
     );
     let audio = scene.scene().audio.borrow();
 
@@ -1479,13 +1482,13 @@ fn sound_tails_extend_the_scene_without_advancing_the_animator() {
 fn audio_resources_and_players_validate_separate_immutable_options() {
     let scene = load(
         r#"
-return function(s)
+return function()
     local source=k.audio_synth{preset='boink'}
     assert(source.duration>0)
     assert(not pcall(function() source.duration=2 end))
     assert(not pcall(function() source:play() end))
-    local left=s:audio{source=source,gain=0.2,pan=-1}
-    local right=s:audio{source=source,gain=0.5,pan=1}
+    local left=k.audio{source=source,gain=0.2,pan=-1}
+    local right=k.audio{source=source,gain=0.5,pan=1}
     left:play(); right:play{gain=0.1}; right:play()
 end
 "#,
@@ -1502,12 +1505,12 @@ end
     assert_eq!(audio.scheduled[2].gain, 0.5);
 
     for script in [
-        "return function(s) s:audio{} end",
-        "return function(s) s:audio{source=k.audio_synth{},frequency=600} end",
-        "return function(s) s:audio{source=k.audio_synth{},gain=0/0} end",
-        "return function(s) s:audio{source=k.audio_synth{},pan=2} end",
-        "return function(s) s:audio{source=k.audio_synth{}}:play{frequency=600} end",
-        "return function(s) k.audio_file('../outside.wav') end",
+        "return function() k.audio{} end",
+        "return function() k.audio{source=k.audio_synth{},frequency=600} end",
+        "return function() k.audio{source=k.audio_synth{},gain=0/0} end",
+        "return function() k.audio{source=k.audio_synth{},pan=2} end",
+        "return function() k.audio{source=k.audio_synth{}}:play{frequency=600} end",
+        "return function() k.load_audio('../outside.wav') end",
     ] {
         assert!(
             LuaScene::load(
@@ -1535,17 +1538,17 @@ fn audio_files_share_samples_and_invalidate_simulation_history_on_content_change
     std::fs::write(root.join("assets/hit.wav"), fixture).unwrap();
 
     let script = r#"
-return function(s)
-    local source=k.audio_file('assets/hit.wav')
-    local again=k.audio_file('assets/hit.wav')
+return function()
+    local source=k.load_audio('assets/hit.wav')
+    local again=k.load_audio('assets/hit.wav')
     assert(source.duration>0.24 and source.duration<0.26)
-    local hit=s:audio{source=source,gain=0.4}
-    local right=s:audio{source=again,gain=0.2,pan=1}
+    local hit=k.audio{source=source,gain=0.4}
+    local right=k.audio{source=again,gain=0.2,pan=1}
     hit:play(); right:play()
-    local object=s:object(k.object{state={},inputs={},update=function(state,frame,inputs)
+    local object=k.object_2d('Object', {state={},inputs={},on_update=function(self,frame,inputs) local state=self.state;
         if frame.index%30==0 then inputs.hit:play() end
-    end},{id='simulation'})
-    object:inputs{hit=hit}; s:world_2d():add(object); s:wait(4)
+    end})({id='simulation'})
+    object:inputs{hit=hit}; k.world_2d():add(object); k.wait(4)
 end
 "#;
 
@@ -1646,10 +1649,10 @@ end
 fn triangle_apex_uses_native_tracks_and_seek() {
     let scene = load(
         r#"
-return function(s)
-    local triangle = s:triangle {id='triangle', size=k.vec2(200, 100), apex=0}
+return function()
+    local triangle = k.triangle{id='triangle', size=k.vec2(200, 100), apex=0}
     assert(not pcall(function() return triangle.sides end))
-    s:world_2d():add(triangle)
+    k.world_2d():add(triangle)
     triangle:to {apex=1}:play(2, 'linear')
 end
 "#,
@@ -1665,4 +1668,176 @@ end
         assert_eq!(shape.size, crate::core::types::vec2(200.0, 100.0));
         assert_eq!(shape.apex, expected);
     }
+}
+
+#[test]
+fn constructors_callbacks_and_named_components_share_the_object_contract() {
+    let scene = load(
+        r#"
+local Progress = k.component('Progress', {
+    value = {default = 0, min = 0, max = 100},
+    width = {default = 20, min = 0},
+})
+local Meter = k.object_2d('Meter', { components = {Progress}, state = {total = 0},
+})
+function Meter:on_bounds()
+    assert(not pcall(function() self.width = 99 end))
+    assert(not pcall(function() self.state.total = 99 end))
+    return k.rect(10, 20, self.width, 40)
+end
+function Meter:on_update(frame)
+    self.state.total = self.state.total + self.width * frame.dt
+end
+function Meter:advance(amount)
+    return self:by {value = amount}
+end
+function Meter.double(value)
+    return value * 2
+end
+local Volume = k.object_3d('Volume', {})
+function Volume:on_bounds()
+    return k.box(-1, -2, -3, 2, 4, 6)
+end
+return function()
+    assert(Meter.double(3) == 6)
+    local first = Meter {id = 'first'}
+    local second = Meter {id = 'second', width = 10}
+    local panel = k.panel {id = 'panel', size = k.vec2(30, 40)}
+    local volume = Volume {id = 'volume'}
+    k.world_2d():add(first)
+    k.world_2d():add(second)
+    k.world_2d():add(panel)
+    k.world_3d():add(volume)
+    assert(first:on_bounds().width == 20)
+    assert(second:on_bounds().width == 10)
+    assert(panel:on_bounds().width == 30)
+    assert(volume:on_bounds().depth == 6)
+    first:advance(3):play(0)
+    assert(first.value:get() == 3 and second.value:get() == 0)
+    first.width:to(40):play(1, 'linear')
+    assert(first:on_bounds().width == 40)
+    k.wait(1)
+end
+"#,
+    );
+    scene.update(1.0).unwrap();
+
+    let world = scene.scene().world();
+    let entity = scene.entity("first").unwrap();
+    let inspection = world
+        .get::<&crate::core::components::Inspection>(entity)
+        .unwrap();
+    let groups = inspection.property_groups(&world, entity);
+    let progress = groups.iter().find(|(name, _)| name == "Progress").unwrap();
+
+    assert!(groups.iter().any(|(name, _)| name == "Transform 2D"));
+    assert_eq!(
+        progress
+            .1
+            .iter()
+            .map(|target| target.name())
+            .collect::<Vec<_>>(),
+        ["value", "width"]
+    );
+}
+
+#[test]
+fn object_definitions_reject_missing_names_and_reserved_members() {
+    for source in [
+        "k.component({value={default=0}}); return function() end",
+        "k.component('', {value={default=0}}); return function() end",
+        "k.component(123, {}); return function() end",
+        "k.object_2d(123, {}); return function() end",
+        "k.object_2d({}); return function() end",
+        "k.object_3d('', {}); return function() end",
+        "k.object_2d('O', {name='Old'}); return function() end",
+        "local O=k.object_2d('O', {}); function O:on_darw(ctx) end; return function() end",
+        "local O=k.object_2d('O', {}); function O:play() end; return function() end",
+        "local O=k.object_2d('O', {dimension=2}); return function() end",
+        "local O=k.object_2d('O', {methods={}}); return function() end",
+    ] {
+        assert!(
+            try_load(source).is_err(),
+            "Accepted invalid definition: {source}"
+        );
+    }
+}
+
+#[test]
+fn scene_local_modules_create_and_schedule_independent_scenes() {
+    let module = r#"
+local Progress = k.component('Progress', {value = {default = 0}})
+local Card = k.object_2d('Card', {components = {Progress}})
+function Card:on_bounds()
+    return k.rect(0, 0, 20, 10)
+end
+local calls = 0
+return function(radius)
+    calls = calls + 1
+    assert(calls == 1)
+    local ball = k.circle {id = 'ball', radius = radius}
+    local card = Card {id = 'card'}
+    assert(ball:parent() == nil and card:parent() == nil)
+    k.world_2d():add(ball)
+    k.world_2d():add(card)
+    k.all(function(...)
+        assert(select('#', ...) == 0)
+        ball.radius:to(radius * 2):play(2, 'linear')
+        card.value:to(1):play(3, 'linear')
+    end)
+    k.wait(1)
+end
+"#;
+    let entry = r#"
+local create = require('shared')
+assert(create == require('shared'))
+return function(...)
+    assert(select('#', ...) == 0)
+    create(RADIUS)
+end
+"#;
+    let sources = |radius| -> Sources {
+        [
+            (PathBuf::from("intro.lua"), entry.replace("RADIUS", radius)),
+            (PathBuf::from("shared.lua"), module.to_owned()),
+        ]
+        .into()
+    };
+    let build = |radius| {
+        LuaScene::load(
+            ProjectContext::new(".").unwrap(),
+            "intro.lua",
+            sources(radius),
+            (640, 480),
+            60,
+            crate::core::Margin::default(),
+        )
+        .unwrap()
+    };
+    let mut first = build("10");
+    let second = build("20");
+    let radius = |scene: &LuaScene| {
+        scene
+            .scene()
+            .world()
+            .get::<&CircleShape>(scene.entity("ball").unwrap())
+            .unwrap()
+            .radius
+    };
+
+    assert_eq!(first.duration(), 4.0);
+    assert_eq!(second.duration(), 4.0);
+    first.update(1.0).unwrap();
+    second.update(1.0).unwrap();
+
+    assert_eq!(radius(&first), 15.0);
+    assert_eq!(radius(&second), 30.0);
+
+    let entity = first.entity("ball");
+    first.reload(sources("30")).unwrap();
+    first.update(1.0).unwrap();
+
+    assert_eq!(first.entity("ball"), entity);
+    assert_eq!(radius(&first), 45.0);
+    assert_eq!(radius(&second), 30.0);
 }

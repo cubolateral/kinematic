@@ -5,6 +5,7 @@ use crate::core::components::{
 };
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Circle Shape")]
 /// Geometry of a circular object.
 pub struct CircleShape {
     /// Radius in local coordinates.

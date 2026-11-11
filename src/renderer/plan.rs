@@ -343,7 +343,7 @@ mod tests {
 
         scene.add_canvas_2d(&extra);
 
-        let first = rect()
+        let first = panel()
             .shader(&shader)
             .texture("source", &extra)
             .build(&mut scene);

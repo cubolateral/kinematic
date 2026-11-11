@@ -48,7 +48,7 @@ pub(super) fn register(runtime: &Rc<Runtime>, api: &Table) -> Result<()> {
     let weak = Rc::downgrade(runtime);
 
     api.set(
-        "image",
+        "load_image",
         runtime.lua.create_function(move |_, path: String| {
             let runtime = weak
                 .upgrade()
@@ -84,7 +84,7 @@ pub(super) fn register(runtime: &Rc<Runtime>, api: &Table) -> Result<()> {
     let weak = Rc::downgrade(runtime);
 
     api.set(
-        "font",
+        "load_font",
         runtime.lua.create_function(move |_, path: String| {
             let runtime = weak
                 .upgrade()
@@ -268,7 +268,7 @@ pub(super) fn configure(
 
             let size = glam::vec2(w as f32, h as f32);
 
-            if let Ok(mut shape) = world.get::<&mut RectShape>(entity) {
+            if let Ok(mut shape) = world.get::<&mut PanelShape>(entity) {
                 shape.size = size;
             } else if let Ok(mut shape) = world.get::<&mut PlaneShape>(entity) {
                 shape.size = size / pixels;
@@ -293,7 +293,7 @@ pub(super) fn configure(
                 .map_err(mlua::Error::external)?
                 .0 = Some(texture.texture);
 
-            if let Ok(mut shape) = world.get::<&mut RectShape>(entity) {
+            if let Ok(mut shape) = world.get::<&mut PanelShape>(entity) {
                 shape.size = glam::vec2(size.0 as f32, size.1 as f32);
             } else if let Ok(mut shape) = world.get::<&mut PlaneShape>(entity) {
                 shape.size = glam::vec2(size.0 as f32, size.1 as f32) / pixels;

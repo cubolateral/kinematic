@@ -16,12 +16,13 @@ Kinematic is an animation editor for Lua projects, implemented in Rust. The sour
 
 ## Stable contracts
 
-- Lua declares scene contents and schedules work through Scene; it does not own the application loop or editor state.
+- Lua declares scene contents and schedules work through its scene-local k module; it does not own the application loop or editor state.
 - Animator compiles Task values into animation data. Scene::update(time) evaluates that data. Drawing must not mutate animation state.
 - Lua objects use internal generated lowercase builders such as circle(). Objects have typed handlers, a default type name, and inactive Node metadata until attached to a group.
 - Every scene has a named internal root container available through Scene::root(). Types deriving Node attach subtrees at the animator's current time through their generated handlers. ObjectHandler::remove ends its lifetime without deleting entities or tree edges, so seeking backward can restore it.
 - Inactive nodes must be ignored by scene evaluation, rendering, hit testing, and editor views.
 - Objects are ECS bundles implementing Object. The derive macro generates builders and typed handlers. #[trackable] fields are exposed directly on those types; do not introduce component-level handlers for convenience.
+- Components deriving Trackable require #[trackable(name = "Component Name")]; use capitalized words separated by spaces, including dimension suffixes such as "Transform 2D". Lua components and custom objects require an explicit display name as their first constructor argument.
 - Trackable fields use #[track] and must appear before untracked fields, separated by one blank line. New trackable value types require support in TrackValue, TrackValueType, interpolation, and display behavior.
 - Keyframes are appended in non-decreasing timeline order.
 - Drawing starts at the root container, follows its optional ordered child lists, uses local coordinates in draw callbacks, and leaves ECS state unchanged. Container opacity composites the complete subtree once.

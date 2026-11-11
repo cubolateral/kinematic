@@ -9,6 +9,7 @@ use crate::core::{
 use kinematic_macros::{Object, Trackable};
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Torus Shape")]
 pub struct TorusShape {
     /// Distance from the torus center to the center of its tube in local units.
     #[track(min = 0.0)]

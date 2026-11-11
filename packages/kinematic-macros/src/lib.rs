@@ -32,7 +32,7 @@ pub fn derive_node(input: TokenStream) -> TokenStream {
     container::derive_node(input)
 }
 
-#[proc_macro_derive(Trackable, attributes(track))]
+#[proc_macro_derive(Trackable, attributes(track, trackable))]
 pub fn derive_trackable(input: TokenStream) -> TokenStream {
     trackable::derive_trackable(input)
 }

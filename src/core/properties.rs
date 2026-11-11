@@ -53,7 +53,10 @@ impl PropertySchema {
 
 /// Dynamic properties use the same values, targets and interpolation as native fields.
 #[derive(Clone, Debug, Default)]
-pub struct Properties(pub BTreeMap<String, (std::sync::Arc<PropertySchema>, TrackValue)>);
+pub struct Properties {
+    pub fields: BTreeMap<String, (std::sync::Arc<PropertySchema>, TrackValue)>,
+    pub components: Vec<(String, Vec<String>)>,
+}
 
 impl TrackValue {
     /// Rejects non-finite values before they enter a scene or animation.

@@ -2,7 +2,7 @@ use super::{LuaScene, Sources};
 use crate::core::{Margin, ProjectContext, ProjectSettings, atomic_write};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     path::{Path, PathBuf},
 };
 
@@ -10,15 +10,16 @@ pub const MANIFEST: &str = "kinematic/project.ron";
 
 /// The single authoritative configuration for a Lua project.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(from = "ManifestData", into = "ManifestData")]
+#[serde(deny_unknown_fields)]
 pub struct Manifest {
     pub version: u32,
     pub name: String,
     pub scenes: Vec<PathBuf>,
+    #[serde(default)]
     pub(crate) audio: Vec<AudioClip>,
-    pub(crate) legacy_audio: BTreeMap<PathBuf, Vec<AudioClip>>,
     pub resolution: (u32, u32),
     pub fps: u32,
+    #[serde(default)]
     pub margin: Margin,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -90,125 +91,6 @@ impl AudioClip {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ManifestData {
-    version: u32,
-    name: String,
-    scenes: Vec<SceneEntry>,
-    #[serde(default)]
-    audio: Vec<AudioClip>,
-    resolution: (u32, u32),
-    fps: u32,
-    #[serde(default)]
-    margin: Margin,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(untagged)]
-enum SceneEntry {
-    Path(PathBuf),
-    Audio {
-        file: PathBuf,
-        audio: Vec<AudioClip>,
-    },
-}
-
-impl<'de> Deserialize<'de> for SceneEntry {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct Visitor;
-
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = SceneEntry;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("A Lua path or scene with audio clips.")
-            }
-            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<Self::Value, E> {
-                Ok(SceneEntry::Path(value.into()))
-            }
-            fn visit_map<M: serde::de::MapAccess<'de>>(
-                self,
-                map: M,
-            ) -> Result<Self::Value, M::Error> {
-                #[derive(Deserialize)]
-                #[serde(deny_unknown_fields)]
-                struct Entry {
-                    file: PathBuf,
-                    #[serde(default)]
-                    audio: Vec<AudioClip>,
-                }
-
-                let entry = Entry::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
-
-                Ok(SceneEntry::Audio {
-                    file: entry.file,
-                    audio: entry.audio,
-                })
-            }
-        }
-
-        deserializer.deserialize_any(Visitor)
-    }
-}
-
-impl From<ManifestData> for Manifest {
-    fn from(data: ManifestData) -> Self {
-        let mut audio = BTreeMap::new();
-        let scenes = data
-            .scenes
-            .into_iter()
-            .map(|entry| match entry {
-                SceneEntry::Path(path) => path,
-                SceneEntry::Audio { file, audio: clips } => {
-                    audio.insert(file.clone(), clips);
-
-                    file
-                }
-            })
-            .collect();
-
-        Self {
-            version: data.version,
-            name: data.name,
-            scenes,
-            audio: data.audio,
-            legacy_audio: audio,
-            resolution: data.resolution,
-            fps: data.fps,
-            margin: data.margin,
-        }
-    }
-}
-
-impl From<Manifest> for ManifestData {
-    fn from(mut manifest: Manifest) -> Self {
-        let scenes = manifest
-            .scenes
-            .into_iter()
-            .map(|file| {
-                match manifest
-                    .legacy_audio
-                    .remove(&file)
-                    .filter(|clips| !clips.is_empty())
-                {
-                    Some(audio) => SceneEntry::Audio { file, audio },
-                    None => SceneEntry::Path(file),
-                }
-            })
-            .collect();
-
-        Self {
-            version: manifest.version,
-            name: manifest.name,
-            scenes,
-            audio: manifest.audio,
-            resolution: manifest.resolution,
-            fps: manifest.fps,
-            margin: manifest.margin,
-        }
-    }
-}
-
 impl Manifest {
     pub fn validate(&self, context: &ProjectContext) -> Result<(), String> {
         if self.version != 1 {
@@ -241,64 +123,19 @@ impl Manifest {
             }
         }
 
-        for clips in std::iter::once(&self.audio).chain(self.legacy_audio.values()) {
-            let mut ids = BTreeSet::new();
+        let mut ids = BTreeSet::new();
 
-            if clips.len() > 100_000 {
-                return Err("Project exceeds 100000 audio clips.".into());
-            }
-
-            for clip in clips {
-                clip.validate(context)?;
-
-                if !ids.insert(clip.id) {
-                    return Err("Audio clip IDs must be unique.".into());
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub(crate) fn migrate_audio(&mut self, durations: &[f32]) -> Result<(), String> {
-        if self.legacy_audio.is_empty() {
-            return Ok(());
-        }
-
-        let mut clips = self.audio.clone();
-        let mut ids = clips.iter().map(|clip| clip.id).collect::<BTreeSet<_>>();
-        let mut next = 0;
-        let mut start: f32 = 0.0;
-
-        for (path, duration) in self.scenes.iter().zip(durations) {
-            for clip in self.legacy_audio.get(path).into_iter().flatten() {
-                let mut clip = clip.clone();
-
-                clip.at += start as f64;
-
-                if ids.contains(&clip.id) {
-                    while ids.contains(&next) {
-                        next += 1;
-                    }
-
-                    clip.id = next;
-                }
-
-                ids.insert(clip.id);
-
-                clips.push(clip);
-            }
-
-            start += *duration;
-        }
-
-        if clips.len() > 100_000 {
+        if self.audio.len() > 100_000 {
             return Err("Project exceeds 100000 audio clips.".into());
         }
 
-        self.audio = clips;
+        for clip in &self.audio {
+            clip.validate(context)?;
 
-        self.legacy_audio.clear();
+            if !ids.insert(clip.id) {
+                return Err("Audio clip IDs must be unique.".into());
+            }
+        }
 
         Ok(())
     }
@@ -375,7 +212,6 @@ impl LuaProject {
             name: name.into(),
             scenes: vec!["scenes/intro.lua".into()],
             audio: Vec::new(),
-            legacy_audio: BTreeMap::new(),
             resolution: settings.resolution,
             fps: settings.fps,
             margin: settings.margin,
@@ -544,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn old_audio_clips_default_to_the_first_lane() {
+    fn audio_clips_default_to_the_first_lane() {
         let mut clip: AudioClip = ron::from_str(r#"(id: 1, file: "assets/a.wav", at: 0.0, offset: 0.0, duration: 1.0, gain: 1.0, pan: 0.0)"#).unwrap();
 
         assert_eq!(clip.lane, 0);
@@ -555,46 +391,9 @@ mod tests {
     }
 
     #[test]
-    fn legacy_audio_migrates_to_absolute_time_with_unique_ids() {
-        let mut manifest: Manifest =
-            ron::from_str(include_str!("../../examples/lua/2d/kinematic/project.ron")).unwrap();
-
-        manifest.scenes = vec!["a.lua".into(), "b.lua".into()];
-
-        let clip: AudioClip = ron::from_str(r#"(id: 1, file: "assets/a.wav", at: 0.25, offset: 0.0, duration: 10.0, gain: 1.0, pan: 0.0)"#).unwrap();
-
-        manifest
-            .legacy_audio
-            .insert("a.lua".into(), vec![clip.clone()]);
-        manifest.legacy_audio.insert("b.lua".into(), vec![clip]);
-
-        let serialized = ron::to_string(&manifest).unwrap();
-        let mut manifest: Manifest = ron::from_str(&serialized).unwrap();
-
-        manifest.migrate_audio(&[2.0, 3.0]).unwrap();
-
-        assert_eq!(
-            manifest
-                .audio
-                .iter()
-                .map(|clip| clip.at)
-                .collect::<Vec<_>>(),
-            [0.25, 2.25]
-        );
-        assert_ne!(manifest.audio[0].id, manifest.audio[1].id);
-        assert!(manifest.legacy_audio.is_empty());
-
-        let saved = ron::to_string(&manifest).unwrap();
-        let restored: Manifest = ron::from_str(&saved).unwrap();
-
-        assert_eq!(restored.audio, manifest.audio);
-        assert!(restored.legacy_audio.is_empty());
-    }
-
-    #[test]
-    fn legacy_and_audio_scene_entries_round_trip_without_losing_clips() {
-        let legacy = include_str!("../../examples/lua/2d/kinematic/project.ron");
-        let mut manifest: Manifest = ron::from_str(legacy).unwrap();
+    fn project_audio_round_trips_without_losing_clips() {
+        let source = include_str!("../../examples/lua/2d/kinematic/project.ron");
+        let mut manifest: Manifest = ron::from_str(source).unwrap();
 
         assert!(manifest.audio.is_empty());
 
@@ -640,7 +439,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let mut project = LuaProject::create(&root, "Audio clips", false).unwrap();
 
-        std::fs::write(root.join("scenes/intro.lua"), "return function(s) local f=k.audio_file('assets/chime.wav'); s:audio{source=f}:play(); s:wait(1) end").unwrap();
+        std::fs::write(root.join("scenes/intro.lua"), "return function() local f=k.load_audio('assets/chime.wav'); k.audio{source=f}:play(); k.wait(1) end").unwrap();
         std::fs::write(
             root.join("assets/chime.wav"),
             include_bytes!("../../examples/lua/audio/assets/chime.wav"),

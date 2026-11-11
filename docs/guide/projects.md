@@ -46,7 +46,7 @@ format does not support. This is the current format:
 <<< ../../examples/lua/2d/kinematic/project.ron
 
 `version` identifies the manifest format, not the application version. `scenes` lists
-the scene files and their order in the video. Each file returns a `function(s)`. The
+the scene files and their order in the video. Each file returns a `function()`. The
 displayed scene name comes from its file name, while its persistent identity is its
 relative path. A module does not become a scene just because it is in the project.
 
@@ -70,21 +70,28 @@ return {accent = k.color("#4080FF")}
 ```lua
 local colors = require("modules.colors")
 
-return function(s)
-    s:world_2d():add(s:circle {fill = colors.accent})
+return function()
+    k.world_2d():add(k.circle{fill = colors.accent})
 
-    s:wait(1)
+    k.wait(1)
 end
 ```
 
 `require("folder.module")` looks for `folder/module.lua` and `folder/module/init.lua`.
-Imports are cached per revision, and circular imports are errors. `k` is available in
-modules as a read-only API. Simulations use a [restricted module
-environment](simulation.md).
+Imports are cached within each scene revision, and circular imports are errors.
+`k` is a read-only API bound to the importing scene, including when called from a module.
+Each scene has its own Lua VM and module cache, so the same module can create objects and
+schedule work independently in multiple scenes. Return a definition or factory function
+from reusable modules; returning an instance shares that instance within the same scene.
+Simulations use a [restricted module environment](simulation.md).
+
+Scene files return exactly one function. Use `return function() ... end`, or declare a
+local named function and return it. The engine calls it without arguments; scene operations
+are available through `k` throughout the module graph.
 
 ## IDs and object identity
 
-Give important objects an explicit `id`, for example `s:circle {id="ball"}`. IDs are
+Give important objects an explicit `id`, for example `k.circle {id="ball"}`. IDs are
 unique within a scene and preserve identity when declarations are inserted or reordered.
 Without an ID, identity depends on declaration order. Changing a built-in type or
 dynamic schema may recreate incompatible data.

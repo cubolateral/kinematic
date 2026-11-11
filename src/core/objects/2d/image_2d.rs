@@ -4,7 +4,7 @@ use kinematic_macros::Object;
 
 use crate::core::{
     components::{Draw2D, Filter, Style, Transform2D, draw_styled_path, styled_bounds},
-    objects::{ImageSource, RectShape, rect_path},
+    objects::{ImageSource, PanelShape, rect_path},
     types::{Color, Vector2},
 };
 
@@ -13,7 +13,7 @@ use crate::core::{
 #[object(spatial = "2d", builder = "image_2d")]
 pub struct Image2D {
     #[trackable]
-    pub shape: RectShape,
+    pub shape: PanelShape,
     #[trackable]
     pub style: Style,
     #[trackable]
@@ -29,7 +29,7 @@ pub struct Image2D {
 impl Default for Image2D {
     fn default() -> Self {
         Self {
-            shape: RectShape::default(),
+            shape: PanelShape::default(),
             style: Style {
                 fill: Color::TRANSPARENT,
                 ..Default::default()
@@ -37,9 +37,9 @@ impl Default for Image2D {
             transform: Transform2D::default(),
             draw: Draw2D {
                 on_draw: draw_image_object,
-                box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size.abs(),
+                box_size: |world, entity| world.get::<&PanelShape>(entity).unwrap().size.abs(),
                 visual_bounds: |world, entity| {
-                    let shape = world.get::<&RectShape>(entity).unwrap();
+                    let shape = world.get::<&PanelShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
 
@@ -73,7 +73,7 @@ impl Image2DHandler {
     pub fn get_pixel_color(&self, point: Vector2) -> Color {
         let world = self.world.borrow();
         let source = world.get::<&ImageSource>(self.entity).unwrap();
-        let shape = world.get::<&RectShape>(self.entity).unwrap();
+        let shape = world.get::<&PanelShape>(self.entity).unwrap();
 
         source.pixel_color(point, shape.size)
     }
@@ -89,7 +89,7 @@ fn draw_image_object(
     let Some(image) = source.image() else {
         return;
     };
-    let shape = world.get::<&RectShape>(entity).unwrap();
+    let shape = world.get::<&PanelShape>(entity).unwrap();
     let style = world.get::<&Style>(entity).unwrap();
     let transform = world.get::<&Transform2D>(entity).unwrap();
 
@@ -99,7 +99,7 @@ fn draw_image_object(
 /// Draws an image inside a styled rectangle in local 2D coordinates.
 pub fn draw_image_2d(
     image: &skia_safe::Image,
-    shape: &RectShape,
+    shape: &PanelShape,
     style: &Style,
     scale: Vector2,
     opacity: f32,

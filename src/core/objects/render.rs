@@ -1232,7 +1232,7 @@ mod shader_capture_tests {
     fn group_blur_filters_its_subtree() {
         let mut scene = Scene::new_with_resolution((64, 64));
         let group = group_2d().blur(4.0).build(&mut scene);
-        let child = rect()
+        let child = panel()
             .size(vec2(16.0, 16.0))
             .fill(Color::WHITE)
             .build(&mut scene);

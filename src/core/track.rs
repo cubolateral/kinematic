@@ -101,8 +101,10 @@ impl TrackTarget {
     pub(crate) fn get(&self, world: &hecs::World, entity: hecs::Entity) -> TrackValue {
         match self {
             Self::Property { info, .. } => (info.get)(world, entity),
-            Self::Dynamic(schema) => world.get::<&crate::core::Properties>(entity).unwrap().0
-                [&schema.name]
+            Self::Dynamic(schema) => world
+                .get::<&crate::core::Properties>(entity)
+                .unwrap()
+                .fields[&schema.name]
                 .1
                 .clone(),
             Self::Uniform(name) => crate::core::objects::shader_uniform(world, entity, name)
@@ -118,7 +120,7 @@ impl TrackTarget {
                 world
                     .get::<&mut crate::core::Properties>(entity)
                     .unwrap()
-                    .0
+                    .fields
                     .get_mut(&schema.name)
                     .unwrap()
                     .1 = schema.clamp(value)
@@ -833,7 +835,7 @@ static STANDALONE_TRACK_INFO: TrackInfo = TrackInfo {
 };
 
 static STANDALONE_TRACKABLE_INFO: TrackableInfo = TrackableInfo {
-    name: "StandaloneTrack",
+    name: "Standalone Track",
     type_id: || std::any::TypeId::of::<StandaloneTrackValue>(),
     get: || std::slice::from_ref(&STANDALONE_TRACK_INFO),
 };
@@ -1181,6 +1183,7 @@ mod tests {
     use super::*;
 
     #[derive(Clone, kinematic_macros::Trackable)]
+    #[trackable(name = "Bounded Values")]
     struct BoundedValues {
         #[track(min = 0.0, max = 1.0)]
         float: f32,
@@ -1568,7 +1571,7 @@ pub enum TrackLimits {
 /// Metadata for a component that exposes one or more tracked fields.
 #[derive(Clone, Copy)]
 pub struct TrackableInfo {
-    /// Name of the trackable component, usually the Rust type name.
+    /// Explicit display name of the trackable component.
     pub name: &'static str,
     /// Returns the runtime type id of the trackable component.
     pub type_id: fn() -> std::any::TypeId,

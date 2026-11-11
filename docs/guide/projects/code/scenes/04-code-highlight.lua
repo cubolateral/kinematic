@@ -1,12 +1,12 @@
-return function(s)
-	local code = s:code {
+return function()
+	local code = k.code{
 		code = [=[
 local text = "Hello, Kinematic!"
 print(text)]=],
 		language = "lua",
 	}
-	s:world_2d():add(code)
+	k.world_2d():add(code)
 
 	code:highlight(code:find_all("text")):play(1)
-	s:wait(1)
+	k.wait(1)
 end

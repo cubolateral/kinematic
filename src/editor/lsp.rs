@@ -52,14 +52,11 @@ impl Client {
 
         std::fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
 
-        let scenes = crate::scripting::LuaProject::open(root.root())
-            .map(|project| project.manifest.scenes)
-            .unwrap_or_default();
-
-        write_scene_paths(&root, &scenes)?;
-
-        std::fs::write(cache.join("components.lua"), luals_plugin(&root))
-            .map_err(|e| e.to_string())?;
+        std::fs::write(
+            cache.join("components.lua"),
+            include_str!("../scripting/luals.lua"),
+        )
+        .map_err(|e| e.to_string())?;
 
         std::fs::write(cache.join("config.json"), lua_settings(&root).to_string())
             .map_err(|e| e.to_string())?;
@@ -177,16 +174,6 @@ impl Client {
             }
         } else {
             self.queued.push(message);
-        }
-    }
-
-    pub(crate) fn set_scenes(&mut self, paths: &[PathBuf]) {
-        if let Err(error) = write_scene_paths(&self.root, paths) {
-            self.messages.push(error);
-        }
-
-        for path in self.versions.keys().cloned().collect::<Vec<_>>() {
-            self.close(&path);
         }
     }
 
@@ -506,33 +493,6 @@ pub(crate) fn analyzed_path(root: &ProjectContext, path: &Path) -> bool {
         })
         && root.resolve(path).is_ok()
 }
-fn write_scene_paths(root: &ProjectContext, paths: &[PathBuf]) -> Result<(), String> {
-    let contents = paths
-        .iter()
-        .map(|path| root.resolve(path).map(|path| file_uri(&path)))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?
-        .join("\n");
-
-    std::fs::write(
-        root.root().join("kinematic/cache/luals/scene-paths.txt"),
-        contents,
-    )
-    .map_err(|e| e.to_string())
-}
-
-fn luals_plugin(root: &ProjectContext) -> String {
-    let list = serde_json::to_string(&server_path(
-        &root.root().join("kinematic/cache/luals/scene-paths.txt"),
-    ))
-    .unwrap();
-
-    format!(
-        "local function is_scene(uri)\n    local file = io.open({list}, 'r')\n    if not file then return false end\n    for line in file:lines() do\n        if line == uri then file:close(); return true end\n    end\n    file:close()\n    return false\nend\n{}",
-        include_str!("../scripting/luals.lua")
-    )
-}
-
 fn lua_settings(root: &ProjectContext) -> Value {
     json!({
         "runtime": {"version": "Lua 5.4", "plugin": server_path(&root.root().join("kinematic/cache/luals/components.lua"))},
@@ -937,7 +897,7 @@ mod integration_tests {
             &crate::scripting::definitions(),
         )
         .unwrap();
-        let text = "\nreturn function(s)\nlocal ball = s:circle { id = 'ball' }\nball.\nend\n";
+        let text = "\nreturn function()\nlocal ball = k.circle{ id = 'ball' }\nball.\nend\n";
         let path = Path::new("intro.lua");
 
         client.sync(path, text, 1);
@@ -1060,7 +1020,7 @@ mod integration_tests {
         assert!(!client.versions.contains_key(Path::new("notes.txt")));
         assert!(!client.versions.contains_key(Path::new("settings.ron")));
 
-        let text = "\nlocal ribbon = k.object { bounds = function() return {x = 0, y = 0, width = 10, height = 10} end }\nreturn function(s)\n  local shape = s:object(ribbon, {id = 'shape'})\n  shape.opacity:set(0)\n  shape:to {opacity = 1}:play(0.5)\n  local ball = s:circle { radius = 10 }\n  ball.radius:set(5)\n  ball.opacity:set(0)\n  ball.opacity:set('Invalid')\n  missing_name()\nend\n";
+        let text = "\nlocal ribbon = k.object_2d('Ribbon', { on_bounds=function(self)  return k.rect(0, 0, 10, 10) end })\nreturn function()\n  local shape = ribbon({id = 'shape'})\n  shape.opacity:set(0)\n  shape:to {opacity = 1}:play(0.5)\n  local ball = k.circle{ radius = 10 }\n  ball.radius:set(5)\n  ball.opacity:set(0)\n  ball.opacity:set('Invalid')\n  missing_name()\nend\n";
 
         client.sync(path, text, 5);
 
@@ -1111,28 +1071,28 @@ mod integration_tests {
         );
 
         let component_path = Path::new("components.lua");
-        let component_text = "\nlocal motion = k.component { speed = {default = 40}, mode = {default = 'idle', choices = {'idle', 'moving'}} }\nreturn { motion = motion }\n";
+        let component_text = "\nlocal motion = k.component('Motion', {  speed = {default = 40}, mode = {default = 'idle', choices = {'idle', 'moving'}} })\nreturn { motion = motion }\n";
 
         std::fs::write(root.join(component_path), component_text).unwrap();
 
         client.sync(component_path, component_text, 1);
 
         let text = r#"local components = require('components')
-local extra = k.component { caption = {default = 'Hello'} }
-local definition = k.object { components = {components.motion, extra} }
-local volume = k.object { dimension = 3 }
-local counter = k.object { methods = { increment = function(self,amount) return self:by {value=amount} end } }
-return function(s)
-  local ball = s:circle { radius = 10 }
+local extra = k.component('Extra', {  caption = {default = 'Hello'} })
+local definition = k.object_2d('Definition', { components = {components.motion, extra} })
+local volume = k.object_3d('Volume', { })
+local counter = k.object_2d('Counter', {  increment = function(self,amount) return self:by {value=amount} end  })
+return function()
+  local ball = k.circle{ radius = 10 }
   local center = ball.position:get()
   ball:signal(function(obj, frame)
     obj.position:set(center + k.vec2(0, math.sin(frame.time * 3) * 40))
     obj.size:set(k.vec2(10, 10))
   end)
-  local prism = s:prism {}
+  local prism = k.prism{}
   prism.size:set(k.vec3(10, 20, 30))
   prism:signal(function(obj) obj.size:set(k.vec3(1, 2, 3)) end)
-  local custom = s:object(definition, {})
+  local custom = definition({})
   custom.speed:set(20)
   custom.caption:set('World')
   custom.mode:set('moving')
@@ -1140,10 +1100,10 @@ return function(s)
   custom.sped:set(20)
   custom.speed:set('Invalid')
   custom.mode:set('Invalid')
-  local three = s:object(volume, {})
-  local text = s:text_2d {}
+  local three = volume({})
+  local text = k.text_2d{}
   text:fade('New'):play(1)
-  local count = s:object(counter,{})
+  local count = counter({})
   count:increment(10):play(2)
   three.position:set(k.vec3(1, 2, 3))
   three.missing:set(1)
@@ -1239,7 +1199,7 @@ end
             "Formatting must preserve original project sources."
         );
 
-        let text = "return function(s)\n  local ball = s:circle {radius=24}\n  ball.radius:get()\n  local label = s:text_2d {text='Hi'}\n  label:fade('Bye'):play(1)\n  local point = k.vec2(1, 2)\n  local center = k.rect(0, 0, 10, 10):middle()\nend\n";
+        let text = "return function()\n  local ball = k.circle{radius=24}\n  ball.radius:get()\n  local label = k.text_2d{text='Hi'}\n  label:fade('Bye'):play(1)\n  local point = k.vec2(1, 2)\n  local center = k.rect(0, 0, 10, 10):middle()\nend\n";
 
         client.sync(path, text, 7);
 
@@ -1334,15 +1294,14 @@ end
             root.join("custom.lua"),
             r#"
 local function origin() return k.vec2(1, 2) end
-local function heading(object) return object.velocity:get():normalized() end
-local motion = k.component { velocity = {default = k.vec2(10, 20)}, speed = {default = 40}, offset = {default = origin()}, multiplier = {default = 2 * 3} }
-return k.object {
+local function heading(self) return self.velocity:get():normalized() end
+local motion = k.component('Motion', {  velocity = {default = k.vec2(10, 20)}, speed = {default = 40}, offset = {default = origin()}, multiplier = {default = 2 * 3} })
+return k.object_2d('Custom 2D', {
     components = {motion},
-    methods = {
+
         heading = heading,
         increment = function(self, amount) return self:by {speed = amount} end,
-    },
-}
+})
 "#,
         )
         .unwrap();
@@ -1368,13 +1327,13 @@ return k.object {
             ("custom.offset:get():", "length", "cross"),
             ("custom.multiplier.", "get", "x"),
             ("custom:increment(1):", "play", "length"),
-            ("s:circle { ra", "radius", "velocity"),
+            ("k.circle { ra", "radius", "velocity"),
         ]
         .into_iter()
         .enumerate()
         {
             let text = format!(
-                "local definition = require('custom')\nreturn function(s)\nlocal ball = s:circle {{}}\nlocal custom = s:object(definition, {{}})\n{expression}\nend\n"
+                "local definition = require('custom')\nreturn function()\nlocal ball = k.circle{{}}\nlocal custom = definition({{}})\n{expression}\nend\n"
             );
             let version = index as u64 + 1;
             let column = expression.chars().count();

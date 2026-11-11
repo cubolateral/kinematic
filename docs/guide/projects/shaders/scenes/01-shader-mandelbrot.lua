@@ -30,13 +30,13 @@ void main() {
 ]],
 }
 
-return function(s)
-	local plane = s:rect {
+return function()
+	local plane = k.panel{
 		size = k.vec2(960, 540),
 		shader = fractal,
 		uniforms = { zoom = 1 },
 	}
-	s:world_2d():add(plane)
+	k.world_2d():add(plane)
 
 	plane:uniform("zoom"):to(128):play(2, "quart_in_out")
 	plane:uniform("zoom"):to(1):play(2, "quart_in_out")

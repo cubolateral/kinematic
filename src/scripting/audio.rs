@@ -185,7 +185,7 @@ pub(super) fn register(runtime: &Rc<Runtime>, api: &Table) -> Result<()> {
     let weak = Rc::downgrade(runtime);
 
     api.set(
-        "audio_file",
+        "load_audio",
         runtime.lua.create_function(move |_, path: String| {
             let runtime = weak
                 .upgrade()

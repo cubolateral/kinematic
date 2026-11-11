@@ -25,23 +25,23 @@ See the dedicated [images guide](images.md) for photos and pixel sampling.
 
 Use `circle`, `ellipse`, `rect`, `triangle`, `regular_polygon_2d`, and `line_2d` to create
 built-in geometry. `square` is a regular polygon preset. Each constructor has its own
-options, listed under [Scene](../api/Scene.md). Check the type reference before using
+options, listed under [k](../api/k.md). Check the type reference before using
 fields from another shape.
 
 Filled shapes use `fill`, while outlines use `stroke` and `stroke_width`. Transforms use
 `position`, `rotation`, `scale`, and `opacity`. `rect.round` is a quad that sets the
-corner radii. See [Rect](../api/Rect.md) and [RectOptions](../api/RectOptions.md) for
+corner radii. See [Panel](../api/Panel.md) and [PanelOptions](../api/PanelOptions.md) for
 defaults and limits.
 
 ```lua
-local card = s:rect {
+local card = k.panel{
     size = k.vec2(320, 160),
     round = k.quad(12, 12, 12, 12),
     fill = k.color("#0A0A0A"),
     stroke = k.color("#FFFFFF"),
     stroke_width = 2,
 }
-s:world_2d():add(card)
+k.world_2d():add(card)
 ```
 
 `triangle` creates a dedicated [Triangle](../api/Triangle.md). Its `size` sets the base
@@ -51,8 +51,8 @@ up by default; use `rotation` to change its direction. A centered apex creates a
 isosceles triangle; set height to width times `math.sqrt(3) / 2` for an equilateral one.
 
 ```lua
-local triangle = s:triangle { size = k.vec2(240, 180), apex = 0.5 }
-s:world_2d():add(triangle)
+local triangle = k.triangle{ size = k.vec2(240, 180), apex = 0.5 }
+k.world_2d():add(triangle)
 triangle:to { apex = 1 }:play(1)
 ```
 
@@ -65,8 +65,8 @@ bottom edges aligned.
 
 ## Images
 
-Load an immutable resource with `k.image`, then display it with `image_2d` or
-`image_3d`. The dedicated [images guide](images.md) covers dimensions, proportions,
+Load an immutable resource with `k.load_image`, then display it with `k.image_2d` or
+`k.image_3d`. The dedicated [images guide](images.md) covers dimensions, proportions,
 style, transparency, animation, and source pixel sampling with supplied photos.
 Use [canvases and projections](canvases.md) for a live rendered texture.
 

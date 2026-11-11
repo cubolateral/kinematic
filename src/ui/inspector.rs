@@ -101,50 +101,64 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
 
         let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing);
 
-        for (index, target) in inspection
-            .properties(&world, entity)
+        for (group_index, (name, targets)) in inspection
+            .property_groups(&world, entity)
             .into_iter()
-            .filter(|target| {
-                inspection.object_name != "Code"
-                    || !matches!(target.name(), "selection" | "highlights")
-            })
             .enumerate()
         {
-            let _id = ui.push_id(index);
-            let mut value = target.get(&world, entity);
-            let before = value.clone();
-            let track = match &target {
-                TrackTarget::Property { info, .. } => Some(*info),
-                _ => None,
-            };
-            let edit = edit_value(
-                ui,
-                state,
-                target.name(),
-                &mut value,
-                track,
-                inspector_edits.contains(entity, &target),
-            );
+            let targets = targets
+                .into_iter()
+                .filter(|target| {
+                    inspection.object_name != "Code"
+                        || !matches!(target.name(), "selection" | "highlights")
+                })
+                .collect::<Vec<_>>();
 
-            if edit.changed {
-                value = target.clamp(value);
-
-                let valid = match &target {
-                    TrackTarget::Dynamic(schema) => schema.validate(&value).is_ok(),
-                    _ => value.validate().is_ok(),
-                };
-
-                if valid && value != before {
-                    inspector_edits.record(entity, target.clone(), before);
-
-                    target.set(&world, entity, value);
-
-                    scene.invalidate();
-                }
+            if targets.is_empty() {
+                continue;
             }
 
-            if edit.reset {
-                inspector_edits.reset(scene, entity, &target);
+            let _group_id = ui.push_id(group_index);
+
+            properties::section(ui, &name);
+
+            for target in targets {
+                let _id = ui.push_id(target.name());
+                let mut value = target.get(&world, entity);
+                let before = value.clone();
+                let track = match &target {
+                    TrackTarget::Property { info, .. } => Some(*info),
+                    _ => None,
+                };
+                let edit = edit_value(
+                    ui,
+                    state,
+                    target.name(),
+                    &mut value,
+                    track,
+                    inspector_edits.contains(entity, &target),
+                );
+
+                if edit.changed {
+                    value = target.clamp(value);
+
+                    let valid = match &target {
+                        TrackTarget::Dynamic(schema) => schema.validate(&value).is_ok(),
+                        _ => value.validate().is_ok(),
+                    };
+
+                    if valid && value != before {
+                        inspector_edits.record(entity, target.clone(), before);
+
+                        target.set(&world, entity, value);
+
+                        scene.invalidate();
+                    }
+                }
+
+                if edit.reset {
+                    inspector_edits.reset(scene, entity, &target);
+                }
             }
         }
     });

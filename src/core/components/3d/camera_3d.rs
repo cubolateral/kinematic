@@ -18,6 +18,7 @@ pub enum Camera3DMode {
 
 /// Camera owned by a three-dimensional canvas.
 #[derive(Clone, Debug, Trackable)]
+#[trackable(name = "Camera 3D")]
 pub struct Camera3D {
     /// Projection mode.
     #[track]

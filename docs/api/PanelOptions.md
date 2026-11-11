@@ -3,7 +3,7 @@ editLink: false
 outline: 2
 ---
 
-# RectOptions
+# PanelOptions
 
 ::: v-pre
 
@@ -13,7 +13,7 @@ outline: 2
 
 Source: [shared declarations](https://github.com/cubolateral/kinematic/blob/main/src/scripting/api.lua), [properties](https://github.com/cubolateral/kinematic/blob/main/src/scripting/property.lua) and [Rust metadata](https://github.com/cubolateral/kinematic/tree/main/src/core).
 
-Initial properties and resources for rect.
+Initial properties and resources for panel.
 
 **Inherits:** <code class="api-signature"><a class="api-type-name" href="ResourceOptions.html">ResourceOptions</a></code>
 

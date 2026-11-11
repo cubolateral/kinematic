@@ -26,6 +26,7 @@ const TEXT_TESSELLATION_TOLERANCE: f32 = 0.005;
 
 /// Content, typography and extrusion depth of a 3D text object.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Text 3D Shape")]
 pub struct Text3DShape {
     /// Text displayed by the object.
     #[track]

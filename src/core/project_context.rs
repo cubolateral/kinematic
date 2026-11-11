@@ -18,11 +18,7 @@ impl ProjectContext {
             return Err(io::Error::other("Project root must be a directory."));
         }
 
-        let context = Self { root };
-
-        crate::storage::migrate_project(&context)?;
-
-        Ok(context)
+        Ok(Self { root })
     }
 
     /// Returns the canonical project directory.

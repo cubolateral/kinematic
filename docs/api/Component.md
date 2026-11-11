@@ -13,7 +13,7 @@ outline: 2
 
 Source: [shared declarations](https://github.com/cubolateral/kinematic/blob/main/src/scripting/api.lua), [properties](https://github.com/cubolateral/kinematic/blob/main/src/scripting/property.lua) and [Rust metadata](https://github.com/cubolateral/kinematic/tree/main/src/core).
 
-Reusable declaration of custom tracked fields for scripted objects.
+Reusable declaration of named custom tracked fields.
 
 </div>
 

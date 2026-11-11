@@ -39,17 +39,17 @@ This scene moves a circle horizontally over two seconds, then waits for half
 a second.
 
 ```lua
-return function(s)
-    local ball = s:circle {
+return function()
+    local ball = k.circle{
         radius = 24,
         position = k.vec2(-100, 0),
         fill = k.color("#60A5FA"),
     }
-    s:world_2d():add(ball)
+    k.world_2d():add(ball)
 
     ball:to { position = k.vec2(100, 0) }:play(2)
 
-    s:wait(0.5)
+    k.wait(0.5)
 end
 ```
 

@@ -177,7 +177,7 @@ The snapshot must belong to this object. Call :play to schedule the restoration.
 
 <div class="api-description">
 
-Creates an animation toward the initial builder property values.
+Creates an animation toward the initial property values.
 Call :play to schedule the reset.
 
 </div>
@@ -334,12 +334,12 @@ Moves this object to the start of its sibling list, below its siblings.
 
 <section class="api-method">
 
-## <code class="api-signature"><a class="api-type-name" href="Object.html">Object</a><span class="api-punctuation">:</span><span class="api-function">bounds</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><span class="api-punctuation">{</span><span class="api-parameter">x</span><span class="api-punctuation">:</span> <span class="api-type-name">number</span><span class="api-punctuation">,</span> <span class="api-parameter">y</span><span class="api-punctuation">:</span> <span class="api-type-name">number</span><span class="api-punctuation">,</span> <span class="api-parameter">z</span><span class="api-punctuation">?</span><span class="api-punctuation">:</span> <span class="api-type-name">number</span><span class="api-punctuation">,</span> <span class="api-parameter">width</span><span class="api-punctuation">:</span> <span class="api-type-name">number</span><span class="api-punctuation">,</span> <span class="api-parameter">height</span><span class="api-punctuation">:</span> <span class="api-type-name">number</span><span class="api-punctuation">,</span> <span class="api-parameter">depth</span><span class="api-punctuation">?</span><span class="api-punctuation">:</span> <span class="api-type-name">number</span><span class="api-punctuation">}</span></code> {#object-bounds}
+## <code class="api-signature"><a class="api-type-name" href="Object.html">Object</a><span class="api-punctuation">:</span><span class="api-function">on_bounds</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="RectValue.html">RectValue</a> <span class="api-punctuation">|</span> <a class="api-type-name" href="BoxValue.html">BoxValue</a></code> {#object-on_bounds}
 
 <div class="api-description">
 
-Returns the local bounding box with named coordinates and dimensions.
-Two-dimensional objects return x, y, width, and height; 3D objects also return z and depth.
+Returns the local bounds using evaluated properties and simulation state.
+This is also the callback implemented by custom objects.
 
 </div>
 

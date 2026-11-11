@@ -1007,7 +1007,7 @@ mod tests {
     #[test]
     fn preview_hit_testing_and_debug_follow_the_root_view_dimension() {
         let mut scene = Scene::new_with_resolution((64, 64));
-        let rectangle = rect().size(vec2(16.0, 16.0)).build(&mut scene);
+        let rectangle = panel().size(vec2(16.0, 16.0)).build(&mut scene);
 
         scene.world_2d().add(&rectangle);
 
@@ -1043,7 +1043,7 @@ mod tests {
             .camera_zoom(2.0)
             .build(&mut scene);
         let group = group_2d().build(&mut scene);
-        let rectangle = rect()
+        let rectangle = panel()
             .size(vec2(10.0, 10.0))
             .position(vec2(20.0, 0.0))
             .build(&mut scene);
@@ -1549,7 +1549,7 @@ mod tests {
     fn container_visibility_hides_its_2d_subtree() {
         let mut scene = Scene::new();
         let group = group_2d().visibility(false).build(&mut scene);
-        let object = rect().size(vec2(10.0, 10.0)).build(&mut scene);
+        let object = panel().size(vec2(10.0, 10.0)).build(&mut scene);
 
         group.add(&object);
 
@@ -2179,7 +2179,7 @@ mod tests {
     #[test]
     fn integer_tracks_interpolate_during_tweens() {
         let mut scene = Scene::new();
-        let object = rect().z_index(-10).build(&mut scene);
+        let object = panel().z_index(-10).build(&mut scene);
         let polygon = regular_polygon_2d().sides(4).build(&mut scene);
 
         scene.world_2d().add(&object);
@@ -2934,7 +2934,7 @@ mod tests {
     #[test]
     fn draw_renders_objects_directly_into_the_supplied_skia_canvas() {
         let mut scene = Scene::new();
-        let rect = rect()
+        let rect = panel()
             .size(vec2(8.0, 8.0))
             .fill(Color::RED)
             .opacity(0.5)
@@ -2973,7 +2973,7 @@ mod tests {
         impl LifetimeScene {
             fn build(&mut self, scene: &mut Scene) {
                 let circle = circle().build(scene);
-                let rect = rect().build(scene);
+                let rect = panel().build(scene);
 
                 scene.world_2d().add(&circle);
                 scene.wait(1.0);

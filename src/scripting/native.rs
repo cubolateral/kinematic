@@ -31,7 +31,7 @@ pub(crate) fn objects() -> Vec<NativeObject> {
     let mut objects = vec![
         native::<Circle>(),
         native::<Ellipse>(),
-        native::<Rect>(),
+        native::<Panel>(),
         native::<Triangle>(),
         native::<RegularPolygon2D>(),
         native::<Line2D>(),
@@ -139,7 +139,7 @@ pub(super) fn property(
     }
 
     if let Ok(properties) = world.get::<&crate::core::Properties>(entity)
-        && let Some((schema, _)) = properties.0.get(name)
+        && let Some((schema, _)) = properties.fields.get(name)
     {
         return Some(TrackTarget::Dynamic(schema.clone()));
     }

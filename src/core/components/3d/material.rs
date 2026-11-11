@@ -3,6 +3,7 @@ use kinematic_macros::Trackable;
 
 /// Basic metallic-roughness surface appearance and screen-space outline.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Material")]
 pub struct Material {
     /// Draws the surface without lighting when true.
     #[track]

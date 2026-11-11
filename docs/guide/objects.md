@@ -6,9 +6,9 @@ pageClass: guide-page
 
 ## Create and attach objects
 
-A constructor such as `s:circle {...}` creates data and returns a typed handle. The
-object starts inactive. It joins scene evaluation, drawing, and selection only after you
-attach it to an active tree:
+A constructor such as `k.circle {...}` creates an object in the current scene and
+returns its typed handle. The object starts inactive. It joins scene evaluation,
+drawing, and selection only after you attach it to an active tree.
 
 Use `add` at the time the object should appear and `remove` when its lifetime should
 end. The following scene demonstrates both operations.
@@ -33,7 +33,7 @@ Use [coordinates and anchors](coordinates.md) to reason about local transforms, 
 
 ## Hierarchy and draw order
 
-Every scene has an internal root container, available through `s:root()`. The 2D and 3D
+Every scene has an internal root container, available through `k.root()`. The 2D and 3D
 worlds are built-in canvases. Attach ordinary objects to the matching world and
 additional canvases to the root. Objects must belong to the same scene, and the target
 of `add` must accept children.

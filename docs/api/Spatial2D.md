@@ -81,6 +81,18 @@ Returns opacity composed through the hierarchy. Requires a 2D object.
 
 <section class="api-method">
 
+## <code class="api-signature"><a class="api-type-name" href="Spatial2D.html">Spatial2D</a><span class="api-punctuation">:</span><span class="api-function">on_bounds</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="RectValue.html">RectValue</a></code> {#spatial2d-on_bounds}
+
+<div class="api-description">
+
+Returns the local bounds at the evaluated time; also used by the engine.
+
+</div>
+
+</section>
+
+<section class="api-method">
+
 ## <code class="api-signature"><a class="api-type-name" href="Spatial2D.html">Spatial2D</a><span class="api-punctuation">:</span><span class="api-function">middle</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><span class="api-type-name">Value</span></code> {#spatial2d-middle}
 
 <div class="api-description">

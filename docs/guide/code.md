@@ -51,7 +51,7 @@ source. For another language, change both the displayed source and the language 
 Here is the same greeting in JavaScript:
 
 ```lua
-local code = s:code {
+local code = k.code{
     code = 'console.log("Hello, Kinematic!");',
     language = "javascript",
 }
@@ -70,7 +70,7 @@ line spacing. `tab_size` controls the visual tab stops. It does not change liter
 spaces in the source.
 
 ```lua
-local code = s:code {
+local code = k.code{
     code = 'local function greet()\n\tprint("Hello, Kinematic!")\nend',
     language = "lua",
     size = 32,
@@ -87,7 +87,7 @@ To use a project font, include a TTF or OTF and its license, then pass the resou
 the constructor:
 
 ```lua
-font = k.font("assets/your-mono-font.ttf"),
+font = k.load_font("assets/your-mono-font.ttf"),
 ```
 
 The default is Hack Mono. The [complete Code example](../examples/code.md) includes a
@@ -164,7 +164,7 @@ erasing a whole line.
 
 ```lua
 code:select(code:word(1, 7, 7)):play(1)
-s:wait(1)
+k.wait(1)
 code:select(code:lines(2)):play(1)
 ```
 
@@ -179,7 +179,7 @@ to a visual operation.
 
 ```lua
 code:highlight(code:find("message")):play(1)
-s:wait(1)
+k.wait(1)
 code:highlight(code:find_all("message")):play(1)
 ```
 

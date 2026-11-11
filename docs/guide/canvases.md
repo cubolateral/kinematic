@@ -53,18 +53,18 @@ Ordinary objects belong to a world or group of the same dimension. Attach additi
 canvases to the root:
 
 ```lua
-local source = s:canvas_3d {resolution = {900, 450}}
-s:root():add(source)
-source:add(s:cube {
+local source = k.canvas_3d{resolution = {900, 450}}
+k.root():add(source)
+source:add(k.cube{
     albedo = k.color("#008CFF"),
     unlit = true,
 })
 
-local screen = s:projection_2d {
+local screen = k.projection_2d{
     source = source:texture(),
     size = k.vec2(900, 450),
 }
-s:world_2d():add(screen)
+k.world_2d():add(screen)
 ```
 
 Creating a canvas does not activate it. Attaching a canvas does not automatically

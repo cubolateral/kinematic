@@ -6,6 +6,7 @@ use crate::core::{
 };
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Triangle Shape")]
 /// Geometry of a triangle with a horizontally adjustable apex.
 pub struct TriangleShape {
     /// Base width and height in local coordinates.

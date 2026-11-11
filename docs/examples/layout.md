@@ -8,7 +8,7 @@ import { withBase } from 'vitepress'
 
 <video controls preload="metadata" :poster="withBase('/previews/layout.png')" style="width:100%" :src="withBase('/previews/layout.mp4')" aria-label="Rectangles and groups preview"></video>
 
-[Guide](../guide/objects.md) · [API reference](../api/Rect.md)
+[Guide](../guide/objects.md) · [API reference](../api/Panel.md)
 
 ## What to look for
 

@@ -22,7 +22,7 @@ impl Default for CustomContainer {
 fn custom_container_returns_typed_direct_children() {
     let mut scene = Scene::new();
     let container = custom_container().build(&mut scene);
-    let rectangle = rect().build(&mut scene);
+    let rectangle = panel().build(&mut scene);
     let circle = circle().build(&mut scene);
 
     container.add(&rectangle);
@@ -38,7 +38,7 @@ fn custom_container_returns_typed_direct_children() {
         Err(ChildError::NotFound { index: 2, len: 2 })
     );
     assert_eq!(
-        container.get_child::<Rect>(0).unwrap().entity(),
+        container.get_child::<Panel>(0).unwrap().entity(),
         rectangle.entity()
     );
     assert_eq!(
@@ -50,11 +50,11 @@ fn custom_container_returns_typed_direct_children() {
         Err(ChildError::TypeMismatch {
             index: 0,
             expected: "Circle",
-            actual: "Rect",
+            actual: "Panel",
         })
     ));
     assert!(matches!(
-        container.get_child::<Rect>(2),
+        container.get_child::<Panel>(2),
         Err(ChildError::NotFound { index: 2, len: 2 })
     ));
 }
@@ -64,10 +64,10 @@ fn custom_container_manages_children_and_sibling_order() {
     let mut scene = Scene::new();
     let parent = custom_container().build(&mut scene);
     let nested = custom_container().build(&mut scene);
-    let first = rect().build(&mut scene);
+    let first = panel().build(&mut scene);
     let circle = circle().build(&mut scene);
-    let last = rect().build(&mut scene);
-    let nested_child = rect().build(&mut scene);
+    let last = panel().build(&mut scene);
+    let nested_child = panel().build(&mut scene);
 
     parent.add(&first);
     parent.add(&circle);
@@ -86,13 +86,16 @@ fn custom_container_manages_children_and_sibling_order() {
         ]
     );
     assert_eq!(
-        parent.first_child::<Rect>().unwrap().entity(),
+        parent.first_child::<Panel>().unwrap().entity(),
         first.entity()
     );
-    assert_eq!(parent.last_child::<Rect>().unwrap().entity(), last.entity());
+    assert_eq!(
+        parent.last_child::<Panel>().unwrap().entity(),
+        last.entity()
+    );
     assert_eq!(
         parent
-            .all_children::<Rect>()
+            .all_children::<Panel>()
             .into_iter()
             .map(|handler| handler.entity())
             .collect::<Vec<_>>(),
@@ -105,16 +108,16 @@ fn custom_container_manages_children_and_sibling_order() {
     );
     assert_eq!(nested.parent(), Some(parent.entity()));
     assert_eq!(
-        parent.first_child_recursively::<Rect>().unwrap().entity(),
+        parent.first_child_recursively::<Panel>().unwrap().entity(),
         first.entity()
     );
     assert_eq!(
-        parent.last_child_recursively::<Rect>().unwrap().entity(),
+        parent.last_child_recursively::<Panel>().unwrap().entity(),
         nested_child.entity()
     );
     assert_eq!(
         parent
-            .all_children_recursively::<Rect>()
+            .all_children_recursively::<Panel>()
             .into_iter()
             .map(|handler| handler.entity())
             .collect::<Vec<_>>(),

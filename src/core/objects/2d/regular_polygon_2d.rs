@@ -7,6 +7,7 @@ use crate::core::{
 };
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Regular Polygon 2D Shape")]
 /// Geometry of a regular polygon.
 pub struct RegularPolygon2DShape {
     /// Geometry dimensions in local coordinates.

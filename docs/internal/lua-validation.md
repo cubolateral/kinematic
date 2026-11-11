@@ -16,8 +16,8 @@ selected tests. Coverage includes WAV/MP3/OGG/FLAC conversion, immutable source
 resources, shared PCM budgets, decoder deadlines and oversized/corrupt input, SDL
 output, AAC timing, and file changes invalidating simulation history while failed
 reloads preserve the valid revision.
-- `--check examples/lua/audio` passed with the new `k.audio_file`, `k.audio_synth`
-and `s:audio` API. The example includes a generated 22.05 kHz mono WAV fixture shared by
+- `--check examples/lua/audio` passed with `k.load_audio` and `k.audio_synth`.
+and `k.audio` API. The example includes a generated 22.05 kHz mono WAV fixture shared by
 two players with independent gain and pan.
 - A temporary copy exported through the application at 160 × 90 and 60 FPS:
 510 video frames and 8.5 seconds of stereo 48 kHz audio, matching video duration.

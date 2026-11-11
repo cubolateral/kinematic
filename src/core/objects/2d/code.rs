@@ -13,6 +13,7 @@ use super::code_syntax::{self, TokenKind};
 
 /// Source, typography, syntax colors, and emphasis of a code object.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Code Shape")]
 pub struct CodeShape {
     /// Code displayed by the object, preserving indentation.
     #[track]
@@ -91,6 +92,7 @@ impl Default for CodeShape {
 
 /// Source edit boundaries used to preserve intact tokens during code transitions.
 #[derive(Clone, Default, Trackable)]
+#[trackable(name = "Code Edit State")]
 pub struct CodeEditState {
     /// Whether this transition uses token edits instead of a block fade.
     #[track]
@@ -106,8 +108,8 @@ pub struct CodeEditState {
 /// Built-in 2D code object with syntax coloring, animated edits, and emphasis.
 ///
 /// ```lua
-/// local code = s:code {language = "python", code = "print(42)"}
-/// s:world_2d():add(code)
+/// local code = k.code {language = "python", code = "print(42)"}
+/// k.world_2d():add(code)
 /// code:append("print(100)"):play(1)
 /// ```
 #[derive(Object)]

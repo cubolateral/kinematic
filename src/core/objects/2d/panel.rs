@@ -6,8 +6,9 @@ use crate::core::{
 };
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Panel Shape")]
 /// Geometry of a rectangular object.
-pub struct RectShape {
+pub struct PanelShape {
     /// Geometry dimensions in local coordinates.
     #[track]
     pub size: Vector2,
@@ -16,7 +17,7 @@ pub struct RectShape {
     pub round: Quad,
 }
 
-impl Default for RectShape {
+impl Default for PanelShape {
     fn default() -> Self {
         Self {
             size: vec2(256.0, 256.0),
@@ -25,7 +26,7 @@ impl Default for RectShape {
     }
 }
 
-pub(crate) fn rect_path(shape: &RectShape) -> skia_safe::Path {
+pub(crate) fn rect_path(shape: &PanelShape) -> skia_safe::Path {
     let rect = skia_safe::Rect::from_xywh(
         -shape.size.x * 0.5,
         -shape.size.y * 0.5,
@@ -46,11 +47,11 @@ pub(crate) fn rect_path(shape: &RectShape) -> skia_safe::Path {
 }
 
 #[derive(Object)]
-#[object(spatial = "2d", builder = "rect")]
+#[object(spatial = "2d", builder = "panel")]
 /// Built-in rectangular scene object.
-pub struct Rect {
+pub struct Panel {
     #[trackable]
-    pub shape: RectShape,
+    pub shape: PanelShape,
     #[trackable]
     pub style: Style,
     #[trackable]
@@ -61,7 +62,7 @@ pub struct Rect {
     pub filter: Filter,
 }
 
-impl Default for Rect {
+impl Default for Panel {
     fn default() -> Self {
         Self {
             shape: Default::default(),
@@ -69,16 +70,16 @@ impl Default for Rect {
             transform: Default::default(),
             draw: Draw2D {
                 on_draw: |world, entity, canvas, opacity| {
-                    let shape = world.get::<&RectShape>(entity).unwrap();
+                    let shape = world.get::<&PanelShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
                     let path = rect_path(&shape);
 
                     draw_styled_path(&path, &style, transform.scale, opacity, canvas);
                 },
-                box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size,
+                box_size: |world, entity| world.get::<&PanelShape>(entity).unwrap().size,
                 visual_bounds: |world, entity| {
-                    let shape = world.get::<&RectShape>(entity).unwrap();
+                    let shape = world.get::<&PanelShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
 
@@ -99,10 +100,10 @@ mod tests {
     fn builder_accepts_corner_shorthand() {
         let mut scene = Scene::new();
         let values = [
-            rect().round(10).build(&mut scene),
-            rect().round([10, 30]).build(&mut scene),
-            rect().round([10, 20, 30]).build(&mut scene),
-            rect().round([10, 20, 30, 40]).build(&mut scene),
+            panel().round(10).build(&mut scene),
+            panel().round([10, 30]).build(&mut scene),
+            panel().round([10, 20, 30]).build(&mut scene),
+            panel().round([10, 20, 30, 40]).build(&mut scene),
         ];
         let expected = [
             Quad::new(10.0, 10.0, 10.0, 10.0),
@@ -116,7 +117,7 @@ mod tests {
 
             for (rect, expected) in values.iter().zip(expected) {
                 assert_eq!(
-                    world.get::<&RectShape>(rect.entity()).unwrap().round,
+                    world.get::<&PanelShape>(rect.entity()).unwrap().round,
                     expected
                 );
             }
@@ -132,7 +133,7 @@ mod tests {
     #[test]
     fn rounded_rect_clears_its_corner() {
         let mut scene = Scene::new_with_resolution((64, 64));
-        let rect = rect()
+        let rect = panel()
             .size(vec2(40.0, 40.0))
             .round(12)
             .position(vec2(32.0, 32.0))

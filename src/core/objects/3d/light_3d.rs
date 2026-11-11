@@ -6,6 +6,7 @@ use kinematic_macros::{Object, Trackable};
 
 /// Color and intensity shared by three-dimensional lights.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Light 3D")]
 pub struct Light3D {
     /// Color emitted by the light.
     #[track]
@@ -83,6 +84,7 @@ pub struct SpotLightKind;
 
 /// Constant, linear, and quadratic falloff coefficients.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Light Attenuation")]
 pub struct LightAttenuation {
     /// Constant term of light falloff: 1 / (constant + linear * distance + quadratic * distance squared).
     #[track(min = 0.0)]
@@ -107,6 +109,7 @@ impl Default for LightAttenuation {
 
 /// Spotlight cone half-angle in radians.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Spot Light Cone")]
 pub struct SpotLightCone {
     /// Spotlight cone cutoff angle in radians.
     #[track(min = 0.001, max = 3.14159)]

@@ -1,7 +1,7 @@
 use crate::core::{
     components::{Draw2D, Filter, Style, Transform2D, draw_styled_path},
     objects::{
-        CanvasFilter, CanvasSettings, ProjectionCanvas, ProjectionSource, RectShape, rect_path,
+        CanvasFilter, CanvasSettings, PanelShape, ProjectionCanvas, ProjectionSource, rect_path,
     },
     types::Color,
 };
@@ -12,7 +12,7 @@ use kinematic_macros::Object;
 #[object(spatial = "2d", builder = "projection_2d")]
 pub struct Projection2D {
     #[trackable]
-    pub shape: RectShape,
+    pub shape: PanelShape,
     #[trackable]
     pub style: Style,
     #[trackable]
@@ -28,16 +28,16 @@ pub struct Projection2D {
 impl Default for Projection2D {
     fn default() -> Self {
         Self {
-            shape: RectShape::default(),
+            shape: PanelShape::default(),
             style: Style {
                 fill: Color::TRANSPARENT,
                 ..Default::default()
             },
             transform: Transform2D::default(),
             draw: Draw2D {
-                box_size: |world, entity| world.get::<&RectShape>(entity).unwrap().size.abs(),
+                box_size: |world, entity| world.get::<&PanelShape>(entity).unwrap().size.abs(),
                 visual_bounds: |world, entity| {
-                    let shape = world.get::<&RectShape>(entity).unwrap();
+                    let shape = world.get::<&PanelShape>(entity).unwrap();
                     let style = world.get::<&Style>(entity).unwrap();
                     let transform = world.get::<&Transform2D>(entity).unwrap();
 
@@ -72,7 +72,7 @@ pub(crate) fn draw_projection_2d(
     canvas: &skia_safe::Canvas,
     opacity: f32,
 ) {
-    let shape = world.get::<&RectShape>(entity).unwrap();
+    let shape = world.get::<&PanelShape>(entity).unwrap();
     let size = shape.size;
 
     if !size.is_finite() || size.x <= 0.0 || size.y <= 0.0 {

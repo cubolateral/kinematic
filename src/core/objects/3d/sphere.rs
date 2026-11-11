@@ -7,6 +7,7 @@ use crate::core::{
 use kinematic_macros::{Object, Trackable};
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Sphere Shape")]
 pub struct SphereShape {
     /// Radius in local coordinates.
     #[track(min = 0.0)]

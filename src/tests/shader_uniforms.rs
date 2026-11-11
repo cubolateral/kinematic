@@ -1,7 +1,7 @@
 use crate::test_support::*;
 
 struct UniformScene {
-    object: Option<RectHandler>,
+    object: Option<PanelHandler>,
 }
 
 impl UniformScene {
@@ -9,7 +9,7 @@ impl UniformScene {
         let shader = ImageShader::new(
             "#version 330 core\nin vec2 k_uv; out vec4 k_color; uniform float u_progress; void main() { k_color = vec4(u_progress); }",
         );
-        let object = rect()
+        let object = panel()
             .shader(&shader)
             .uniform("u_progress", 0.0_f32)
             .build(scene);

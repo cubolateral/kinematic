@@ -105,14 +105,14 @@ Put a TTF or OTF file in your assets and load it once. Paths are relative to the
 root. Include its license when distributing the project.
 
 ```lua
-local heading_font = k.font("assets/heading.ttf")
-local title = s:text_2d {
+local heading_font = k.load_font("assets/heading.ttf")
+local title = k.text_2d{
     text = "A new chapter",
     font = heading_font,
     size = 56,
     fill = k.color("#FFFFFF"),
 }
-s:world_2d():add(title)
+k.world_2d():add(title)
 ```
 
 The font is a resource, not an animated channel. Changing the text, size, or font can

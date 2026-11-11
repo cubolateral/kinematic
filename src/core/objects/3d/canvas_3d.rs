@@ -12,6 +12,7 @@ use super::super::canvas::{
 
 /// Uniform ambient lighting owned by a three-dimensional canvas.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Ambient Light 3D")]
 pub struct AmbientLight3D {
     /// Ambient light color. Alpha does not affect lighting.
     #[track]

@@ -3,11 +3,11 @@ use crate::test_support::*;
 #[test]
 fn two_dimensional_anchors_align_objects() {
     let mut scene = Scene::new();
-    let other = rect()
+    let other = panel()
         .size(vec2(20.0, 10.0))
         .position(vec2(50.0, 30.0))
         .build(&mut scene);
-    let object = rect()
+    let object = panel()
         .size(vec2(8.0, 4.0))
         .position(vec2(10.0, 20.0))
         .build(&mut scene);
@@ -59,12 +59,12 @@ fn three_dimensional_anchors_align_objects() {
 #[test]
 fn group_anchor_uses_offset_child_bounds() {
     let mut scene = Scene::new();
-    let margin = rect()
+    let margin = panel()
         .size(vec2(20.0, 20.0))
         .position(vec2(0.0, 100.0))
         .build(&mut scene);
     let group = group_2d().build(&mut scene);
-    let child = rect()
+    let child = panel()
         .size(vec2(10.0, 10.0))
         .position(vec2(0.0, 20.0))
         .build(&mut scene);
@@ -107,7 +107,7 @@ fn anchors_include_children_scheduled_for_the_current_time() {
     scene.wait(1.0);
 
     let group_2d = group_2d().build(&mut scene);
-    let child_2d = rect()
+    let child_2d = panel()
         .size(vec2(10.0, 10.0))
         .position(vec2(0.0, 20.0))
         .build(&mut scene);
@@ -134,7 +134,7 @@ fn anchors_include_children_scheduled_for_the_current_time() {
 #[test]
 fn future_nested_group_bottom_aligns_after_play() {
     let mut scene = Scene::new();
-    let margin = rect()
+    let margin = panel()
         .size(vec2(20.0, 20.0))
         .position(vec2(0.0, 100.0))
         .build(&mut scene);
@@ -154,7 +154,7 @@ fn future_nested_group_bottom_aligns_after_play() {
 
     patterns_group.add(&pattern);
 
-    let child = rect()
+    let child = panel()
         .size(vec2(10.0, 10.0))
         .position_y(20.0)
         .build(&mut scene);

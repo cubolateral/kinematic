@@ -25,7 +25,7 @@ pub(crate) enum SceneTemplate {
 impl SceneTemplate {
     pub(crate) fn source(self) -> &'static str {
         match self {
-            Self::None => "return function(s)\nend\n",
+            Self::None => "return function()\nend\n",
             Self::TwoD => include_str!("../../templates/scene_2d.lua"),
             Self::ThreeD => include_str!("../../templates/scene_3d.lua"),
         }
@@ -59,25 +59,11 @@ impl Documents {
         let original =
             std::fs::read(self.context.root().join(MANIFEST)).map_err(|e| e.to_string())?;
         let mut manifest: Manifest = ron::de::from_bytes(&original).map_err(|e| e.to_string())?;
-        let previous = (
-            manifest.scenes.clone(),
-            manifest.audio.clone(),
-            manifest.legacy_audio.clone(),
-        );
+        let previous = (manifest.scenes.clone(), manifest.audio.clone());
 
         change(&mut manifest);
 
-        manifest
-            .legacy_audio
-            .retain(|path, _| manifest.scenes.contains(path));
-
-        if previous
-            == (
-                manifest.scenes.clone(),
-                manifest.audio.clone(),
-                manifest.legacy_audio.clone(),
-            )
-        {
+        if previous == (manifest.scenes.clone(), manifest.audio.clone()) {
             return Ok(None);
         }
 

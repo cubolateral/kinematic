@@ -545,7 +545,7 @@ fn arguments(
     runtime: &super::runtime::Runtime,
     world: &hecs::World,
     entity: hecs::Entity,
-) -> Result<(Table, Value)> {
+) -> Result<Table> {
     let props = runtime.lua.create_table()?;
     let uniforms = runtime.lua.create_table()?;
 
@@ -556,13 +556,21 @@ fn arguments(
             &props
         };
 
-        fields.set(
-            target.name(),
-            super::value::to_lua(&runtime.lua, target.get(world, entity))?,
-        )?;
+        let value = if runtime.building.get() {
+            super::runtime::engine(|| {
+                runtime
+                    .animator
+                    .borrow()
+                    .sample_scheduled(world, entity, &target)
+            })?
+        } else {
+            target.get(world, entity)
+        };
+
+        fields.set(target.name(), super::value::to_lua(&runtime.lua, value)?)?;
     }
 
-    props.set("uniforms", uniforms)?;
+    props.set("uniforms", extension::readonly(&runtime.lua, uniforms)?)?;
 
     let state = world
         .get::<&Simulation>(entity)
@@ -572,7 +580,9 @@ fn arguments(
         .transpose()?
         .unwrap_or(Value::Nil);
 
-    Ok((props, state))
+    props.set("state", extension::readonly_state(&runtime.lua, state)?)?;
+
+    extension::readonly(&runtime.lua, props)
 }
 pub(super) fn bounds_2d(world: &hecs::World, entity: hecs::Entity) -> skia_safe::Rect {
     let result = (|| {
@@ -589,24 +599,15 @@ pub(super) fn bounds_2d(world: &hecs::World, entity: hecs::Entity) -> skia_safe:
         let Some(callback) = callback else {
             return Ok(skia_safe::Rect::new_empty());
         };
-        let (props, state) = arguments(&runtime, world, entity)?;
-        let bounds = runtime.draw_call(|| callback.call::<Table>((props, state)))?;
-        let values = bound_fields(&runtime.lua, bounds, &["x", "y", "width", "height"])?;
-
-        if values.len() != 4 {
-            return Err(mlua::Error::runtime(
-                "2D bounds must return {x,y,width,height}.",
-            ));
-        }
-
-        finite(&values)?;
-
-        if values[2] < 0.0 || values[3] < 0.0 {
-            return Err(mlua::Error::runtime("Bounds size cannot be negative."));
-        }
+        let receiver = arguments(&runtime, world, entity)?;
+        let bounds = runtime.draw_call(|| callback.call::<mlua::AnyUserData>(receiver))?;
+        let bounds = bounds.borrow::<super::value::RectHandle>()?.0;
 
         Ok(skia_safe::Rect::from_xywh(
-            values[0], values[1], values[2], values[3],
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            bounds.height,
         ))
     })();
 
@@ -634,26 +635,12 @@ pub(super) fn bounds_3d(world: &hecs::World, entity: hecs::Entity) -> (glam::Vec
         let Some(callback) = callback else {
             return Ok((glam::Vec3::ZERO, glam::Vec3::ZERO));
         };
-        let (props, state) = arguments(&runtime, world, entity)?;
-        let bounds = runtime.draw_call(|| callback.call::<Table>((props, state)))?;
-        let values = bound_fields(
-            &runtime.lua,
-            bounds,
-            &["x", "y", "z", "width", "height", "depth"],
-        )?;
+        let receiver = arguments(&runtime, world, entity)?;
+        let bounds = runtime.draw_call(|| callback.call::<mlua::AnyUserData>(receiver))?;
+        let [x, y, z, width, height, depth] = bounds.borrow::<super::value::BoxHandle>()?.0;
+        let min = glam::vec3(x, y, z);
 
-        finite(&values)?;
-
-        let min = glam::vec3(values[0], values[1], values[2]);
-        let max = min + glam::vec3(values[3], values[4], values[5]);
-
-        if (max - min).min_element() < 0.0 {
-            return Err(mlua::Error::runtime(
-                "Bounds dimensions cannot be negative.",
-            ));
-        }
-
-        Ok((min, max))
+        Ok((min, min + glam::vec3(width, height, depth)))
     })();
 
     match result {
@@ -700,8 +687,8 @@ pub(super) fn draw_2d(
             commands: Rc::new(RefCell::new(Vec::new())),
             depth: Rc::new(Cell::new(0)),
         };
-        let (props, state) = arguments(&runtime, world, entity)?;
-        let result = runtime.draw_call(|| callback.call::<()>((context.clone(), props, state)));
+        let receiver = arguments(&runtime, world, entity)?;
+        let result = runtime.draw_call(|| callback.call::<()>((receiver, context.clone())));
 
         context.active.set(false);
 
@@ -839,8 +826,8 @@ pub(super) fn draw_3d(
             active: Rc::new(Cell::new(true)),
             commands: Rc::new(RefCell::new(Vec::new())),
         };
-        let (props, state) = arguments(&runtime, world, entity)?;
-        let result = runtime.draw_call(|| callback.call::<()>((context.clone(), props, state)));
+        let receiver = arguments(&runtime, world, entity)?;
+        let result = runtime.draw_call(|| callback.call::<()>((receiver, context.clone())));
 
         context.active.set(false);
 
@@ -875,31 +862,4 @@ pub(super) fn draw_3d(
                 |runtime| runtime.diagnostic("Draw", entity, &error),
             )
     })
-}
-
-fn bound_fields(lua: &Lua, bounds: Table, names: &[&str]) -> Result<Vec<f32>> {
-    for field in bounds.clone().pairs::<String, Value>() {
-        let (name, _) = field?;
-
-        if !names.contains(&name.as_str()) {
-            return Err(mlua::Error::runtime("Unknown bounds field."));
-        }
-    }
-
-    names
-        .iter()
-        .map(|name| {
-            let TrackValue::F32(value) = super::value::from_lua(
-                lua,
-                bounds.get(*name)?,
-                &TrackValue::F32(0.0),
-                crate::core::TrackChoices::None,
-            )?
-            else {
-                unreachable!()
-            };
-
-            Ok(value)
-        })
-        .collect()
 }

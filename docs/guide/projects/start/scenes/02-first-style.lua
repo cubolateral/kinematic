@@ -1,5 +1,5 @@
-return function(s)
-	s:world_2d():add(s:circle {
+return function()
+	k.world_2d():add(k.circle{
 		fill = k.color("#00000000"),
 		stroke = k.color("#FFFFFF"),
 		stroke_width = 8,

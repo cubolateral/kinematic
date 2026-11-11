@@ -320,6 +320,7 @@ impl SimulationOperation {
 /// Only [`Self::auto_update`] is trackable. Current state, frame position, and
 /// checkpoints are transient runtime data and are not persisted with a project.
 #[derive(Trackable)]
+#[trackable(name = "Simulation")]
 pub struct Simulation {
     /// Whether [`SimulationState::on_update`] runs automatically on project frames.
     ///

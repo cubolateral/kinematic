@@ -104,7 +104,7 @@ fn dimensional_containers_reject_mixing_and_foreign_scenes() {
     let two = canvas_2d().resolution((64, 32)).build(&mut scene);
     let three = canvas_3d().resolution((64, 32)).build(&mut scene);
     let cube = cube().build(&mut scene);
-    let rectangle = rect().build(&mut scene);
+    let rectangle = panel().build(&mut scene);
 
     for action in [0, 1] {
         assert!(
@@ -120,7 +120,7 @@ fn dimensional_containers_reject_mixing_and_foreign_scenes() {
     }
 
     let mut other = Scene::new();
-    let foreign = rect().build(&mut other);
+    let foreign = panel().build(&mut other);
 
     assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| two.add(&foreign))).is_err());
 }
@@ -207,7 +207,7 @@ fn projection_2d_builder_sizes_the_rect_from_canvas_resolution() {
     let world = scene.world();
 
     assert_eq!(
-        world.get::<&RectShape>(projection.entity()).unwrap().size,
+        world.get::<&PanelShape>(projection.entity()).unwrap().size,
         vec2(960.0, 540.0)
     );
     assert_eq!(
@@ -215,7 +215,7 @@ fn projection_2d_builder_sizes_the_rect_from_canvas_resolution() {
         Color::TRANSPARENT
     );
     assert_eq!(
-        world.get::<&RectShape>(projection.entity()).unwrap().round,
+        world.get::<&PanelShape>(projection.entity()).unwrap().round,
         Quad::new(10.0, 20.0, 30.0, 40.0)
     );
 }
@@ -411,7 +411,7 @@ fn projections_accept_sources_with_the_same_dimension() {
 fn canvas2d_camera_is_scoped_to_its_canvas() {
     let mut scene = Scene::new_with_resolution((32, 32));
     let source = scene.world_2d();
-    let shape = rect()
+    let shape = panel()
         .size(vec2(4.0, 4.0))
         .position(vec2(10.0, 0.0))
         .fill(Color::RED)
@@ -448,7 +448,7 @@ fn objects_can_ignore_the_2d_camera_with_their_subtree() {
         .position(vec2(2.0, 0.0))
         .follows_camera(false)
         .build(&mut scene);
-    let child = rect()
+    let child = panel()
         .size(vec2(4.0, 4.0))
         .position(vec2(1.0, 0.0))
         .fill(Color::RED)
@@ -514,7 +514,7 @@ fn canvas_camera_tracks_use_the_camera_prefix() {
         let inspection = world.get::<&Inspection>(entity).unwrap();
         let camera = (inspection.get)(&world, entity)
             .into_iter()
-            .find(|component| component.name == "Camera2D" || component.name == "Camera3D")
+            .find(|component| component.name == "Camera 2D" || component.name == "Camera 3D")
             .unwrap();
 
         assert!(

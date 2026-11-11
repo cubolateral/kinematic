@@ -58,12 +58,12 @@ second.
 
 <!-- focus: animation-modes -->
 ```lua
-s:all(function()
-    s:chain(function()
+k.all(function()
+    k.chain(function()
         target.position.x:to(0):play(1, "linear")
         target.position.x:to(0):play(1, "linear")
     end)
-    s:chain(function()
+    k.chain(function()
         increment.position.x:by(256):play(1, "linear")
         increment.position.x:by(256):play(1, "linear")
     end)
@@ -137,9 +137,9 @@ Property snapshots do not replace [simulation state](simulation.md).
 
 ## Timeline events and independent tracks
 
-Use `s:event("Reading")` for a pause you can adjust in Timeline, or `s:wait(seconds)`
+Use `k.event("Reading")` for a pause you can adjust in Timeline, or `k.wait(seconds)`
 for a fixed pause. See [editable pauses](sequences.md#editable-pauses).
 
-`s:track(initial, id)` creates an independent animated property. Use it for a shared
+`k.track(initial, id)` creates an independent animated property. Use it for a shared
 parameter that drives several [signals](signals.md), without adding a visible object.
 The optional ID preserves its identity across reloads.

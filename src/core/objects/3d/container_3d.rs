@@ -17,6 +17,7 @@ pub enum LayoutDirection3D {
 
 /// Procedural spacing and anchoring for a three-dimensional container.
 #[derive(Clone, Debug, Default, Trackable)]
+#[trackable(name = "Layout 3D")]
 pub struct Layout3D {
     /// Spacing between children on each layout axis in local coordinates.
     #[track]

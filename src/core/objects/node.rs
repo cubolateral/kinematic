@@ -709,7 +709,7 @@ mod tests {
     fn derived_container_initializes_children_on_first_add() {
         let mut scene = Scene::new();
         let container = test_container().build(&mut scene);
-        let child = rect().build(&mut scene);
+        let child = panel().build(&mut scene);
 
         assert!(
             scene
@@ -737,11 +737,11 @@ mod tests {
     fn container_2d_layout_is_procedural_and_preserves_child_positions() {
         let mut scene = Scene::new();
         let container = container_2d().gap(vec2(2.0, 4.0)).build(&mut scene);
-        let first = rect()
+        let first = panel()
             .size(vec2(10.0, 6.0))
             .position(vec2(3.0, 0.0))
             .build(&mut scene);
-        let second = rect().size(vec2(20.0, 8.0)).build(&mut scene);
+        let second = panel().size(vec2(20.0, 8.0)).build(&mut scene);
 
         container.add(&first);
         container.add(&second);
@@ -781,7 +781,7 @@ mod tests {
     fn non_group_containers_draw_their_children() {
         let mut scene = Scene::new();
         let container = test_container().position(vec2(4.0, 0.0)).build(&mut scene);
-        let child = rect()
+        let child = panel()
             .size(vec2(4.0, 4.0))
             .fill(Color::RED)
             .build(&mut scene);
@@ -815,7 +815,7 @@ mod tests {
         let mut scene = Scene::new();
         let first = test_container().build(&mut scene);
         let second = test_container().build(&mut scene);
-        let child = rect().build(&mut scene);
+        let child = panel().build(&mut scene);
 
         first.add(&second);
 
@@ -835,7 +835,7 @@ mod tests {
     fn removing_a_container_updates_its_complete_subtree() {
         let mut scene = Scene::new();
         let container = test_container().build(&mut scene);
-        let child = rect().build(&mut scene);
+        let child = panel().build(&mut scene);
 
         container.add(&child);
 
@@ -860,7 +860,7 @@ mod tests {
     fn container_bounds_include_transformed_children() {
         let mut scene = Scene::new();
         let container = test_container().build(&mut scene);
-        let child = rect()
+        let child = panel()
             .size(vec2(10.0, 20.0))
             .position(vec2(30.0, -10.0))
             .scale(vec2(2.0, 1.0))
@@ -880,7 +880,7 @@ mod tests {
         let mut scene = Scene::new();
         let group = group_2d().origin(vec2(1.0, 0.0)).build(&mut scene);
         let children = [-4.0, 0.0, 4.0].map(|x| {
-            let child = rect()
+            let child = panel()
                 .size(vec2(4.0, 4.0))
                 .position(vec2(x, 0.0))
                 .build(&mut scene);
@@ -897,11 +897,11 @@ mod tests {
     #[test]
     fn container_opacity_composites_the_subtree_once() {
         let mut scene = Scene::new();
-        let first = rect()
+        let first = panel()
             .size(vec2(8.0, 8.0))
             .fill(Color::RED)
             .build(&mut scene);
-        let second = rect()
+        let second = panel()
             .size(vec2(8.0, 8.0))
             .fill(Color::RED)
             .build(&mut scene);
@@ -935,12 +935,12 @@ mod tests {
     #[test]
     fn higher_z_index_draws_and_picks_in_front() {
         let mut scene = Scene::new();
-        let front = rect()
+        let front = panel()
             .size(vec2(8.0, 8.0))
             .fill(Color::RED)
             .z_index(1)
             .build(&mut scene);
-        let back = rect()
+        let back = panel()
             .size(vec2(8.0, 8.0))
             .fill(Color::BLUE)
             .z_index(-1)
@@ -983,7 +983,7 @@ mod tests {
             .rotation(0.25)
             .opacity(0.4)
             .build(&mut scene);
-        let child = rect()
+        let child = panel()
             .position(vec2(1.0, 2.0))
             .scale(vec2(0.5, 0.25))
             .rotation(0.125)

@@ -252,7 +252,7 @@ impl LuaScene {
 
         runtime.scene.borrow_mut().as_mut().unwrap().set_name(name);
 
-        build.call::<()>(SceneHandle(Rc::downgrade(&runtime)))?;
+        build.call::<()>(())?;
 
         if let Some(error) = runtime.errors.borrow().first() {
             return Err(mlua::Error::runtime(error.clone()));
@@ -685,6 +685,12 @@ fn fingerprint(world: &hecs::World, entity: hecs::Entity) -> String {
 }
 
 impl Runtime {
+    pub(super) fn from_lua(lua: &Lua) -> Result<Rc<Self>> {
+        lua.app_data_ref::<Weak<Self>>()
+            .and_then(|runtime| runtime.upgrade())
+            .ok_or_else(|| mlua::Error::runtime("Scene runtime is unavailable."))
+    }
+
     fn spawn_native(
         self: &Rc<Self>,
         lua: &Lua,
@@ -729,6 +735,97 @@ impl Runtime {
         Ok(handle)
     }
 
+    pub(super) fn spawn_custom(
+        self: &Rc<Self>,
+        lua: &Lua,
+        definition: &extension::ObjectDefinition,
+        options: Table,
+    ) -> Result<ObjectHandle> {
+        extension::validate_definition(definition)?;
+        self.construction()?;
+
+        let kind = if definition.dimension == 2 {
+            "Lua2D"
+        } else {
+            "Lua3D"
+        };
+        let (key, entity) = self.allocate(&options, kind)?;
+        let world = self.world.borrow().clone();
+        let animator = self.animator.borrow().clone();
+
+        engine(|| {
+            if definition.dimension == 2 {
+                extension::Script2D::spawn_at(
+                    world.clone(),
+                    animator,
+                    extension::Script2D::default(),
+                    Name::new(kind),
+                    Some(entity),
+                );
+            } else {
+                extension::Script3D::spawn_at(
+                    world.clone(),
+                    animator,
+                    extension::Script3D::default(),
+                    Name::new(kind),
+                    Some(entity),
+                );
+            }
+        })?;
+
+        for name in definition.properties.fields.keys() {
+            if native::properties(&world.borrow(), entity)
+                .iter()
+                .any(|target| target.name() == name)
+            {
+                return Err(mlua::Error::runtime(format!(
+                    "Custom property '{name}' conflicts with a native property."
+                )));
+            }
+        }
+
+        world
+            .borrow_mut()
+            .insert_one(entity, definition.properties.clone())
+            .map_err(mlua::Error::external)?;
+
+        let handle = ObjectHandle {
+            runtime: Rc::downgrade(self),
+            entity,
+        };
+
+        super::resources::configure(lua, self, &handle, &options)?;
+
+        if let Some(name) = options.get::<Option<String>>("name")? {
+            world.borrow().get::<&mut Name>(entity).unwrap().set(&name);
+        }
+
+        super::animation::configure(lua, &handle, &options)?;
+
+        extension::configure(self, &handle, definition)?;
+
+        if options.get::<Option<String>>("name")?.is_none() {
+            world
+                .borrow()
+                .get::<&mut Name>(entity)
+                .unwrap()
+                .set(&definition.name);
+        }
+
+        crate::core::objects::initialize_object_snapshots(&world, entity);
+
+        self.definitions.borrow_mut().insert(
+            key,
+            Definition {
+                kind: kind.into(),
+                entity,
+                fingerprint: String::new(),
+            },
+        );
+
+        Ok(handle)
+    }
+
     pub(super) fn resource(&self, path: &Path) -> Result<Vec<u8>> {
         self.dependencies.borrow_mut().insert(path.to_owned());
         self.sources
@@ -752,6 +849,9 @@ impl Runtime {
 
     fn register(self: &Rc<Self>) -> Result<()> {
         let lua = &self.lua;
+
+        lua.set_app_data(Rc::downgrade(self));
+
         let rawset: Function = lua.globals().get("rawset")?;
 
         lua.globals().set(
@@ -781,6 +881,21 @@ impl Runtime {
         super::resources::register(self, &api)?;
 
         super::audio::register(self, &api)?;
+
+        register_scene(lua, &api)?;
+
+        for native in native::objects() {
+            api.set(
+                native.name,
+                lua.create_function(move |lua, options: Option<Table>| {
+                    Runtime::from_lua(lua)?.spawn_native(
+                        lua,
+                        native,
+                        options.unwrap_or(lua.create_table()?),
+                    )
+                })?,
+            )?;
+        }
 
         let api = extension::readonly(lua, api)?;
 
@@ -922,124 +1037,61 @@ pub(super) fn duration(value: f32) -> Result<f32> {
     }
 }
 
-#[derive(Clone)]
-struct SceneHandle(Weak<Runtime>);
-impl SceneHandle {
-    fn runtime(&self) -> Result<Rc<Runtime>> {
-        self.0
-            .upgrade()
-            .ok_or_else(|| mlua::Error::runtime("Scene has been released."))
-    }
-}
-
-impl UserData for SceneHandle {
-    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("audio", |_, this, options: Table| {
-            super::audio::create(this.runtime()?, options)
-        });
-        methods.add_method(
-            "track",
-            |lua, this, (initial, id): (Value, Option<String>)| {
-                let runtime = this.runtime()?;
-
-                runtime.construction()?;
-
-                let options = lua.create_table()?;
-
-                if let Some(id) = id {
-                    options.set("id", id)?;
-                }
-
-                let (key, entity) = runtime.allocate(&options, "StandaloneTrack")?;
-                let value = extension::infer(initial)?;
-                let (entity, target) = engine(|| {
-                    crate::core::standalone_value(
-                        &runtime.world.borrow(),
-                        &runtime.animator.borrow(),
-                        value,
-                        Some(entity),
-                    )
-                })?;
-
-                runtime.definitions.borrow_mut().insert(
-                    key,
-                    Definition {
-                        entity,
-                        kind: "StandaloneTrack".into(),
-                        fingerprint: String::new(),
-                    },
-                );
-
-                Ok(PropertyHandle {
-                    object: ObjectHandle {
-                        runtime: this.0.clone(),
-                        entity,
-                    },
-                    target,
-                    channel: None,
-                })
-            },
-        );
-        methods.add_method("object", |lua, this, (definition, options): (mlua::UserDataRef<extension::ObjectDefinition>, Table)| {
-            let runtime = this.runtime()?;
+fn register_scene(lua: &Lua, api: &Table) -> Result<()> {
+    api.set(
+        "audio",
+        lua.create_function(|lua, options: Table| {
+            super::audio::create(Runtime::from_lua(lua)?, options)
+        })?,
+    )?;
+    api.set(
+        "track",
+        lua.create_function(|lua, (initial, id): (Value, Option<String>)| {
+            let runtime = Runtime::from_lua(lua)?;
 
             runtime.construction()?;
 
-            let kind = if definition.dimension == 2 { "Lua2D" } else { "Lua3D" };
-            let (key, entity) = runtime.allocate(&options, kind)?;
-            let world = runtime.world.borrow().clone();
-            let animator = runtime.animator.borrow().clone();
+            let options = lua.create_table()?;
 
-            engine(|| {
-                if definition.dimension == 2 {
-                    extension::Script2D::spawn_at(world.clone(), animator, extension::Script2D::default(), Name::new(kind), Some(entity));
-                } else {
-                    extension::Script3D::spawn_at(world.clone(), animator, extension::Script3D::default(), Name::new(kind), Some(entity));
-                }
+            if let Some(id) = id {
+                options.set("id", id)?;
+            }
+
+            let (key, entity) = runtime.allocate(&options, "StandaloneTrack")?;
+            let value = extension::infer(initial)?;
+            let (entity, target) = engine(|| {
+                crate::core::standalone_value(
+                    &runtime.world.borrow(),
+                    &runtime.animator.borrow(),
+                    value,
+                    Some(entity),
+                )
             })?;
 
-            for name in definition.properties.0.keys() {
-                if native::properties(&world.borrow(), entity).iter().any(|target| target.name() == name) {
-                    return Err(mlua::Error::runtime(format!("Custom property '{name}' conflicts with a native property.")));
-                }
-            }
+            runtime.definitions.borrow_mut().insert(
+                key,
+                Definition {
+                    entity,
+                    kind: "StandaloneTrack".into(),
+                    fingerprint: String::new(),
+                },
+            );
 
-            world.borrow_mut().insert_one(entity, definition.properties.clone()).map_err(mlua::Error::external)?;
-
-            let handle = ObjectHandle { runtime: this.0.clone(), entity };
-
-            super::resources::configure(lua, &runtime, &handle, &options)?;
-
-            if let Some(name) = options.get::<Option<String>>("name")? {
-                world.borrow().get::<&mut Name>(entity).unwrap().set(&name);
-            }
-
-            super::animation::configure(lua, &handle, &options)?;
-
-            extension::configure(&runtime, &handle, &definition)?;
-
-            if options.get::<Option<String>>("name")?.is_none() {
-                if let Some(name) = definition.table.get::<Option<String>>("name")? {
-                    world.borrow().get::<&mut Name>(entity).unwrap().set(&name);
-                }
-            }
-
-            crate::core::objects::initialize_object_snapshots(&world, entity);
-
-            runtime.definitions.borrow_mut().insert(key, Definition { kind: kind.into(), entity, fingerprint: String::new() });
-
-            Ok(handle)
-        });
-
-        for native in native::objects() {
-            methods.add_method(native.name, move |lua, this, options: Table| {
-                this.runtime()?.spawn_native(lua, native, options)
-            });
-        }
-
-        for (name, which) in [("root", 0), ("world_2d", 1), ("world_3d", 2)] {
-            methods.add_method(name, move |_, this, ()| {
-                let runtime = this.runtime()?;
+            Ok(PropertyHandle {
+                object: ObjectHandle {
+                    runtime: Rc::downgrade(&runtime),
+                    entity,
+                },
+                target,
+                channel: None,
+            })
+        })?,
+    )?;
+    for (name, which) in [("root", 0), ("world_2d", 1), ("world_3d", 2)] {
+        api.set(
+            name,
+            lua.create_function(move |lua, ()| {
+                let runtime = Runtime::from_lua(lua)?;
 
                 runtime.construction()?;
 
@@ -1052,21 +1104,26 @@ impl UserData for SceneHandle {
                 };
 
                 Ok(ObjectHandle {
-                    runtime: this.0.clone(),
+                    runtime: Rc::downgrade(&runtime),
                     entity,
                 })
-            });
-        }
+            })?,
+        )?;
+    }
 
-        methods.add_method("view", |lua, this, view: String| {
+    api.set(
+        "view",
+        lua.create_function(|lua, view: String| {
             if view != "2d" && view != "3d" {
                 return Err(mlua::Error::runtime("View must be '2d' or '3d'."));
             }
 
-            let runtime = this.runtime()?;
+            let runtime = Runtime::from_lua(lua)?;
+
+            runtime.construction()?;
             let entity = runtime.scene.borrow().as_ref().unwrap().root().entity();
             let root = ObjectHandle {
-                runtime: this.0.clone(),
+                runtime: Rc::downgrade(&runtime),
                 entity,
             };
             let table = lua.create_table()?;
@@ -1080,27 +1137,36 @@ impl UserData for SceneHandle {
                 super::animation::Operation::To,
             )?
             .play(None, None)
-        });
-        methods.add_method("wait", |_, this, seconds: f32| {
-            let runtime = this.runtime()?;
+        })?,
+    )?;
+    api.set(
+        "wait",
+        lua.create_function(|lua, seconds: f32| {
+            let runtime = Runtime::from_lua(lua)?;
 
             runtime.construction()?;
 
             let seconds = duration(seconds)?;
 
             engine(|| runtime.scene.borrow_mut().as_mut().unwrap().wait(seconds))
-        });
-        methods.add_method("event", |_, this, name: String| {
-            let runtime = this.runtime()?;
+        })?,
+    )?;
+    api.set(
+        "event",
+        lua.create_function(|lua, name: String| {
+            let runtime = Runtime::from_lua(lua)?;
 
             runtime.construction()?;
 
             engine(|| runtime.scene.borrow_mut().as_mut().unwrap().event(&name))
-        });
+        })?,
+    )?;
 
-        for name in ["chain", "all", "parallel", "loop"] {
-            methods.add_method(name, move |_, this, callback: Function| {
-                let runtime = this.runtime()?;
+    for name in ["chain", "all", "parallel", "loop"] {
+        api.set(
+            name,
+            lua.create_function(move |lua, callback: Function| {
+                let runtime = Runtime::from_lua(lua)?;
 
                 runtime.construction()?;
 
@@ -1135,7 +1201,7 @@ impl UserData for SceneHandle {
                         .unwrap()
                         .begin_schedule(name == "all", repeating)
                 })?;
-                let result = callback.call::<()>(this.clone());
+                let result = callback.call::<()>(());
                 let close = engine(|| {
                     runtime.scene.borrow_mut().as_mut().unwrap().end_schedule(
                         scope,
@@ -1151,9 +1217,10 @@ impl UserData for SceneHandle {
                 result?;
 
                 close
-            });
-        }
+            })?,
+        )?;
     }
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -1925,22 +1992,22 @@ impl Runtime {
 mod extension_tests {
     use super::*;
     const SOURCE: &str = r##"
-local settings=k.component {speed={default=2,min=0,max=20}}
-local counter=k.object {
+local settings=k.component('Settings', { speed={default=2,min=0,max=20}})
+local counter=k.object_2d('Counter', {
     components={settings}, state={total=0}, inputs={speed='speed'},
-    update=function(state,frame,inputs)
+    on_update=function(self,frame,inputs) local state=self.state;
         state.total=state.total+inputs.speed*frame.dt
     end,
-    bounds=function(props,state) return {x = 10, y = 20, width = 30, height = 40} end,
-    draw=function(ctx,props,state)
+    on_bounds=function(self) local props=self; local state=self.state; return k.rect(10, 20, 30, 40) end,
+    on_draw=function(self,ctx) local props=self; local state=self.state;
         ctx:rect(10,20,30,40,props.fill)
     end,
-}
-return function(s)
-    local counter=s:object(counter,{id='counter',fill=k.color('#ff0000')})
-    s:world_2d():add(counter)
+})
+return function()
+    local counter=counter({id='counter',fill=k.color('#ff0000')})
+    k.world_2d():add(counter)
     counter:to {speed = 8}:play(3, 'linear')
-    s:wait(1)
+    k.wait(1)
 end
 "##;
     fn sources(text: &str) -> Sources {
@@ -1981,14 +2048,14 @@ end
 
         let scene = load(
             r##"
-return function(s)
-    local world = s:world_3d()
-    local other = s:canvas_3d {
+return function()
+    local world = k.world_3d()
+    local other = k.canvas_3d{
         id = 'other',
         ambient_color = k.color('#0000FF'),
         ambient_intensity = 0.2,
     }
-    s:root():add(other)
+    k.root():add(other)
     assert(math.abs(world.ambient_intensity:get() - 0.4) < 0.000001)
     world:to {
         ambient_color = k.color('#FF0000'),
@@ -2026,11 +2093,11 @@ end
 
         let scene = load(
             r#"
-return function(s)
-    local two = s:canvas_2d {id='two', resolution={2, 2}}
-    local three = s:canvas_3d {id='three', resolution={2, 2}, filter='linear'}
-    s:root():add(two)
-    s:root():add(three)
+return function()
+    local two = k.canvas_2d{id='two', resolution={2, 2}}
+    local three = k.canvas_3d{id='three', resolution={2, 2}, filter='linear'}
+    k.root():add(two)
+    k.root():add(three)
     assert(two.filter:get() == 'nearest')
     assert(three.filter:get() == 'linear')
     two:to {filter='linear'}:play(1, 'linear')
@@ -2117,18 +2184,18 @@ end
     #[test]
     fn dependent_simulations_sample_each_step_and_replay_only_changed_dependencies() {
         let source = r#"
-return function(s)
-    local a = s:object(k.object{
+return function()
+    local a = k.object_2d('A', {
         state={total=0},
-        update=function(state, frame) state.total=state.total+1 end,
-    }, {id='source'})
-    local b = s:object(k.object{
+        on_update=function(self,frame) local state=self.state; state.total=state.total+1 end,
+    })({id='source'})
+    local b = k.object_2d('B', {
         state={total=0}, inputs={source=a},
-        update=function(state, frame, inputs) state.total=state.total+inputs.source.total end,
-    }, {id='counter'})
-    s:world_2d():add(a)
-    s:world_2d():add(b)
-    s:wait(4)
+        on_update=function(self,frame,inputs) local state=self.state; state.total=state.total+inputs.source.total end,
+    })({id='counter'})
+    k.world_2d():add(a)
+    k.world_2d():add(b)
+    k.wait(4)
 end
 "#;
         let mut scene = load(source);
@@ -2161,7 +2228,7 @@ end
         assert_eq!(total(&scene), total(&clean));
         assert_eq!(total(&scene), expected * 2.0);
 
-        let cycle = changed.replace("s:wait(4)", "a:inputs{source=b}; s:wait(4)");
+        let cycle = changed.replace("k.wait(4)", "a:inputs{source=b}; k.wait(4)");
         let error = scene.reload(sources(&cycle)).err().unwrap().to_string();
 
         assert!(error.contains("cycle"), "{error}");
@@ -2173,14 +2240,14 @@ end
         let source = r#"
 local hidden=0
 math.sin=function() hidden=hidden+1; return hidden end
-local counter=k.object{state={total=0},inputs={}, update=function(state)
+local counter=k.object_2d('Counter', {state={total=0},inputs={}, on_update=function(self) local state=self.state;
     local values=require('kinematic')
     state.total=state.total+values.vec2(3,4):length()+math.sin(0)
-end}
-return function(s)
-    local a=s:object(counter,{id='counter'})
-    s:world_2d():add(a)
-    s:wait(1)
+end})
+return function()
+    local a=counter({id='counter'})
+    k.world_2d():add(a)
+    k.wait(1)
 end
 "#;
         let scene = load(source);
@@ -2238,15 +2305,15 @@ end
 
         let manual = load(
             r#"
-local definition=k.object{state={total=0},inputs={},update=function(state) state.total=state.total+1 end}
-return function(s)
-    local obj=s:object(definition,{id='counter',auto_update=false})
-    s:world_2d():add(obj)
-    s:wait(0.5)
+local definition=k.object_2d('Definition', {state={total=0},inputs={},on_update=function(self) local state=self.state; state.total=state.total+1 end})
+return function()
+    local obj=definition({id='counter',auto_update=false})
+    k.world_2d():add(obj)
+    k.wait(0.5)
     obj:mutate(function(state) state.total=state.total+5 end)
     obj:update()
     obj:checkpoint()
-    s:wait(0.5)
+    k.wait(0.5)
 end
 "#,
         );
@@ -2277,7 +2344,7 @@ end
 
         let mut scene = LuaScene::load(
             ProjectContext::new(&root).unwrap(), "counter.lua",
-            sources("return function(s) local a=s:circle{id='ball',radius=4}; s:world_2d():add(a); a:to{radius=8}:play(1,'linear') end"),
+            sources("return function() local a=k.circle{id='ball',radius=4}; k.world_2d():add(a); a:to{radius=8}:play(1,'linear') end"),
             (100, 100), 60, Margin::default(),
         ).unwrap();
 
@@ -2308,7 +2375,11 @@ end
 
     #[test]
     fn custom_drawing_uses_displaced_bounds_and_commits_only_complete_callbacks() {
-        let scene = load(SOURCE);
+        let source = SOURCE.replace(
+            "ctx:rect(10,20,30,40,props.fill)",
+            "assert(not pcall(k.view,'3d')); assert(not pcall(k.wait,1)); assert(not pcall(k.circle,{})); ctx:rect(10,20,30,40,props.fill)",
+        );
+        let scene = load(&source);
         let entity = scene.entity("counter").unwrap();
         let bounds = super::super::drawing::bounds_2d(&scene.scene.world(), entity);
 
@@ -2369,7 +2440,7 @@ pub(super) const OBJECT_METHODS: &[&str] = &[
     "move_down",
     "move_to_top",
     "move_to_bottom",
-    "bounds",
+    "on_bounds",
     "box_size",
     "global_matrix",
     "global_position",

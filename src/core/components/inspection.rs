@@ -42,7 +42,7 @@ impl Inspection {
         if let Ok(properties) = world.get::<&crate::core::Properties>(entity) {
             fields.extend(
                 properties
-                    .0
+                    .fields
                     .values()
                     .map(|(schema, _)| crate::core::TrackTarget::Dynamic(schema.clone())),
             );
@@ -55,6 +55,49 @@ impl Inspection {
         );
 
         fields
+    }
+
+    /// Groups editable fields by their declaring component.
+    pub(crate) fn property_groups(
+        &self,
+        world: &hecs::World,
+        entity: hecs::Entity,
+    ) -> Vec<(String, Vec<crate::core::TrackTarget>)> {
+        let mut groups = Vec::new();
+
+        for component in self.trackables(world, entity) {
+            let fields = (component.get)()
+                .iter()
+                .map(|info| crate::core::TrackTarget::property((component.type_id)(), info))
+                .collect();
+
+            groups.push((component.name.to_owned(), fields));
+        }
+
+        if let Ok(properties) = world.get::<&crate::core::Properties>(entity) {
+            for (name, fields) in &properties.components {
+                groups.push((
+                    name.clone(),
+                    fields
+                        .iter()
+                        .map(|name| {
+                            crate::core::TrackTarget::Dynamic(properties.fields[name].0.clone())
+                        })
+                        .collect(),
+                ));
+            }
+        }
+
+        let uniforms = crate::core::objects::shader_uniforms(world, entity)
+            .into_iter()
+            .map(|(name, _)| crate::core::TrackTarget::uniform(name))
+            .collect::<Vec<_>>();
+
+        if !uniforms.is_empty() {
+            groups.push(("Shader Uniforms".into(), uniforms));
+        }
+
+        groups
     }
 
     /// Iterates over the object's trackable components.

@@ -34,13 +34,13 @@ local source = k.audio_synth {
     frequency = 520,
 }
 
-return function(s)
-    local hit = s:audio {source = source, gain = 0.25, pan = 0}
+return function()
+    local hit = k.audio {source = source, gain = 0.25, pan = 0}
     hit:play()
-    s:wait(0.5)
+    k.wait(0.5)
 
     hit:play {pan = -0.7}
-    s:wait(0.5)
+    k.wait(0.5)
 end
 ```
 
@@ -51,7 +51,7 @@ construction contribute to the scene duration.
 
 ## Audio files and synthesis
 
-`k.audio_file("assets/hit.wav")` decodes WAV, MP3, OGG, or FLAC using the FFmpeg bundled
+`k.load_audio("assets/hit.wav")` decodes WAV, MP3, OGG, or FLAC using the FFmpeg bundled
 or prepared with the application. Paths are relative to the project root. File data is
 frozen into the revision and converted to 48 kHz stereo PCM with short fades at the
 edges. Audio stays in memory, so long tracks are not streamed.

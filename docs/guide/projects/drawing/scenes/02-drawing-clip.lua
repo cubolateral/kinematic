@@ -1,9 +1,9 @@
-local clipped = k.object {
-	bounds = function()
-		return { x = -160, y = -110, width = 320, height = 220 }
+local clipped = k.object_2d("Clipped", {
+	on_bounds = function(self)
+		return k.rect(-160, -110, 320, 220)
 	end,
 
-	draw = function(ctx)
+	on_draw = function(self, ctx)
 		local mask = k.path()
 		mask:move_to(-100, -100)
 		mask:line_to(100, -100)
@@ -18,8 +18,8 @@ local clipped = k.object {
 		ctx:restore()
 		ctx:stroke(mask, k.color("#FFFFFF"), 3)
 	end,
-}
+})
 
-return function(s)
-	s:world_2d():add(s:object(clipped, {}))
+return function()
+	k.world_2d():add(clipped({}))
 end

@@ -79,7 +79,7 @@ fn lua_simulation_startup_and_frames() {
 
     std::fs::write(
         root.join("scenes/intro.lua"),
-        include_str!("tests/fixtures/life.lua").replace("s:wait(3)", "s:wait(10)"),
+        include_str!("tests/fixtures/life.lua").replace("k.wait(3)", "k.wait(10)"),
     )
     .unwrap();
     std::fs::create_dir_all(root.join("kinematic/cache")).unwrap();
@@ -207,7 +207,7 @@ fn lua_editor_reload_switch_and_frozen_export() {
 
         project.save().unwrap();
 
-        let source = "return function(s) local a=s:circle{id='ball',name='Ball',radius=4}; s:world_2d():add(a); s:wait(0.5) end";
+        let source = "return function() local a=k.circle{id='ball',name='Ball',radius=4}; k.world_2d():add(a); k.wait(0.5) end";
         let path = Path::new("scenes/intro.lua");
 
         std::fs::write(project.context.root().join(path), source).unwrap();
@@ -387,7 +387,7 @@ fn lua_editor_reload_switch_and_frozen_export() {
 
         std::fs::write(
             editor.context().root().join(other),
-            "return function(s) s:wait(1) end",
+            "return function() k.wait(1) end",
         )
         .unwrap();
 
@@ -462,12 +462,12 @@ fn ui_audio_clips_save_mix_and_rebuild() {
 
     std::fs::write(
         root.join("scenes/other.lua"),
-        "return function(s) s:wait(0.1) end",
+        "return function() k.wait(0.1) end",
     )
     .unwrap();
     std::fs::write(
         root.join("scenes/intro.lua"),
-        "return function(s) local ball=s:circle{id='ball',name='Ball'}; s:world_2d():add(ball); s:wait(0.05) end",
+        "return function() local ball=k.circle{id='ball',name='Ball'}; k.world_2d():add(ball); k.wait(0.05) end",
     )
     .unwrap();
 
@@ -481,19 +481,16 @@ fn ui_audio_clips_save_mix_and_rebuild() {
     )
     .unwrap();
 
-    project.manifest.legacy_audio.insert(
-        "scenes/other.lua".into(),
-        vec![crate::scripting::AudioClip {
-            id: 77,
-            lane: 0,
-            file: "assets/chime.wav".into(),
-            at: 0.02,
-            offset: 0.0,
-            duration: 0.02,
-            gain: 1.0,
-            pan: 0.0,
-        }],
-    );
+    project.manifest.audio.push(crate::scripting::AudioClip {
+        id: 77,
+        lane: 0,
+        file: "assets/chime.wav".into(),
+        at: 0.07,
+        offset: 0.0,
+        duration: 0.02,
+        gain: 1.0,
+        pan: 0.0,
+    });
     project.save().unwrap();
 
     let mut app = App::new();
@@ -592,10 +589,9 @@ fn ui_audio_clips_save_mix_and_rebuild() {
     editor.reset_editor_2d_view();
     editor.reset_editor_3d_view();
 
-    let migrated = LuaProject::open(&root).unwrap();
+    let reopened = LuaProject::open(&root).unwrap();
 
-    assert!(migrated.manifest.legacy_audio.is_empty());
-    assert!((migrated.manifest.audio[0].at - 0.07).abs() < 1e-6);
+    assert!((reopened.manifest.audio[0].at - 0.07).abs() < 1e-6);
 
     editor.commit_audio(Vec::new());
 

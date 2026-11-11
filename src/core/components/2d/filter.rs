@@ -4,6 +4,7 @@ use crate::core::types::{Color, Vector2};
 
 /// Image filters applied to a two-dimensional object and its subtree.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Filter")]
 pub struct Filter {
     /// Gaussian blur sigma in local canvas units.
     #[track(min = 0.0)]

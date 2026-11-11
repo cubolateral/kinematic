@@ -194,9 +194,48 @@ fn type_name(ty: &syn::Type) -> Option<String> {
         .map(|segment| segment.ident.to_string())
 }
 
+fn component_name(input: &DeriveInput) -> syn::Result<syn::LitStr> {
+    let mut name = None;
+
+    for attribute in &input.attrs {
+        if !attribute.path().is_ident("trackable") {
+            continue;
+        }
+
+        attribute.parse_nested_meta(|meta| {
+            if !meta.path.is_ident("name") || name.is_some() {
+                return Err(meta.error("Expected one component name."));
+            }
+
+            let value: syn::LitStr = meta.value()?.parse()?;
+
+            if value.value().trim().is_empty() {
+                return Err(syn::Error::new(
+                    value.span(),
+                    "Component name cannot be empty.",
+                ));
+            }
+
+            name = Some(value);
+            Ok(())
+        })?;
+    }
+
+    name.ok_or_else(|| {
+        syn::Error::new_spanned(
+            &input.ident,
+            "Trackable requires #[trackable(name = \"Component Name\")].",
+        )
+    })
+}
+
 /// Generates object-handler fields and track metadata for a `Trackable` component.
 pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
+    let name = match component_name(&input) {
+        Ok(name) => name,
+        Err(error) => return error.to_compile_error().into(),
+    };
     let struct_name = &input.ident;
     let handler_fields_name = format_ident!("__{}HandlerFields", struct_name);
     let tween_fields_trait = format_ident!("__Kinematic{}TweenFields", struct_name);
@@ -925,7 +964,7 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             #(#property_constants)*
 
             pub const INFO: #trackable_info_type = #trackable_info_type {
-                name: stringify!(#struct_name),
+                name: #name,
                 type_id: || std::any::TypeId::of::<#struct_name>(),
                 get: || &#tracks_ident,
             };
@@ -939,6 +978,31 @@ pub fn derive_trackable(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 mod tests {
     use super::*;
     use syn::parse_quote;
+
+    #[test]
+    fn component_names_are_required_and_explicit() {
+        let missing: DeriveInput = parse_quote!(
+            struct Transform2D {
+                value: f32,
+            }
+        );
+        let named: DeriveInput = parse_quote!(
+            #[trackable(name = "Transform 2D")]
+            struct Transform2D {
+                value: f32,
+            }
+        );
+        let empty: DeriveInput = parse_quote!(
+            #[trackable(name = " ")]
+            struct Transform2D {
+                value: f32,
+            }
+        );
+
+        assert!(component_name(&missing).is_err());
+        assert_eq!(component_name(&named).unwrap().value(), "Transform 2D");
+        assert!(component_name(&empty).is_err());
+    }
 
     #[test]
     fn parses_optional_track_limits() {

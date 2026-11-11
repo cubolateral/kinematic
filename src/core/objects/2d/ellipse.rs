@@ -6,6 +6,7 @@ use crate::core::{
 };
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Ellipse Shape")]
 /// Geometry of an elliptical object.
 pub struct EllipseShape {
     /// Horizontal and vertical radii in local coordinates.

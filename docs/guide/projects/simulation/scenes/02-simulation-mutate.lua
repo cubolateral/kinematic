@@ -1,38 +1,38 @@
-local particle = k.object {
+local particle = k.object_2d("Particle", {
 	state = { x = -240, trail = {} },
-	components = { k.component {
+	components = { k.component("Custom", {
 		speed = { default = 160, min = 0 },
-	} },
+	}) },
 	inputs = { speed = "speed" },
 
-	update = function(state, frame, inputs)
-		state.x = state.x + inputs.speed * frame.dt
-		state.trail[#state.trail + 1] = state.x
-		if #state.trail > 120 then
-			table.remove(state.trail, 1)
+	on_update = function(self, frame,inputs)
+		self.state.x = self.state.x + inputs.speed * frame.dt
+		self.state.trail[#self.state.trail + 1] = self.state.x
+		if #self.state.trail > 120 then
+			table.remove(self.state.trail, 1)
 		end
 	end,
 
-	bounds = function()
-		return { x = -270, y = -30, width = 810, height = 60 }
+	on_bounds = function(self)
+		return k.rect(-270, -30, 810, 60)
 	end,
 
-	draw = function(ctx, properties, state)
-		for _, x in ipairs(state.trail) do
+	on_draw = function(self, ctx)
+		for _, x in ipairs(self.state.trail) do
 			ctx:circle(x, 0, 2, k.color("#008CFF"))
 		end
-		ctx:circle(state.x, 0, 18, properties.fill)
+		ctx:circle(self.state.x, 0, 18, self.fill)
 	end,
-}
+})
 
-return function(s)
-	local ball = s:object(particle, { fill = k.color("#FFFFFF") })
-	s:world_2d():add(ball)
+return function()
+	local ball = particle({ fill = k.color("#FFFFFF") })
+	k.world_2d():add(ball)
 
-	s:wait(1)
+	k.wait(1)
 	ball:mutate(function(state)
 		state.x = -240
 		state.trail = {}
 	end)
-	s:wait(1)
+	k.wait(1)
 end

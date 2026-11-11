@@ -23,11 +23,11 @@ Drawing only reads those points.
 
 <!-- focus: simulation-step -->
 ```lua
-update = function(state, frame, inputs)
-    state.x = state.x + inputs.speed * frame.dt
-    state.trail[#state.trail + 1] = state.x
-    if #state.trail > 120 then
-        table.remove(state.trail, 1)
+on_update = function(self, frame, inputs)
+    self.state.x = self.state.x + inputs.speed * frame.dt
+    self.state.trail[#self.state.trail + 1] = self.state.x
+    if #self.state.trail > 120 then
+        table.remove(self.state.trail, 1)
     end
 end,
 ```
@@ -61,9 +61,11 @@ inputs = {speed = "speed"},
 After creating an instance, `ball:inputs({speed = other.speed})` can bind it to another
 object's speed. Dependencies are evaluated before their dependents. Cycles are rejected.
 Omitting `inputs` conservatively includes the object's own properties. `inputs = {}`
-declares no dependencies.
+declares no property dependencies. Own properties are also available as evaluated values
+on `self` when included in the declared inputs. With explicit inputs, declare every own
+property the update reads. State remains mutable through `self.state`.
 
-Keep changing data in `state`. A mutable variable captured outside `update` would not
+Keep changing data in `state`. A mutable variable captured outside `on_update` would not
 be restored when seeking, so simulation callbacks reject such captures.
 
 ## Schedule a state change
@@ -76,12 +78,12 @@ timeline, so seeking across it reproduces the same reset.
 
 <!-- focus: simulation-mutate -->
 ```lua
-s:wait(1)
+k.wait(1)
 ball:mutate(function(state)
     state.x = -240
     state.trail = {}
 end)
-s:wait(1)
+k.wait(1)
 ```
 
 <template #source>
@@ -117,9 +119,9 @@ State supports finite scalar values, simple tables, supported vectors and colors
 Random values, and immutable resource handles. Functions, metatables, cyclic or shared
 tables, and unsupported userdata are rejected. Each instance receives its own copy.
 
-For randomness, put `k.random(seed)` in state and draw values inside `update`. Checkpoints
+For randomness, put `k.random(seed)` in state and draw values inside `on_update`. Checkpoints
 then preserve the random sequence. Do not use `math.random`, sample random values in
-`draw`, or recreate the generator at every step. See [Random](random.md).
+`on_draw`, or recreate the generator at every step. See [Random](random.md).
 
 Update and mutate run in an isolated environment. Pure helper modules are allowed.
 Mutable exports and writes to globals are not. If a result changes when seeking, check

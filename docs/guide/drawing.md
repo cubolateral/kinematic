@@ -5,7 +5,7 @@ pageClass: guide-page
 # Procedural drawing
 
 Use custom drawing when built-in objects cannot express the geometry you need. Create an
-object with `k.object`, provide bounds, and draw through a local context. For reusable
+object with `k.object_2d` or `k.object_3d`, provide `on_bounds`, and draw through a local context. For reusable
 properties, methods, simulation, or both 2D and 3D drawing, see [custom
 objects](custom-objects.md).
 
@@ -14,7 +14,7 @@ objects](custom-objects.md).
 The object transform is applied by the engine. Draw around the local origin and keep the
 object's bounds consistent with the visible geometry.
 
-The context is available only during the draw callback. Do not store it for later or
+The context is available only during the `on_draw` callback. Do not store it for later or
 mutate scene data while drawing. Drawing can run at arbitrary seek times and must not
 advance animation or simulation.
 

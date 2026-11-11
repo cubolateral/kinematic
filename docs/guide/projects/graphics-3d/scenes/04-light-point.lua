@@ -1,31 +1,31 @@
-return function(s)
-	s:view("3d")
-	s:world_3d().camera_position:set(k.vec3(0, 0, 5))
+return function()
+	k.view("3d")
+	k.world_3d().camera_position:set(k.vec3(0, 0, 5))
 
-	s:world_3d():add(s:pyramid {
+	k.world_3d():add(k.pyramid{
 		position = k.vec3(-1.5, 0, 0),
 		albedo = k.color("#FF4040"),
 	})
-	s:world_3d():add(s:cube {
+	k.world_3d():add(k.cube{
 		albedo = k.color("#40FF80"),
 	})
-	s:world_3d():add(s:sphere {
+	k.world_3d():add(k.sphere{
 		position = k.vec3(1.5, 0, 0),
 		albedo = k.color("#4080FF"),
 	})
 
-	local light = s:point_light {
+	local light = k.point_light{
 		position = k.vec3(-1.75, 0.75, 1.75),
 		intensity = 5,
 		quadratic = 0.25,
 	}
-	s:world_3d():add(light)
+	k.world_3d():add(light)
 
-	local marker = s:sphere {
+	local marker = k.sphere{
 		radius = 0.05,
 		unlit = true,
 	}
-	s:world_3d():add(marker)
+	k.world_3d():add(marker)
 
 	marker:signal(function(object)
 		object.position:set(light.position:get())

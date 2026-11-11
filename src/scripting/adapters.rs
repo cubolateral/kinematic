@@ -223,11 +223,11 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             TrackValue::Vector2(two_d(this)?.box_size())
         }))
     });
-    m.add_method("bounds", |lua, this, ()| {
+    m.add_method("on_bounds", |lua, this, ()| {
+        use mlua::IntoLua;
         let runtime = this.runtime()?;
         let world = runtime.world.borrow();
         let world = world.borrow();
-        let table = lua.create_table()?;
 
         if is_3d(this)? {
             let (min, max) = if runtime.building.get() {
@@ -236,17 +236,9 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
                 object_bounds3d(&world, this.entity)
             }
             .unwrap_or((glam::Vec3::ZERO, glam::Vec3::ZERO));
+            let size = max - min;
 
-            for (name, value) in [
-                ("x", min.x),
-                ("y", min.y),
-                ("z", min.z),
-                ("width", max.x - min.x),
-                ("height", max.y - min.y),
-                ("depth", max.z - min.z),
-            ] {
-                table.set(name, value)?;
-            }
+            super::value::BoxHandle([min.x, min.y, min.z, size.x, size.y, size.z]).into_lua(lua)
         } else {
             let bounds = if runtime.building.get() {
                 logical_bounds_at(&world, this.entity, runtime.animator.borrow().time())
@@ -255,17 +247,14 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
             }
             .unwrap_or_default();
 
-            for (name, value) in [
-                ("x", bounds.left),
-                ("y", bounds.top),
-                ("width", bounds.width()),
-                ("height", bounds.height()),
-            ] {
-                table.set(name, value)?;
-            }
+            super::value::RectHandle(crate::core::types::Rect::new(
+                bounds.left,
+                bounds.top,
+                bounds.width(),
+                bounds.height(),
+            ))
+            .into_lua(lua)
         }
-
-        Ok(table)
     });
     m.add_method("global_matrix", |_, this, ()| {
         let runtime = this.runtime()?;
@@ -491,7 +480,7 @@ pub(super) fn object_methods<M: UserDataMethods<ObjectHandle>>(m: &mut M) {
                 shape.size
             } else {
                 world
-                    .get::<&RectShape>(this.entity)
+                    .get::<&PanelShape>(this.entity)
                     .map_err(mlua::Error::external)?
                     .size
             };

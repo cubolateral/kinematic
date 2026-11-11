@@ -15,6 +15,7 @@ pub enum LayoutDirection2D {
 
 /// Procedural spacing and anchoring for a two-dimensional container.
 #[derive(Clone, Debug, Default, Trackable)]
+#[trackable(name = "Layout 2D")]
 pub struct Layout2D {
     /// Spacing between children on each layout axis in local coordinates.
     #[track]

@@ -22,20 +22,20 @@ void main() {
 ]],
 }
 
-return function(s)
-	s:view("3d")
-	s:world_3d():focus_camera {
+return function()
+	k.view("3d")
+	k.world_3d():focus_camera {
 		position = k.vec3(2, 2, 2),
 		target = k.vec3(0, 0, 0)
 	}:play()
 
-	local sphere = s:sphere {
+	local sphere = k.sphere{
 		radius = 0.8,
 		segments = 64,
 		shader = material,
 		uniforms = { phase = 0 },
 	}
-	s:world_3d():add(sphere)
+	k.world_3d():add(sphere)
 
 	sphere:uniform("phase"):to(math.pi * 2):play(2, "linear")
 end

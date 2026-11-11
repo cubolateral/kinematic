@@ -714,9 +714,9 @@ mod tests {
     fn searches_support_case_and_word_options_next_to_punctuation() {
         load(
             r#"
-return function(s)
-    local c = s:code {code='Foo(foo):foo foo_bar food FOO\nÉ(é)'}
-    s:world_2d():add(c)
+return function()
+    local c = k.code{code='Foo(foo):foo foo_bar food FOO\nÉ(é)'}
+    k.world_2d():add(c)
     assert(#c:find_all('foo') == 6)
     assert(#c:find_all('foo', true) == 4)
     assert(#c:find_all('foo', false, true) == 4)
@@ -733,8 +733,8 @@ return function(s)
     assert(#c:find_all('é', true, true) == 1)
     c:replace(c:find_all('foo', false, true), 'x'):play(1)
     assert(c.code:get() == 'x(x):x foo_bar food x\nÉ(é)')
-    local repeated = s:code {code='aaaa'}
-    s:world_2d():add(repeated)
+    local repeated = k.code{code='aaaa'}
+    k.world_2d():add(repeated)
     assert(#repeated:find_all('aa') == 2)
 end
 "#,
@@ -761,9 +761,9 @@ end
         ] {
             let scene = load(&format!(
                 r#"
-return function(s)
-    local c = s:{builder} {{id='object', {property}='abc'}}
-    s:{world}():add(c)
+return function()
+    local c = k.{builder}{{id='object', {property}='abc'}}
+    k.{world}():add(c)
     assert(not pcall(function() c:morph('def', 1) end))
     assert(not pcall(function() c:morph('def', true, false) end))
     c:morph('def', true):play(1, 'linear')
@@ -791,10 +791,10 @@ end
     fn edits_resolve_at_play_and_emphasis_survives_backward_seeks() {
         let scene = load(
             r#"
-return function(s)
-    local c = s:code {id='code', code='é🦀\nprint(1)'}
-    local group = s:group_2d {}
-    s:world_2d():add(group)
+return function()
+    local c = k.code{id='code', code='é🦀\nprint(1)'}
+    local group = k.group_2d{}
+    k.world_2d():add(group)
     assert(group:insert(c, 1) == nil)
     local edit = c:insert({1, 2}, 'x')
     assert(c.code:get() == 'é🦀\nprint(1)')
@@ -805,11 +805,11 @@ return function(s)
     assert(found[1][1] == 1 and found[1][2] == 4 and found[2][2] == 5)
     assert(c:find('missing') == nil)
     assert(#c:find_all('missing') == 0)
-    s:all(function()
+    k.all(function()
         c:select(c:find_all('print')):play(1, 'linear')
         c:highlight(c:find_all('print')):play(1, 'linear')
     end)
-    s:all(function()
+    k.all(function()
         c:select(nil):play(1, 'linear')
         c:highlight({}):play(1, 'linear')
     end)
@@ -853,9 +853,9 @@ end
     fn mixed_queries_line_helpers_and_line_edits_share_the_same_ranges() {
         let scene = load(
             r#"
-return function(s)
-    local code = s:code {id='code', code='local one = 1\noi oi\nend'}
-    s:world_2d():add(code)
+return function()
+    local code = k.code{id='code', code='local one = 1\noi oi\nend'}
+    k.world_2d():add(code)
     local word = code:word(1, 3, 3)
     assert(word[1][2] == 3 and word[2][2] == 6)
     assert(code:word(1, 3)[2][2] == 14)
@@ -932,14 +932,14 @@ end
             "local ranges={}; ranges[1]=ranges; c:select(ranges):play(1)",
         ] {
             let source = format!(
-                "return function(s) local c=s:code{{code='abc'}}; s:world_2d():add(c); assert(not pcall(function() {operation} end)); assert(c.code:get()=='abc'); c:morph('ok'):play(1); assert(c.code:get()=='ok') end"
+                "return function() local c=k.code{{code='abc'}}; k.world_2d():add(c); assert(not pcall(function() {operation} end)); assert(c.code:get()=='abc'); c:morph('ok'):play(1); assert(c.code:get()=='ok') end"
             );
             let scene = load(&source).unwrap_or_else(|error| panic!("{operation}: {error}"));
 
             assert!((scene.duration() - 1.0).abs() < 0.001, "{operation}");
         }
 
-        assert!(load("return function(s) s:code {language='unknown'} end").is_err());
+        assert!(load("return function() k.code{language='unknown'} end").is_err());
     }
 
     #[test]
@@ -951,12 +951,12 @@ end
             .lines()
             .find(|line| line.starts_with("---@field language? "))
             .unwrap();
-        let mut source = String::from("return function(s)\n");
+        let mut source = String::from("return function()\n");
 
         for language in CodeLanguage::VARIANTS {
             assert!(field.contains(&format!("'{language}'")), "{language}");
 
-            source.push_str(&format!("local code=s:code{{language='{language}'}}; assert(code.language:get()=='{language}')\n"));
+            source.push_str(&format!("local code=k.code{{language='{language}'}}; assert(code.language:get()=='{language}')\n"));
         }
 
         source.push_str("end");

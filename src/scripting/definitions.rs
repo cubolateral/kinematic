@@ -102,6 +102,20 @@ fn definitions_from_sources(api: &str, properties: &str) -> String {
             }
         }
 
+        if custom {
+            output.push_str(&format!("--- Evaluated properties available to scripted callbacks.\n---@class Kinematic.{class}View\n---@field state table Simulation state; read-only during drawing and bounds.\n---@field uniforms table<string,number|Kinematic.Value> Evaluated shader uniforms.\n"));
+            for field in &fields {
+                let value = field.get(&world, entity);
+                output.push_str(&format!(
+                    "---@field {} {} {}\n",
+                    field.name(),
+                    value_type(&value),
+                    property_documentation(field, &world, entity)
+                ));
+            }
+            output.push('\n');
+        }
+
         let options_class = if new_class {
             format!("{class}Options")
         } else {
@@ -126,8 +140,10 @@ fn definitions_from_sources(api: &str, properties: &str) -> String {
         if !custom {
             documentation(&mut output, object.documentation);
 
-            output.push_str("--- Creates the object with the supplied initial properties at the current schedule time.\n");
-            output.push_str(&format!("---@param options Kinematic.{options_class} Initial properties, name, identifier, and resources.\n---@return Kinematic.{class} object Handle exposing animatable properties and object methods.\nfunction Scene:{}(options) end\n\n",object.name));
+            output.push_str(
+                "--- Creates an object in this scene; attach it to a group or canvas to activate it.\n",
+            );
+            output.push_str(&format!("---@param options? Kinematic.{options_class} Initial properties, name, identifier, and resources.\n---@return Kinematic.{class}\nfunction k.{}(options) end\n\n",object.name));
         }
     }
 
@@ -154,6 +170,9 @@ fn spatial_definitions(output: &mut String, restricted: &[&str]) {
                 output.push_str("\n\n");
             }
         }
+
+        let bounds = if three_d { "BoxValue" } else { "RectValue" };
+        output.push_str(&format!("--- Returns the local bounds at the evaluated time; also used by the engine.\n---@return Kinematic.{bounds}\nfunction {class}:on_bounds() end\n\n"));
 
         for &(name, _, _, z) in super::adapters::ANCHORS {
             if z == 0.0 || three_d {
@@ -479,7 +498,12 @@ mod tests {
             assert!(definitions.contains(&format!("function {name}:fade(text) end\n\n")));
         }
 
-        assert!(!definitions.contains("Scene:native"));
+        assert!(!definitions.contains("Kinematic.Scene"));
+        assert!(!definitions.contains("Kinematic.Builder"));
+        assert!(definitions.contains("function k.all(schedule) end"));
+        assert!(
+            definitions.contains("---@return Kinematic.Circle\nfunction k.circle(options) end")
+        );
         assert!(definitions.contains("function Canvas3D:focus_camera("));
         assert!(definitions.contains("function Image2D:get_pixel_color("));
         assert!(definitions.contains("function Script2D:checkpoint("));

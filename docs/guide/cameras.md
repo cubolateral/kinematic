@@ -17,10 +17,10 @@ pans to the square and circle, then restores the full view. The shapes stay fixe
 
 <!-- focus: camera-pan -->
 ```lua
-s:world_2d():to { camera_position = triangle.position:get(), camera_zoom = 2.5, }:play(1)
-s:world_2d():to { camera_position = square.position:get(), }:play(1)
-s:world_2d():to { camera_position = circle.position:get(), }:play(1)
-s:world_2d():to { camera_position = k.vec2(0, 0), camera_zoom = 1, }:play(1)
+k.world_2d():to { camera_position = triangle.position:get(), camera_zoom = 2.5, }:play(1)
+k.world_2d():to { camera_position = square.position:get(), }:play(1)
+k.world_2d():to { camera_position = circle.position:get(), }:play(1)
+k.world_2d():to { camera_position = k.vec2(0, 0), camera_zoom = 1, }:play(1)
 ```
 
 <template #source>
@@ -39,12 +39,12 @@ the exported image.
 
 ## 2D camera
 
-`s:world_2d()` returns the built-in 2D canvas. `camera_position` is the point at the
+`k.world_2d()` returns the built-in 2D canvas. `camera_position` is the point at the
 center of the view, `camera_zoom` controls magnification, and `camera_rotation` is the
 angle in radians. Zoom must be positive, and all values must be finite.
 
 ```lua
-local world = s:world_2d()
+local world = k.world_2d()
 world:to {
     camera_position = k.vec2(150, 0),
     camera_zoom = 1.5,
@@ -66,7 +66,7 @@ Blue dots mark the ellipse at equal angular intervals.
 
 <!-- focus: camera-path -->
 ```lua
-s:world_2d():signal(function(canvas)
+k.world_2d():signal(function(canvas)
     canvas.camera_position:set(point(phase:get()))
 end)
 
@@ -88,7 +88,7 @@ the markers without changing the camera. See [signals](signals.md) for derived m
 
 ## 3D camera
 
-`s:world_3d()` returns the built-in 3D canvas. The default camera is at `(0,0,3)`,
+`k.world_3d()` returns the built-in 3D canvas. The default camera is at `(0,0,3)`,
 looking along local negative Z, with positive Y pointing up. Position uses `vec3`, and
 rotation uses a quaternion.
 
@@ -151,7 +151,7 @@ continuous derived control, calculate orientation from properties or use
 ## Cameras on separate canvases
 
 Each canvas has its own camera properties. An additional canvas can render a view that a
-projection displays in another world. `s:view("2d")` and `s:view("3d")` select the
+projection displays in another world. `k.view("2d")` and `k.view("3d")` select the
 built-in worlds. They do not move objects between worlds or reconfigure additional
 canvases.
 

@@ -1,15 +1,15 @@
-return function(s)
-	local leader = s:circle {
+return function()
+	local leader = k.circle{
 		radius = 32,
 		position = k.vec2(-256, -64),
 	}
-	s:world_2d():add(leader)
+	k.world_2d():add(leader)
 
-	local follower = s:circle {
+	local follower = k.circle{
 		radius = 32,
 		fill = k.color("#008CFF")
 	}
-	s:world_2d():add(follower)
+	k.world_2d():add(follower)
 
 	follower:signal(function(object)
 		local position = leader.position:get()
@@ -17,5 +17,5 @@ return function(s)
 	end)
 
 	leader.position.x:to(256):play(2)
-	s:wait(1)
+	k.wait(1)
 end

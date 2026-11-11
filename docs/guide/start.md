@@ -46,9 +46,9 @@ reloads](projects.md#reloads-and-revisions).
 
 ## Create and attach a circle
 
-Replace `scenes/intro.lua` with this scene. `s` is the scene passed to your function.
-`k` supplies values such as colors and vectors. A constructor creates an inactive object.
-`add` makes it visible in the world at the current timeline time.
+Replace `scenes/intro.lua` with this scene. The file returns a function with no arguments.
+`k` belongs to this scene and supplies values, object constructors, and scheduling functions.
+A constructor creates an inactive object; `add` makes it visible at the current timeline time.
 
 <GuideDemo name="first-circle" caption="A white circle at the center of the frame." still>
 
@@ -69,7 +69,7 @@ and width, independently of the fill.
 
 <!-- focus: first-style -->
 ```lua
-s:circle {
+k.circle{
     fill = k.color("#00000000"),
     stroke = k.color("#FFFFFF"),
     stroke_width = 8,

@@ -6,6 +6,7 @@ use crate::core::{
 };
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Line 2D Shape")]
 /// Geometry of a line, including optional arrowheads at either end.
 pub struct Line2DShape {
     /// Starting point in local coordinates.

@@ -1,61 +1,49 @@
-local progress = k.component {
+local progress = k.component("Progress", {
     value = {default = 0, min = 0, max = 1},
     width = {default = 520, min = 1, max = 800},
     height = {default = 24, min = 1, max = 100},
-}
+})
 
-local meter = k.object {
-    name = "Meter",
-    dimension = 2,
+local meter = k.object_2d("Meter", {
     components = {progress},
-    bounds = function(properties)
-        return {
-            x = -properties.width / 2,
-            y = -properties.height / 2,
-            width = properties.width,
-            height = properties.height,
-        }
-    end,
-    draw = function(ctx, properties)
-        local x, y = -properties.width / 2, -properties.height / 2
-        ctx:rect(x, y, properties.width, properties.height, k.color("#242424"))
-        ctx:rect(
-            x,
-            y,
-            properties.width * properties.value,
-            properties.height,
-            properties.fill
-        )
-    end,
-    methods = {
-        advance = function(self, amount)
-            return self:by {value = amount}
-        end,
-    },
-}
+})
 
-return function(s)
-    local first = s:object(meter, {
+function meter:on_bounds()
+    return k.rect(-self.width / 2, -self.height / 2, self.width, self.height)
+end
+
+function meter:on_draw(ctx)
+    local x, y = -self.width / 2, -self.height / 2
+    ctx:rect(x, y, self.width, self.height, k.color("#242424"))
+    ctx:rect(x, y, self.width * self.value, self.height, self.fill)
+end
+
+function meter:advance(amount)
+    return self:by {value = amount}
+end
+
+return function()
+    local first = meter({
         id = "first",
         fill = k.color("#008CFF"),
         position = k.vec2(0, -60),
     })
-    local second = s:object(meter, {
+    local second = meter({
         id = "second",
         fill = k.color("#FFFFFF"),
         position = k.vec2(0, 60),
     })
-    s:world_2d():add(first)
-    s:world_2d():add(second)
-    s:all(function()
+    k.world_2d():add(first)
+    k.world_2d():add(second)
+    k.all(function()
         first:advance(0.8):play(2)
         second:advance(0.5):play(2)
     end)
-    s:wait(0.7)
+    k.wait(0.7)
 
-    s:all(function()
+    k.all(function()
         first:reset():play(1)
         second:reset():play(1)
     end)
-    s:wait(0.5)
+    k.wait(0.5)
 end

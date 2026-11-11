@@ -7,7 +7,7 @@ use crate::core::{
     Properties, PropertySchema, TrackLimits, TrackTarget, TrackValue, components::*,
 };
 use kinematic_macros::Object;
-use mlua::{Function, Lua, Result, Table, UserData, Value};
+use mlua::{Function, Lua, MetaMethod, Result, Table, UserData, UserDataMethods, Value};
 use std::{
     cell::RefCell,
     collections::BTreeMap,
@@ -37,15 +37,80 @@ pub(super) fn runtime(id: u64) -> Result<Rc<Runtime>> {
 }
 
 #[derive(Clone)]
-pub(super) struct Component(Vec<Arc<PropertySchema>>);
+pub(super) struct Component {
+    name: String,
+    properties: Vec<Arc<PropertySchema>>,
+}
 impl UserData for Component {}
 #[derive(Clone)]
 pub(super) struct ObjectDefinition {
+    pub name: String,
     pub table: Table,
     pub properties: Properties,
     pub dimension: u8,
 }
-impl UserData for ObjectDefinition {}
+impl UserData for ObjectDefinition {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method(MetaMethod::Index, |_, this, name: String| {
+            this.table.get::<Value>(name)
+        });
+        methods.add_meta_method(
+            MetaMethod::NewIndex,
+            |_, this, (name, function): (String, Function)| {
+                validate_function_name(&name)?;
+                this.table.set(name, function)
+            },
+        );
+        methods.add_meta_method(MetaMethod::Call, |lua, this, options: Option<Table>| {
+            Runtime::from_lua(lua)?.spawn_custom(lua, this, options.unwrap_or(lua.create_table()?))
+        });
+    }
+}
+
+fn validate_function_name(name: &str) -> Result<()> {
+    if name.starts_with("on_") {
+        if !matches!(name, "on_draw" | "on_bounds" | "on_update") {
+            return Err(mlua::Error::runtime(format!(
+                "Unknown object callback '{name}'."
+            )));
+        }
+        return Ok(());
+    }
+
+    if super::runtime::OBJECT_METHODS.contains(&name)
+        || super::adapters::ANCHORS
+            .iter()
+            .any(|(anchor, _, _, _)| name == *anchor || name == format!("{anchor}_to"))
+        || matches!(name, "name" | "state" | "components" | "inputs")
+    {
+        return Err(mlua::Error::runtime(format!(
+            "Cannot replace fundamental object member '{name}'."
+        )));
+    }
+
+    Ok(())
+}
+
+pub(super) fn validate_definition(definition: &ObjectDefinition) -> Result<()> {
+    for entry in definition.table.clone().pairs::<String, Value>() {
+        let (name, value) = entry?;
+
+        if matches!(value, Value::Function(_)) {
+            validate_function_name(&name)?;
+            if definition.properties.fields.contains_key(&name) {
+                return Err(mlua::Error::runtime(format!(
+                    "Object function '{name}' conflicts with a property."
+                )));
+            }
+        } else if !matches!(name.as_str(), "state" | "components" | "inputs") {
+            return Err(mlua::Error::runtime(format!(
+                "Unknown object definition field '{name}'."
+            )));
+        }
+    }
+
+    Ok(())
+}
 #[derive(Clone)]
 pub(super) struct Callbacks {
     pub draw: Option<Function>,
@@ -120,6 +185,28 @@ impl SimulationState for ScriptState {
             }
 
             let state = self.data.value(lua)?;
+            let receiver = lua.create_table()?;
+            let uniforms = lua.create_table()?;
+
+            for (_, entity, target, _) in &callbacks.inputs {
+                if *entity != self.entity {
+                    continue;
+                }
+
+                let fields = if target.uniform_name().is_some() {
+                    &uniforms
+                } else {
+                    &receiver
+                };
+                fields.set(
+                    target.name(),
+                    value::to_lua(lua, context.sample(self.entity, target))?,
+                )?;
+            }
+
+            receiver.set("uniforms", readonly(lua, uniforms)?)?;
+            receiver.set("state", state.clone())?;
+            let receiver = readonly(lua, receiver)?;
             let next = super::audio::step(
                 &runtime,
                 self.entity,
@@ -127,9 +214,14 @@ impl SimulationState for ScriptState {
                 context.update_index,
                 context.time,
                 || {
-                    let returned = update.call::<Value>((state.clone(), frame, inputs))?;
+                    let returned =
+                        update.call::<Value>((receiver.clone(), frame, readonly(lua, inputs)?))?;
 
-                    Snapshot::read(if returned.is_nil() { state } else { returned })
+                    Snapshot::read(if returned.is_nil() {
+                        receiver.get("state")?
+                    } else {
+                        returned
+                    })
                 },
             )?;
 
@@ -185,6 +277,19 @@ pub(super) struct ScriptObject {
     pub name: String,
 }
 
+fn definition_name(value: Value) -> Result<String> {
+    let Value::String(name) = value else {
+        return Err(mlua::Error::runtime("Definition requires a name string."));
+    };
+    let name = name.to_str()?.to_owned();
+
+    if name.trim().is_empty() {
+        return Err(mlua::Error::runtime("Definition name cannot be empty."));
+    }
+
+    Ok(name)
+}
+
 pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
     api.set(
         "random",
@@ -193,14 +298,28 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
 
     api.set(
         "component",
-        lua.create_function(|lua, fields: Table| {
+        lua.create_function(|_, (name, fields): (Value, Table)| {
+            let name = definition_name(name)?;
+
             let mut properties = Vec::new();
 
-            for field in fields.pairs::<String, Table>() {
+            for field in fields.pairs::<String, Value>() {
                 let (name, definition) = field?;
+
+                let Value::Table(definition) = definition else {
+                    return Err(mlua::Error::runtime(
+                        "Component properties require a schema table.",
+                    ));
+                };
 
                 if name.is_empty() {
                     return Err(mlua::Error::runtime("Property name cannot be empty."));
+                }
+
+                if name.starts_with("on_") || validate_function_name(&name).is_err() {
+                    return Err(mlua::Error::runtime(format!(
+                        "Property '{name}' conflicts with an object member."
+                    )));
                 }
 
                 let default = infer(definition.get("default")?)?;
@@ -253,73 +372,70 @@ pub(super) fn register(lua: &Lua, api: &Table) -> Result<()> {
                 properties.push(Arc::new(schema));
             }
 
-            let _ = lua;
+            properties.sort_by(|left, right| left.name.cmp(&right.name));
 
-            Ok(Component(properties))
+            Ok(Component { name, properties })
         })?,
     )?;
 
-    api.set(
-        "object",
-        lua.create_function(|_, definition: Table| {
-            if definition
-                .get::<Option<String>>("name")?
-                .is_some_and(|name| name.is_empty())
-            {
-                return Err(mlua::Error::runtime("Object type name cannot be empty."));
-            }
+    for (name, dimension) in [("object_2d", 2), ("object_3d", 3)] {
+        api.set(
+            name,
+            lua.create_function(move |_, (name, definition): (Value, Table)| {
+                let name = definition_name(name)?;
 
-            let dimension = definition.get::<Option<u8>>("dimension")?.unwrap_or(2);
+                let mut properties = Properties::default();
 
-            if dimension != 2 && dimension != 3 {
-                return Err(mlua::Error::runtime("Object dimension must be 2 or 3."));
-            }
-
-            let mut properties = Properties::default();
-
-            if let Some(components) = definition.get::<Option<Table>>("components")? {
-                for component in components.sequence_values::<mlua::UserDataRef<Component>>() {
-                    for schema in &component?.0 {
+                if let Some(components) = definition.get::<Option<Table>>("components")? {
+                    for component in components.sequence_values::<mlua::UserDataRef<Component>>() {
+                        let component = component?;
                         if properties
-                            .0
-                            .insert(
-                                schema.name.clone(),
-                                (schema.clone(), schema.default.clone()),
-                            )
-                            .is_some()
+                            .components
+                            .iter()
+                            .any(|(name, _)| name == &component.name)
                         {
-                            return Err(mlua::Error::runtime(format!(
-                                "Duplicate property '{}'.",
-                                schema.name
-                            )));
+                            return Err(mlua::Error::runtime("Duplicate component name."));
+                        }
+                        properties.components.push((
+                            component.name.clone(),
+                            component
+                                .properties
+                                .iter()
+                                .map(|schema| schema.name.clone())
+                                .collect(),
+                        ));
+
+                        for schema in &component.properties {
+                            if properties
+                                .fields
+                                .insert(
+                                    schema.name.clone(),
+                                    (schema.clone(), schema.default.clone()),
+                                )
+                                .is_some()
+                            {
+                                return Err(mlua::Error::runtime(format!(
+                                    "Duplicate property '{}'.",
+                                    schema.name
+                                )));
+                            }
                         }
                     }
                 }
-            }
 
-            if let Some(methods) = definition.get::<Option<Table>>("methods")? {
-                for entry in methods.pairs::<String, Function>() {
-                    let (name, _) = entry?;
+                let definition = ObjectDefinition {
+                    name,
+                    table: definition,
+                    properties,
+                    dimension,
+                };
 
-                    if super::runtime::OBJECT_METHODS.contains(&name.as_str())
-                        || super::adapters::ANCHORS.iter().any(|(anchor, _, _, _)| {
-                            name == *anchor || name == format!("{anchor}_to")
-                        })
-                    {
-                        return Err(mlua::Error::runtime(format!(
-                            "Cannot replace fundamental object method '{name}'."
-                        )));
-                    }
-                }
-            }
+                validate_definition(&definition)?;
 
-            Ok(ObjectDefinition {
-                table: definition,
-                properties,
-                dimension,
-            })
-        })?,
-    )?;
+                Ok(definition)
+            })?,
+        )?;
+    }
 
     Ok(())
 }
@@ -348,15 +464,15 @@ pub(super) fn configure(
     definition: &ObjectDefinition,
 ) -> Result<()> {
     let entity = handle.entity;
-    let update = definition.table.get::<Option<Function>>("update")?;
+    let update = definition.table.get::<Option<Function>>("on_update")?;
 
     if let Some(update) = &update {
         validate_update(&runtime.lua, update)?;
     }
 
     let state = Snapshot::read(definition.table.get("state")?)?;
-    let draw = definition.table.get::<Option<Function>>("draw")?;
-    let bounds = definition.table.get::<Option<Function>>("bounds")?;
+    let draw = definition.table.get::<Option<Function>>("on_draw")?;
+    let bounds = definition.table.get::<Option<Function>>("on_bounds")?;
 
     if draw.is_some() && bounds.is_none() {
         return Err(mlua::Error::runtime(
@@ -378,7 +494,23 @@ pub(super) fn configure(
         bounds,
         update,
         inputs: Vec::new(),
-        methods: definition.table.get("methods")?,
+        methods: Some({
+            let methods = runtime.lua.create_table()?;
+            for entry in definition.table.clone().pairs::<String, Value>() {
+                let (name, value) = entry?;
+                if matches!(value, Value::Function(_)) && !name.starts_with("on_") {
+                    if super::native::property(&runtime.world.borrow().borrow(), entity, &name)
+                        .is_some()
+                    {
+                        return Err(mlua::Error::runtime(format!(
+                            "Object function '{name}' conflicts with a property."
+                        )));
+                    }
+                    methods.set(name, value)?;
+                }
+            }
+            methods
+        }),
         states: Vec::new(),
         sounds: Vec::new(),
         simulation_key,
@@ -396,16 +528,7 @@ pub(super) fn configure(
             entity,
             ScriptObject {
                 runtime: runtime.id,
-                name: definition
-                    .table
-                    .get::<Option<String>>("name")?
-                    .unwrap_or_else(|| {
-                        if definition.dimension == 2 {
-                            "Lua2D".into()
-                        } else {
-                            "Lua3D".into()
-                        }
-                    }),
+                name: definition.name.clone(),
             },
         )
         .map_err(mlua::Error::external)?;
@@ -756,6 +879,19 @@ pub(super) fn prepare_environment(runtime: &Rc<Runtime>) -> Result<()> {
     lua.set_named_registry_value("kinematic.update_environment", proxy)?;
 
     Ok(())
+}
+
+pub(super) fn readonly_state(lua: &Lua, value: Value) -> Result<Value> {
+    if let Value::Table(table) = value {
+        let contents = lua.create_table()?;
+        for entry in table.pairs::<Value, Value>() {
+            let (key, value) = entry?;
+            contents.set(key, readonly_state(lua, value)?)?;
+        }
+        Ok(Value::Table(readonly(lua, contents)?))
+    } else {
+        Ok(value)
+    }
 }
 
 pub(super) fn readonly(lua: &Lua, table: Table) -> Result<Table> {

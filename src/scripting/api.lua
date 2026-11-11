@@ -1,5 +1,7 @@
 ---@meta
 
+k = {}
+
 --- Position written as {line, column}. Both start at 1; columns count Unicode characters.
 ---@class Kinematic.CodePosition
 ---@field [integer] integer
@@ -89,10 +91,6 @@ function Object:remove() end
 ---@return Kinematic.Signal
 function Object:signal(callback) end
 
---- Scene construction and animation scheduling context passed to a scene function.
----@class Kinematic.Scene
-local Scene = {}
-
 --- Parameters for an immutable procedural audio resource; times are seconds and frequencies are Hz.
 ---@class Kinematic.AudioSynthOptions
 ---@field preset? "boink"|"pluck"|"click"|"impact"|"whoosh" Overridable starting parameters.
@@ -132,57 +130,55 @@ function Audio:play(options) end
 --- Creates a silent player. Scheduled tails contribute to scene duration; repeat scopes are rejected.
 ---@param options Kinematic.AudioOptions
 ---@return Kinematic.Audio
-function Scene:audio(options) end
+function k.audio(options) end
 
 --- Schedules an instantaneous switch between the built-in 2D and 3D world canvases.
 --- The dimension must be "2d" or "3d".
 ---@param dimension "2d"|"3d"
-function Scene:view(dimension) end
+function k.view(dimension) end
 
 --- Advances the current scheduling scope by a nonnegative duration in seconds.
 ---@param seconds number
-function Scene:wait(seconds) end
+function k.wait(seconds) end
 
 --- Adds a named editable wait at the current timeline position.
 --- Its duration can be adjusted in the editor.
 ---@param name string
-function Scene:event(name) end
+function k.event(name) end
 
 --- Schedules the callback animations simultaneously.
 --- The parent timeline advances by the longest child duration.
----@param schedule fun(scene: Kinematic.Scene)
-function Scene:all(schedule) end
+---@param schedule fun()
+function k.all(schedule) end
 
 --- Schedules the callback animations sequentially on the current timeline.
----@param schedule fun(scene: Kinematic.Scene)
-function Scene:chain(schedule) end
+---@param schedule fun()
+function k.chain(schedule) end
 
 --- Schedules the callback without advancing or extending the parent timeline.
---- Animations inside the callback are sequential unless grouped with :all.
----@param schedule fun(scene: Kinematic.Scene)
-function Scene:parallel(schedule) end
+--- Animations inside the callback are sequential unless grouped with k.all.
+---@param schedule fun()
+function k.parallel(schedule) end
 
 --- Repeats one positive finite animation cycle without advancing the parent timeline.
 --- The callback executes once; its animations repeat until their lifetime ends. Nested loops and object creation, attachment, or removal within a cycle are rejected.
----@param schedule fun(scene: Kinematic.Scene)
-function Scene:loop(schedule) end
+---@param schedule fun()
+function k.loop(schedule) end
 
 --- Returns the built-in 2D canvas.
---- Attach 2D objects with scene:world_2d():add(object).
+--- Attach 2D objects with k.world_2d():add(object).
 ---@return Kinematic.Canvas2D
-function Scene:world_2d() end
+function k.world_2d() end
 
 --- Returns the built-in 3D canvas.
---- Attach 3D objects with scene:world_3d():add(object).
+--- Attach 3D objects with k.world_3d():add(object).
 ---@return Kinematic.Canvas3D
-function Scene:world_3d() end
+function k.world_3d() end
 
 --- Returns the internal root container shared by all scene contents.
---- Attach additional canvases here; use :world_2d() and :world_3d() for ordinary world objects.
+--- Attach additional canvases here; use k.world_2d() and k.world_3d() for ordinary world objects.
 ---@return Kinematic.Object
-function Scene:root() end
-
-k = {}
+function k.root() end
 
 --- Creates a silent synthesizer resource; the envelope must last 0.001–10 seconds.
 ---@param options Kinematic.AudioSynthOptions
@@ -192,7 +188,7 @@ function k.audio_synth(options) end
 --- Loads a project-relative WAV, MP3, OGG, or FLAC file using FFmpeg; creation does not play it.
 ---@param path string
 ---@return Kinematic.AudioResource
-function k.audio_file(path) end
+function k.load_audio(path) end
 
 
 --- Creates a two-dimensional value with x and y components.
@@ -257,7 +253,7 @@ function Object:save() end
 ---@return Kinematic.Animation
 function Object:restore(snapshot) end
 
---- Creates an animation toward the initial builder property values.
+--- Creates an animation toward the initial property values.
 --- Call :play to schedule the reset.
 ---@return Kinematic.Animation
 function Object:reset() end
@@ -312,10 +308,10 @@ function Object:move_to_top() end
 --- Moves this object to the start of its sibling list, below its siblings.
 function Object:move_to_bottom() end
 
---- Returns the local bounding box with named coordinates and dimensions.
---- Two-dimensional objects return x, y, width, and height; 3D objects also return z and depth.
----@return {x:number,y:number,z?:number,width:number,height:number,depth?:number}
-function Object:bounds() end
+--- Returns the local bounds using evaluated properties and simulation state.
+--- This is also the callback implemented by custom objects.
+---@return Kinematic.RectValue|Kinematic.BoxValue
+function Object:on_bounds() end
 
 --- Returns the local bounding box dimensions as a vector.
 ---@return Kinematic.Value
@@ -388,26 +384,18 @@ function Object:uniform(name) end
 
 --- Creates a standalone animatable property from an initial value.
 --- An optional stable id preserves object identity across reloads. Supports get, set, to, by, from, and signal.
----@overload fun(self:Kinematic.Scene, initial:Kinematic.Vec2, id?:string):Kinematic.Vec2Property
----@overload fun(self:Kinematic.Scene, initial:Kinematic.Vec3, id?:string):Kinematic.Vec3Property
----@overload fun(self:Kinematic.Scene, initial:Kinematic.Color, id?:string):Kinematic.ColorProperty
----@overload fun(self:Kinematic.Scene, initial:Kinematic.Quaternion, id?:string):Kinematic.QuaternionProperty
----@overload fun(self:Kinematic.Scene, initial:Kinematic.Quad, id?:string):Kinematic.QuadProperty
+---@overload fun(initial:Kinematic.Vec2, id?:string):Kinematic.Vec2Property
+---@overload fun(initial:Kinematic.Vec3, id?:string):Kinematic.Vec3Property
+---@overload fun(initial:Kinematic.Color, id?:string):Kinematic.ColorProperty
+---@overload fun(initial:Kinematic.Quaternion, id?:string):Kinematic.QuaternionProperty
+---@overload fun(initial:Kinematic.Quad, id?:string):Kinematic.QuadProperty
 ---@generic T
 ---@param initial T
 ---@param id? string
 ---@return Kinematic.Property<T>
-function Scene:track(initial, id) end
+function k.track(initial, id) end
 
---- Instantiates a k.object definition with initial property and resource options.
---- Each instance receives independent state and stays inactive until attached to a group or canvas.
----@generic T
----@param definition T
----@param options table
----@return T
-function Scene:object(definition, options) end
-
---- Reusable declaration of custom tracked fields for scripted objects.
+--- Reusable declaration of named custom tracked fields.
 ---@class Kinematic.Component
 
 --- Custom property schema; the required default value determines its type.
@@ -416,31 +404,52 @@ function Scene:object(definition, options) end
 ---@field min? number Optional lower bound for a numeric property.
 ---@field max? number Optional upper bound for a numeric property.
 ---@field choices? string[] Allowed snake_case values for a string property.
---- Declares custom animatable fields from default values and optional numeric bounds or string choices.
---- The default determines each field type. Custom names must not shadow native properties.
+--- Declares a named component; its fields form a group in the Inspector.
+--- Use capitalized words separated by spaces, such as "Motion 2D".
+---@param name string Component display name, such as "Progress".
 ---@param fields table<string,Kinematic.PropertyDefinition>
 ---@return Kinematic.Component
-function k.component(fields) end
+function k.component(name, fields) end
 
---- Reusable scripted object declaration created by k.object.
----@class Kinematic.ObjectDefinition
-
---- Scripted object callbacks, state, components, and methods.
+--- Shared scripted object declaration metadata.
 ---@class Kinematic.ObjectOptions
----@field dimension? 2|3 Spatial dimension, 2 or 3; defaults to 2.
----@field components? Kinematic.Component[] Custom tracked field declarations.
+---@field components? Kinematic.Component[] Named custom tracked field declarations.
 ---@field state? table Initial state copied independently for each instance.
----@field inputs? table<string,Kinematic.Property|Kinematic.Object|Kinematic.Audio|string> Declared simulation dependencies. Omitted inputs use own properties; an empty table declares none.
----@field update? fun(state:table, frame:Kinematic.Frame, inputs:table) Fixed-step state update callback; external mutable upvalues are rejected.
----@field draw? fun(context:Kinematic.Draw2D|Kinematic.Draw3D, properties:table, state:table) Local drawing callback; reads evaluated properties and state.
----@field bounds? fun(properties:table, state:table):{x:number,y:number,z?:number,width:number,height:number,depth?:number} Returns local coordinates and dimensions for selection and layout.
----@field name? string Default display name of the scripted object.
----@field methods? table<string,function> Instance methods invoked with the object as self; fundamental operations cannot be replaced.
---- Declares a reusable scripted 2D or 3D object with components, state, callbacks, and methods.
---- Instantiate it with scene:object(definition, options). Drawing reads state; updates change state at fixed steps.
----@param definition Kinematic.ObjectOptions
----@return Kinematic.Script2D|Kinematic.Script3D
-function k.object(definition) end
+---@field inputs? table<string,Kinematic.Property|Kinematic.Object|Kinematic.Audio|string> Declared simulation dependencies; omitted inputs use own properties.
+
+--- Scripted 2D callbacks; additional functions are ordinary instance methods or helpers.
+---@class Kinematic.Object2DOptions: Kinematic.ObjectOptions
+---@field on_draw? fun(self:Kinematic.Script2DView, context:Kinematic.Draw2D) Draws using evaluated properties and read-only state.
+---@field on_bounds? fun(self:Kinematic.Script2DView):Kinematic.RectValue Returns local bounds.
+---@field on_update? fun(self:Kinematic.Script2DView, frame:Kinematic.Frame, inputs:table) Updates self.state at fixed steps; own values must be declared in inputs when inputs are explicit. Mutable external upvalues are rejected.
+
+--- Scripted 3D callbacks; additional functions are ordinary instance methods or helpers.
+---@class Kinematic.Object3DOptions: Kinematic.ObjectOptions
+---@field on_draw? fun(self:Kinematic.Script3DView, context:Kinematic.Draw3D) Draws using evaluated properties and read-only state.
+---@field on_bounds? fun(self:Kinematic.Script3DView):Kinematic.BoxValue Returns local bounds.
+---@field on_update? fun(self:Kinematic.Script3DView, frame:Kinematic.Frame, inputs:table) Updates self.state at fixed steps; own values must be declared in inputs when inputs are explicit. Mutable external upvalues are rejected.
+
+--- Callable scripted 2D definition; assign callbacks and functions directly on it.
+---@class Kinematic.Object2DDefinition: Kinematic.Object2DOptions
+---@operator call(Kinematic.Script2DOptions): Kinematic.Script2D
+
+--- Callable scripted 3D definition; assign callbacks and functions directly on it.
+---@class Kinematic.Object3DDefinition: Kinematic.Object3DOptions
+---@operator call(Kinematic.Script3DOptions): Kinematic.Script3D
+
+--- Declares a reusable 2D object; instantiate with Definition(options).
+--- Define on_draw, on_bounds, on_update and ordinary functions inside or after the declaration.
+---@param name string Object type name, such as "Meter".
+---@param definition Kinematic.Object2DOptions
+---@return Kinematic.Object2DDefinition
+function k.object_2d(name, definition) end
+
+--- Declares a reusable 3D object; instantiate with Definition(options).
+--- Define on_draw, on_bounds, on_update and ordinary functions inside or after the declaration.
+---@param name string Object type name, such as "Sculpture".
+---@param definition Kinematic.Object3DOptions
+---@return Kinematic.Object3DDefinition
+function k.object_3d(name, definition) end
 
 --- Creates a quaternion from a nonzero vec3 axis and a finite angle in radians.
 --- The axis is normalized automatically.
@@ -459,7 +468,7 @@ function k.axis_angle(axis, radians) end
 function k.quad(a, b, c, d) end
 
 --- Creates an immutable rectangle value from local coordinates and nonnegative dimensions.
---- This is a value helper; use scene:rect(options) to create a scene object.
+--- Use k.panel(options) to create a rectangular scene object.
 ---@param x number
 ---@param y number
 ---@param width number
@@ -474,6 +483,25 @@ function k.rect(x, y, width, height) end
 ---@field width number Rectangle width in local coordinates.
 ---@field height number Rectangle height in local coordinates.
 local RectValue = {}
+
+--- Creates immutable 3D bounds from local coordinates and nonnegative dimensions.
+---@param x number
+---@param y number
+---@param z number
+---@param width number
+---@param height number
+---@param depth number
+---@return Kinematic.BoxValue
+function k.box(x, y, z, width, height, depth) end
+
+--- Immutable axis-aligned 3D bounding box.
+---@class Kinematic.BoxValue
+---@field x number Minimum x coordinate.
+---@field y number Minimum y coordinate.
+---@field z number Minimum z coordinate.
+---@field width number Width in local coordinates.
+---@field height number Height in local coordinates.
+---@field depth number Depth in local coordinates.
 
 --- Deterministic mutable random generator that can be preserved in simulation state.
 ---@class Kinematic.Random
@@ -592,12 +620,12 @@ function k.mesh(data) end
 --- Use the returned handle as an image object source or in a drawing callback.
 ---@param path string
 ---@return Kinematic.Image
-function k.image(path) end
+function k.load_image(path) end
 
 --- Loads a font resource from a path relative to the project directory.
 ---@param path string
 ---@return Kinematic.Font
-function k.font(path) end
+function k.load_font(path) end
 
 --- Creates a 2D image shader from inline source or a project-relative path.
 --- When both are supplied, the file path takes precedence.

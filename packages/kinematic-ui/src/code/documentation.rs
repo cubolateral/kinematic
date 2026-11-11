@@ -555,7 +555,7 @@ mod tests {
     #[test]
     fn luals_hover_has_readable_sections_and_preserves_unicode_selection() {
         let doc = Documentation::parse(
-            "```lua\n(method) Kinematic.Scene:text_2d(options: Kinematic.Text2DOptions)\n  -> object: Kinematic.Text2D\n```\n---\nBuilt-in **text** scene object.\n\n@*param* `options` — Initial properties.\n\n@*return* `object` — Handle exposing properties.\n\n## Example\n```lua\nlocal label = s:text_2d {text='Olá'}\n```\n",
+            "```lua\n(method) k.text_2d(options: Kinematic.Text2DOptions)\n  -> object: Kinematic.Text2D\n```\n---\nBuilt-in **text** scene object.\n\n@*param* `options` — Initial properties.\n\n@*return* `object` — Handle exposing properties.\n\n## Example\n```lua\nlocal label = k.text_2d {text='Olá'}\n```\n",
         );
 
         assert!(!doc.text.contains("(method)"));
@@ -578,7 +578,7 @@ mod tests {
 
         assert_eq!(
             position(&doc.text, offset).column,
-            "local label = s:text_2d {text='Olá".chars().count()
+            "local label = k.text_2d {text='Olá".chars().count()
         );
         assert!(
             doc.blocks

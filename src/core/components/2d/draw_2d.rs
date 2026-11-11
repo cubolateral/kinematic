@@ -12,6 +12,7 @@ fn centered_box_bounds(world: &hecs::World, entity: hecs::Entity) -> skia_safe::
 ///
 /// The callback receives the current entity state and must not mutate the ECS world.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Draw 2D")]
 pub struct Draw2D {
     /// Whether this entity and, for containers, its subtree are drawn.
     #[track]

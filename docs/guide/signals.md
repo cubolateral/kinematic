@@ -45,7 +45,7 @@ local signal = ball:signal(function(object, frame)
     object.position:set(k.vec2(math.sin(frame.time * 2) * 100, 0))
 end)
 
-s:wait(2)
+k.wait(2)
 signal:stop()
 ```
 
@@ -76,7 +76,7 @@ local signal = ball:signal(function(object, frame)
     object.position:set(k.vec2(math.cos(frame.time * 5), math.sin(frame.time * 5)) * 128)
 end)
 
-s:wait(2)
+k.wait(2)
 signal:stop()
 ```
 

@@ -245,7 +245,7 @@ pub(crate) struct Editor {
 
 impl Editor {
     pub(crate) fn new_lua(
-        mut project: crate::scripting::LuaProject,
+        project: crate::scripting::LuaProject,
         imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
         skia_context: &mut skia_safe::gpu::DirectContext,
         gl: &std::rc::Rc<glow::Context>,
@@ -298,39 +298,12 @@ impl Editor {
                 }
             })
             .collect::<Vec<_>>();
-        let mut manifest = project.manifest.clone();
-        let migrate = !manifest.legacy_audio.is_empty()
-            && scenes
-                .iter()
-                .all(|entry| matches!(entry.scene, SceneInstance::Lua(_)));
-
-        if migrate {
-            manifest.migrate_audio(
-                &scenes
-                    .iter()
-                    .map(|entry| entry.scene.duration())
-                    .collect::<Vec<_>>(),
-            )?;
-        } else if !manifest.legacy_audio.is_empty() {
-            documents
-                .diagnostics
-                .push("Legacy audio requires valid scene scripts before migration.".into());
-        }
-
         let audio = crate::scripting::audio::clip_events(
             &project.context,
             &sources,
-            &manifest.audio,
+            &project.manifest.audio,
             &crate::core::audio::AudioEvents::default(),
         );
-
-        if migrate && audio.is_ok() {
-            manifest.validate(&project.context)?;
-
-            project.manifest = manifest;
-
-            project.save()?;
-        }
 
         let metadata = Project {
             name: project.manifest.name.clone(),
@@ -519,12 +492,8 @@ impl Editor {
             if documents.project_dirty && manifest_changed {
                 let saved = project.saved_manifest()?;
 
-                if manifest.audio != saved.audio || manifest.legacy_audio != saved.legacy_audio {
+                if manifest.audio != saved.audio {
                     return Err("Project audio changed on disk; resolve the conflict before saving local audio.".into());
-                }
-
-                if project.manifest.legacy_audio.is_empty() {
-                    manifest.legacy_audio.clear();
                 }
 
                 manifest.audio = project.manifest.audio.clone();
@@ -588,27 +557,6 @@ impl Editor {
                 }
             }
 
-            let migrated = !manifest.legacy_audio.is_empty();
-
-            if migrated {
-                manifest.migrate_audio(
-                    &order
-                        .iter()
-                        .map(|index| {
-                            candidates
-                                .iter()
-                                .find(|(candidate, _)| candidate == index)
-                                .map_or_else(
-                                    || self.scenes[*index].scene.duration(),
-                                    |(_, scene)| scene.duration(),
-                                )
-                        })
-                        .collect::<Vec<_>>(),
-                )?;
-
-                manifest.validate(&project.context)?;
-            }
-
             let audio = crate::core::audio::AudioEvents {
                 clips: crate::scripting::audio::clip_events(
                     &project.context,
@@ -621,11 +569,11 @@ impl Editor {
 
             Ok::<_, String>(PendingLua {
                 audio: Some(audio),
-                save_manifest: migrated && !documents.project_dirty,
+                save_manifest: false,
                 revision: documents.revision,
                 seek: None,
                 candidates,
-                manifest: (manifest_changed || migrated).then_some((manifest, order)),
+                manifest: manifest_changed.then_some((manifest, order)),
             })
         })();
 
@@ -810,20 +758,17 @@ impl Editor {
             project.manifest = pending.manifest.as_ref().unwrap().0.clone();
 
             let draft_audio = project.manifest.audio.clone();
-            let draft_legacy = project.manifest.legacy_audio.clone();
             let saved = (|| {
                 if documents.project_dirty {
                     let baseline = project.saved_manifest()?;
 
                     project.manifest.audio = baseline.audio;
-                    project.manifest.legacy_audio = baseline.legacy_audio;
                 }
 
                 project.save()
             })();
 
             project.manifest.audio = draft_audio;
-            project.manifest.legacy_audio = draft_legacy;
 
             if let Err(error) = saved {
                 project.manifest = previous;
@@ -931,14 +876,6 @@ impl Editor {
             self.timeline.set_fps(settings.fps);
 
             self.project.settings = settings;
-
-            if let Some(client) = self
-                .documents
-                .as_mut()
-                .and_then(|documents| documents.lsp.as_mut())
-            {
-                client.set_scenes(&manifest.scenes);
-            }
 
             if !self.documents.as_ref().unwrap().project_dirty {
                 self.saved_audio = manifest.audio.clone();
@@ -2322,7 +2259,7 @@ fn recalculate_scene_ranges(scenes: &mut [EditorScene]) -> f32 {
 mod tests {
     use super::*;
     use crate::core::objects::ObjectHandler;
-    use crate::test_support::{ImageShader, rect};
+    use crate::test_support::{ImageShader, panel};
 
     #[test]
     fn scenes_advance_at_the_end_of_each_range() {
@@ -2379,7 +2316,7 @@ mod tests {
         use crate::core::{Trackable, components::Style};
 
         let mut scene = Scene::new();
-        let object = rect().build(&mut scene);
+        let object = panel().build(&mut scene);
         let entity = object.entity();
         let target = TrackTarget::property(std::any::TypeId::of::<Style>(), Style::track(0));
         let original = target.get(&scene.world(), entity);
@@ -2406,9 +2343,10 @@ mod tests {
             .world_mut()
             .insert_one(
                 entity,
-                crate::core::Properties(
-                    [(schema.name.clone(), (schema.clone(), TrackValue::F32(1.0)))].into(),
-                ),
+                crate::core::Properties {
+                    fields: [(schema.name.clone(), (schema.clone(), TrackValue::F32(1.0)))].into(),
+                    components: vec![("Custom".into(), vec![schema.name.clone()])],
+                },
             )
             .unwrap();
 
@@ -2432,7 +2370,7 @@ mod tests {
     fn inspector_edits_restore_uniforms() {
         let shader = ImageShader::new("#version 330 core\nvoid main() {}");
         let mut scene = Scene::new();
-        let object = rect()
+        let object = panel()
             .shader(&shader)
             .uniform("amount", 0.25_f32)
             .build(&mut scene);

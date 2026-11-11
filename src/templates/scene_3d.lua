@@ -1,14 +1,14 @@
-return function(s)
-    s:view("3d")
+return function()
+    k.view("3d")
 
-    local cube = s:cube {
+    local cube = k.cube{
         id = "cube",
         albedo = k.color("#60A5FA"),
     }
 
-    s:world_3d():add(cube)
+    k.world_3d():add(cube)
 
     cube:to { rotation = k.axis_angle(k.vec3(0, 1, 0), math.pi) }:play(1)
 
-    s:wait(1)
+    k.wait(1)
 end

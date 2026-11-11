@@ -1,5 +1,7 @@
 ---@meta
 
+k = {}
+
 --- Position written as {line, column}. Both start at 1; columns count Unicode characters.
 ---@class Kinematic.CodePosition
 ---@field [integer] integer
@@ -89,10 +91,6 @@ function Object:remove() end
 ---@return Kinematic.Signal
 function Object:signal(callback) end
 
---- Scene construction and animation scheduling context passed to a scene function.
----@class Kinematic.Scene
-local Scene = {}
-
 --- Parameters for an immutable procedural audio resource; times are seconds and frequencies are Hz.
 ---@class Kinematic.AudioSynthOptions
 ---@field preset? "boink"|"pluck"|"click"|"impact"|"whoosh" Overridable starting parameters.
@@ -132,57 +130,55 @@ function Audio:play(options) end
 --- Creates a silent player. Scheduled tails contribute to scene duration; repeat scopes are rejected.
 ---@param options Kinematic.AudioOptions
 ---@return Kinematic.Audio
-function Scene:audio(options) end
+function k.audio(options) end
 
 --- Schedules an instantaneous switch between the built-in 2D and 3D world canvases.
 --- The dimension must be "2d" or "3d".
 ---@param dimension "2d"|"3d"
-function Scene:view(dimension) end
+function k.view(dimension) end
 
 --- Advances the current scheduling scope by a nonnegative duration in seconds.
 ---@param seconds number
-function Scene:wait(seconds) end
+function k.wait(seconds) end
 
 --- Adds a named editable wait at the current timeline position.
 --- Its duration can be adjusted in the editor.
 ---@param name string
-function Scene:event(name) end
+function k.event(name) end
 
 --- Schedules the callback animations simultaneously.
 --- The parent timeline advances by the longest child duration.
----@param schedule fun(scene: Kinematic.Scene)
-function Scene:all(schedule) end
+---@param schedule fun()
+function k.all(schedule) end
 
 --- Schedules the callback animations sequentially on the current timeline.
----@param schedule fun(scene: Kinematic.Scene)
-function Scene:chain(schedule) end
+---@param schedule fun()
+function k.chain(schedule) end
 
 --- Schedules the callback without advancing or extending the parent timeline.
---- Animations inside the callback are sequential unless grouped with :all.
----@param schedule fun(scene: Kinematic.Scene)
-function Scene:parallel(schedule) end
+--- Animations inside the callback are sequential unless grouped with k.all.
+---@param schedule fun()
+function k.parallel(schedule) end
 
 --- Repeats one positive finite animation cycle without advancing the parent timeline.
 --- The callback executes once; its animations repeat until their lifetime ends. Nested loops and object creation, attachment, or removal within a cycle are rejected.
----@param schedule fun(scene: Kinematic.Scene)
-function Scene:loop(schedule) end
+---@param schedule fun()
+function k.loop(schedule) end
 
 --- Returns the built-in 2D canvas.
---- Attach 2D objects with scene:world_2d():add(object).
+--- Attach 2D objects with k.world_2d():add(object).
 ---@return Kinematic.Canvas2D
-function Scene:world_2d() end
+function k.world_2d() end
 
 --- Returns the built-in 3D canvas.
---- Attach 3D objects with scene:world_3d():add(object).
+--- Attach 3D objects with k.world_3d():add(object).
 ---@return Kinematic.Canvas3D
-function Scene:world_3d() end
+function k.world_3d() end
 
 --- Returns the internal root container shared by all scene contents.
---- Attach additional canvases here; use :world_2d() and :world_3d() for ordinary world objects.
+--- Attach additional canvases here; use k.world_2d() and k.world_3d() for ordinary world objects.
 ---@return Kinematic.Object
-function Scene:root() end
-
-k = {}
+function k.root() end
 
 --- Creates a silent synthesizer resource; the envelope must last 0.001–10 seconds.
 ---@param options Kinematic.AudioSynthOptions
@@ -192,7 +188,7 @@ function k.audio_synth(options) end
 --- Loads a project-relative WAV, MP3, OGG, or FLAC file using FFmpeg; creation does not play it.
 ---@param path string
 ---@return Kinematic.AudioResource
-function k.audio_file(path) end
+function k.load_audio(path) end
 
 
 --- Creates a two-dimensional value with x and y components.
@@ -257,7 +253,7 @@ function Object:save() end
 ---@return Kinematic.Animation
 function Object:restore(snapshot) end
 
---- Creates an animation toward the initial builder property values.
+--- Creates an animation toward the initial property values.
 --- Call :play to schedule the reset.
 ---@return Kinematic.Animation
 function Object:reset() end
@@ -312,10 +308,10 @@ function Object:move_to_top() end
 --- Moves this object to the start of its sibling list, below its siblings.
 function Object:move_to_bottom() end
 
---- Returns the local bounding box with named coordinates and dimensions.
---- Two-dimensional objects return x, y, width, and height; 3D objects also return z and depth.
----@return {x:number,y:number,z?:number,width:number,height:number,depth?:number}
-function Object:bounds() end
+--- Returns the local bounds using evaluated properties and simulation state.
+--- This is also the callback implemented by custom objects.
+---@return Kinematic.RectValue|Kinematic.BoxValue
+function Object:on_bounds() end
 
 --- Returns the transformation matrix composed through the object hierarchy.
 ---@return Kinematic.Matrix
@@ -329,26 +325,18 @@ function Object:uniform(name) end
 
 --- Creates a standalone animatable property from an initial value.
 --- An optional stable id preserves object identity across reloads. Supports get, set, to, by, from, and signal.
----@overload fun(self:Kinematic.Scene, initial:Kinematic.Vec2, id?:string):Kinematic.Vec2Property
----@overload fun(self:Kinematic.Scene, initial:Kinematic.Vec3, id?:string):Kinematic.Vec3Property
----@overload fun(self:Kinematic.Scene, initial:Kinematic.Color, id?:string):Kinematic.ColorProperty
----@overload fun(self:Kinematic.Scene, initial:Kinematic.Quaternion, id?:string):Kinematic.QuaternionProperty
----@overload fun(self:Kinematic.Scene, initial:Kinematic.Quad, id?:string):Kinematic.QuadProperty
+---@overload fun(initial:Kinematic.Vec2, id?:string):Kinematic.Vec2Property
+---@overload fun(initial:Kinematic.Vec3, id?:string):Kinematic.Vec3Property
+---@overload fun(initial:Kinematic.Color, id?:string):Kinematic.ColorProperty
+---@overload fun(initial:Kinematic.Quaternion, id?:string):Kinematic.QuaternionProperty
+---@overload fun(initial:Kinematic.Quad, id?:string):Kinematic.QuadProperty
 ---@generic T
 ---@param initial T
 ---@param id? string
 ---@return Kinematic.Property<T>
-function Scene:track(initial, id) end
+function k.track(initial, id) end
 
---- Instantiates a k.object definition with initial property and resource options.
---- Each instance receives independent state and stays inactive until attached to a group or canvas.
----@generic T
----@param definition T
----@param options table
----@return T
-function Scene:object(definition, options) end
-
---- Reusable declaration of custom tracked fields for scripted objects.
+--- Reusable declaration of named custom tracked fields.
 ---@class Kinematic.Component
 
 --- Custom property schema; the required default value determines its type.
@@ -357,31 +345,52 @@ function Scene:object(definition, options) end
 ---@field min? number Optional lower bound for a numeric property.
 ---@field max? number Optional upper bound for a numeric property.
 ---@field choices? string[] Allowed snake_case values for a string property.
---- Declares custom animatable fields from default values and optional numeric bounds or string choices.
---- The default determines each field type. Custom names must not shadow native properties.
+--- Declares a named component; its fields form a group in the Inspector.
+--- Use capitalized words separated by spaces, such as "Motion 2D".
+---@param name string Component display name, such as "Progress".
 ---@param fields table<string,Kinematic.PropertyDefinition>
 ---@return Kinematic.Component
-function k.component(fields) end
+function k.component(name, fields) end
 
---- Reusable scripted object declaration created by k.object.
----@class Kinematic.ObjectDefinition
-
---- Scripted object callbacks, state, components, and methods.
+--- Shared scripted object declaration metadata.
 ---@class Kinematic.ObjectOptions
----@field dimension? 2|3 Spatial dimension, 2 or 3; defaults to 2.
----@field components? Kinematic.Component[] Custom tracked field declarations.
+---@field components? Kinematic.Component[] Named custom tracked field declarations.
 ---@field state? table Initial state copied independently for each instance.
----@field inputs? table<string,Kinematic.Property|Kinematic.Object|Kinematic.Audio|string> Declared simulation dependencies. Omitted inputs use own properties; an empty table declares none.
----@field update? fun(state:table, frame:Kinematic.Frame, inputs:table) Fixed-step state update callback; external mutable upvalues are rejected.
----@field draw? fun(context:Kinematic.Draw2D|Kinematic.Draw3D, properties:table, state:table) Local drawing callback; reads evaluated properties and state.
----@field bounds? fun(properties:table, state:table):{x:number,y:number,z?:number,width:number,height:number,depth?:number} Returns local coordinates and dimensions for selection and layout.
----@field name? string Default display name of the scripted object.
----@field methods? table<string,function> Instance methods invoked with the object as self; fundamental operations cannot be replaced.
---- Declares a reusable scripted 2D or 3D object with components, state, callbacks, and methods.
---- Instantiate it with scene:object(definition, options). Drawing reads state; updates change state at fixed steps.
----@param definition Kinematic.ObjectOptions
----@return Kinematic.Script2D|Kinematic.Script3D
-function k.object(definition) end
+---@field inputs? table<string,Kinematic.Property|Kinematic.Object|Kinematic.Audio|string> Declared simulation dependencies; omitted inputs use own properties.
+
+--- Scripted 2D callbacks; additional functions are ordinary instance methods or helpers.
+---@class Kinematic.Object2DOptions: Kinematic.ObjectOptions
+---@field on_draw? fun(self:Kinematic.Script2DView, context:Kinematic.Draw2D) Draws using evaluated properties and read-only state.
+---@field on_bounds? fun(self:Kinematic.Script2DView):Kinematic.RectValue Returns local bounds.
+---@field on_update? fun(self:Kinematic.Script2DView, frame:Kinematic.Frame, inputs:table) Updates self.state at fixed steps; own values must be declared in inputs when inputs are explicit. Mutable external upvalues are rejected.
+
+--- Scripted 3D callbacks; additional functions are ordinary instance methods or helpers.
+---@class Kinematic.Object3DOptions: Kinematic.ObjectOptions
+---@field on_draw? fun(self:Kinematic.Script3DView, context:Kinematic.Draw3D) Draws using evaluated properties and read-only state.
+---@field on_bounds? fun(self:Kinematic.Script3DView):Kinematic.BoxValue Returns local bounds.
+---@field on_update? fun(self:Kinematic.Script3DView, frame:Kinematic.Frame, inputs:table) Updates self.state at fixed steps; own values must be declared in inputs when inputs are explicit. Mutable external upvalues are rejected.
+
+--- Callable scripted 2D definition; assign callbacks and functions directly on it.
+---@class Kinematic.Object2DDefinition: Kinematic.Object2DOptions
+---@operator call(Kinematic.Script2DOptions): Kinematic.Script2D
+
+--- Callable scripted 3D definition; assign callbacks and functions directly on it.
+---@class Kinematic.Object3DDefinition: Kinematic.Object3DOptions
+---@operator call(Kinematic.Script3DOptions): Kinematic.Script3D
+
+--- Declares a reusable 2D object; instantiate with Definition(options).
+--- Define on_draw, on_bounds, on_update and ordinary functions inside or after the declaration.
+---@param name string Object type name, such as "Meter".
+---@param definition Kinematic.Object2DOptions
+---@return Kinematic.Object2DDefinition
+function k.object_2d(name, definition) end
+
+--- Declares a reusable 3D object; instantiate with Definition(options).
+--- Define on_draw, on_bounds, on_update and ordinary functions inside or after the declaration.
+---@param name string Object type name, such as "Sculpture".
+---@param definition Kinematic.Object3DOptions
+---@return Kinematic.Object3DDefinition
+function k.object_3d(name, definition) end
 
 --- Creates a quaternion from a nonzero vec3 axis and a finite angle in radians.
 --- The axis is normalized automatically.
@@ -400,7 +409,7 @@ function k.axis_angle(axis, radians) end
 function k.quad(a, b, c, d) end
 
 --- Creates an immutable rectangle value from local coordinates and nonnegative dimensions.
---- This is a value helper; use scene:rect(options) to create a scene object.
+--- Use k.panel(options) to create a rectangular scene object.
 ---@param x number
 ---@param y number
 ---@param width number
@@ -415,6 +424,25 @@ function k.rect(x, y, width, height) end
 ---@field width number Rectangle width in local coordinates.
 ---@field height number Rectangle height in local coordinates.
 local RectValue = {}
+
+--- Creates immutable 3D bounds from local coordinates and nonnegative dimensions.
+---@param x number
+---@param y number
+---@param z number
+---@param width number
+---@param height number
+---@param depth number
+---@return Kinematic.BoxValue
+function k.box(x, y, z, width, height, depth) end
+
+--- Immutable axis-aligned 3D bounding box.
+---@class Kinematic.BoxValue
+---@field x number Minimum x coordinate.
+---@field y number Minimum y coordinate.
+---@field z number Minimum z coordinate.
+---@field width number Width in local coordinates.
+---@field height number Height in local coordinates.
+---@field depth number Depth in local coordinates.
 
 --- Deterministic mutable random generator that can be preserved in simulation state.
 ---@class Kinematic.Random
@@ -533,12 +561,12 @@ function k.mesh(data) end
 --- Use the returned handle as an image object source or in a drawing callback.
 ---@param path string
 ---@return Kinematic.Image
-function k.image(path) end
+function k.load_image(path) end
 
 --- Loads a font resource from a path relative to the project directory.
 ---@param path string
 ---@return Kinematic.Font
-function k.font(path) end
+function k.load_font(path) end
 
 --- Creates a 2D image shader from inline source or a project-relative path.
 --- When both are supplied, the file path takes precedence.
@@ -1172,6 +1200,10 @@ function Spatial2D:global_rotation() end
 ---@return number
 function Spatial2D:global_opacity() end
 
+--- Returns the local bounds at the evaluated time; also used by the engine.
+---@return Kinematic.RectValue
+function Spatial2D:on_bounds() end
+
 --- Returns the middle anchor of the bounding box in parent coordinates.
 ---@return Kinematic.Value
 function Spatial2D:middle() end
@@ -1273,6 +1305,10 @@ function Spatial3D:global_scale() end
 --- The result is radians for a 2D object or a quaternion for a 3D object.
 ---@return Kinematic.Value|number
 function Spatial3D:global_rotation() end
+
+--- Returns the local bounds at the evaluated time; also used by the engine.
+---@return Kinematic.BoxValue
+function Spatial3D:on_bounds() end
 
 --- Returns the middle anchor of the bounding box in parent coordinates.
 ---@return Kinematic.Value
@@ -1560,10 +1596,10 @@ local Circle = {}
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- Built-in circular scene object.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.CircleOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Circle object Handle exposing animatable properties and object methods.
-function Scene:circle(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.CircleOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Circle
+function k.circle(options) end
 
 --- Built-in elliptical scene object.
 ---@class Kinematic.Ellipse: Kinematic.Spatial2D
@@ -1608,14 +1644,14 @@ local Ellipse = {}
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- Built-in elliptical scene object.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.EllipseOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Ellipse object Handle exposing animatable properties and object methods.
-function Scene:ellipse(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.EllipseOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Ellipse
+function k.ellipse(options) end
 
 --- Built-in rectangular scene object.
----@class Kinematic.Rect: Kinematic.Spatial2D
----@field signal fun(self:Kinematic.Rect, callback:fun(object:Kinematic.Rect, frame:Kinematic.Frame)):Kinematic.Signal Runs a callback after scene evaluation at each frame; returns a signal that can be stopped.
+---@class Kinematic.Panel: Kinematic.Spatial2D
+---@field signal fun(self:Kinematic.Panel, callback:fun(object:Kinematic.Panel, frame:Kinematic.Frame)):Kinematic.Signal Runs a callback after scene evaluation at each frame; returns a signal that can be stopped.
 ---@field size Kinematic.Vec2Property Geometry dimensions in local coordinates. Default: [256, 256].
 ---@field round Kinematic.QuadProperty Corner radii in local coordinates, ordered top-left, top-right, bottom-right, bottom-left. Default: [0, 0, 0, 0].
 ---@field fill Kinematic.ColorProperty Color used to fill the style. Default: [1, 1, 1, 1].
@@ -1633,10 +1669,10 @@ function Scene:ellipse(options) end
 ---@field shadow_offset Kinematic.Vec2Property Shadow offset in local canvas units. Default: [0, 0].
 ---@field shadow_blur Kinematic.Property<number> Shadow blur sigma in local canvas units. Default: 0. Minimum: 0.
 ---@field shadow_color Kinematic.ColorProperty Shadow color. Default: [0, 0, 0, 0].
-local Rect = {}
+local Panel = {}
 
---- Initial properties and resources for rect.
----@class Kinematic.RectOptions: Kinematic.ResourceOptions
+--- Initial properties and resources for panel.
+---@class Kinematic.PanelOptions: Kinematic.ResourceOptions
 ---@field id? string Stable identifier used to preserve object identity across reloads.
 ---@field name? string Display name in the scene tree.
 ---@field size? Kinematic.Vec2|{x?:number,y?:number} Geometry dimensions in local coordinates. Default: [256, 256].
@@ -1658,10 +1694,10 @@ local Rect = {}
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- Built-in rectangular scene object.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.RectOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Rect object Handle exposing animatable properties and object methods.
-function Scene:rect(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.PanelOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Panel
+function k.panel(options) end
 
 --- Built-in triangle scene object with an independently animatable apex.
 ---@class Kinematic.Triangle: Kinematic.Spatial2D
@@ -1708,10 +1744,10 @@ local Triangle = {}
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- Built-in triangle scene object with an independently animatable apex.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.TriangleOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Triangle object Handle exposing animatable properties and object methods.
-function Scene:triangle(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.TriangleOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Triangle
+function k.triangle(options) end
 
 --- Built-in regular polygon scene object.
 ---@class Kinematic.RegularPolygon2D: Kinematic.Spatial2D
@@ -1758,10 +1794,10 @@ local RegularPolygon2D = {}
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- Built-in regular polygon scene object.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.RegularPolygon2DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.RegularPolygon2D object Handle exposing animatable properties and object methods.
-function Scene:regular_polygon_2d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.RegularPolygon2DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.RegularPolygon2D
+function k.regular_polygon_2d(options) end
 
 --- Built-in line scene object with independently animatable arrowheads.
 ---@class Kinematic.Line2D: Kinematic.Spatial2D
@@ -1814,10 +1850,10 @@ local Line2D = {}
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- Built-in line scene object with independently animatable arrowheads.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Line2DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Line2D object Handle exposing animatable properties and object methods.
-function Scene:line_2d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Line2DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Line2D
+function k.line_2d(options) end
 
 --- Image drawn inside a styled rectangular shape.
 ---@class Kinematic.Image2D: Kinematic.Spatial2D
@@ -1870,16 +1906,16 @@ function Image2D:get_pixel_color(position) end
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- Image drawn inside a styled rectangular shape.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Image2DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Image2D object Handle exposing animatable properties and object methods.
-function Scene:image_2d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Image2DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Image2D
+function k.image_2d(options) end
 
 --- Built-in 2D code object with syntax coloring, animated edits, and emphasis.
 --- 
 --- ```lua
---- local code = s:code {language = "python", code = "print(42)"}
---- s:world_2d():add(code)
+--- local code = k.code {language = "python", code = "print(42)"}
+--- k.world_2d():add(code)
 --- code:append("print(100)"):play(1)
 --- ```
 ---@class Kinematic.Code: Kinematic.Spatial2D
@@ -2108,14 +2144,14 @@ function Code:find_all(text, match_case, match_whole_word) end
 --- Built-in 2D code object with syntax coloring, animated edits, and emphasis.
 --- 
 --- ```lua
---- local code = s:code {language = "python", code = "print(42)"}
---- s:world_2d():add(code)
+--- local code = k.code {language = "python", code = "print(42)"}
+--- k.world_2d():add(code)
 --- code:append("print(100)"):play(1)
 --- ```
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.CodeOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Code object Handle exposing animatable properties and object methods.
-function Scene:code(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.CodeOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Code
+function k.code(options) end
 
 --- Built-in text scene object.
 ---@class Kinematic.Text2D: Kinematic.Spatial2D
@@ -2180,10 +2216,10 @@ function Text2D:fade(text) end
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- Built-in text scene object.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Text2DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Text2D object Handle exposing animatable properties and object methods.
-function Scene:text_2d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Text2DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Text2D
+function k.text_2d(options) end
 
 --- Built-in LaTeX math scene object, rendered with embedded KaTeX fonts.
 --- 
@@ -2252,10 +2288,10 @@ function Latex2D:fade(text) end
 --- 
 --- Supports mathematical LaTeX accepted by RaTeX in display style.
 --- Invalid or unsupported source panics when its geometry is first requested.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Latex2DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Latex2D object Handle exposing animatable properties and object methods.
-function Scene:latex_2d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Latex2DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Latex2D
+function k.latex_2d(options) end
 
 --- Transformable scene object that groups an ordered set of child objects.
 ---@class Kinematic.Group2D: Kinematic.Spatial2D
@@ -2292,10 +2328,10 @@ local Group2D = {}
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- Transformable scene object that groups an ordered set of child objects.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Group2DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Group2D object Handle exposing animatable properties and object methods.
-function Scene:group_2d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Group2DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Group2D
+function k.group_2d(options) end
 
 --- A two-dimensional node that lays out its children procedurally.
 ---@class Kinematic.Container2D: Kinematic.Spatial2D
@@ -2336,10 +2372,10 @@ local Container2D = {}
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- A two-dimensional node that lays out its children procedurally.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Container2DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Container2D object Handle exposing animatable properties and object methods.
-function Scene:container_2d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Container2DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Container2D
+function k.container_2d(options) end
 
 --- Independent 2D Skia viewport with its own camera.
 ---@class Kinematic.Canvas2D: Kinematic.Object
@@ -2375,10 +2411,10 @@ function Canvas2D:texture() end
 ---@field follows_camera? boolean Whether this entity and its subtree are affected by the canvas camera. Default: true.
 
 --- Independent 2D Skia viewport with its own camera.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Canvas2DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Canvas2D object Handle exposing animatable properties and object methods.
-function Scene:canvas_2d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Canvas2DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Canvas2D
+function k.canvas_2d(options) end
 
 --- 2D rectangle sampling the premultiplied output of a canvas.
 ---@class Kinematic.Projection2D: Kinematic.Spatial2D
@@ -2425,10 +2461,10 @@ local Projection2D = {}
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- 2D rectangle sampling the premultiplied output of a canvas.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Projection2DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Projection2D object Handle exposing animatable properties and object methods.
-function Scene:projection_2d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Projection2DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Projection2D
+function k.projection_2d(options) end
 
 --- Sphere centered on its local origin.
 ---@class Kinematic.Sphere: Kinematic.Spatial3D
@@ -2467,10 +2503,10 @@ local Sphere = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Sphere centered on its local origin.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.SphereOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Sphere object Handle exposing animatable properties and object methods.
-function Scene:sphere(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.SphereOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Sphere
+function k.sphere(options) end
 
 --- Torus centered on its local origin with its ring around the Y axis.
 ---@class Kinematic.Torus: Kinematic.Spatial3D
@@ -2515,10 +2551,10 @@ local Torus = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Torus centered on its local origin with its ring around the Y axis.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.TorusOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Torus object Handle exposing animatable properties and object methods.
-function Scene:torus(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.TorusOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Torus
+function k.torus(options) end
 
 --- Regular-base prism centered on its local origin.
 ---@class Kinematic.Prism: Kinematic.Spatial3D
@@ -2563,10 +2599,10 @@ local Prism = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Regular-base prism centered on its local origin.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.PrismOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Prism object Handle exposing animatable properties and object methods.
-function Scene:prism(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.PrismOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Prism
+function k.prism(options) end
 
 --- Regular-base pyramid centered on its local origin with its apex facing positive Y.
 ---@class Kinematic.Pyramid: Kinematic.Spatial3D
@@ -2609,10 +2645,10 @@ local Pyramid = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Regular-base pyramid centered on its local origin with its apex facing positive Y.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.PyramidOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Pyramid object Handle exposing animatable properties and object methods.
-function Scene:pyramid(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.PyramidOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Pyramid
+function k.pyramid(options) end
 
 --- Plane in local XY with its front facing positive Z.
 ---@class Kinematic.Plane: Kinematic.Spatial3D
@@ -2651,10 +2687,10 @@ local Plane = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Plane in local XY with its front facing positive Z.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.PlaneOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Plane object Handle exposing animatable properties and object methods.
-function Scene:plane(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.PlaneOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Plane
+function k.plane(options) end
 
 --- Flat regular polygon with its front facing positive Z.
 ---@class Kinematic.RegularPolygon3D: Kinematic.Spatial3D
@@ -2695,10 +2731,10 @@ local RegularPolygon3D = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Flat regular polygon with its front facing positive Z.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.RegularPolygon3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.RegularPolygon3D object Handle exposing animatable properties and object methods.
-function Scene:regular_polygon_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.RegularPolygon3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.RegularPolygon3D
+function k.regular_polygon_3d(options) end
 
 --- Built-in 3D line scene object with independently animatable arrowheads.
 ---@class Kinematic.Line3D: Kinematic.Spatial3D
@@ -2749,10 +2785,10 @@ local Line3D = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Built-in 3D line scene object with independently animatable arrowheads.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Line3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Line3D object Handle exposing animatable properties and object methods.
-function Scene:line_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Line3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Line3D
+function k.line_3d(options) end
 
 --- Textured plane in local XY with its front facing positive Z.
 ---@class Kinematic.Image3D: Kinematic.Spatial3D
@@ -2797,10 +2833,10 @@ function Image3D:get_pixel_color(position) end
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Textured plane in local XY with its front facing positive Z.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Image3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Image3D object Handle exposing animatable properties and object methods.
-function Scene:image_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Image3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Image3D
+function k.image_3d(options) end
 
 --- Built-in extruded text scene object.
 ---@class Kinematic.Text3D: Kinematic.Spatial3D
@@ -2855,10 +2891,10 @@ function Text3D:morph(text, group) end
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Built-in extruded text scene object.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Text3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Text3D object Handle exposing animatable properties and object methods.
-function Scene:text_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Text3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Text3D
+function k.text_3d(options) end
 
 --- Built-in extruded LaTeX math scene object.
 --- 
@@ -2923,10 +2959,10 @@ function Latex3D:fade(text) end
 --- 
 --- Supports mathematical LaTeX accepted by RaTeX in display style.
 --- Invalid or unsupported source panics when its geometry is first requested.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Latex3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Latex3D object Handle exposing animatable properties and object methods.
-function Scene:latex_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Latex3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Latex3D
+function k.latex_3d(options) end
 
 --- Container inheriting three-dimensional transforms.
 ---@class Kinematic.Group3D: Kinematic.Spatial3D
@@ -2949,10 +2985,10 @@ local Group3D = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Container inheriting three-dimensional transforms.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Group3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Group3D object Handle exposing animatable properties and object methods.
-function Scene:group_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Group3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Group3D
+function k.group_3d(options) end
 
 --- A three-dimensional node that lays out its children procedurally.
 ---@class Kinematic.Container3D: Kinematic.Spatial3D
@@ -2979,10 +3015,10 @@ local Container3D = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- A three-dimensional node that lays out its children procedurally.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Container3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Container3D object Handle exposing animatable properties and object methods.
-function Scene:container_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Container3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Container3D
+function k.container_3d(options) end
 
 --- Independent 3D perspective viewport with its own camera.
 ---@class Kinematic.Canvas3D: Kinematic.Object
@@ -3028,10 +3064,10 @@ function Canvas3D:texture() end
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Independent 3D perspective viewport with its own camera.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Canvas3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Canvas3D object Handle exposing animatable properties and object methods.
-function Scene:canvas_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Canvas3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Canvas3D
+function k.canvas_3d(options) end
 
 --- Unlit 3D plane sampling the premultiplied output of a canvas.
 ---@class Kinematic.Projection3D: Kinematic.Spatial3D
@@ -3056,10 +3092,10 @@ local Projection3D = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Unlit 3D plane sampling the premultiplied output of a canvas.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.Projection3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.Projection3D object Handle exposing animatable properties and object methods.
-function Scene:projection_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.Projection3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.Projection3D
+function k.projection_3d(options) end
 
 --- Light shining along its local negative Z axis.
 ---@class Kinematic.DirectionalLight3D: Kinematic.Spatial3D
@@ -3086,10 +3122,10 @@ local DirectionalLight3D = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Light shining along its local negative Z axis.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.DirectionalLight3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.DirectionalLight3D object Handle exposing animatable properties and object methods.
-function Scene:directional_light(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.DirectionalLight3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.DirectionalLight3D
+function k.directional_light(options) end
 
 --- Light shining in every direction from its position.
 ---@class Kinematic.PointLight3D: Kinematic.Spatial3D
@@ -3122,10 +3158,10 @@ local PointLight3D = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Light shining in every direction from its position.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.PointLight3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.PointLight3D object Handle exposing animatable properties and object methods.
-function Scene:point_light(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.PointLight3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.PointLight3D
+function k.point_light(options) end
 
 --- Light shining in a cone along its local negative Z axis.
 ---@class Kinematic.SpotLight3D: Kinematic.Spatial3D
@@ -3160,10 +3196,10 @@ local SpotLight3D = {}
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Light shining in a cone along its local negative Z axis.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.SpotLight3DOptions Initial properties, name, identifier, and resources.
----@return Kinematic.SpotLight3D object Handle exposing animatable properties and object methods.
-function Scene:spot_light(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.SpotLight3DOptions Initial properties, name, identifier, and resources.
+---@return Kinematic.SpotLight3D
+function k.spot_light(options) end
 
 --- Initial properties and resources for square.
 ---@class Kinematic.RegularPolygon2DOptions_square: Kinematic.ResourceOptions
@@ -3188,10 +3224,10 @@ function Scene:spot_light(options) end
 ---@field shadow_color? Kinematic.Color|{r?:number,g?:number,b?:number,a?:number} Shadow color. Default: [0, 0, 0, 0].
 
 --- Built-in regular polygon scene object.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.RegularPolygon2DOptions_square Initial properties, name, identifier, and resources.
----@return Kinematic.RegularPolygon2D object Handle exposing animatable properties and object methods.
-function Scene:square(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.RegularPolygon2DOptions_square Initial properties, name, identifier, and resources.
+---@return Kinematic.RegularPolygon2D
+function k.square(options) end
 
 --- Initial properties and resources for triangle_3d.
 ---@class Kinematic.RegularPolygon3DOptions_triangle_3d: Kinematic.ResourceOptions
@@ -3213,10 +3249,10 @@ function Scene:square(options) end
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Flat regular polygon with its front facing positive Z.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.RegularPolygon3DOptions_triangle_3d Initial properties, name, identifier, and resources.
----@return Kinematic.RegularPolygon3D object Handle exposing animatable properties and object methods.
-function Scene:triangle_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.RegularPolygon3DOptions_triangle_3d Initial properties, name, identifier, and resources.
+---@return Kinematic.RegularPolygon3D
+function k.triangle_3d(options) end
 
 --- Initial properties and resources for square_3d.
 ---@class Kinematic.RegularPolygon3DOptions_square_3d: Kinematic.ResourceOptions
@@ -3238,10 +3274,10 @@ function Scene:triangle_3d(options) end
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Flat regular polygon with its front facing positive Z.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.RegularPolygon3DOptions_square_3d Initial properties, name, identifier, and resources.
----@return Kinematic.RegularPolygon3D object Handle exposing animatable properties and object methods.
-function Scene:square_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.RegularPolygon3DOptions_square_3d Initial properties, name, identifier, and resources.
+---@return Kinematic.RegularPolygon3D
+function k.square_3d(options) end
 
 --- Initial properties and resources for circle_3d.
 ---@class Kinematic.RegularPolygon3DOptions_circle_3d: Kinematic.ResourceOptions
@@ -3263,10 +3299,10 @@ function Scene:square_3d(options) end
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Flat regular polygon with its front facing positive Z.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.RegularPolygon3DOptions_circle_3d Initial properties, name, identifier, and resources.
----@return Kinematic.RegularPolygon3D object Handle exposing animatable properties and object methods.
-function Scene:circle_3d(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.RegularPolygon3DOptions_circle_3d Initial properties, name, identifier, and resources.
+---@return Kinematic.RegularPolygon3D
+function k.circle_3d(options) end
 
 --- Initial properties and resources for tetrahedron.
 ---@class Kinematic.PrismOptions_tetrahedron: Kinematic.ResourceOptions
@@ -3290,10 +3326,10 @@ function Scene:circle_3d(options) end
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Regular-base prism centered on its local origin.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.PrismOptions_tetrahedron Initial properties, name, identifier, and resources.
----@return Kinematic.Prism object Handle exposing animatable properties and object methods.
-function Scene:tetrahedron(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.PrismOptions_tetrahedron Initial properties, name, identifier, and resources.
+---@return Kinematic.Prism
+function k.tetrahedron(options) end
 
 --- Initial properties and resources for cube.
 ---@class Kinematic.PrismOptions_cube: Kinematic.ResourceOptions
@@ -3317,10 +3353,10 @@ function Scene:tetrahedron(options) end
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Regular-base prism centered on its local origin.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.PrismOptions_cube Initial properties, name, identifier, and resources.
----@return Kinematic.Prism object Handle exposing animatable properties and object methods.
-function Scene:cube(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.PrismOptions_cube Initial properties, name, identifier, and resources.
+---@return Kinematic.Prism
+function k.cube(options) end
 
 --- Initial properties and resources for cylinder.
 ---@class Kinematic.PrismOptions_cylinder: Kinematic.ResourceOptions
@@ -3344,10 +3380,10 @@ function Scene:cube(options) end
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Regular-base prism centered on its local origin.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.PrismOptions_cylinder Initial properties, name, identifier, and resources.
----@return Kinematic.Prism object Handle exposing animatable properties and object methods.
-function Scene:cylinder(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.PrismOptions_cylinder Initial properties, name, identifier, and resources.
+---@return Kinematic.Prism
+function k.cylinder(options) end
 
 --- Initial properties and resources for cone.
 ---@class Kinematic.PyramidOptions_cone: Kinematic.ResourceOptions
@@ -3370,10 +3406,10 @@ function Scene:cylinder(options) end
 ---@field visibility? boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
 
 --- Regular-base pyramid centered on its local origin with its apex facing positive Y.
---- Creates the object with the supplied initial properties at the current schedule time.
----@param options Kinematic.PyramidOptions_cone Initial properties, name, identifier, and resources.
----@return Kinematic.Pyramid object Handle exposing animatable properties and object methods.
-function Scene:cone(options) end
+--- Creates an object in this scene; attach it to a group or canvas to activate it.
+---@param options? Kinematic.PyramidOptions_cone Initial properties, name, identifier, and resources.
+---@return Kinematic.Pyramid
+function k.cone(options) end
 
 --- Scripted 2D object with local drawing, tracked properties, and fixed-step simulation.
 ---@class Kinematic.Script2D: Kinematic.Spatial2D
@@ -3416,6 +3452,27 @@ function Script2D:checkpoint() end
 --- Mutable data must live in state; callbacks cannot capture mutable external upvalues.
 ---@param callback fun(state:table)
 function Script2D:mutate(callback) end
+
+--- Evaluated properties available to scripted callbacks.
+---@class Kinematic.Script2DView
+---@field state table Simulation state; read-only during drawing and bounds.
+---@field uniforms table<string,number|Kinematic.Value> Evaluated shader uniforms.
+---@field position Kinematic.Vec2 Position of the entity. Default: [0, 0].
+---@field origin Kinematic.Vec2 Pivot relative to half the entity size. Values are not clamped. Default: [0, 0].
+---@field scale Kinematic.Vec2 Scale of the entity on each axis. Default: [1, 1].
+---@field rotation number Rotation of the entity in radians. Default: 0.
+---@field visibility boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
+---@field opacity number Transparency applied while drawing this entity, from `0` to `1`. Default: 1. Minimum: 0. Maximum: 1.
+---@field z_index integer Stacking order among sibling objects. Higher values are drawn in front. Default: 0.
+---@field follows_camera boolean Whether this entity and its subtree are affected by the canvas camera. Default: true.
+---@field fill Kinematic.Color Color used to fill the style. Default: [1, 1, 1, 1].
+---@field stroke Kinematic.Color Color used to outline the style. Default: [1, 1, 1, 1].
+---@field stroke_width number Width used to outline the style. Default: 0. Minimum: 0.
+---@field blur number Gaussian blur sigma in local canvas units. Default: 0. Minimum: 0.
+---@field shadow_offset Kinematic.Vec2 Shadow offset in local canvas units. Default: [0, 0].
+---@field shadow_blur number Shadow blur sigma in local canvas units. Default: 0. Minimum: 0.
+---@field shadow_color Kinematic.Color Shadow color. Default: [0, 0, 0, 0].
+---@field auto_update boolean Whether [`SimulationState::on_update`] runs automatically on project frames. Drawing is unaffected, so a paused simulation keeps showing its latest state. During seek replay, the value is sampled from its historical track at every frame. Default: true.
 
 --- Initial properties and resources for script_2d.
 ---@class Kinematic.Script2DOptions: Kinematic.ResourceOptions
@@ -3476,6 +3533,24 @@ function Script3D:checkpoint() end
 --- Mutable data must live in state; callbacks cannot capture mutable external upvalues.
 ---@param callback fun(state:table)
 function Script3D:mutate(callback) end
+
+--- Evaluated properties available to scripted callbacks.
+---@class Kinematic.Script3DView
+---@field state table Simulation state; read-only during drawing and bounds.
+---@field uniforms table<string,number|Kinematic.Value> Evaluated shader uniforms.
+---@field position Kinematic.Vec3 Position relative to the parent in local coordinates. Default: [0, 0, 0].
+---@field origin Kinematic.Vec3 Pivot relative to half the entity size. Values are not clamped. Default: [0, 0, 0].
+---@field rotation Kinematic.Quaternion Local orientation as a quaternion. Use k.axis_angle to construct a rotation. Default: [0.0, 0.0, 0.0, 1.0].
+---@field scale Kinematic.Vec3 Local scale multiplier on each axis. Default: [1, 1, 1].
+---@field visibility boolean Whether this entity and, for containers, its subtree are drawn. Default: true.
+---@field unlit boolean Draws the surface without lighting when true. Default: false.
+---@field albedo Kinematic.Color Base surface color used by lighting. Default: [1, 1, 1, 1].
+---@field metallic number Metallic fraction, from zero for a dielectric to one for a metal. Default: 0. Minimum: 0. Maximum: 1.
+---@field roughness number Surface roughness, from 0.04 for a smooth surface to one for a rough surface. Default: 0.7. Minimum: 0.04. Maximum: 1.
+---@field outline_color Kinematic.Color Color of the mesh outline. Default: [1, 1, 1, 1].
+---@field outline_width number Width of the mesh outline in screen pixels. Default: 0. Minimum: 0.
+---@field opacity number Surface opacity, from zero for transparent to one for opaque. Default: 1. Minimum: 0. Maximum: 1.
+---@field auto_update boolean Whether [`SimulationState::on_update`] runs automatically on project frames. Drawing is unaffected, so a paused simulation keeps showing its latest state. During seek replay, the value is sampled from its historical track at every frame. Default: true.
 
 --- Initial properties and resources for script_3d.
 ---@class Kinematic.Script3DOptions: Kinematic.ResourceOptions

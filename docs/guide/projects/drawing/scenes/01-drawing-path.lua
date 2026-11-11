@@ -1,9 +1,9 @@
-local badge = k.object {
-	bounds = function()
-		return { x = -205, y = -155, width = 410, height = 310 }
+local badge = k.object_2d("Badge", {
+	on_bounds = function(self)
+		return k.rect(-205, -155, 410, 310)
 	end,
 
-	draw = function(ctx)
+	on_draw = function(self, ctx)
 		local path = k.path()
 		path:move_to(-200, 100)
 		path:line_to(200, 100)
@@ -17,12 +17,12 @@ local badge = k.object {
 		})
 		ctx:stroke(path, k.color("#FFFFFF"), 4)
 	end,
-}
+})
 
-return function(s)
-	local object = s:object(badge, {})
-	s:world_2d():add(object)
+return function()
+	local object = badge({})
+	k.world_2d():add(object)
 
 	object:to { rotation = math.pi }:play(1)
-	s:wait(1)
+	k.wait(1)
 end

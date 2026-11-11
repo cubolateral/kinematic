@@ -7,6 +7,7 @@ use crate::core::{
 
 /// Local three-dimensional position, rotation and scale.
 #[derive(Clone, Debug, Trackable)]
+#[trackable(name = "Transform 3D")]
 pub struct Transform3D {
     /// Position relative to the parent in local coordinates.
     #[track]

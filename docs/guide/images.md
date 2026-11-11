@@ -21,9 +21,9 @@ The guide demonstrations use the supplied photos rather than generated illustrat
 
 ![Original kitten photo, standing on a carpet.](./projects/images/assets/kitten.jpg)
 
-The source is 480 × 532 pixels. `k.image` loads its bytes. `s:image_2d` creates the
-object. `add` makes it visible. A loaded 2D image adopts its source dimensions before
-explicit property options are applied.
+The source is 480 × 532 pixels. `k.load_image` loads its bytes. `k.image_2d` creates
+the object, and `add` makes it visible. A loaded 2D image adopts its source dimensions
+before explicit property options are applied.
 
 <GuideDemo name="image-load" caption="The original photo appears centered at 60 percent scale." still>
 

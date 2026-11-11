@@ -1,9 +1,9 @@
-return function(s)
-	local picture = s:image_2d {
-		source = k.image("assets/kitten.jpg"),
+return function()
+	local picture = k.image_2d{
+		source = k.load_image("assets/kitten.jpg"),
 		size = k.vec2(280, 310),
 	}
-	s:world_2d():add(picture)
+	k.world_2d():add(picture)
 
 	picture:to {
 		size = k.vec2(280, 280),
@@ -11,5 +11,5 @@ return function(s)
 		fill = k.color("#FFFFFF"),
 	}:play(2)
 
-	s:wait(1)
+	k.wait(1)
 end

@@ -376,7 +376,7 @@ mod tests {
                 .shader_padding(8.0),
             canvas_3d().resolution((64, 64)).shader(&shader),
         );
-        let object = rect()
+        let object = panel()
             .shader(&shader)
             .uniform("amount", 2.0)
             .build(&mut scene);
@@ -394,12 +394,12 @@ mod tests {
     #[test]
     fn uniforms_share_tweens_with_properties_and_seek_normally() {
         struct Build {
-            object: Option<RectHandler>,
+            object: Option<PanelHandler>,
         }
 
         impl Build {
             fn build(&mut self, scene: &mut Scene) {
-                let object = rect()
+                let object = panel()
                     .shader(&shader())
                     .uniform("u_progress", 0.0_f32)
                     .uniform("u_other", 0.0_f32)
@@ -448,12 +448,12 @@ mod tests {
     #[test]
     fn uniform_repeat_signal_and_override_restoration_use_existing_evaluation_order() {
         struct Build {
-            object: Option<RectHandler>,
+            object: Option<PanelHandler>,
         }
 
         impl Build {
             fn build(&mut self, scene: &mut Scene) {
-                let object = rect()
+                let object = panel()
                     .shader(&shader())
                     .uniform("u_progress", 0.0_f32)
                     .build(scene);
@@ -502,7 +502,7 @@ mod tests {
     #[test]
     fn snapshots_include_uniforms_and_preserve_their_types() {
         let mut scene = Scene::new();
-        let object = rect()
+        let object = panel()
             .shader(&shader())
             .uniform("float", 0.25_f32)
             .uniform("uint", 2_u32)
@@ -531,7 +531,7 @@ mod tests {
     #[should_panic(expected = "must keep its builder-defined type")]
     fn uniform_type_cannot_change() {
         let mut scene = Scene::new();
-        let object = rect()
+        let object = panel()
             .shader(&shader())
             .uniform("value", 1.0_f32)
             .build(&mut scene);
@@ -541,11 +541,11 @@ mod tests {
 
     #[test]
     fn concurrent_uniform_writes_use_the_latest_tween() {
-        struct Build(Option<RectHandler>);
+        struct Build(Option<PanelHandler>);
 
         impl Build {
             fn build(&mut self, scene: &mut Scene) {
-                let object = rect()
+                let object = panel()
                     .shader(&shader())
                     .uniform("value", 0.0_f32)
                     .build(scene);

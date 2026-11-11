@@ -1,10 +1,10 @@
-return function(s)
-	local title = s:text_2d {
+return function()
+	local title = k.text_2d{
 		text = "Hello, world!",
 		size = 56,
 	}
-	s:world_2d():add(title)
+	k.world_2d():add(title)
 
 	title:morph("Hello, wonderful world!"):play(1)
-	s:wait(1)
+	k.wait(1)
 end

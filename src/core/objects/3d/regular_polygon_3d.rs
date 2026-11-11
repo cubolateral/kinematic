@@ -8,6 +8,7 @@ use crate::core::{
 use kinematic_macros::{Object, Trackable};
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Regular Polygon 3D Shape")]
 /// Geometry of a regular polygon in local XY.
 pub struct RegularPolygon3DShape {
     /// Geometry dimensions in local coordinates.

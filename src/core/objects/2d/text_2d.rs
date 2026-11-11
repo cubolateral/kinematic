@@ -138,6 +138,7 @@ pub mod fonts {
 
 /// Content and typography of a text object.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Text Shape")]
 pub struct TextShape {
     /// Text displayed by the object.
     #[track]
@@ -169,6 +170,7 @@ impl Default for TextShape {
 }
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Text Fade")]
 pub(crate) struct TextFade {
     #[track]
     pub text: String,

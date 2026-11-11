@@ -240,6 +240,23 @@ pub(crate) fn register(lua: &Lua, api: &mlua::Table) -> Result<()> {
     )?;
 
     api.set(
+        "box",
+        lua.create_function(
+            |_, (x, y, z, width, height, depth): (f32, f32, f32, f32, f32, f32)| {
+                let values = [x, y, z, width, height, depth];
+                if !values.iter().all(|value| value.is_finite())
+                    || values[3..].iter().any(|value| *value < 0.0)
+                {
+                    return Err(mlua::Error::runtime(
+                        "Box needs finite coordinates and nonnegative size.",
+                    ));
+                }
+                Ok(BoxHandle(values))
+            },
+        )?,
+    )?;
+
+    api.set(
         "axis_angle",
         lua.create_function(|_, (axis, angle): (mlua::UserDataRef<ValueHandle>, f32)| {
             let TrackValue::Vector3(axis) = axis.0 else {
@@ -337,7 +354,7 @@ pub(crate) fn register(lua: &Lua, api: &mlua::Table) -> Result<()> {
 }
 
 #[derive(Clone, Copy)]
-struct RectHandle(crate::core::types::Rect);
+pub(super) struct RectHandle(pub crate::core::types::Rect);
 impl UserData for RectHandle {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_meta_method(MetaMethod::Index, |_, this, name: String| {
@@ -368,5 +385,19 @@ impl UserData for RectHandle {
                 Ok(ValueHandle(TrackValue::Vector2(anchor(this.0))))
             });
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct BoxHandle(pub [f32; 6]);
+impl UserData for BoxHandle {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_meta_method(MetaMethod::Index, |_, this, name: String| {
+            let index = ["x", "y", "z", "width", "height", "depth"]
+                .iter()
+                .position(|field| *field == name)
+                .ok_or_else(|| mlua::Error::runtime("Unknown box field."))?;
+            Ok(this.0[index])
+        });
     }
 }

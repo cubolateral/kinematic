@@ -40,9 +40,10 @@ Try changing the parent destinations to move the whole arrangement along a diffe
 
 ## Bounds and anchors use different spaces
 
-`bounds()` returns a local box (`x`, `y`, `width`, `height`. Also `z` and `depth` in
-3D). `box_size()` returns dimensions. The box can be offset from the local origin.
-Anchors such as `left()` and `middle()` return points in parent coordinates.
+`on_bounds()` returns local bounds: a `k.rect(x, y, width, height)` in 2D or a
+`k.box(x, y, z, width, height, depth)` in 3D. `box_size()` returns dimensions. The
+box can be offset from the local origin. Anchors such as `left()` and `middle()` return
+points in parent coordinates.
 `left_to(point)` returns the local position required to align the left anchor to a
 point in that parent.
 

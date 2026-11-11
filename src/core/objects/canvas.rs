@@ -29,6 +29,7 @@ pub enum CanvasFilter {
 
 /// Declarative render target settings with a build-time resolution.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Canvas Settings")]
 pub struct CanvasSettings {
     /// Color used to clear the canvas before drawing its children.
     #[track]

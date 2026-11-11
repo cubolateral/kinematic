@@ -47,12 +47,12 @@ fn graphics_canvas_projection_alpha_orientation() {
     let mut output = Target::new((64, 64), false, &mut skia, &gl).unwrap();
     let mut scene = Scene::new_with_resolution((64, 64));
     let overlay = scene.world_2d();
-    let top = rect()
+    let top = panel()
         .size(vec2(64.0, 32.0))
         .position(vec2(0.0, -16.0))
         .fill(Color::new(0.5, 0.25, 0.0, 0.5))
         .build(&mut scene);
-    let bottom = rect()
+    let bottom = panel()
         .size(vec2(64.0, 32.0))
         .position(vec2(0.0, 16.0))
         .fill(Color::BLUE)
@@ -249,7 +249,7 @@ fn graphics_canvas_projection_alpha_orientation() {
         .uniform("gain", 1.0)
         .shader_padding(4.0)
         .build(&mut shader_scene);
-    let child = rect()
+    let child = panel()
         .size(vec2(24.0, 24.0))
         .fill(Color::BLUE)
         .build(&mut shader_scene);
@@ -367,7 +367,7 @@ fn graphics_canvas_projection_alpha_orientation() {
         canvas_3d().resolution((64, 64)),
     );
     let source = filter_scene.world_2d();
-    let stripe = rect()
+    let stripe = panel()
         .size(vec2(1.0, 2.0))
         .position(vec2(0.5, 0.0))
         .fill(Color::WHITE)

@@ -4,9 +4,9 @@ pageClass: guide-page
 
 # Lua conventions
 
-A scene file returns a function. Kinematic calls it to construct objects and schedule
-work. Lua does not own a frame loop. The parameter name `s` is a convention. `k` is
-available in scenes and modules and constructs immutable resources and ordinary values.
+A scene file returns a function with no arguments. Kinematic calls it to construct
+objects and schedule work. Lua does not own a frame loop. The scene-local `k` module
+provides constructors, values, resources, and scheduling operations in every project module.
 
 ## Variables, tables, and loops
 

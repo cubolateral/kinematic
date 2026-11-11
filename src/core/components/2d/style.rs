@@ -6,6 +6,7 @@ const PATH_REBASE_THRESHOLD: f32 = 32_768.0;
 
 /// Fill and stroke properties for a style entity.
 #[derive(Clone, Trackable, Debug)]
+#[trackable(name = "Style")]
 pub struct Style {
     /// Color used to fill the style.
     #[track]

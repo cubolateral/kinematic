@@ -1,18 +1,18 @@
-return function(s)
-	local ball = s:circle {
+return function()
+	local ball = k.circle{
 		radius = 64,
 		position = k.vec2(-256, 64),
 	}
-	s:world_2d():add(ball)
+	k.world_2d():add(ball)
 
-	s:loop(function()
+	k.loop(function()
 		ball.position.y:to(-64):play(0.5)
 		ball.position.y:to(64):play(0.5)
 	end)
 
-	s:parallel(function()
+	k.parallel(function()
 		ball.position.x:to(256):play(2, "linear")
 	end)
 
-	s:wait(2)
+	k.wait(2)
 end

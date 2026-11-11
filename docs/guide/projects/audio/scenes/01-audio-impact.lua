@@ -1,11 +1,11 @@
-return function(s)
-	local ball = s:circle {
+return function()
+	local ball = k.circle{
 		radius = 32,
 		position = k.vec2(-200, 0),
 	}
-	s:world_2d():add(ball)
+	k.world_2d():add(ball)
 
-	local hit = s:audio {
+	local hit = k.audio {
 		source = k.audio_synth { preset = "pluck", frequency = 520 },
 		gain = 0.25,
 	}
@@ -16,5 +16,5 @@ return function(s)
 	ball.position.x:to(-200):play(1, "linear")
 	hit:play { pan = 0.7 }
 
-	s:wait(1)
+	k.wait(1)
 end

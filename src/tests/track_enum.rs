@@ -8,6 +8,7 @@ enum PlaybackMode {
 }
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Playback")]
 struct Playback {
     #[track]
     mode: PlaybackMode,
@@ -16,6 +17,7 @@ struct Playback {
 }
 
 #[derive(Clone, Trackable)]
+#[trackable(name = "Playback Fallback")]
 struct PlaybackFallback {
     #[track]
     fallback_mode: PlaybackMode,

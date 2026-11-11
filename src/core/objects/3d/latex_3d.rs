@@ -15,6 +15,7 @@ const LATEX_TESSELLATION_TOLERANCE: f32 = 0.005;
 
 /// Mathematical source, size and extrusion depth of a 3D LaTeX object.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Latex 3D Shape")]
 pub struct Latex3DShape {
     /// LaTeX math source, without dollar delimiters.
     #[track]

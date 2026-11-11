@@ -198,7 +198,7 @@ end
 -- Describes component fields without executing project code.
 function OnSetText(uri, text)
     if not uri:match("%.lua$") or uri:find("/kinematic/cache/luals/", 1, true)
-        or not (is_scene(uri) or text:find("object", 1, true) or text:find("component", 1, true)) then
+        or not (text:find("object", 1, true) or text:find("component", 1, true)) then
         return nil
     end
 
@@ -230,31 +230,21 @@ function OnSetText(uri, text)
         local start = node.type == "function" and node.args and node.args.start or node.start
         local expression = source:sub(guide.positionToOffset(parsed, start) + 1, guide.positionToOffset(parsed, node.finish))
 
-        return node.type == "function" and "function" .. expression or expression
-    end
-
-    if is_scene(uri) then
-        for _, action in ipairs(state.ast) do
-            if action.type == "return" and action[1] and action[1].type == "function" then
-                local callback = action[1]
-                local parameter = callback.args and callback.args[1]
-
-                if parameter then
-                    local start = guide.positionToOffset(state, action.start) + 1
-                    diffs[#diffs + 1] = { start = start, finish = start - 1, text = ("---@param %s Kinematic.Scene\n"):format(parameter[1]) }
-                end
-            end
+        if node.type == "function" and node.args and node.args[1] and node.args[1].type == "self" then
+            expression = expression:gsub("^%(", #node.args > 1 and "(self, " or "(self", 1)
         end
+
+        return node.type == "function" and "function" .. expression or expression
     end
 
     guide.eachSourceType(state.ast, "call", function(call)
         local component = api_call(call, "component")
 
-        if not component and not api_call(call, "object") then
+        if not component and not api_call(call, "object_2d") and not api_call(call, "object_3d") then
             return
         end
 
-        local options = call.args and resolve(call.args[1])
+        local options = call.args and resolve(call.args[2])
 
         if not options or options.type ~= "table" then
             return
@@ -262,7 +252,7 @@ function OnSetText(uri, text)
 
         local class = class_name(call)
         local parents = {}
-        local definition, method_definitions = {}, {}
+        local definition, method_definitions, view_fields, option_fields = {}, {}, {}, {}
         local class_local = "_kinematic_" .. class:gsub("%W", "_")
 
         if component then
@@ -277,6 +267,8 @@ function OnSetText(uri, text)
                     local key, access = member(name)
                     local ty = property_type(schema)
                     local default = resolve(field(schema, "default"))
+                    view_fields[#view_fields + 1] = ("---@field %s %s"):format(key, ty)
+                    option_fields[#option_fields + 1] = ("---@field %s? %s"):format(key, ty)
 
                     if ty == "any" then
                         local source = default and source_text(default)
@@ -291,30 +283,84 @@ function OnSetText(uri, text)
                 end
             end
         else
-            local dimension = resolve(field(options, "dimension"))
-            parents[1] = dimension and dimension[1] == 3 and "Kinematic.Script3D" or "Kinematic.Script2D"
+            local base = api_call(call, "object_3d") and "Kinematic.Script3D" or "Kinematic.Script2D"
+            parents[1] = base
+            definition[#definition + 1] = ("---@operator call(%sOptions): %s"):format(class, class)
             definition[#definition + 1] = ("---@field signal fun(self:%s, callback:fun(object:%s, frame:Kinematic.Frame)):Kinematic.Signal"):format(class, class)
 
-            local methods = resolve(field(options, "methods"))
+            local methods = options
 
-            if methods and methods.type == "table" then
+            if methods then
                 for _, entry in ipairs(methods) do
                     local name = entry.type == "tablefield" and entry.field[1]
                         or entry.type == "tableindex" and entry.index.type == "string" and entry.index[1]
                     local method = resolve(entry.value)
                     local source = method and method.type == "function" and source_text(method)
 
-                    if name and source then
+                    if name and source and not name:match("^on_") then
                         local _, access = member(name)
                         local receiver = method.args and method.args[1]
-                        local annotation = receiver and type(receiver[1]) == "string"
+                        local annotation = receiver and receiver[1] == "self"
                             and ("---@param %s %s\n"):format(receiver[1], class) or ""
                         method_definitions[#method_definitions + 1] = ("%s%s%s = %s"):format(annotation, class_local, access, source)
                     end
                 end
             end
 
+            local function annotate(method, name, start)
+                local receiver = method.args and method.args[1]
+                if not receiver then
+                    return
+                end
+                local callback = name:match("^on_")
+                local annotation = ("---@param %s %s\n"):format(receiver[1], class .. (callback and "View" or ""))
+                if name == "on_draw" and method.args[2] then
+                    annotation = annotation .. ("---@param %s %s\n"):format(method.args[2][1], api_call(call, "object_3d") and "Kinematic.Draw3D" or "Kinematic.Draw2D")
+                elseif name == "on_update" and method.args[2] then
+                    annotation = annotation .. ("---@param %s Kinematic.Frame\n"):format(method.args[2][1])
+                end
+                diffs[#diffs + 1] = {start = start, finish = start - 1, text = annotation}
+            end
+
+            for _, entry in ipairs(options) do
+                local name = entry.type == "tablefield" and entry.field[1]
+                local method = resolve(entry.value)
+                if name and name:match("^on_") and method and method.type == "function" then
+                    annotate(method, name, guide.positionToOffset(state, entry.start) + 1)
+                end
+            end
+
+            for _, kind in ipairs {"setfield", "setmethod"} do
+                guide.eachSourceType(state.ast, kind, function(assignment)
+                    local owner = resolve(assignment.node)
+                    local name = assignment.field and assignment.field[1] or assignment.method and assignment.method[1]
+                    local method = assignment.value
+                    if owner == call and name and method and method.type == "function" then
+                        local start = guide.positionToOffset(state, assignment.start) + 1
+                        -- Named function statements start before their assigned receiver.
+                        local line = text:sub(1, start - 1):match("[^\n]*$") or ""
+                        if line:match("^%s*function%s*$") then
+                            start = start - #line
+                        end
+                        if kind == "setmethod" or name:match("^on_") then
+                            annotate(method, name, start)
+                        end
+                        if not name:match("^on_") then
+                            local _, access = member(name)
+                            local source = source_text(method)
+                            if source then
+                                local annotation = kind == "setmethod" and ("---@param self %s\n"):format(class) or ""
+                                method_definitions[#method_definitions + 1] = ("%s%s%s = %s"):format(annotation, class_local, access, source)
+                            end
+                        end
+                    end
+                end)
+            end
+
             local components = resolve(field(options, "components"))
+
+            local view_parents = {base .. "View"}
+            local option_parents = {base .. "Options"}
 
             if components and components.type == "table" then
                 for _, item in ipairs(components) do
@@ -322,9 +368,16 @@ function OnSetText(uri, text)
 
                     if api_call(source, "component") then
                         parents[#parents + 1] = class_name(source)
+                        view_parents[#view_parents + 1] = class_name(source) .. "View"
+                        option_parents[#option_parents + 1] = class_name(source) .. "Options"
                     end
                 end
             end
+            classes[#classes + 1] = ("---@class %sView: %s\n\n---@class %sOptions: %s\n"):format(class, table.concat(view_parents, ","), class, table.concat(option_parents, ","))
+        end
+
+        if component then
+            classes[#classes + 1] = ("---@class %sView\n%s\n\n---@class %sOptions\n%s\n"):format(class, table.concat(view_fields, "\n"), class, table.concat(option_fields, "\n"))
         end
 
         table.insert(definition, 1, ("\n---@class %s: %s"):format(class, table.concat(parents, ",")))

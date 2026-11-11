@@ -27,10 +27,10 @@ spot lights also restrict their cone. The options for each light are type-specif
 The scene provides `sphere`, `torus`, `prism`, `pyramid`, `plane`, `regular_polygon_3d`,
 and `line_3d`. Presets such as `triangle_3d`, `square_3d`, `circle_3d`, `tetrahedron`,
 `cube`, `cylinder`, and `cone` use built-in geometry with preset parameters. Compare
-their option types under [Scene](../api/Scene.md). Preset defaults are generated from
+their option types under [k](../api/k.md). Preset defaults are generated from
 the runtime too.
 
-Attach primitives to `s:world_3d()` and select `s:view("3d")`, or use a separate 3D
+Attach primitives to `k.world_3d()` and select `k.view("3d")`, or use a separate 3D
 canvas. Position and scale use `vec3`, and orientation uses a quaternion.
 
 ## Materials and lights
@@ -67,13 +67,13 @@ or orientation. Intensity must be nonnegative; color alpha does not affect light
 
 <!-- focus: light-ambient -->
 ```lua
-s:world_3d().ambient_intensity:to(0):play(1)
-s:wait(0.5)
-s:world_3d().ambient_intensity:to(1):play(1)
+k.world_3d().ambient_intensity:to(0):play(1)
+k.wait(0.5)
+k.world_3d().ambient_intensity:to(1):play(1)
 
-s:world_3d().ambient_color:to(k.color("#FF0000")):play(1)
-s:world_3d().ambient_color:to(k.color("#00FF00")):play(1)
-s:world_3d().ambient_color:to(k.color("#0000FF")):play(1)
+k.world_3d().ambient_color:to(k.color("#FF0000")):play(1)
+k.world_3d().ambient_color:to(k.color("#00FF00")):play(1)
+k.world_3d().ambient_color:to(k.color("#0000FF")):play(1)
 ```
 
 <template #source>
@@ -100,10 +100,10 @@ fixed while the group of shapes rotates.
 
 <!-- focus: light-directional -->
 ```lua
-local light = s:directional_light {
+local light = k.directional_light{
     rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
 }
-s:world_3d():add(light)
+k.world_3d():add(light)
 ```
 
 <template #source>
@@ -128,7 +128,7 @@ makes nearby surfaces brighter.
 
 <!-- focus: light-point -->
 ```lua
-local light = s:point_light {
+local light = k.point_light{
     position = k.vec3(-1.75, 0.75, 1.75),
     intensity = 5,
     quadratic = 0.25,
@@ -158,14 +158,14 @@ cone below sweeps across the row.
 
 <!-- focus: light-spot -->
 ```lua
-local light = s:spot_light {
+local light = k.spot_light{
     position = k.vec3(0, 0, 2),
     rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
     intensity = 5,
     quadratic = 0.1,
     cutoff = 0.4,
 }
-s:world_3d():add(light)
+k.world_3d():add(light)
 
 light.rotation:to(k.axis_angle(k.vec3(0, 1, 0), 1)):play(2)
 light.rotation:to(k.axis_angle(k.vec3(0, 1, 0), -1)):play(2)
@@ -231,7 +231,7 @@ accepts project fonts, while `latex_3d` uses the built-in math renderer. Each ty
 its own properties and transitions. Do not assume every Text2D method is available on
 Text3D. The API reference lists them separately.
 
-Images come from `k.image(path)`, while projections use `canvas:texture()`. A 2D canvas
+Images come from `k.load_image(path)`, while projections use `canvas:texture()`. A 2D canvas
 can feed a 3D projection to create a panel in space. A 3D canvas can feed a 2D
 projection to compose 3D content into a 2D world.
 

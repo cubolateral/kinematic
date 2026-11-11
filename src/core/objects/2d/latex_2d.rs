@@ -7,6 +7,7 @@ use kinematic_macros::{Object, Trackable};
 
 /// Mathematical source and size of a LaTeX object.
 #[derive(Clone, Trackable)]
+#[trackable(name = "Latex 2D Shape")]
 pub struct Latex2DShape {
     /// LaTeX math source, without dollar delimiters.
     #[track]

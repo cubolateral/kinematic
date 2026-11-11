@@ -1,23 +1,23 @@
-return function(s)
-	s:view("3d")
-	s:world_3d().camera_position:set(k.vec3(0, 0, 5))
+return function()
+	k.view("3d")
+	k.world_3d().camera_position:set(k.vec3(0, 0, 5))
 
-	local light = s:directional_light {
+	local light = k.directional_light{
 		rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
 	}
-	s:world_3d():add(light)
+	k.world_3d():add(light)
 
-	local group = s:group_3d {}
-	s:world_3d():add(group)
+	local group = k.group_3d{}
+	k.world_3d():add(group)
 
-	group:add(s:pyramid {
+	group:add(k.pyramid{
 		position = k.vec3(-1.5, 0, 0),
 		albedo = k.color("#FF4040"),
 	})
-	group:add(s:cube {
+	group:add(k.cube{
 		albedo = k.color("#40FF80"),
 	})
-	group:add(s:sphere {
+	group:add(k.sphere{
 		position = k.vec3(1.5, 0, 0),
 		albedo = k.color("#4080FF"),
 	})

@@ -1,9 +1,9 @@
-return function(s)
-	local ball = s:circle {}
+return function()
+	local ball = k.circle{}
 
-	s:wait(1)
-	s:world_2d():add(ball)
-	s:wait(1)
+	k.wait(1)
+	k.world_2d():add(ball)
+	k.wait(1)
 	ball:remove()
-	s:wait(1)
+	k.wait(1)
 end

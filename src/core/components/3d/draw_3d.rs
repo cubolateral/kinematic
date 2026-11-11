@@ -863,6 +863,7 @@ fn normalized_float_bits(value: f32) -> u32 {
 
 /// Local three-dimensional rendering callback and bounds for an entity.
 #[derive(Clone, kinematic_macros::Trackable)]
+#[trackable(name = "Draw 3D")]
 pub struct Draw3D {
     /// Whether this entity and, for containers, its subtree are drawn.
     #[track]

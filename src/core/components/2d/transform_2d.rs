@@ -3,6 +3,7 @@ use kinematic_macros::Trackable;
 use crate::core::types::Vector2;
 
 #[derive(Clone, Trackable, Debug)]
+#[trackable(name = "Transform 2D")]
 /// Spatial transformation of an entity in logical canvas coordinates.
 pub struct Transform2D {
     /// Position of the entity.

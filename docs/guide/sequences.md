@@ -47,7 +47,7 @@ construction. It cannot animate a scene.
 
 ## Editable pauses
 
-Use `s:wait(1)` for a fixed pause, or `s:event("Reading")` for a named pause you can
+Use `k.wait(1)` for a fixed pause, or `k.event("Reading")` for a named pause you can
 adjust in Timeline. An event gives the reader time to inspect a finished diagram without
 changing its values. Resolve pending code edits before adjusting it. Event timing lives
 in [scene metadata](projects.md#reloads-and-revisions), separately from Lua.
