@@ -442,13 +442,7 @@ impl Documents {
 
         for p in removed {
             self.open.remove(&p);
-
-            if let Some(lsp) = &mut self.lsp {
-                lsp.close(&p);
-            }
         }
-
-        self.lsp_diagnostics.retain(|p, _| !p.starts_with(path));
 
         if self.active.as_ref().is_some_and(|p| p.starts_with(path)) {
             self.active = self.open.keys().next().cloned();
@@ -487,8 +481,6 @@ mod tests {
             std::env::temp_dir().join(format!("kinematic-batch-files-{}", std::process::id()));
         let project = LuaProject::create(&root, "Batch", false).unwrap();
         let mut docs = Documents::new(project.context, "").unwrap();
-
-        docs.lsp = None;
 
         docs.create(Path::new("destination"), true).unwrap();
         docs.create(Path::new("a.txt"), false).unwrap();
@@ -547,8 +539,6 @@ mod tests {
         let root = std::env::temp_dir().join(format!("kinematic-duplicate-{}", std::process::id()));
         let project = LuaProject::create(&root, "Copies", false).unwrap();
         let mut docs = Documents::new(project.context, "").unwrap();
-
-        docs.lsp = None;
 
         docs.duplicate(Path::new("scenes"), Path::new("copies"))
             .unwrap();
@@ -611,8 +601,6 @@ mod tests {
             std::env::temp_dir().join(format!("kinematic-file-scenes-{}", std::process::id()));
         let project = LuaProject::create(&root, "Files", false).unwrap();
         let mut docs = Documents::new(project.context.clone(), "").unwrap();
-
-        docs.lsp = None;
 
         assert!(
             docs.files()
@@ -718,8 +706,6 @@ mod tests {
         let project = LuaProject::create(&root, "Conflicts", false).unwrap();
         let mut docs = Documents::new(ProjectContext::new(&root).unwrap(), "").unwrap();
 
-        docs.lsp = None;
-
         let original = std::fs::read(root.join(MANIFEST)).unwrap();
 
         std::fs::write(root.join("existing.lua"), "Existing").unwrap();
@@ -797,8 +783,6 @@ mod audio_tests {
         project.save().unwrap();
 
         let mut docs = Documents::new(project.context.clone(), "").unwrap();
-
-        docs.lsp = None;
 
         docs.rename(Path::new("assets/a.wav"), Path::new("assets/b.wav"))
             .unwrap();

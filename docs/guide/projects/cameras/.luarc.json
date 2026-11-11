@@ -1,0 +1,15 @@
+{
+  "diagnostics.libraryFiles": "Disable",
+  "runtime.plugin": "kinematic/cache/luals/components.lua",
+  "runtime.version": "Lua 5.4",
+  "workspace.checkThirdParty": "Disable",
+  "workspace.ignoreDir": [
+    "kinematic",
+    "output",
+    "target",
+    ".git"
+  ],
+  "workspace.library": [
+    "kinematic/cache/luals"
+  ]
+}

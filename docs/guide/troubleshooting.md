@@ -70,7 +70,7 @@ reproducible values.
 
 ## The code changed but the preview did not
 
-Check the status in **Code** and read the diagnostics. A failed candidate does not
+Check the status in **Console** and read the diagnostics. A failed candidate does not
 replace the last valid revision. Export also uses the applied revision. Resolve imports,
 duplicate IDs, property types, missing assets, or callback errors before expecting the
 image to change.
@@ -132,3 +132,13 @@ To report a problem on [GitHub](https://github.com/cubolateral/kinematic/issues)
 include the version, operating system, GPU and driver, Console error, steps to
 reproduce, and a minimal project with licensed assets. Specify whether the issue occurs
 in `--check`, shader rendering, or editing. See [versions and migrations](versions.md).
+
+## External editor does not open
+
+Check **Editor settings → External editor** and test both commands with a project open.
+Use the installed executable, without quotes, and JSON arrays for arguments. Verify
+that its launcher is available on PATH, or provide an absolute executable path. On
+Windows, use `Code.exe` or `VSCodium.exe`. Errors appear in the test result or Console.
+If completion is missing, install LuaLS support in the external editor and check the
+configuration described in the [editor guide](editor.md#edit-and-diagnose-a-revision).
+Save changes externally before checking the preview.

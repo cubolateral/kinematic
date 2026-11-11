@@ -36,10 +36,9 @@ shows progress and provides **Cancel** while rendering.
 
 ## Revision and timing
 
-Export uses the latest successfully applied preview revision, including unsaved buffers
-that have already been applied. Changes made after export starts remain pending until it
-finishes or is cancelled. A buffer with errors does not replace the last valid preview.
-Check the status in **Code** before exporting.
+Export uses the latest successfully applied preview revision from saved files. Changes made after export starts remain pending until it
+finishes or is cancelled. A saved file with errors does not replace the last valid preview.
+Check the status and diagnostics in **Console** before exporting.
 
 Temporary Inspector changes are discarded. Editor cameras, selection, and overlays are
 not included in the video. The renderer reuses the application's graphics resources and
@@ -67,7 +66,7 @@ stop at scene boundaries, so leave enough time for releases to finish.
 | `kinematic --new DIRECTORY NAME --3d` | Creates a project from the 3D template. |
 | `kinematic --check PROJECT` | Builds and evaluates scenes without opening a window. |
 | `kinematic --render PROJECT` | Opens graphics resources and exports the project. |
-| `kinematic --lua-definitions` | Prints the LuaLS definitions used by editor help and the site. |
+| `kinematic --lua-definitions` | Prints the LuaLS definitions used by external editors and the site. |
 | `kinematic --help` | Shows a summary of commands. |
 | `kinematic --self-test` | Validates the distributed runtime for maintenance. |
 

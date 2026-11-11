@@ -23,7 +23,6 @@ removal. Seek back to recover the object and its earlier appearance.
 | --- | --- |
 | Home | Create and open projects, find recent projects, and open settings. |
 | Files | Browse, create, rename, duplicate, and open source and asset files. |
-| Code | Edit Lua in tabs, with diagnostics, completion, search, and replace. |
 | Preview | View the scene, select objects, and navigate with the editor cameras. |
 | Scene Tree | Inspect active objects and select them in the hierarchy. |
 | Inspector | Read and preview properties for the selected object. |
@@ -68,21 +67,52 @@ Property channels reflect animations prepared in Lua. For imported sounds, use t
 
 ## Edit and diagnose a revision
 
-Completion appears while typing and after `.` or `:`. Press `Ctrl+Space` to request it.
-Use the arrow keys to choose a result, Tab or Enter to insert, and Escape to close.
-Hover over a symbol for documentation. Select and copy text from the popup. Press `F12`
-or `Ctrl+click` to go to a definition. Signatures appear while you enter arguments.
+Open a file from the **Files** tree to edit it externally. The VS Code and VSCodium
+profiles also pass the project folder, leaving window selection to the external editor.
+**Editor settings → External editor** offers VS Code, VSCodium, and a custom
+graphical editor. The executable may be a full path or a command on PATH; enter it
+without surrounding quotes. Relative executable paths containing directories resolve
+against the project. On Windows, choose the installed `Code.exe` or `VSCodium.exe`.
+No terminal editor or Kinematic editor extension is required.
 
-LuaLS uses definitions generated from the same source as the [API
-reference](../api/index.md). Logs and definitions are stored in `kinematic/cache/luals`.
-Server failures appear as diagnostics but do not prevent basic editing. Replies for
-older buffer revisions are discarded.
+Project and file arguments are JSON arrays of separate arguments. For VS Code and
+VSCodium, the defaults are:
+
+```json
+["{project}"]
+["{project}", "--goto", "{file}:{line}:{column}"]
+```
+
+`{project}` and `{file}` become absolute paths; `{line}` and `{column}` start at 1.
+For a custom editor, follow its command-line syntax. Spaces and shell characters in
+paths stay inside their argument; commands run without a shell. **Test project** and
+**Test file** require an open project; the latter opens a scene at line 7, column 3.
+Check the external window to confirm navigation. Launch and exit failures appear in
+Console or the settings test result. Opening an editor never waits for it on the UI
+thread.
+
+Install the LuaLS integration provided by your external editor. Kinematic generates
+`kinematic/cache/luals/kinematic.lua` from the same metadata as the [API
+reference](../api/index.md), plus `components.lua` for custom components and objects.
+Opening the project refreshes these files and creates `.luarc.json` if neither
+`.luarc.json`, `.luarc.jsonc`, nor `.vscode/settings.json` exists. Existing configuration
+is preserved. If you already have LuaLS settings, merge the entries from
+`kinematic/cache/luals/luarc.json` into them, preserving your own library paths and
+other choices. In editor-specific settings, prefix keys with `Lua.`; `.luarc.json`
+uses unprefixed keys. If you already use `runtime.plugin`, integrate both plugins
+manually rather than replacing it. LuaLS may ask you to trust the generated plugin.
+See [LuaLS configuration](https://luals.github.io/wiki/configuration/) and
+[plugin settings](https://luals.github.io/wiki/settings/#runtimeplugin).
+
+Completion, hover, definitions, and formatting belong to the external editor. Save
+Lua files there to update Kinematic. The existing file watcher also handles atomic
+replacement saves and changes to required modules.
 
 For a concrete check, change a circle radius to a string. Read the diagnostic and
 notice that the last valid scene stays visible. Restore a number and check that the
 pending or failure status clears before exporting.
 
-Select a diagnostic to open its file, line, and column. Console keeps up to 500 lines
+Select a runtime diagnostic in Console to open its file, line, and column externally. Console keeps up to 500 lines
 and suppresses consecutive identical prints. The status shows pending edits, replay, or
 failure. A visible image may still belong to the previous revision.
 
@@ -91,11 +121,11 @@ failure. A visible image may still belong to the previous revision.
 **Project settings** controls the project. **Editor settings** controls appearance and
 editing behavior, and lists all shortcuts. Global preferences and recent projects are
 stored in `.kinematic` in the user data directory. Fonts and the manifest are stored in
-the project. Preview volume and code zoom are restored when you reopen the editor.
+the project. Preview volume and external editor preferences are restored when you reopen the editor.
 
 | Action | Shortcut |
 | --- | --- |
-| Save file or project | Ctrl+S. |
+| Save project | Ctrl+S. |
 | Return to projects | Ctrl+Shift+Q. |
 | Exit | Ctrl+Q. |
 | Play or pause | Space. |
@@ -103,9 +133,6 @@ the project. Preview volume and code zoom are restored when you reopen the edito
 | Go to start or end | Shift+left or right arrow. |
 | Split audio | Ctrl+B. |
 | Delete selected clip | Delete or Backspace. |
-| Find or replace in code | Ctrl+F / Ctrl+H. |
-| Increase or decrease font size | Ctrl++ / Ctrl+-. |
-| Go to definition | F12 or Ctrl+click. |
 
 Editor shortcuts do not capture keys typed into text fields. Find the full list and
 navigation bindings under **Shortcuts**, generated from the active action map.

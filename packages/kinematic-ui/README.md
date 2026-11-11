@@ -1,6 +1,6 @@
 # Kinematic UI
 
-Shared ImGui components and the minimal visual style used by Kinematic. The crate uses `dear-imgui-rs` and the existing CTE integration. It has no
+Shared ImGui components and the minimal visual style used by Kinematic. The crate uses `dear-imgui-rs`. It has no
 dependency on the application, its editor, scene model, Lua runtime, SDL,
 OpenGL, or export loop.
 
@@ -20,13 +20,10 @@ OpenGL, or export loop.
   rectangles stay square regardless of the general corner radius.
 - `diagnostics`: Severity counters, filtering, and message rows. The caller provides
   locations and receives the ID of a clicked message.
-- `code`: Documentation presentation, text overlays, palette, and the current CTE
-  adapter. LSP requests, file operations, and editing transactions stay in Kinematic.
 - `icons` and `widgets`: Shared glyphs, text styles, and small layout helpers.
 
 Use these components for ordinary UI. Application panels assemble data and apply component responses. Direct ImGui
-access in the application is reserved for lifecycle, docking, input routing, and
-the remaining CTE integration. Custom drawing and visual style belong here.
+access in the application is reserved for lifecycle, docking, input routing, and canvas integration. Custom drawing and visual style belong here.
 Add a component when a real view needs it. Do not wrap the entire ImGui API.
 
 ```rust,ignore

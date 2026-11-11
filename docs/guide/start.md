@@ -14,7 +14,7 @@ Preview, pause, and seek through your animation before exporting it as an MP4.
 ## Requirements and installation
 
 Download the Windows or Linux x64 build from [GitHub
-Releases](https://github.com/cubolateral/kinematic/releases). Lua, LuaLS, and FFmpeg are
+Releases](https://github.com/cubolateral/kinematic/releases). Lua and FFmpeg are
 included, so you do not need to install Lua or configure your PATH. On Linux, make the
 downloaded file executable:
 
@@ -33,10 +33,10 @@ To build from source, see [contributing](contributing.md).
 ## Create and explore a project
 
 1. Open Kinematic and select **Create project**. Choose a name, folder, resolution, and frame rate. New projects default to 1280 × 720 at 60 FPS.
-2. Open `scenes/intro.lua` in **Files**. **Code** displays the file and LuaLS help.
+2. In **Editor settings → External editor**, choose VS Code, VSCodium, or a custom graphical editor. Set its executable and test the project and file commands. Install LuaLS support in that editor. Open `scenes/intro.lua` from **Files**.
 3. Watch the **Preview**, select objects in **Scene Tree**, and inspect their properties in **Inspector**.
 4. Use **Timeline** to choose a time. Press Space to play or pause when focus is outside a text field.
-5. Press `Ctrl+S` to save. Code changes update the preview after about 400 ms without typing. You do not need to save before previewing them.
+5. Save the Lua file in your external editor. Kinematic reloads after about 400 ms without further file changes. Unsaved external edits do not affect the preview.
 
 Guide previews use a 960 × 540 canvas at 30 FPS. Choose these values in Project
 settings to match their framing, or keep your own project settings and compare behavior.

@@ -60,7 +60,7 @@ if (!(Test-Path "$work/identity") -or (Get-Content "$work/identity" -Raw) -ne $i
 
     New-Item -ItemType Directory $runtime | Out-Null
 
-    foreach ($name in @('luals', 'ffmpeg')) {
+    foreach ($name in @('ffmpeg')) {
         $dependency = $spec.$name
         $archive = Join-Path $work ([IO.Path]::GetFileName($dependency.url))
 
@@ -94,7 +94,7 @@ if (!(Test-Path "$work/identity") -or (Get-Content "$work/identity" -Raw) -ne $i
         }
     }
 
-    foreach ($path in @("luals/bin/lua-language-server$suffix", "ffmpeg/bin/ffmpeg$suffix")) {
+    foreach ($path in @("ffmpeg/bin/ffmpeg$suffix")) {
         if (!(Test-Path (Join-Path $runtime $path))) {
             throw "Missing dependency: $path."
         }
@@ -153,13 +153,12 @@ $executable = Join-Path $isolated "kinematic$suffix"
 Copy-Item $output $executable
 $saved = @{}
 
-foreach ($key in @('PATH', 'APPDATA', 'XDG_DATA_HOME', 'KINEMATIC_LUALS', 'SDL_AUDIODRIVER')) {
+foreach ($key in @('PATH', 'APPDATA', 'XDG_DATA_HOME', 'SDL_AUDIODRIVER')) {
     $saved[$key] = [Environment]::GetEnvironmentVariable($key)
 }
 
 try {
     $env:PATH = ''
-    $env:KINEMATIC_LUALS = $null
     $env:SDL_AUDIODRIVER = 'dummy'
     $env:APPDATA = $isolated
     $env:XDG_DATA_HOME = $isolated

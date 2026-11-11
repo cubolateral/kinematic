@@ -213,7 +213,7 @@ impl App {
             self.gl.clear(glow::COLOR_BUFFER_BIT);
         }
 
-        self.ui.prepare_documents(&self.imgui, editor.as_ref());
+        self.ui.prepare_documents(&self.imgui);
         self.ui.apply_scale(&mut self.imgui);
         self.imgui_sdl.new_frame(&mut self.imgui).unwrap();
         self.ui

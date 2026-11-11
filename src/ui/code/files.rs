@@ -74,6 +74,7 @@ struct Dialog {
 #[derive(Default)]
 pub(super) struct State {
     pub(super) focused: bool,
+    pub(super) open_requested: Option<PathBuf>,
     pub(super) dragged_audio: Option<PathBuf>,
     selected: BTreeSet<PathBuf>,
     anchor: Option<PathBuf>,
@@ -319,10 +320,7 @@ impl State {
             let (target, directory) = self.context.as_ref().unwrap();
             let immediate = match action {
                 Action::Open => {
-                    match documents.open(target) {
-                        Ok(()) => focus = true,
-                        Err(message) => *error = Some(message),
-                    }
+                    self.open_requested = Some(target.clone());
 
                     true
                 }
@@ -580,10 +578,7 @@ impl State {
             && self.selected.len() <= 1
             && !crate::ui::timeline::is_audio_file(path)
         {
-            match documents.open(path) {
-                Ok(()) => *focus = true,
-                Err(message) => *error = Some(message),
-            }
+            self.open_requested = Some(path.to_owned());
         }
 
         if let Some(_node) = node {
@@ -904,8 +899,6 @@ mod tests {
 
         let mut documents = Documents::new(project.context, "").unwrap();
 
-        documents.lsp = None;
-
         let mut state = State::default();
         let mut error = None;
 
@@ -941,7 +934,10 @@ mod tests {
             frame(&mut context, font, &mut state, &mut documents, &mut error);
         }
 
-        assert_eq!(documents.active.as_deref(), Some(a));
+        assert_eq!(state.open_requested.take().as_deref(), Some(a));
+        assert!(documents.active.is_none());
+
+        documents.open(a).unwrap();
 
         context.io_mut().add_key_event(Key::ModShift, true);
         context.io_mut().add_mouse_pos_event(positions[b]);
@@ -1088,8 +1084,6 @@ mod tests {
         let root = std::env::temp_dir().join(format!("kinematic-files-ui-{}", std::process::id()));
         let project = crate::scripting::LuaProject::create(&root, "Files", false).unwrap();
         let mut documents = Documents::new(project.context, "").unwrap();
-
-        documents.lsp = None;
 
         let mut state = State::default();
         let mut error = None;

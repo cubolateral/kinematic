@@ -45,7 +45,7 @@ Xvfb is only needed for graphics validation without a physical display. The
 [CI workflow](.github/workflows/ci.yml) records the build and graphics setup used
 by the runners. Other distributions need equivalent packages.
 
-## Prepare LuaLS and FFmpeg
+## Prepare FFmpeg
 
 On Windows:
 
@@ -68,7 +68,7 @@ All downloads and generated files stay under the Git-ignored `target/` directory
 Run preparation once after cloning and again after changing the dependency
 manifest or packaging script, or after `cargo clean`. Unchanged preparation is
 reused, and verified downloaded archives are reused when rebuilding the bundle.
-There are no LuaLS or FFmpeg downloads in `build.rs` or during application startup.
+There are no FFmpeg downloads in `build.rs` or during application startup.
 
 ## Run and edit
 
@@ -87,9 +87,11 @@ are linked statically. Distribution builds also link the Windows C runtime
 statically. System graphics, windowing, font and audio libraries remain supplied
 by the operating system. Rust dependencies are pinned by `Cargo.lock`.
 
-LuaLS normally comes from the prepared dependencies. To test another server,
-set `KINEMATIC_LUALS` to its executable. Distribution validation clears this
-override to verify the bundled server.
+Lua editing uses VS Code, VSCodium, or a custom graphical editor. Install LuaLS support
+there and configure the executable in Editor settings. Kinematic generates `.luarc.json`
+for new configurations and the API and custom-component support in
+`kinematic/cache/luals/`. Existing configurations are preserved; merge the generated
+`luarc.json` entries manually. See the [editor guide](docs/guide/editor.md).
 
 The binary is the only application interface. Projects and scenes are written
 in Lua. Rust modules and procedural macros are internal implementation details.
@@ -122,8 +124,7 @@ cargo check --workspace --locked
 cargo test --workspace --locked
 ```
 
-Prepare dependencies before running LuaLS integration tests. Tests requiring
-additional graphics or audio setup are marked as ignored. Passing the ordinary
+Tests requiring additional graphics or audio setup are marked as ignored. Passing the ordinary
 suite does not replace distribution validation. See
 [graphics validation](docs/internal/lua-validation.md) and
 [performance measurements](docs/internal/lua-performance.md) for those checks.
@@ -170,10 +171,9 @@ It rejects dynamic application libraries, unresolved Linux libraries and
 Windows imports of the Visual C++ runtime.
 
 It then copies only the executable to an isolated directory under
-`target/runtime/<platform>/`, clears PATH and `KINEMATIC_LUALS`, and redirects
+`target/runtime/<platform>/`, clears PATH and redirects
 user data to that directory. Running `--self-test` checks:
 
-- LuaLS starts and returns completions for the generated API.
 - FFmpeg generates a tone and the application's audio decoder reads it.
 - The SDL audio device consumes the decoded samples.
 - The application renderer exports an MP4 with video and audio streams.
@@ -196,10 +196,11 @@ listen to playback on a real audio device before publishing.
 
 ### Runtime dependency cache
 
-The distributed executable extracts LuaLS and FFmpeg lazily into
+The distributed executable extracts FFmpeg lazily into
 `.kinematic/cache/dependencies/` under the platform's user data directory.
-They continue running as separate processes, using explicit executable paths.
-The recipient does not need Rust, LuaLS, FFmpeg or PATH configuration.
+FFmpeg runs as a separate process, using an explicit executable path.
+The recipient does not need Rust or FFmpeg installed. Lua editing requires an external
+graphical editor, with LuaLS support installed in that editor.
 
 The cache key combines the platform and hashes of the pinned dependency
 manifest and packaging script. It is independent of the editor version, so
@@ -217,8 +218,7 @@ platforms. Preserve licenses and upstream documentation in the bundle.
 The FFmpeg GPL build includes libx264. Preserve its license and corresponding
 source availability when redistributing. Its monthly upstream assets have a
 two-year retention period. Update or mirror the exact assets before expiry.
-Upstream sources: [LuaLS](https://github.com/LuaLS/lua-language-server) and
-[FFmpeg build recipes and retention policy](https://github.com/BtbN/FFmpeg-Builds).
+Upstream sources: [FFmpeg build recipes and retention policy](https://github.com/BtbN/FFmpeg-Builds).
 
 ## Publish a version
 

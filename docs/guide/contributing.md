@@ -176,5 +176,4 @@ with that foreground using `background + (foreground - background) * amount * co
 The amount is `0.08` for surfaces, `0.14` for hover, `0.22` for active states, `0.12`
 for borders, and `0.50` for disabled text. Alpha stays equal to the background alpha.
 
-The code editor defaults to the One Dark syntax palette, with its background set to the
-same RGB `(10, 10, 10)` value. Its syntax colors remain those of One Dark.
+Lua source editing and syntax colors are configured in the external editor.

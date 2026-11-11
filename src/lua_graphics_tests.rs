@@ -24,7 +24,7 @@ fn frame_input(
         app.ui.render_mode(),
     );
 
-    app.ui.prepare_documents(&app.imgui, Some(editor));
+    app.ui.prepare_documents(&app.imgui);
     app.ui.apply_scale(&mut app.imgui);
     app.imgui_sdl.new_frame(&mut app.imgui).unwrap();
 
@@ -43,14 +43,18 @@ fn frame_input(
 }
 
 fn settle(app: &mut App, editor: &mut Editor) {
-    let timeout = Instant::now() + Duration::from_secs(10);
+    let started = Instant::now();
+    let timeout = started + Duration::from_secs(10);
 
     loop {
         frame(app, editor);
 
         let docs = editor.documents.as_ref().unwrap();
 
-        if docs.applied == docs.revision && !docs.replaying {
+        if docs.applied == docs.revision
+            && !docs.replaying
+            && started.elapsed() >= Duration::from_millis(500)
+        {
             break;
         }
 
@@ -186,7 +190,7 @@ fn lua_simulation_startup_and_frames() {
 }
 
 #[test]
-#[ignore = "Requires SDL/OpenGL and FFmpeg; exercises the actual editor and CTE."]
+#[ignore = "Requires SDL/OpenGL and FFmpeg; exercises external saves, reloads, and frozen exports."]
 fn lua_editor_reload_switch_and_frozen_export() {
     let root = std::env::temp_dir().join(format!("kinematic-editor-smoke-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
@@ -235,14 +239,6 @@ fn lua_editor_reload_switch_and_frozen_export() {
             .0;
 
         editor.select_entity(ball);
-        editor
-            .documents
-            .as_mut()
-            .unwrap()
-            .edit(path, source.replace("radius=4", "radius=8"));
-
-        settle(&mut app, &mut editor);
-
         assert_eq!(editor.selected_object(), Some((0, ball)));
         assert_eq!(
             editor
@@ -258,7 +254,11 @@ fn lua_editor_reload_switch_and_frozen_export() {
             source
         );
 
-        editor.documents.as_mut().unwrap().save(path).unwrap();
+        std::fs::write(
+            editor.context().root().join(path),
+            source.replace("radius=4", "radius=8"),
+        )
+        .unwrap();
 
         settle(&mut app, &mut editor);
 
@@ -272,12 +272,7 @@ fn lua_editor_reload_switch_and_frozen_export() {
             8.0
         );
 
-        editor
-            .documents
-            .as_mut()
-            .unwrap()
-            .edit(path, "Invalid Lua ???".into());
-        editor.documents.as_mut().unwrap().save(path).unwrap();
+        std::fs::write(editor.context().root().join(path), "Invalid Lua ???").unwrap();
 
         settle(&mut app, &mut editor);
 
@@ -296,11 +291,11 @@ fn lua_editor_reload_switch_and_frozen_export() {
 
         assert!(editor.is_exporting(), "{:?}", editor.export_message());
 
-        editor
-            .documents
-            .as_mut()
-            .unwrap()
-            .edit(path, source.replace("radius=4", "radius=16"));
+        std::fs::write(
+            editor.context().root().join(path),
+            source.replace("radius=4", "radius=16"),
+        )
+        .unwrap();
 
         let timeout = Instant::now() + Duration::from_secs(15);
 
@@ -349,20 +344,6 @@ fn lua_editor_reload_switch_and_frozen_export() {
                 .get::<&CircleShape>(ball)
                 .unwrap()
                 .radius,
-            8.0
-        );
-
-        editor.documents.as_mut().unwrap().save_all().unwrap();
-
-        settle(&mut app, &mut editor);
-
-        assert_eq!(
-            editor
-                .scene(0)
-                .world()
-                .get::<&CircleShape>(ball)
-                .unwrap()
-                .radius,
             16.0
         );
 
@@ -395,14 +376,11 @@ fn lua_editor_reload_switch_and_frozen_export() {
 
         manifest.scenes.insert(0, other.to_owned());
 
-        let docs = editor.documents.as_mut().unwrap();
-
-        docs.open(Path::new("kinematic/project.ron")).unwrap();
-        docs.edit(
-            Path::new("kinematic/project.ron"),
+        std::fs::write(
+            editor.context().root().join("kinematic/project.ron"),
             ron::to_string(&manifest).unwrap(),
-        );
-        docs.save(Path::new("kinematic/project.ron")).unwrap();
+        )
+        .unwrap();
 
         settle(&mut app, &mut editor);
 

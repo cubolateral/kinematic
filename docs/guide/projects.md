@@ -102,14 +102,14 @@ from previous revisions.
 
 ## Reloads and revisions
 
-The editor prepares a candidate revision from open buffers, including unsaved text. It
+The editor prepares a candidate revision from files saved on disk. It
 replays any required simulation and validates resources and drawing before applying the
 candidate between frames. Errors leave the last valid preview in place. Modules and
 resources determine which scenes need to be reloaded. Long replays can be cancelled
 between time slices.
 
-Exports use the latest successfully applied revision. If a buffer contains an error, the
-code in **Code** may differ from the exported video. Check the editor status before
+Exports use the latest successfully applied revision. If a saved file contains an error, the
+source may differ from the exported video. Check the editor status before
 exporting. Further changes wait until an export finishes or is cancelled.
 
 Editable timeline events are stored separately from Lua in `kinematic/scenes/`. For
@@ -120,9 +120,9 @@ sharing edits that include it.
 ## Files and conflicts
 
 Use **Files** to create, open, and rename files or folders. Renaming does not update
-`require` statements or resource paths. When closing an unsaved file, choose Save,
-Discard, or Cancel. Saves use atomic replacement and check the on-disk version. Resolve
-external edits explicitly to protect your work.
+`require` statements or resource paths. Files open in your configured external editor. Save there to reload the scene.
+Kinematic watches saved files and keeps the previous valid preview when a reload fails.
+Project metadata saves use atomic replacement and check the on-disk version.
 
 Next: [editor](editor.md), [project audio](audio.md#project-audio-clips), and [export
 revisions](export.md#revision-and-timing).

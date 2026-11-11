@@ -25,6 +25,8 @@ pub(super) struct State {
     fps: i32,
     margin: Margin,
     numeric: numbers::State,
+    launcher: crate::editor::external::Launcher,
+    editor_result: Option<String>,
 }
 
 pub(super) fn load() -> Appearance {
@@ -77,7 +79,7 @@ fn write(appearance: &Appearance, path: &Path) -> Result<(), Box<dyn std::error:
 pub(super) fn draw(
     appearance: &mut Appearance,
     state: &mut State,
-    editor: Option<&mut Editor>,
+    mut editor: Option<&mut Editor>,
     ui: &dear_imgui_rs::Ui,
 ) -> bool {
     let mut changed = false;
@@ -88,7 +90,7 @@ pub(super) fn draw(
         super::windows::window(ui, PROJECT_WINDOW)
             .opened(&mut open)
             .build(|| {
-                if let Some(editor) = editor {
+                if let Some(editor) = editor.as_deref_mut() {
                     if !state.initialized {
                         let (name, settings) = editor.project_info();
 
@@ -225,136 +227,15 @@ pub(super) fn draw(
         .opened(&mut open)
         .build(|| {
             if let Some(_tabs) = super::windows::tabs(ui, "Editor settings sections") {
-                if let Some(_editor) = super::windows::tab(ui, "Code Editor") {
-                    let settings = &mut appearance.editor;
-                    let defaults = super::code::Settings::default();
-
-                    changed |= field(
+                if let Some(_editor) = super::windows::tab(ui, "External editor") {
+                    changed |= draw_external(
+                        &mut appearance.editor,
                         ui,
-                        "Font size",
-                        &mut settings.font_size,
-                        defaults.font_size,
-                        |value| input_float(ui, &mut state.numeric, value, 10.0, 28.0),
-                    );
-
-                    changed |= field(
-                        ui,
-                        "Line height",
-                        &mut settings.line_height,
-                        defaults.line_height,
-                        |value| input_float(ui, &mut state.numeric, value, 1.0, 2.0),
-                    );
-
-                    changed |= field(
-                        ui,
-                        "Tab size",
-                        &mut settings.tab_size,
-                        defaults.tab_size,
-                        |value| input_usize(ui, &mut state.numeric, value, 1, 8),
-                    );
-
-                    changed |= field(
-                        ui,
-                        "Insert spaces",
-                        &mut settings.insert_spaces,
-                        defaults.insert_spaces,
-                        |value| controls::checkbox(ui, "##value", value),
-                    );
-
-                    changed |= field(
-                        ui,
-                        "Word wrap",
-                        &mut settings.word_wrap,
-                        defaults.word_wrap,
-                        |value| controls::checkbox(ui, "##value", value),
-                    );
-
-                    changed |= field(
-                        ui,
-                        "Rulers",
-                        &mut settings.rulers,
-                        defaults.rulers,
-                        |value| controls::text_input(ui, "##value", value),
-                    );
-
-                    widgets::muted(ui, "Comma-separated columns, e.g. 80,100.");
-
-                    changed |= field(
-                        ui,
-                        "Line numbers",
-                        &mut settings.line_numbers,
-                        defaults.line_numbers,
-                        |value| controls::checkbox(ui, "##value", value),
-                    );
-
-                    changed |= field(
-                        ui,
-                        "Automatic suggestions",
-                        &mut settings.autocomplete,
-                        defaults.autocomplete,
-                        |value| controls::checkbox(ui, "##value", value),
-                    );
-
-                    changed |= field(
-                        ui,
-                        "Show whitespace",
-                        &mut settings.show_spaces,
-                        defaults.show_spaces,
-                        |value| controls::checkbox(ui, "##value", value),
-                    );
-
-                    changed |= field(
-                        ui,
-                        "Hover delay (ms)",
-                        &mut settings.hover_delay_ms,
-                        defaults.hover_delay_ms,
-                        |value| input_usize(ui, &mut state.numeric, value, 200, 2000),
-                    );
-
-                    super::properties::section(ui, "Files");
-
-                    changed |= field(
-                        ui,
-                        "Auto save",
-                        &mut settings.auto_save,
-                        defaults.auto_save,
-                        |value| controls::checkbox(ui, "##value", value),
-                    );
-
-                    changed |= field(
-                        ui,
-                        "Auto save delay (ms)",
-                        &mut settings.auto_save_delay_ms,
-                        defaults.auto_save_delay_ms,
-                        |value| input_usize(ui, &mut state.numeric, value, 100, 60_000),
-                    );
-
-                    super::properties::section(ui, "Formatting");
-
-                    changed |= field(
-                        ui,
-                        "Format on save",
-                        &mut settings.format_on_save,
-                        defaults.format_on_save,
-                        |value| controls::checkbox(ui, "##value", value),
-                    );
-
-                    widgets::muted(ui, "Uses the tab size and indentation settings above.");
-
-                    changed |= field(
-                        ui,
-                        "Trim trailing whitespace",
-                        &mut settings.trim_trailing_whitespace,
-                        defaults.trim_trailing_whitespace,
-                        |value| controls::checkbox(ui, "##value", value),
-                    );
-
-                    changed |= field(
-                        ui,
-                        "Insert final newline",
-                        &mut settings.insert_final_newline,
-                        defaults.insert_final_newline,
-                        |value| controls::checkbox(ui, "##value", value),
+                        &mut state.launcher,
+                        &mut state.editor_result,
+                        editor
+                            .as_deref()
+                            .and_then(|editor| editor.documents.as_ref()),
                     );
                 }
 
@@ -396,8 +277,6 @@ pub(super) fn draw(
                         defaults.scale,
                         |value| input_float(ui, &mut state.numeric, value, 0.75, 1.25),
                     );
-
-                    changed |= appearance.editor.colors.draw(ui);
                 }
             }
         });
@@ -408,11 +287,7 @@ pub(super) fn draw(
 }
 
 fn draw_shortcuts(ui: &dear_imgui_rs::Ui) {
-    let groups = [
-        (Category::Editor, "Editor"),
-        (Category::CodeEditor, "Code Editor"),
-    ]
-    .map(|(category, title)| {
+    let groups = [(Category::Editor, "Editor")].map(|(category, title)| {
         let bindings = inputs::map()
             .bindings
             .iter()
@@ -443,32 +318,6 @@ fn input_int_components(
     super::properties::components(ui, values, ["x", "y"], |_, value| {
         input_int(ui, state, "##value", value)
     })
-}
-
-fn input_usize(
-    ui: &dear_imgui_rs::Ui,
-    state: &mut numbers::State,
-    value: &mut usize,
-    min: i32,
-    max: i32,
-) -> bool {
-    let mut number = (*value).min(i32::MAX as usize) as i32;
-    let changed = numbers::drag(
-        ui,
-        state,
-        "##value",
-        &mut number,
-        1.0,
-        "%d",
-        Some(&min),
-        Some(&max),
-    );
-
-    if changed {
-        *value = number.clamp(min, max) as usize;
-    }
-
-    changed
 }
 
 fn input_float(
@@ -550,9 +399,14 @@ mod tests {
         let appearance: Appearance = ron::from_str("(background: (0.0, 0.0, 0.0, 1.0), accent: (0.0, 0.5, 1.0, 1.0), contrast: 1.0, scale: 1.0)").unwrap();
 
         assert_eq!(appearance.editor, super::super::code::Settings::default());
-        assert_eq!(appearance.editor.line_height, 1.5);
-        assert!(!appearance.editor.auto_save);
-        assert_eq!(appearance.editor.auto_save_delay_ms, 1000);
+        assert_eq!(appearance.editor.executable, "code");
+    }
+
+    #[test]
+    fn embedded_editor_preferences_do_not_replace_external_defaults() {
+        let appearance: Appearance = ron::from_str("(background: (0.1, 0.2, 0.3, 1.0), editor: (font_size: 18.0, colors: (theme: Custom, values: [])))").unwrap();
+        assert_eq!(appearance.background, [0.1, 0.2, 0.3, 1.0]);
+        assert_eq!(appearance.editor, super::super::code::Settings::default());
     }
 
     #[test]
@@ -566,8 +420,7 @@ mod tests {
             contrast: 0.75,
             scale: 1.25,
             editor: super::super::code::Settings {
-                tab_size: 2,
-                word_wrap: true,
+                executable: "codium".into(),
                 ..Default::default()
             },
         };
@@ -585,4 +438,78 @@ mod tests {
 
         fs::remove_dir_all(directory).unwrap();
     }
+}
+
+fn draw_external(
+    settings: &mut crate::editor::external::Settings,
+    ui: &dear_imgui_rs::Ui,
+    launcher: &mut crate::editor::external::Launcher,
+    result: &mut Option<String>,
+    documents: Option<&crate::editor::documents::Documents>,
+) -> bool {
+    use kinematic_ui::{controls, properties, widgets, windows};
+    if let Some(completed) = launcher.poll() {
+        *result = Some(completed.map_or_else(
+            |error| error,
+            |()| "Editor test completed successfully.".into(),
+        ));
+    }
+    let mut profile = settings.profile.min(2);
+    let mut changed = properties::row(ui, "Profile", false, || {
+        controls::choice(
+            ui,
+            "##Profile",
+            &mut profile,
+            &["VS Code", "VSCodium", "Custom graphical editor"],
+        )
+    })
+    .changed;
+    if changed {
+        *settings = crate::editor::external::Settings::profile(profile);
+    }
+    for (label, value) in [
+        ("Executable", &mut settings.executable),
+        ("Project arguments", &mut settings.project_arguments),
+        ("File arguments", &mut settings.file_arguments),
+    ] {
+        changed |= properties::row(ui, label, false, || {
+            controls::text_input(ui, "##value", value)
+        })
+        .changed;
+    }
+    widgets::muted(
+        ui,
+        "Arguments: JSON arrays. Placeholders: {project}, {file}, {line}, {column}.",
+    );
+    widgets::muted(
+        ui,
+        "Line and column start at 1. Choose a graphical editor executable or its CLI launcher.",
+    );
+    let project = documents.map(|documents| &documents.context);
+    let test_file = documents.and_then(|documents| documents.active.as_deref());
+    match windows::actions(
+        ui,
+        &[
+            ("Test project", project.is_some()),
+            ("Test file", test_file.is_some()),
+        ],
+    ) {
+        Some(action) => {
+            let root = project.unwrap();
+            let file = if action == 1 {
+                test_file.map(|path| (path, 7, 3))
+            } else {
+                None
+            };
+            *result = Some(launcher.open(settings, root, file).map_or_else(
+                |error| error,
+                |()| "Test launched; check the external editor.".into(),
+            ));
+        }
+        _ => {}
+    }
+    if let Some(result) = result {
+        widgets::message(ui, result);
+    }
+    changed
 }

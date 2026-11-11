@@ -5,7 +5,6 @@ pub(crate) fn executable(name: &str) -> io::Result<PathBuf> {
     let suffix = std::env::consts::EXE_SUFFIX;
 
     Ok(match name {
-        "luals" => root.join(format!("luals/bin/lua-language-server{suffix}")),
         "ffmpeg" => root.join(format!("ffmpeg/bin/ffmpeg{suffix}")),
         _ => return Err(io::Error::other("Unknown bundled dependency.")),
     })
@@ -157,10 +156,9 @@ mod tests {
 }
 
 pub(crate) fn self_test() -> Result<(), String> {
-    use crate::{core::ProjectContext, editor::lsp::Client, scripting::LuaProject};
+    use crate::scripting::LuaProject;
 
     use std::{
-        path::Path,
         process::Command,
         time::{Duration, Instant},
     };
@@ -199,51 +197,6 @@ pub(crate) fn self_test() -> Result<(), String> {
 
         crate::audio::self_test(&samples)?;
 
-        let mut client = Client::start(
-            ProjectContext::new(&root)?,
-            &crate::scripting::definitions(),
-        )?;
-        let path = Path::new("scenes/probe.lua");
-        let text = "local v = k.vec2(1, 2)\nv.";
-
-        client.sync(path, text, 1);
-
-        let deadline = Instant::now() + Duration::from_secs(20);
-
-        loop {
-            client.request("textDocument/completion", path, text, 1, 1, 2);
-
-            let until = Instant::now() + Duration::from_millis(100);
-            let mut complete = false;
-
-            while Instant::now() < until {
-                for reply in client.poll() {
-                    let items = reply
-                        .value
-                        .as_array()
-                        .or_else(|| reply.value["items"].as_array());
-
-                    complete |=
-                        items.is_some_and(|items| items.iter().any(|item| item["label"] == "x"));
-                }
-
-                if complete {
-                    break;
-                }
-
-                std::thread::sleep(Duration::from_millis(10));
-            }
-
-            if complete {
-                break;
-            }
-
-            if Instant::now() >= deadline {
-                return Err(format!("LuaLS completion failed: {:?}.", client.messages).into());
-            }
-        }
-
-        drop(client);
         drop(project);
 
         crate::app::app().open_project(&root).run_export()?;
@@ -276,7 +229,7 @@ pub(crate) fn self_test() -> Result<(), String> {
 
         fs::remove_dir_all(root)?;
 
-        println!("Validated LuaLS completion, audio decoding/playback and video/audio export.");
+        println!("Validated audio decoding/playback and video/audio export.");
 
         Ok(())
     }

@@ -8,4 +8,3 @@ publish = false
 
 [dependencies]
 dear-imgui-rs = { version = "0.19.0", features = ["multi-viewport"] }
-dear-imgui-cte = "0.19.0"

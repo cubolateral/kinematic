@@ -239,28 +239,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dear-imgui-cte"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3faf7a3d0aa64f03290163ef62a4b9edd9889fadb6d039abcfe35f131c42510b"
-dependencies = [
- "dear-imgui-cte-sys",
- "dear-imgui-rs",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "dear-imgui-cte-sys"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96616201d71776b7d788778cc4cb8deabc9c6612efe7bfa807fd829f75b1ba9f"
-dependencies = [
- "cc",
- "dear-imgui-build-support",
- "dear-imgui-sys",
-]
-
-[[package]]
 name = "dear-imgui-glow"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -603,7 +581,6 @@ dependencies = [
 name = "kinematic"
 version = "0.1.0"
 dependencies = [
- "dear-imgui-cte",
  "dear-imgui-glow",
  "dear-imgui-rs",
  "dear-imgui-sdl3",
@@ -649,7 +626,6 @@ dependencies = [
 name = "kinematic-ui"
 version = "0.1.0"
 dependencies = [
- "dear-imgui-cte",
  "dear-imgui-rs",
 ]
 

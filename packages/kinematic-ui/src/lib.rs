@@ -1,7 +1,6 @@
 //! Shared editor components. Application state and rendering backends stay with the caller.
 
 pub mod canvas;
-pub mod code;
 pub mod controls;
 pub mod diagnostics;
 pub mod icons;

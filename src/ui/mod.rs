@@ -147,8 +147,6 @@ impl Ui {
         let cache = cache::Cache::load();
         let mut code = code::State::default();
 
-        code.zoom = cache.code_zoom;
-
         code.set_project_directory(cache.project_directory);
 
         let mut home = home::State::default();
@@ -165,8 +163,6 @@ impl Ui {
         home.refresh();
 
         let font = theme::initialize(context);
-
-        code.bold_font = Some(theme::load_bold_font(context));
 
         Self {
             needs_initial_layout: true,
@@ -189,7 +185,6 @@ impl Ui {
     pub(crate) fn save_cache(&self) {
         cache::Cache {
             audio_volume: self.audio_volume,
-            code_zoom: self.code.zoom,
             project_directory: self.code.project_directory(),
             recent_projects: self.home.recent.clone(),
             project_details: self.home.details.clone(),
@@ -206,10 +201,8 @@ impl Ui {
         let _window_style = windows::style(ui);
         let _font = ui.push_font(self.font);
         let io = ui.io();
-        let plain_keyboard_input = !self.code.focused
-            && !self.code.files_focused()
-            && !io.want_text_input()
-            && !ui.is_any_item_active();
+        let plain_keyboard_input =
+            !self.code.files_focused() && !io.want_text_input() && !ui.is_any_item_active();
         let fullscreen_shortcut = plain_keyboard_input
             && (self.is_fullscreen || !editor.is_exporting())
             && inputs::active(ui, InputAction::ToggleFullscreen);
@@ -281,7 +274,7 @@ impl Ui {
                 editor,
                 ui,
                 &mut self.preview,
-                !self.code.focused && !self.code.files_focused(),
+                !self.code.files_focused(),
                 &mut self.audio_volume,
             );
 
@@ -291,7 +284,7 @@ impl Ui {
                 editor,
                 ui,
                 &mut self.timeline,
-                !self.code.focused && !self.code.files_focused(),
+                !self.code.files_focused(),
                 self.code.dragged_audio(),
             );
 
@@ -300,7 +293,7 @@ impl Ui {
 
         self.draw_status_bar(ui, true);
 
-        if initial_layout && !self.code.focused {
+        if initial_layout {
             ui.set_window_focus(Some(inspector::WINDOW_NAME));
         }
 
@@ -309,20 +302,12 @@ impl Ui {
         }
     }
 
-    pub(crate) fn prepare_documents(
-        &mut self,
-        context: &dear_imgui_rs::Context,
-        editor: Option<&Editor>,
-    ) {
+    pub(crate) fn prepare_documents(&mut self, context: &dear_imgui_rs::Context) {
         if let Some(path) = self.home.copy_path.take() {
             context.set_clipboard_text(path);
         }
 
-        self.code.prepare(
-            context,
-            editor.and_then(|e| e.documents.as_ref()),
-            &self.appearance.editor,
-        );
+        self.code.prepare(context);
     }
 
     pub(crate) fn draw_projects(&mut self, editor: Option<&mut Editor>, ui: &dear_imgui_rs::Ui) {

@@ -14,12 +14,7 @@ pub(super) fn draw(ui: &dear_imgui_rs::Ui) {
         DockLayout::split(
             DockSplit::Right,
             0.75,
-            DockLayout::split(
-                DockSplit::Left,
-                0.5,
-                tabs([code::WINDOW_NAME]),
-                tabs([preview::WINDOW_NAME]),
-            ),
+            tabs([preview::WINDOW_NAME]),
             tabs([scene_tree::WINDOW_NAME, inspector::WINDOW_NAME]),
         ),
     );

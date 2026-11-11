@@ -14,9 +14,8 @@ interaction belongs in the panel modules. Reusable presentation belongs in
 - `inputs.rs`: Action bindings, modifier matching, and shortcut display names.
 - `settings.rs`: Separate Project settings and Editor settings windows opened from the menus.
 - `title_bar.rs`: Shared window controls, Home settings, and the empty region used for system window dragging. SDL operations stay in `src/app/window.rs`.
-- `code.rs`: Lua buffers, file tabs, focus, and inline LuaLS assistance.
-- `code/diagnostics.rs`: Converts runtime/LuaLS messages into UI diagnostics and routes clicked locations.
-- `code/shortcuts.rs`: VS Code Linux editing overrides, command chords, and keyboard navigation.
+- `code.rs`: Project dialogs, Files, Console, and external editor navigation.
+- `code/diagnostics.rs`: Converts runtime messages into UI diagnostics and routes clicked locations.
 - `code/files.rs`: Project file tree, context menu, and file operation dialogs.
 - `scene_tree.rs`: Active scene hierarchy and entity selection.
 - `inspector.rs`: Selected entity inspection.
@@ -41,7 +40,6 @@ The Timeline is split as follows:
 - `interaction.rs`: Mouse gesture state transitions.
 Ruler, layout, metrics, waveform summaries, block painting, and transport are in
 `kinematic_ui::timeline`. Preview geometry and overlays are in `kinematic_ui::canvas`.
-Code popovers, documentation, and text overlays are in `kinematic_ui::code`.
 
 ## Boundaries
 
@@ -50,8 +48,7 @@ Code popovers, documentation, and text overlays are in `kinematic_ui::code`.
 - Access shared selection and playback through `Editor`.
 - Use `kinematic_ui::{controls, numbers, properties, windows}` for ordinary controls and layouts.
 - Keep custom drawing, colors, spacing, and shapes in `kinematic-ui`.
-- Keep direct ImGui access only at lifecycle, docking, input-routing, and remaining
-  CTE integration boundaries. Do not create panel-specific copies of shared components.
+- Keep direct ImGui access only at lifecycle, docking, input-routing, and canvas integration boundaries. Do not create panel-specific copies of shared components.
 - Keep editor types internal to the binary.
 - Do not let preview overlays enter exported frames.
 
@@ -68,7 +65,7 @@ Use `kinematic_ui::windows::panel` for docked panels, `windows::window` for
 floating windows, `windows::modal` for dialogs, and `windows::sized_modal` when
 a dialog needs a specific size. These templates own positioning and sizing.
 callers supply content and actions. Keep them independent of editor and project types.
-Context menus and inline code assistance keep their contextual anchors.
+Context menus keep their contextual anchors.
 
 To change Timeline behavior, update the module that owns that responsibility.
 Pure calculations should remain independent of Dear ImGui and have unit tests.
@@ -76,36 +73,10 @@ Pure calculations should remain independent of Dear ImGui and have unit tests.
 Run `cargo fmt --check`, `cargo check --workspace`, and
 `cargo test --workspace` after UI changes.
 
-## Code editor shortcuts
-
-The keymap follows VS Code on Linux for the editor features available here.
-Editor Settings → Shortcuts lists both application commands and the CTE editing
-bindings. `Ctrl+P` searches project files. Arrows choose a result and Enter opens
-it. `Ctrl+G` accepts a one-based `line:column`. Closing an editor uses the existing
-unsaved-changes dialog. Formatting uses LuaLS without saving the file.
-
-SDL key events normalize punctuation by its layout symbol before reaching
-ImGui, so ABNT2 slash and bracket keys share the same shortcuts as US keyboards.
-Register every alternative key in routed bindings, including keypad Enter.
-
-CTE owns basic editing, undo, comments, indentation, moving lines, and growing
-selections. Register overrides before rendering CTE, through ImGui routing, so
-its conflicting defaults do not execute as well. Keep text-field and
-documentation focus separate from source editing.
-
-The word at the caret and its whole-word matches receive a subtle highlight.
-Selected newlines remain visible across empty lines. Backgrounds use geometry
-captured from CTE's child window and render in its transparent parent, behind
-the text, with balanced line spacing. Mouse documentation uses the glyph under
-the pointer and the child viewport bounds, including after scrolling. Caret
-word navigation may look to the left. Drag selection keeps the text cursor
-until the mouse button is released, even outside the editor.
-
-The current CTE API cannot create arbitrary additional carets. Multi-cursor
-selection uses `Ctrl+D` and `Ctrl+Shift+L`. Custom range edits (word deletion,
-line duplication/insertion, cutting whole lines, and explicit comment chords) collapse to one caret.
-Vertical caret insertion, column selection, workspace search, rename/refactoring,
-and a command palette are not implemented.
+External editor settings live in `settings.rs`. `editor/external.rs` owns process
+launching, argument expansion, and generated LuaLS configuration. `Documents` retains
+file watching and the saved source snapshots used by scene reload and metadata writes.
+The external editor owns text editing, completion, formatting, and unsaved changes.
 
 The audio integration checks need FFmpeg and SDL/OpenGL. On a headless system,
 run them sequentially because SDL initialization uses process-wide state:

@@ -18,7 +18,6 @@ skia-safe = { version = "0.99.0", features = ["gl"] }
 dear-imgui-rs = { version = "0.19.0", features = ["multi-viewport"] }
 dear-imgui-sdl3 = { version = "0.19.0", features = ["multi-viewport"] }
 dear-imgui-glow = { version = "0.19.0", features = ["multi-viewport"] }
-dear-imgui-cte = "0.19.0"
 mlua = { version = "0.12.2", features = ["lua54", "vendored"] }
 serde_json = "1.0"
 notify = "8.2"

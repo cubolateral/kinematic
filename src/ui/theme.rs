@@ -8,6 +8,7 @@ pub(super) struct Appearance {
     pub accent: [f32; 4],
     pub contrast: f32,
     pub scale: f32,
+    #[serde(rename = "external_editor")]
     pub editor: super::code::Settings,
 }
 
@@ -50,16 +51,6 @@ pub(super) fn initialize(context: &mut Context) -> FontId {
         include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/assets/fonts/JetBrainsMonoNerdFont-Regular.ttf"
-        )),
-    )
-}
-
-pub(super) fn load_bold_font(context: &mut Context) -> FontId {
-    kinematic_ui::theme::load_font(
-        context,
-        include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/assets/fonts/JetBrainsMonoNerdFont-Bold.ttf"
         )),
     )
 }

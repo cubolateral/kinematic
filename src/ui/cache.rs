@@ -10,7 +10,6 @@ const CACHE_PATH: &str = "cache/editor.ron";
 #[serde(default)]
 pub(super) struct Cache {
     pub audio_volume: i32,
-    pub code_zoom: f32,
     pub project_directory: Option<std::path::PathBuf>,
     pub recent_projects: Vec<std::path::PathBuf>,
     pub project_details: BTreeMap<std::path::PathBuf, ProjectDetails>,
@@ -20,7 +19,6 @@ impl Default for Cache {
     fn default() -> Self {
         Self {
             audio_volume: 100,
-            code_zoom: 0.0,
             project_directory: None,
             recent_projects: Vec::new(),
             project_details: BTreeMap::new(),
@@ -50,11 +48,8 @@ impl Cache {
     }
 
     fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
-        if !(0..=100).contains(&self.audio_volume)
-            || !self.code_zoom.is_finite()
-            || !(-18.0..=18.0).contains(&self.code_zoom)
-        {
-            return Err("Editor cache volume and zoom must be finite and within range.".into());
+        if !(0..=100).contains(&self.audio_volume) {
+            return Err("Editor cache volume must be within range.".into());
         }
 
         Ok(())
@@ -102,12 +97,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn volume_and_text_zoom_round_trip_and_reject_invalid_cache() {
+    fn volume_round_trip_and_reject_invalid_cache() {
         let root = std::env::temp_dir().join(format!("kinematic-ui-cache-{}", std::process::id()));
         let path = root.join("cache/editor.ron");
         let cache = Cache {
             audio_volume: 35,
-            code_zoom: 4.0,
             project_directory: Some(root.clone()),
             recent_projects: vec![root.join("Project")],
             project_details: [(
@@ -137,11 +131,7 @@ mod tests {
             }
         );
 
-        for text in [
-            "(audio_volume: 101)",
-            "(code_zoom: NaN)",
-            "(code_zoom: 19.0)",
-        ] {
+        for text in ["(audio_volume: 101)"] {
             std::fs::write(&path, text).unwrap();
 
             assert!(read(&path).is_err());

@@ -12,4 +12,4 @@ pub(crate) use timeline::*;
 
 pub(crate) mod documents;
 
-pub(crate) mod lsp;
+pub(crate) mod external;
