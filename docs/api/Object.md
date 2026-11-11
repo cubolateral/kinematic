@@ -82,12 +82,14 @@ Example: object:from {opacity={0,1}}:play(1). Overlapping destinations are error
 
 <section class="api-method">
 
-## <code class="api-signature"><a class="api-type-name" href="Object.html">Object</a><span class="api-punctuation">:</span><span class="api-function">add</span><span class="api-punctuation">(</span><span class="api-parameter">child</span><span class="api-punctuation">: </span><a class="api-type-name" href="Object.html">Object</a><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Object.html">Object</a></code> {#object-add-child}
+## <code class="api-signature"><a class="api-type-name" href="Object.html">Object</a><span class="api-punctuation">:</span><span class="api-function">add</span><span class="api-punctuation">(</span><span class="api-parameter">child</span><span class="api-punctuation">: </span><span class="api-type-name">T</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><span class="api-type-name">T</span></code> {#object-add-child}
 
 <div class="api-description">
 
 Attaches a child subtree at the current schedule time.
 The receiver must support children, and both objects must belong to the same scene. Newly constructed objects stay inactive until attached.
+
+**Type parameter:** <code class="api-signature"><span class="api-parameter">T</span><span class="api-punctuation">:</span> <a class="api-type-name" href="Object.html">Object</a></code>
 
 </div>
 

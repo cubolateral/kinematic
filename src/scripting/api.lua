@@ -74,8 +74,9 @@ function Object:from(fields) end
 
 --- Attaches a child subtree at the current schedule time.
 --- The receiver must support children, and both objects must belong to the same scene. Newly constructed objects stay inactive until attached.
----@param child Kinematic.Object
----@return Kinematic.Object
+---@generic T: Kinematic.Object
+---@param child T
+---@return T
 function Object:add(child) end
 
 --- Moves this object to a new container for the whole timeline, preserving local properties and lifetime.
