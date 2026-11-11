@@ -100,6 +100,7 @@ fn terminal_command(program: &str, folder: &Path) -> std::process::Command {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     use super::*;
 
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]

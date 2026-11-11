@@ -1497,7 +1497,9 @@ mod tests {
         let child = circle().build(&mut scene);
         let parent = canvas.clone();
 
-        canvas.signal(move |_, _| parent.add(&child));
+        canvas.signal(move |_, _| {
+            parent.add(&child);
+        });
 
         scene.animator.take_schedule().compile(&scene);
         scene.update(0.0);
