@@ -66,6 +66,7 @@ fn message_parts(message: &str, summary: bool) -> (String, &str) {
                     .filter(|(column, _)| column.parse::<usize>().is_ok())
                     .map_or(rest, |(_, text)| text)
                     .trim();
+                let text = if text.is_empty() { message } else { text };
                 let prefix = if summary {
                     format!("{severity} at ({}, {}): ", line + 1, column + 1)
                 } else {
