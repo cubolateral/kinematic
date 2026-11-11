@@ -26,8 +26,7 @@ local particle = k.object_2d("Particle", {
 })
 
 return function()
-	local ball = particle({ fill = k.color("#FFFFFF") })
-	k.world_2d():add(ball)
+	local ball = k.world_2d():add(particle({ fill = k.color("#FFFFFF") }))
 
 	k.wait(1)
 	ball:mutate(function(state)

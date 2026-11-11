@@ -1,9 +1,8 @@
 return function()
-	local picture = k.image_2d{
+	local picture = k.world_2d():add(k.image_2d{
 		source = k.load_image("assets/kitten.jpg"),
 		size = k.vec2(280, 310),
-	}
-	k.world_2d():add(picture)
+	})
 
 	picture:to {
 		size = k.vec2(280, 280),

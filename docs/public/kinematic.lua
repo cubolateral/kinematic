@@ -75,6 +75,7 @@ function Object:from(fields) end
 --- Attaches a child subtree at the current schedule time.
 --- The receiver must support children, and both objects must belong to the same scene. Newly constructed objects stay inactive until attached.
 ---@param child Kinematic.Object
+---@return Kinematic.Object
 function Object:add(child) end
 
 --- Moves this object to a new container for the whole timeline, preserving local properties and lifetime.
@@ -1914,8 +1915,7 @@ function k.image_2d(options) end
 --- Built-in 2D code object with syntax coloring, animated edits, and emphasis.
 --- 
 --- ```lua
---- local code = k.code {language = "python", code = "print(42)"}
---- k.world_2d():add(code)
+--- local code = k.world_2d():add(k.code {language = "python", code = "print(42)"})
 --- code:append("print(100)"):play(1)
 --- ```
 ---@class Kinematic.Code: Kinematic.Spatial2D
@@ -2144,8 +2144,7 @@ function Code:find_all(text, match_case, match_whole_word) end
 --- Built-in 2D code object with syntax coloring, animated edits, and emphasis.
 --- 
 --- ```lua
---- local code = k.code {language = "python", code = "print(42)"}
---- k.world_2d():add(code)
+--- local code = k.world_2d():add(k.code {language = "python", code = "print(42)"})
 --- code:append("print(100)"):play(1)
 --- ```
 --- Creates an object in this scene; attach it to a group or canvas to activate it.

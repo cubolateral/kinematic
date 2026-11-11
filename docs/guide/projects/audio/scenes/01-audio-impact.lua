@@ -1,9 +1,8 @@
 return function()
-	local ball = k.circle{
+	local ball = k.world_2d():add(k.circle{
 		radius = 32,
 		position = k.vec2(-200, 0),
-	}
-	k.world_2d():add(ball)
+	})
 
 	local hit = k.audio {
 		source = k.audio_synth { preset = "pluck", frequency = 520 },

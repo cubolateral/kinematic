@@ -1,12 +1,10 @@
 return function()
-	local source = k.canvas_3d{
+	local source = k.root():add(k.canvas_3d{
 		resolution = { 480, 270 },
 		clear = k.color("#0A0A0A"),
-	}
-	k.root():add(source)
+	})
 
-	local group = k.group_3d{}
-	source:add(group)
+	local group = source:add(k.group_3d{})
 
 	group:add(k.sphere{ albedo = k.color("#008CFF"), unlit = true })
 	group:add(k.text_3d{ text = "3D", size = 0.5, position = { z = 0.5 } })

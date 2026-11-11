@@ -2,8 +2,7 @@ return function()
     local world = k.world_2d()
     world:add(k.panel{size = k.vec2(1280, 720), fill = k.color("#000000")})
 
-    local content = k.group_2d{id = "content"}
-    world:add(content)
+    local content = world:add(k.group_2d{id = "content"})
 
     local image_shader = k.image_shader {
         source = [[
@@ -20,15 +19,14 @@ return function()
         }
         ]],
     }
-    local card = k.panel{
+    local card = content:add(k.panel{
         id = "card",
         size = k.vec2(300, 260),
         position = k.vec2(-250, 0),
         fill = k.color("#008CFF"),
         shader = image_shader,
         uniforms = {pulse = 0},
-    }
-    content:add(card)
+    })
 
     local mesh_shader = k.mesh_shader {
         fragment = [[
@@ -41,26 +39,23 @@ return function()
         }
         ]],
     }
-    local stage = k.canvas_3d{
+    local stage = k.root():add(k.canvas_3d{
         id = "stage",
         resolution = {400, 400},
         camera_position = k.vec3(0, 0, 5),
-    }
-    k.root():add(stage)
+    })
 
-    local cube = k.cube{
+    local cube = stage:add(k.cube{
         id = "cube",
         shader = mesh_shader,
         uniforms = {pulse = 0},
-    }
-    stage:add(cube)
+    })
 
-    local screen = k.projection_2d{
+    content:add(k.projection_2d{
         source = stage:texture(),
         size = k.vec2(400, 400),
         position = k.vec2(260, 0),
-    }
-    content:add(screen)
+    })
     k.all(function()
         card:to {uniforms = {pulse = 12}}:play(3, "linear")
         cube:to {uniforms = {pulse = 12}}:play(3, "linear")

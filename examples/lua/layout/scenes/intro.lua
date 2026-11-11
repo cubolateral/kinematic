@@ -2,19 +2,17 @@ return function()
     local world = k.world_2d()
     world:add(k.panel{size = k.vec2(1280, 720), fill = k.color("#000000")})
 
-    local content = k.group_2d{id = "content"}
-    world:add(content)
+    local content = world:add(k.group_2d{id = "content"})
 
     local values = {42, 65, 58, 86}
     local bars = {}
     for i, value in ipairs(values) do
         local x = -330 + (i - 1) * 220
-        local track = k.panel{
+        content:add(k.panel{
             size = k.vec2(110, 260),
             position = k.vec2(x, 0),
             fill = k.color("#242424"),
-        }
-        content:add(track)
+        })
         bars[i] = k.panel{
             id = "bar_" .. i,
             size = k.vec2(110, 0),

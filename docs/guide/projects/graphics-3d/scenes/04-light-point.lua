@@ -14,18 +14,16 @@ return function()
 		albedo = k.color("#4080FF"),
 	})
 
-	local light = k.point_light{
+	local light = k.world_3d():add(k.point_light{
 		position = k.vec3(-1.75, 0.75, 1.75),
 		intensity = 5,
 		quadratic = 0.25,
-	}
-	k.world_3d():add(light)
+	})
 
-	local marker = k.sphere{
+	local marker = k.world_3d():add(k.sphere{
 		radius = 0.05,
 		unlit = true,
-	}
-	k.world_3d():add(marker)
+	})
 
 	marker:signal(function(object)
 		object.position:set(light.position:get())

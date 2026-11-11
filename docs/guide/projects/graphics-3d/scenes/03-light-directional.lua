@@ -2,13 +2,11 @@ return function()
 	k.view("3d")
 	k.world_3d().camera_position:set(k.vec3(0, 0, 5))
 
-	local light = k.directional_light{
+	k.world_3d():add(k.directional_light{
 		rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
-	}
-	k.world_3d():add(light)
+	})
 
-	local group = k.group_3d{}
-	k.world_3d():add(group)
+	local group = k.world_3d():add(k.group_3d{})
 
 	group:add(k.pyramid{
 		position = k.vec3(-1.5, 0, 0),

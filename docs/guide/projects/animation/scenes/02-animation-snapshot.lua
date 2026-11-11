@@ -1,6 +1,5 @@
 return function()
-	local ball = k.circle{ radius = 32 }
-	k.world_2d():add(ball)
+	local ball = k.world_2d():add(k.circle{ radius = 32 })
 
 	ball.position.x:set(-256)
 	local pose = ball:snapshot()

@@ -59,8 +59,8 @@ pub trait NodeHandler {
     #[doc(hidden)]
     fn container_animator(&self) -> AnimatorHandle;
 
-    /// Adds an object subtree to this container at the current scheduling time.
-    fn add(&self, handler: &impl ObjectHandler) {
+    /// Adds an object subtree to this container at the current scheduling time and returns its handler.
+    fn add<'a, H: ObjectHandler>(&self, handler: &'a H) -> &'a H {
         assert!(
             std::rc::Rc::ptr_eq(&self.container_world(), &handler.object_world()),
             "Added object must belong to this scene."
@@ -72,6 +72,8 @@ pub trait NodeHandler {
             handler.entity(),
             self.container_time(),
         );
+
+        handler
     }
 
     /// Inserts an object subtree at `index` at the current scheduling time.

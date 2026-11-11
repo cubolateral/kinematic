@@ -1,14 +1,13 @@
 local font = k.load_font("assets/HackNerdFontMono-Regular.ttf")
 
 return function()
-    local code = k.code{
+    local code = k.world_2d():add(k.code{
         id = "code",
         font = font,
         language = "lua",
         size = 40,
         code = "local value = 1\nprint(value)",
-    }
-    k.world_2d():add(code)
+    })
 
     code:from {opacity = {0, 1}}:play(0.5)
     code:highlight(code:find_all("value")):play(0.5)

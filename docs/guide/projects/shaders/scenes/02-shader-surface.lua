@@ -29,13 +29,12 @@ return function()
 		target = k.vec3(0, 0, 0)
 	}:play()
 
-	local sphere = k.sphere{
+	local sphere = k.world_3d():add(k.sphere{
 		radius = 0.8,
 		segments = 64,
 		shader = material,
 		uniforms = { phase = 0 },
-	}
-	k.world_3d():add(sphere)
+	})
 
 	sphere:uniform("phase"):to(math.pi * 2):play(2, "linear")
 end

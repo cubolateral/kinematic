@@ -2,28 +2,25 @@ return function()
     local world = k.world_2d()
     world:add(k.panel{size = k.vec2(1280, 720), fill = k.color("#000000")})
 
-    local content = k.group_2d{id = "content"}
-    world:add(content)
+    local content = world:add(k.group_2d{id = "content"})
 
     local source = k.audio_synth {
         preset = "pluck",
         frequency = 520,
     }
     local hit = k.audio {source = source, gain = 0.3}
-    local floor = k.panel{
+    content:add(k.panel{
         size = k.vec2(700, 4),
         position = k.vec2(0, 140),
         fill = k.color("#383838"),
-    }
-    content:add(floor)
+    })
 
-    local ball = k.circle{
+    local ball = content:add(k.circle{
         id = "ball",
         radius = 30,
         fill = k.color("#FBBF24"),
         position = k.vec2(-250, -120),
-    }
-    content:add(ball)
+    })
 
     for i = 1, 3 do
         ball:to {position = k.vec2((i - 2) * 250, 108)}:play(0.5, "cubic_in")

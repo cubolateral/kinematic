@@ -1,8 +1,7 @@
 return function()
-	local formula = k.latex_2d{
+	local formula = k.world_2d():add(k.latex_2d{
 		text = [[E = mc^2]],
-	}
-	k.world_2d():add(formula)
+	})
 
 	formula:fade([[x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}]]):play(1)
 	k.wait(0.5)

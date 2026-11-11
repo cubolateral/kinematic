@@ -1,16 +1,14 @@
 return function()
-	local target = k.circle{
+	local target = k.world_2d():add(k.circle{
 		radius = 32,
 		position = k.vec2(-256, -64),
-	}
-	k.world_2d():add(target)
+	})
 
-	local increment = k.circle{
+	local increment = k.world_2d():add(k.circle{
 		radius = 32,
 		fill = k.color("#008CFF"),
 		position = k.vec2(-256, 64),
-	}
-	k.world_2d():add(increment)
+	})
 
 	k.all(function()
 		k.chain(function()

@@ -100,10 +100,9 @@ fixed while the group of shapes rotates.
 
 <!-- focus: light-directional -->
 ```lua
-local light = k.directional_light{
+local light = k.world_3d():add(k.directional_light{
     rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
-}
-k.world_3d():add(light)
+})
 ```
 
 <template #source>
@@ -158,14 +157,13 @@ cone below sweeps across the row.
 
 <!-- focus: light-spot -->
 ```lua
-local light = k.spot_light{
+local light = k.world_3d():add(k.spot_light{
     position = k.vec3(0, 0, 2),
     rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
     intensity = 5,
     quadratic = 0.1,
     cutoff = 0.4,
-}
-k.world_3d():add(light)
+})
 
 light.rotation:to(k.axis_angle(k.vec3(0, 1, 0), 1)):play(2)
 light.rotation:to(k.axis_angle(k.vec3(0, 1, 0), -1)):play(2)

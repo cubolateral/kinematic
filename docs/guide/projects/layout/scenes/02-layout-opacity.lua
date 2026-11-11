@@ -1,14 +1,12 @@
 return function()
-	local group_opacity = k.group_2d{
+	local group_opacity = k.world_2d():add(k.group_2d{
 		position = k.vec2(-192, 0),
 		opacity = 0.5,
-	}
-	k.world_2d():add(group_opacity)
+	})
 
-	local child_opacity = k.group_2d{
+	local child_opacity = k.world_2d():add(k.group_2d{
 		position = k.vec2(192, 0),
-	}
-	k.world_2d():add(child_opacity)
+	})
 
 	for _, circle in ipairs {
 		{ position = k.vec2(0, -32),  fill = k.color("#FF4040") },

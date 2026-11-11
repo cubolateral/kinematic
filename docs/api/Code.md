@@ -16,8 +16,7 @@ Source: [shared declarations](https://github.com/cubolateral/kinematic/blob/main
 Built-in 2D code object with syntax coloring, animated edits, and emphasis.
 
 ```lua
-local code = k.code {language = "python", code = "print(42)"}
-k.world_2d():add(code)
+local code = k.world_2d():add(k.code {language = "python", code = "print(42)"})
 code:append("print(100)"):play(1)
 ```
 

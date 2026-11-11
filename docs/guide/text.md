@@ -20,6 +20,14 @@ Attach the title to the 2D world, just like a shape. `size` uses local canvas un
 
 </GuideDemo>
 
+`add` returns the attached object, so you can keep its handle while creating it
+and use it immediately:
+
+```lua
+local title = k.world_2d():add(k.text_2d{ text = "Hello, world!" })
+title:to { opacity = 0.5 }:play(1)
+```
+
 ## Compare morph modes
 
 Both videos begin with `Hello, world!` and end with `Hello, wonderful world!`.
@@ -106,13 +114,12 @@ root. Include its license when distributing the project.
 
 ```lua
 local heading_font = k.load_font("assets/heading.ttf")
-local title = k.text_2d{
+k.world_2d():add(k.text_2d{
     text = "A new chapter",
     font = heading_font,
     size = 56,
     fill = k.color("#FFFFFF"),
-}
-k.world_2d():add(title)
+})
 ```
 
 The font is a resource, not an animated channel. Changing the text, size, or font can

@@ -2,22 +2,19 @@ return function()
     local world = k.world_2d()
     world:add(k.panel{size = k.vec2(1280, 720), fill = k.color("#000000")})
 
-    local content = k.group_2d{id = "content"}
-    world:add(content)
+    local content = world:add(k.group_2d{id = "content"})
 
-    local stage = k.canvas_3d{
+    local stage = k.root():add(k.canvas_3d{
         id = "stage",
         resolution = {900, 450},
         camera_position = k.vec3(0, 0, 7),
-    }
-    k.root():add(stage)
+    })
 
-    local screen = k.projection_2d{
+    local screen = content:add(k.projection_2d{
         id = "screen",
         source = stage:texture(),
         size = k.vec2(900, 450),
-    }
-    content:add(screen)
+    })
 
     local sphere = k.sphere{
         id = "sphere",

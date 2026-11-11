@@ -1,9 +1,8 @@
 return function()
-	local code = k.code{
+	local code = k.world_2d():add(k.code{
 		code = 'print("Hello, world!")',
 		language = "lua",
-	}
-	k.world_2d():add(code)
+	})
 
 	code:morph([=[local function add(a, b)
     return a + b

@@ -18,12 +18,11 @@ iteration count. Points that remain inside after 200 steps are black.
 
 <!-- focus: shader-mandelbrot -->
 ```lua
-local plane = k.panel{
+local plane = k.world_2d():add(k.panel{
     size = k.vec2(960, 540),
     shader = fractal,
     uniforms = { zoom = 1 },
-}
-k.world_2d():add(plane)
+})
 
 plane:uniform("zoom"):to(128):play(2, "quart_in_out")
 plane:uniform("zoom"):to(1):play(2, "quart_in_out")
@@ -100,13 +99,12 @@ cycle. A simple normal-based light calculation reveals the sphere's shape.
 
 <!-- focus: shader-surface -->
 ```lua
-local sphere = k.sphere{
+local sphere = k.world_3d():add(k.sphere{
     radius = 0.8,
     segments = 64,
     shader = material,
     uniforms = { phase = 0 },
-}
-k.world_3d():add(sphere)
+})
 
 sphere:uniform("phase"):to(math.pi * 2):play(2, "linear")
 ```

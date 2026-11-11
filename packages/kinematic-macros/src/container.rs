@@ -10,9 +10,12 @@ pub fn derive_node(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         impl crate::core::objects::Node for #object_name {}
 
         impl #handler_name {
-            /// Adds an object subtree to this container at the current scheduling time.
-            pub fn add(&self, handler: &impl crate::core::objects::ObjectHandler) {
-                <Self as crate::core::objects::NodeHandler>::add(self, handler);
+            /// Adds an object subtree to this container at the current scheduling time and returns its handler.
+            pub fn add<'a, H: crate::core::objects::ObjectHandler>(
+                &self,
+                handler: &'a H,
+            ) -> &'a H {
+                <Self as crate::core::objects::NodeHandler>::add(self, handler)
             }
 
             /// Inserts an object subtree at `index` at the current scheduling time.

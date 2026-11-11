@@ -1,6 +1,5 @@
 return function()
-	local parent = k.group_2d{}
-	k.world_2d():add(parent)
+	local parent = k.world_2d():add(k.group_2d{})
 
 	for _, position in ipairs({ { 0, -128 }, { 128, 0 }, { 0, 128 }, { -128, 0 } }) do
 		parent:add(k.circle{

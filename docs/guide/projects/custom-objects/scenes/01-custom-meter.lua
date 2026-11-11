@@ -16,17 +16,15 @@ local meter = k.object_2d("Meter", {
 })
 
 return function()
-	local first = meter({
+	local first = k.world_2d():add(meter({
 		position = k.vec2(0, -64),
 		fill = k.color("#FFFFFF"),
-	})
-	k.world_2d():add(first)
+	}))
 
-	local second = meter({
+	local second = k.world_2d():add(meter({
 		position = k.vec2(0, 64),
 		fill = k.color("#008CFF"),
-	})
-	k.world_2d():add(second)
+	}))
 
 	k.all(function()
 		first.value:to(1):play(2, "linear")

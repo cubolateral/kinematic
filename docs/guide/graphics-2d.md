@@ -34,14 +34,13 @@ corner radii. See [Panel](../api/Panel.md) and [PanelOptions](../api/PanelOption
 defaults and limits.
 
 ```lua
-local card = k.panel{
+k.world_2d():add(k.panel{
     size = k.vec2(320, 160),
     round = k.quad(12, 12, 12, 12),
     fill = k.color("#0A0A0A"),
     stroke = k.color("#FFFFFF"),
     stroke_width = 2,
-}
-k.world_2d():add(card)
+})
 ```
 
 `triangle` creates a dedicated [Triangle](../api/Triangle.md). Its `size` sets the base
@@ -51,8 +50,7 @@ up by default; use `rotation` to change its direction. A centered apex creates a
 isosceles triangle; set height to width times `math.sqrt(3) / 2` for an equilateral one.
 
 ```lua
-local triangle = k.triangle{ size = k.vec2(240, 180), apex = 0.5 }
-k.world_2d():add(triangle)
+local triangle = k.world_2d():add(k.triangle{ size = k.vec2(240, 180), apex = 0.5 })
 triangle:to { apex = 1 }:play(1)
 ```
 

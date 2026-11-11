@@ -2,8 +2,7 @@ return function()
 	local world = k.world_2d()
 	world:add(k.panel{ size = k.vec2(1280, 720), fill = k.color("#000000") })
 
-	local content = k.group_2d{ id = "content" }
-	world:add(content)
+	local content = world:add(k.group_2d{ id = "content" })
 
 	local walk = k.object_2d("Walk", {
 		state = {
@@ -32,11 +31,10 @@ return function()
 	})
 	content:add(k.panel{ size = k.vec2(640, 2), fill = k.color("#383838") })
 
-	local walker = walk({
+	local walker = content:add(walk({
 		id = "walker",
 		fill = k.color("#34D399"),
-	})
-	content:add(walker)
+	}))
 	k.wait(2)
 	walker:checkpoint()
 	k.wait(2)

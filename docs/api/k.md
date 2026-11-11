@@ -610,8 +610,7 @@ Creates an object in this scene; attach it to a group or canvas to activate it.
 Built-in 2D code object with syntax coloring, animated edits, and emphasis.
 
 ```lua
-local code = k.code {language = "python", code = "print(42)"}
-k.world_2d():add(code)
+local code = k.world_2d():add(k.code {language = "python", code = "print(42)"})
 code:append("print(100)"):play(1)
 ```
 Creates an object in this scene; attach it to a group or canvas to activate it.

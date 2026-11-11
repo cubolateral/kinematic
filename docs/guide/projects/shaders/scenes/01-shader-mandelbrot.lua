@@ -31,12 +31,11 @@ void main() {
 }
 
 return function()
-	local plane = k.panel{
+	local plane = k.world_2d():add(k.panel{
 		size = k.vec2(960, 540),
 		shader = fractal,
 		uniforms = { zoom = 1 },
-	}
-	k.world_2d():add(plane)
+	})
 
 	plane:uniform("zoom"):to(128):play(2, "quart_in_out")
 	plane:uniform("zoom"):to(1):play(2, "quart_in_out")

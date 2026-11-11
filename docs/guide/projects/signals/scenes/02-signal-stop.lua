@@ -1,6 +1,5 @@
 return function()
-	local ball = k.circle{ radius = 32 }
-	k.world_2d():add(ball)
+	local ball = k.world_2d():add(k.circle{ radius = 32 })
 
 	local signal = ball:signal(function(object, frame)
 		object.position:set(k.vec2(math.cos(frame.time * 5), math.sin(frame.time * 5)) * 128)

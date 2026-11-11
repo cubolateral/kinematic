@@ -20,8 +20,7 @@ local badge = k.object_2d("Badge", {
 })
 
 return function()
-	local object = badge({})
-	k.world_2d():add(object)
+	local object = k.world_2d():add(badge({}))
 
 	object:to { rotation = math.pi }:play(1)
 	k.wait(1)

@@ -1,9 +1,8 @@
 return function()
-	local square = k.panel{
+	local square = k.world_2d():add(k.panel{
 		size = k.vec2(256, 128),
 		fill = k.color("#008CFF"),
-	}
-	k.world_2d():add(square)
+	})
 
 	local left_ball = k.circle{ radius = 20 }
 	local right_ball = k.circle{ radius = 28 }

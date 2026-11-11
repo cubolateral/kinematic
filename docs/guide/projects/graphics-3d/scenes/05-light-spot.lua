@@ -14,14 +14,13 @@ return function()
 		albedo = k.color("#4080FF"),
 	})
 
-	local light = k.spot_light{
+	local light = k.world_3d():add(k.spot_light{
 		position = k.vec3(0, 0, 2),
 		rotation = k.axis_angle(k.vec3(0, 1, 0), -1),
 		intensity = 5,
 		quadratic = 0.1,
 		cutoff = 0.4,
-	}
-	k.world_3d():add(light)
+	})
 
 	light.rotation:to(k.axis_angle(k.vec3(0, 1, 0), 1)):play(2)
 	light.rotation:to(k.axis_angle(k.vec3(0, 1, 0), -1)):play(2)

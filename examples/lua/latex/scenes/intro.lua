@@ -1,11 +1,10 @@
 return function()
-    local formula = k.latex_2d{
+    local formula = k.world_2d():add(k.latex_2d{
         id = "formula",
         text = "a^2 + b^2 = c^2",
         size = 64,
         fill = k.color("#FFFFFF"),
-    }
-    k.world_2d():add(formula)
+    })
 
     formula:from {opacity = {0, 1}}:play(0.5)
     k.wait(0.7)

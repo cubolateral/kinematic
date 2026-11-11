@@ -1,16 +1,14 @@
 return function()
-	local top = k.circle{
+	local top = k.world_2d():add(k.circle{
 		radius = 32,
 		position = k.vec2(-256, -64),
-	}
-	k.world_2d():add(top)
+	})
 
-	local bottom = k.circle{
+	local bottom = k.world_2d():add(k.circle{
 		radius = 32,
 		fill = k.color("#008CFF"),
 		position = k.vec2(-256, 64),
-	}
-	k.world_2d():add(bottom)
+	})
 
 	k.all(function()
 		k.chain(function()

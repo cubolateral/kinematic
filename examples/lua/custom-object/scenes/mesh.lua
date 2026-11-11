@@ -24,12 +24,11 @@ local sculpture = k.object_3d("Sculpture", {
 return function()
     k.view("3d")
     k.world_3d().camera_position:set(k.vec3(0, 0, 7))
-    local object = sculpture({
+    local object = k.world_3d():add(sculpture({
         id = "sculpture",
         albedo = k.color("#008CFF"),
         unlit = true,
-    })
-    k.world_3d():add(object)
+    }))
 
     object.rotation:rotate(k.vec3(0, 1, 0), math.pi * 2):play(3, "linear")
     k.wait(0.5)

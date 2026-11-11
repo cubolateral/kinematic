@@ -1370,7 +1370,9 @@ impl UserData for ObjectHandle {
                     child.entity,
                     runtime.animator.borrow().time(),
                 )
-            })
+            })?;
+
+            Ok(child.clone())
         });
         methods.add_method("reparent", |_, this, parent: mlua::UserDataRef<Self>| {
             let runtime = this.runtime()?;

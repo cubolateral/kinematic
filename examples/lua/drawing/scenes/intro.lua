@@ -1,8 +1,7 @@
 return function()
     local world = k.world_2d()
     world:add(k.panel{size = k.vec2(1280, 720), fill = k.color("#000000")})
-    local content = k.group_2d{id = "content"}
-    world:add(content)
+    local content = world:add(k.group_2d{id = "content"})
 
     local ribbon = k.object_2d("Ribbon", {
         on_bounds = function(self)
@@ -27,8 +26,7 @@ return function()
             ctx:stroke(path, k.color("#F1F5F9"), 2)
         end,
     })
-    local shape = ribbon({id = "ribbon"})
-    content:add(shape)
+    local shape = content:add(ribbon({id = "ribbon"}))
 
     shape:from {opacity = {0, 1}, scale = {k.vec2(0.7, 0.7), k.vec2(1, 1)}}:play(1)
     local saved = shape:snapshot()
