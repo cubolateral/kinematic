@@ -1,5 +1,44 @@
 use crate::renderer::target::Target;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub(crate) enum PreviewQuality {
+    #[serde(alias = "Sixteenth")]
+    Eighth,
+    Quarter,
+    Half,
+    #[default]
+    Full,
+    Double,
+}
+
+impl PreviewQuality {
+    pub const ALL: [Self; 5] = [
+        Self::Eighth,
+        Self::Quarter,
+        Self::Half,
+        Self::Full,
+        Self::Double,
+    ];
+    pub const LABELS: [&str; 5] = ["1/8x", "1/4x", "1/2x", "1x", "2x"];
+
+    pub fn scale(self) -> f32 {
+        match self {
+            Self::Eighth => 0.125,
+            Self::Quarter => 0.25,
+            Self::Half => 0.5,
+            Self::Full => 1.0,
+            Self::Double => 2.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ViewportQualities {
+    pub preview: PreviewQuality,
+    pub editor_2d: PreviewQuality,
+    pub editor_3d: PreviewQuality,
+}
+
 pub(crate) struct Canvas {
     pub(crate) target: Target,
     imgui_texture_id: dear_imgui_glow::ExternalTextureId,

@@ -10,6 +10,9 @@ const CACHE_PATH: &str = "cache/editor.ron";
 #[serde(default)]
 pub(super) struct Cache {
     pub audio_volume: i32,
+    pub viewport_quality: crate::editor::PreviewQuality,
+    pub editor_2d_quality: crate::editor::PreviewQuality,
+    pub editor_3d_quality: crate::editor::PreviewQuality,
     pub workspace: super::workspace::Layout,
     pub project_directory: Option<std::path::PathBuf>,
     pub recent_projects: Vec<std::path::PathBuf>,
@@ -20,6 +23,9 @@ impl Default for Cache {
     fn default() -> Self {
         Self {
             audio_volume: 100,
+            viewport_quality: crate::editor::PreviewQuality::default(),
+            editor_2d_quality: crate::editor::PreviewQuality::default(),
+            editor_3d_quality: crate::editor::PreviewQuality::default(),
             workspace: super::workspace::Layout::default(),
             project_directory: None,
             recent_projects: Vec::new(),
@@ -106,8 +112,11 @@ mod tests {
     fn volume_round_trip_and_reject_invalid_cache() {
         let root = std::env::temp_dir().join(format!("kinematic-ui-cache-{}", std::process::id()));
         let path = root.join("cache/editor.ron");
-        let cache = Cache {
+        let mut cache = Cache {
             audio_volume: 35,
+            viewport_quality: crate::editor::PreviewQuality::Eighth,
+            editor_2d_quality: crate::editor::PreviewQuality::Half,
+            editor_3d_quality: crate::editor::PreviewQuality::Quarter,
             workspace: super::super::workspace::Layout::default(),
             project_directory: Some(root.clone()),
             recent_projects: vec![root.join("Project")],
@@ -124,9 +133,13 @@ mod tests {
 
         assert_eq!(read(&path).unwrap(), Cache::default());
 
-        write(&cache, &path).unwrap();
+        for quality in crate::editor::PreviewQuality::ALL {
+            cache.viewport_quality = quality;
 
-        assert_eq!(read(&path).unwrap(), cache);
+            write(&cache, &path).unwrap();
+
+            assert_eq!(read(&path).unwrap(), cache);
+        }
 
         std::fs::write(&path, "(audio_volume: 0)").unwrap();
 
@@ -134,6 +147,31 @@ mod tests {
             read(&path).unwrap(),
             Cache {
                 audio_volume: 0,
+                ..Cache::default()
+            }
+        );
+
+        std::fs::write(&path, "(viewport_quality: Eighth)").unwrap();
+
+        assert_eq!(
+            read(&path).unwrap(),
+            Cache {
+                viewport_quality: crate::editor::PreviewQuality::Eighth,
+                ..Cache::default()
+            }
+        );
+
+        std::fs::write(
+            &path,
+            "(viewport_quality: Sixteenth, editor_2d_quality: Sixteenth, editor_3d_quality: Sixteenth)",
+        ).unwrap();
+
+        assert_eq!(
+            read(&path).unwrap(),
+            Cache {
+                viewport_quality: crate::editor::PreviewQuality::Eighth,
+                editor_2d_quality: crate::editor::PreviewQuality::Eighth,
+                editor_3d_quality: crate::editor::PreviewQuality::Eighth,
                 ..Cache::default()
             }
         );

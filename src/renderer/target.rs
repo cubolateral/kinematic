@@ -220,8 +220,7 @@ impl Target {
         skia.flush_and_submit();
     }
 
-    /// Presents premultiplied RGB over the project's opaque black background.
-    pub fn present_to(&self, destination: &mut Target) {
+    pub fn copy_to(&self, destination: &mut Target, depth: bool) {
         destination.set_filter(self.filter);
 
         unsafe {
@@ -244,6 +243,28 @@ impl Target {
                 self.gl_filter(),
             );
 
+            if depth {
+                self.gl.blit_framebuffer(
+                    0,
+                    0,
+                    self.size.0 as i32,
+                    self.size.1 as i32,
+                    0,
+                    0,
+                    destination.size.0 as i32,
+                    destination.size.1 as i32,
+                    glow::DEPTH_BUFFER_BIT,
+                    glow::NEAREST,
+                );
+            }
+        }
+    }
+
+    /// Presents premultiplied RGB over the project's opaque black background.
+    pub fn present_to(&self, destination: &mut Target) {
+        self.copy_to(destination, false);
+
+        unsafe {
             // RGB already equals the result of compositing premultiplied color over black.
             self.gl.color_mask(false, false, false, true);
             self.gl.clear_color(0.0, 0.0, 0.0, 1.0);

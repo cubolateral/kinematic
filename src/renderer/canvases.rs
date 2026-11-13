@@ -28,6 +28,7 @@ pub(crate) struct Canvases {
     pub(crate) geometry_uploads: u64,
     pub(crate) geometry_upload_ms: f64,
     targets: HashMap<CanvasTexture, Target>,
+    editor_targets: [Option<Target>; 2],
     geometries: HashMap<GeometryKey, CachedGeometry>,
     mesh_programs: MeshProgramCache,
     plans: PlanCache,
@@ -55,6 +56,7 @@ impl Canvases {
             geometry_uploads: 0,
             geometry_upload_ms: 0.0,
             targets: HashMap::new(),
+            editor_targets: [None, None],
             geometries: HashMap::new(),
             mesh_programs: HashMap::new(),
             plans: PlanCache::default(),
@@ -91,7 +93,7 @@ impl Canvases {
 
         let plan = canvas_plan_for(scene, scene.view_texture().entity)?;
 
-        self.render_targets(scene, &plan.order, &plan.sources, skia)?;
+        self.render_targets(scene, &plan.order, &plan.sources, skia, 1.0)?;
 
         scene.check_runtime()
     }
@@ -101,6 +103,7 @@ impl Canvases {
         scene: &Scene,
         final_target: &mut Target,
         skia: &mut skia_safe::gpu::DirectContext,
+        scale: f32,
     ) -> Result<(), String> {
         self.frame += 1;
 
@@ -110,7 +113,7 @@ impl Canvases {
             (plan.order.clone(), plan.sources.clone())
         };
 
-        self.render_targets(scene, &order, &sources, skia)?;
+        self.render_targets(scene, &order, &sources, skia, scale)?;
 
         scene.check_runtime()?;
 
@@ -169,6 +172,7 @@ impl Canvases {
         rotation: f32,
         correction: [f32; 2],
         camera_view: bool,
+        scale: f32,
     ) -> Result<(), String> {
         let plan = canvas_plan_for(scene, entity)?;
         let dependencies = plan
@@ -178,7 +182,7 @@ impl Canvases {
             .filter(|candidate| *candidate != entity)
             .collect::<Vec<_>>();
 
-        self.render_targets(scene, &dependencies, &plan.sources, skia)?;
+        self.render_targets(scene, &dependencies, &plan.sources, skia, scale)?;
 
         for key in &self.used_geometries {
             self.geometry_usage.insert(*key, self.frame);
@@ -209,11 +213,31 @@ impl Canvases {
             .unwrap()
             .0;
 
-        self.prepare_object_shaders(scene_id, scene.time(), &world, entity, skia)?;
+        self.prepare_object_shaders(scene_id, scene.time(), &world, entity, skia, scale)?;
 
         let target_size = target.size;
 
-        target.draw_skia(skia, |canvas| {
+        let size = scaled_size(target_size, scale);
+        let mut scaled = self.editor_targets[0].take();
+
+        if scale != 1.0 && scaled.as_ref().is_none_or(|target| target.size != size) {
+            scaled = Some(Target::new(size, false, skia, &self.gl)?);
+        }
+
+        let raster = if scale == 1.0 {
+            &mut *target
+        } else {
+            scaled.as_mut().unwrap()
+        };
+
+        raster.draw_skia(skia, |canvas| {
+            let saved = canvas.save();
+
+            canvas.scale((
+                size.0 as f32 / target_size.0 as f32,
+                size.1 as f32 / target_size.1 as f32,
+            ));
+
             crate::core::objects::draw_canvas2d_editor_with_images(
                 &world,
                 entity,
@@ -226,9 +250,17 @@ impl Canvases {
                 rotation,
                 correction,
                 camera_view,
-            )
+            );
+
+            canvas.restore_to_count(saved);
         });
-        target.set_filter(settings.filter);
+        raster.set_filter(settings.filter);
+
+        if scale != 1.0 {
+            scaled.as_ref().unwrap().copy_to(target, false);
+        }
+
+        self.editor_targets[0] = scaled;
 
         Ok(())
     }
@@ -242,6 +274,7 @@ impl Canvases {
         camera_component: &Camera3D,
         projection: Option<glam::Mat4>,
         guides: &EditorGuides3D,
+        scale: f32,
     ) -> Result<(), String> {
         let plan = canvas_plan_for(scene, entity)?;
         let dependencies = plan
@@ -251,7 +284,7 @@ impl Canvases {
             .filter(|candidate| *candidate != entity)
             .collect::<Vec<_>>();
 
-        self.render_targets(scene, &dependencies, &plan.sources, skia)?;
+        self.render_targets(scene, &dependencies, &plan.sources, skia, scale)?;
 
         let world = scene.world();
         let settings = world
@@ -262,7 +295,14 @@ impl Canvases {
             return Err("Selected canvas is not three-dimensional.".into());
         }
 
-        reset_gl(&self.gl, target.size);
+        let size = scaled_size(target.size, scale);
+        let mut scaled = self.editor_targets[1].take();
+
+        if scale != 1.0 && scaled.as_ref().is_none_or(|target| target.size != size) {
+            scaled = Some(Target::new(size, true, skia, &self.gl)?);
+        }
+
+        reset_gl(&self.gl, size);
 
         let camera = camera_from_component(camera_component, target.size)?;
         let camera = EditorCamera {
@@ -273,13 +313,23 @@ impl Canvases {
             camera,
         };
 
+        let raster_camera = EditorCamera {
+            projection: camera.projection,
+            camera: camera_from_component(camera_component, size)?,
+        };
+        let raster = if scale == 1.0 {
+            &mut *target
+        } else {
+            scaled.as_mut().unwrap()
+        };
+
         unsafe {
             self.gl
-                .bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(target.framebuffer()));
+                .bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(raster.framebuffer()));
         }
 
         let [r, g, b, a] = settings.clear.rgba();
-        let pass = FramebufferPass::new(&self.context, target);
+        let pass = FramebufferPass::new(&self.context, raster);
 
         pass.target().clear(three_d::ClearState::color_and_depth(
             r * a,
@@ -307,7 +357,7 @@ impl Canvases {
         pass.target()
             .write(|| {
                 let mut render = RenderContext3D::new(
-                    &camera,
+                    &raster_camera,
                     pass.target(),
                     &self.context,
                     &mut self.geometries,
@@ -342,6 +392,19 @@ impl Canvases {
             })
             .map_err(|error| error.to_string())?;
 
+        drop(pass);
+        raster.set_filter(settings.filter);
+
+        if scale != 1.0 {
+            scaled.as_ref().unwrap().copy_to(target, true);
+        }
+
+        self.editor_targets[1] = scaled;
+
+        reset_gl(&self.gl, target.size);
+
+        let pass = FramebufferPass::new(&self.context, target);
+
         pass.target()
             .write(|| {
                 self.editor_guides
@@ -361,6 +424,7 @@ impl Canvases {
         order: &[hecs::Entity],
         sources: &HashMap<hecs::Entity, Vec<CanvasTexture>>,
         skia: &mut skia_safe::gpu::DirectContext,
+        scale: f32,
     ) -> Result<(), String> {
         let world = scene.world();
         let scene_id = world
@@ -375,6 +439,7 @@ impl Canvases {
 
         for entity in order {
             let settings = world.get::<&CanvasSettings>(*entity).unwrap().clone();
+            let size = scaled_size(settings.resolution, scale);
             let key = CanvasTexture {
                 scene: scene_id,
                 entity: *entity,
@@ -383,10 +448,10 @@ impl Canvases {
             if self
                 .targets
                 .get(&key)
-                .is_none_or(|target| target.size != settings.resolution)
+                .is_none_or(|target| target.size != size)
             {
                 let target = Target::new(
-                    settings.resolution,
+                    size,
                     settings.dimension == CanvasDimension::Three,
                     skia,
                     &self.gl,
@@ -410,25 +475,46 @@ impl Canvases {
                         self.images.insert(*source, image);
                     }
 
-                    self.prepare_object_shaders(scene_id, scene.time(), &world, *entity, skia)?;
+                    self.prepare_object_shaders(
+                        scene_id,
+                        scene.time(),
+                        &world,
+                        *entity,
+                        skia,
+                        scale,
+                    )?;
 
                     self.targets
                         .get_mut(&key)
                         .unwrap()
                         .draw_skia(skia, |canvas| {
+                            let saved = canvas.save();
+
+                            canvas.scale((
+                                size.0 as f32 / settings.resolution.0 as f32,
+                                size.1 as f32 / settings.resolution.1 as f32,
+                            ));
+
                             draw_canvas2d_with_shader_images(
                                 &world,
                                 *entity,
                                 canvas,
                                 &self.images,
                                 &self.shader_images,
-                            )
+                            );
+
+                            canvas.restore_to_count(saved);
                         });
                 }
                 CanvasDimension::Three => {
-                    reset_gl(&self.gl, settings.resolution);
+                    reset_gl(&self.gl, size);
 
-                    let camera = camera(&world, *entity, settings.resolution)?;
+                    let mut camera = camera(&world, *entity, settings.resolution)?;
+                    let projection = camera.projection();
+
+                    camera.set_viewport(three_d::Viewport::new_at_origo(size.0, size.1));
+
+                    let camera = EditorCamera { camera, projection };
                     let target = &self.targets[&key];
 
                     unsafe {
@@ -549,6 +635,7 @@ impl Canvases {
         world: &hecs::World,
         canvas: hecs::Entity,
         skia: &mut skia_safe::gpu::DirectContext,
+        quality_scale: f32,
     ) -> Result<(), String> {
         self.shader_images.clear();
 
@@ -577,6 +664,7 @@ impl Canvases {
                 (bounds.width() * scale.x * camera).ceil().max(1.0) as u32,
                 (bounds.height() * scale.y * camera).ceil().max(1.0) as u32,
             );
+            let requested = scaled_size(requested, quality_scale);
             let size = (bucket(requested.0), bucket(requested.1));
             let key = (scene_id, entity);
 
@@ -690,6 +778,13 @@ impl Canvases {
     }
 }
 
+fn scaled_size(size: (u32, u32), scale: f32) -> (u32, u32) {
+    (
+        (size.0 as f32 * scale).round().max(1.0) as u32,
+        (size.1 as f32 * scale).round().max(1.0) as u32,
+    )
+}
+
 fn bucket(size: u32) -> u32 {
     size.saturating_add(63) / 64 * 64
 }
@@ -699,6 +794,7 @@ impl Drop for Canvases {
         self.images.clear();
         self.shader_images.clear();
         self.targets.clear();
+        self.editor_targets = [None, None];
         self.shader_targets.clear();
         self.object_targets.clear();
         self.geometries.clear();
@@ -953,6 +1049,21 @@ mod graphics_tests;
 mod tests {
     use super::camera;
     use crate::test_support::*;
+
+    #[test]
+    fn quality_scales_internal_dimensions_and_keeps_them_nonzero() {
+        for (scale, expected) in [
+            (0.125, (240, 135)),
+            (0.25, (480, 270)),
+            (0.5, (960, 540)),
+            (1.0, (1920, 1080)),
+            (2.0, (3840, 2160)),
+        ] {
+            assert_eq!(super::scaled_size((1920, 1080), scale), expected);
+        }
+
+        assert_eq!(super::scaled_size((1, 3), 0.125), (1, 1));
+    }
 
     #[test]
     fn eviction_retains_recent_resources_and_reclaims_one_old_resource() {

@@ -339,6 +339,15 @@ impl App {
                     editor.apply_project_settings(settings);
                 }
 
+                if let Some(size) = editor.take_pending_editor_2d_size() {
+                    editor.resize_editor_2d(
+                        size,
+                        &mut self.imgui_renderer,
+                        &mut self.skia_context,
+                        &self.gl,
+                    );
+                }
+
                 if let Some(size) = editor.take_pending_editor_3d_size() {
                     editor.resize_editor_3d(
                         size,
@@ -365,6 +374,8 @@ impl App {
                 );
 
                 crate::renderer::target::reset_gl(&self.gl, self.window.size());
+
+                editor.set_viewport_qualities(self.ui.viewport_qualities());
 
                 editor.draw(
                     &mut self.skia_context,

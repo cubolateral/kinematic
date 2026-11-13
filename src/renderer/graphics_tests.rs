@@ -78,7 +78,93 @@ fn graphics_canvas_projection_alpha_orientation() {
     scene.root().view_2d(false).immediate();
     scene.update(0.0);
 
-    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    renderer
+        .render(&scene, &mut output, &mut skia, 1.0)
+        .unwrap();
+
+    for scale in [0.125, 0.25, 0.5, 1.0, 2.0, 1.0] {
+        renderer
+            .render(&scene, &mut output, &mut skia, scale)
+            .unwrap();
+
+        let expected = super::scaled_size((64, 64), scale);
+        let pixels = read(&gl, &output);
+
+        assert_eq!(renderer.targets[&overlay.texture()].size, expected);
+        assert_eq!(renderer.targets[&world.texture()].size, expected);
+        assert_eq!(output.size, (64, 64));
+        assert_eq!(
+            scene
+                .world()
+                .get::<&CanvasSettings>(overlay.entity())
+                .unwrap()
+                .resolution,
+            (64, 64),
+        );
+        assert_pixel(&pixels, 32, 48, [64, 32, 0, 255]);
+        assert_pixel(&pixels, 32, 16, [0, 0, 255, 255]);
+    }
+
+    let mut editor_2d = Target::new((64, 64), false, &mut skia, &gl).unwrap();
+    let mut editor_3d = Target::new((64, 64), true, &mut skia, &gl).unwrap();
+    let camera = (*scene.world().get::<&Camera3D>(world.entity()).unwrap()).clone();
+    let guides = crate::renderer::editor_guides::EditorGuides3D {
+        axes: [false; 3],
+        canvas_camera: None,
+        selection: None,
+    };
+
+    for scale in [0.125, 0.25, 0.5, 1.0, 2.0, 1.0] {
+        renderer
+            .render_editor_2d(
+                &scene,
+                overlay.entity(),
+                &mut editor_2d,
+                &mut skia,
+                [0.0; 2],
+                1.0,
+                0.0,
+                [1.0; 2],
+                true,
+                scale,
+            )
+            .unwrap();
+        renderer
+            .render_editor_3d(
+                &scene,
+                world.entity(),
+                &mut editor_3d,
+                &mut skia,
+                &camera,
+                None,
+                &guides,
+                scale,
+            )
+            .unwrap();
+
+        for target in [&editor_2d, &editor_3d] {
+            let pixels = read(&gl, target);
+
+            assert_eq!(target.size, (64, 64));
+            assert_pixel(&pixels, 32, 48, [64, 32, 0, 128]);
+            assert_pixel(&pixels, 32, 16, [0, 0, 255, 255]);
+        }
+
+        if scale != 1.0 {
+            for target in &renderer.editor_targets {
+                assert_eq!(
+                    target.as_ref().unwrap().size,
+                    super::scaled_size((64, 64), scale)
+                );
+            }
+        }
+
+        assert_eq!(unsafe { gl.get_error() }, glow::NO_ERROR);
+    }
+
+    renderer
+        .render(&scene, &mut output, &mut skia, 1.0)
+        .unwrap();
 
     let source_texture = renderer.targets[&overlay.texture()].texture();
     let first = read(&gl, &output);
@@ -92,7 +178,9 @@ fn graphics_canvas_projection_alpha_orientation() {
     );
     assert_pixel(&first, 32, 16, [0, 0, 255, 255]);
 
-    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    renderer
+        .render(&scene, &mut output, &mut skia, 1.0)
+        .unwrap();
 
     assert_eq!(read(&gl, &output), first);
 
@@ -107,7 +195,9 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     scene.update(0.0);
 
-    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    renderer
+        .render(&scene, &mut output, &mut skia, 1.0)
+        .unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 48, [64, 32, 127, 255]);
 
@@ -115,7 +205,9 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     scene.update(1.0);
 
-    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    renderer
+        .render(&scene, &mut output, &mut skia, 1.0)
+        .unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 48, [0, 0, 255, 255]);
 
@@ -139,7 +231,9 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     scene.update(1.0);
 
-    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    renderer
+        .render(&scene, &mut output, &mut skia, 1.0)
+        .unwrap();
 
     let pixels = read(&gl, &output);
 
@@ -160,7 +254,9 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     scene.update(1.0);
 
-    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    renderer
+        .render(&scene, &mut output, &mut skia, 1.0)
+        .unwrap();
 
     let lit = read(&gl, &output);
 
@@ -173,7 +269,9 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     scene.update(1.0);
 
-    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    renderer
+        .render(&scene, &mut output, &mut skia, 1.0)
+        .unwrap();
 
     assert_eq!(read(&gl, &output), pixels);
 
@@ -184,7 +282,9 @@ fn graphics_canvas_projection_alpha_orientation() {
     scene.root().view_2d(true).immediate();
     scene.update(1.0);
 
-    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    renderer
+        .render(&scene, &mut output, &mut skia, 1.0)
+        .unwrap();
 
     assert_eq!(read(&gl, &output), pixels);
 
@@ -197,7 +297,9 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     second.update(0.0);
 
-    renderer.render(&second, &mut output, &mut skia).unwrap();
+    renderer
+        .render(&second, &mut output, &mut skia, 1.0)
+        .unwrap();
 
     assert_eq!(
         renderer.targets[&overlay.texture()].texture(),
@@ -209,7 +311,9 @@ fn graphics_canvas_projection_alpha_orientation() {
             .all(|key| renderer.geometries.contains_key(key))
     );
 
-    renderer.render(&scene, &mut output, &mut skia).unwrap();
+    renderer
+        .render(&scene, &mut output, &mut skia, 1.0)
+        .unwrap();
 
     assert_eq!(
         renderer.targets[&overlay.texture()].texture(),
@@ -260,7 +364,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     shader_scene.update(0.25);
 
     renderer
-        .render(&shader_scene, &mut output, &mut skia)
+        .render(&shader_scene, &mut output, &mut skia, 1.0)
         .unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 32, [0, 255, 64, 255]);
@@ -272,7 +376,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     shader_scene.update(0.25);
 
     renderer
-        .render(&shader_scene, &mut output, &mut skia)
+        .render(&shader_scene, &mut output, &mut skia, 1.0)
         .unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 32, [0, 128, 64, 255]);
@@ -314,7 +418,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     mesh_scene.update(0.25);
 
     renderer
-        .render(&mesh_scene, &mut output, &mut skia)
+        .render(&mesh_scene, &mut output, &mut skia, 1.0)
         .unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 32, [128, 64, 0, 255]);
@@ -324,7 +428,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     mesh_scene.update(0.25);
 
     renderer
-        .render(&mesh_scene, &mut output, &mut skia)
+        .render(&mesh_scene, &mut output, &mut skia, 1.0)
         .unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 32, [64, 64, 0, 255]);
@@ -357,7 +461,7 @@ fn graphics_canvas_projection_alpha_orientation() {
     program_scene.update(0.0);
 
     renderer
-        .render(&program_scene, &mut output, &mut skia)
+        .render(&program_scene, &mut output, &mut skia, 1.0)
         .unwrap();
 
     assert_pixel(&read(&gl, &output), 32, 32, [0, 0, 255, 255]);
@@ -414,7 +518,7 @@ fn graphics_canvas_projection_alpha_orientation() {
                 .unwrap();
 
             renderer
-                .render_targets(&filter_scene, &plan.order, &plan.sources, &mut skia)
+                .render_targets(&filter_scene, &plan.order, &plan.sources, &mut skia, 1.0)
                 .unwrap();
             renderer
                 .rendered_target(output_canvas)

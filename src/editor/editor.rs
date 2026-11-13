@@ -11,7 +11,7 @@ use crate::{
         types::Vector2,
     },
     editor::{
-        Canvas, Selection, Timeline,
+        Canvas, Selection, Timeline, ViewportQualities,
         cache::{Camera2DCache, Camera3DCache, EditorCache, EditorMode},
     },
     renderer::{FrameResult, Renderer},
@@ -220,6 +220,8 @@ pub(crate) struct Editor {
     selection: Selection,
     timeline: Timeline,
     preview: Canvas,
+    viewport_qualities: ViewportQualities,
+    rendered_scale: f32,
     editor_2d: Canvas,
     editor_view_2d: EditorView2D,
     displayed_2d: Option<EditorView2D>,
@@ -231,6 +233,7 @@ pub(crate) struct Editor {
     displayed_projection_3d: Option<glam::Mat4>,
     editor_3d_rendered: Option<((u64, u64), hecs::Entity, Option<hecs::Entity>, [u32; 11])>,
     pending_editor_3d_size: Option<(u32, u32)>,
+    pending_editor_2d_size: Option<(u32, u32)>,
     pending_mouse_warp: Option<[f32; 2]>,
     suppress_editor_mouse_delta: bool,
     canvases: crate::renderer::canvases::Canvases,
@@ -409,6 +412,8 @@ impl Editor {
             selection: Selection::default(),
             timeline,
             preview,
+            viewport_qualities: ViewportQualities::default(),
+            rendered_scale: 1.0,
             editor_2d,
             editor_view_2d: EditorView2D {
                 pan: cache.camera_2d.pan,
@@ -438,6 +443,7 @@ impl Editor {
             displayed_projection_3d: None,
             editor_3d_rendered: None,
             pending_editor_3d_size: None,
+            pending_editor_2d_size: None,
             pending_mouse_warp: None,
             suppress_editor_mouse_delta: false,
             canvases: crate::renderer::canvases::Canvases::new(three_context, gl),
@@ -958,7 +964,13 @@ impl Editor {
         let scene = &self.scenes[self.active_scene].scene;
         let key = scene.render_key();
 
-        if self.rendered == Some(key) {
+        let scale = if self.is_exporting || self.pending_screenshot {
+            1.0
+        } else {
+            self.viewport_qualities.preview.scale()
+        };
+
+        if self.rendered == Some(key) && self.rendered_scale == scale {
             self.performance.avoided += 1;
 
             if self.is_exporting {
@@ -968,7 +980,7 @@ impl Editor {
             let started = std::time::Instant::now();
             let result = self
                 .canvases
-                .render(scene, &mut self.preview.target, skia_context);
+                .render(scene, &mut self.preview.target, skia_context, scale);
 
             if let Err(error) = result {
                 self.rendered = None;
@@ -989,6 +1001,7 @@ impl Editor {
 
             self.render_error = None;
             self.rendered = Some(key);
+            self.rendered_scale = scale;
             self.performance.render_ms = started.elapsed().as_secs_f32() * 1000.0;
 
             crate::renderer::target::reset_gl(gl, window_size);
@@ -1722,6 +1735,15 @@ impl Editor {
     }
 
     pub(crate) fn set_editor_2d_viewport(&mut self, display_size: [f32; 2]) {
+        let size = (
+            display_size[0].max(1.0).round() as u32,
+            display_size[1].max(1.0).round() as u32,
+        );
+
+        if self.editor_2d.size() != size {
+            self.pending_editor_2d_size = Some(size);
+        }
+
         let target_size = self.editor_2d.size();
         let canvas_size = self.editor_2d_canvas_size();
         let camera_scale = (display_size[0].max(1.0) / canvas_size.0.max(1) as f32)
@@ -1942,6 +1964,28 @@ impl Editor {
         &mut self.timeline
     }
 
+    pub fn viewport_qualities(&self) -> ViewportQualities {
+        self.viewport_qualities
+    }
+
+    pub fn set_viewport_qualities(&mut self, qualities: ViewportQualities) {
+        if self.viewport_qualities != qualities {
+            self.render_error = None;
+
+            if self.viewport_qualities.preview != qualities.preview {
+                self.rendered = None;
+            }
+            if self.viewport_qualities.editor_2d != qualities.editor_2d {
+                self.editor_rendered = None;
+            }
+            if self.viewport_qualities.editor_3d != qualities.editor_3d {
+                self.editor_3d_rendered = None;
+            }
+
+            self.viewport_qualities = qualities;
+        }
+    }
+
     pub fn preview_mut(&mut self) -> &mut Canvas {
         &mut self.preview
     }
@@ -1984,6 +2028,31 @@ impl Editor {
         } else {
             delta
         }
+    }
+
+    pub(crate) fn take_pending_editor_2d_size(&mut self) -> Option<(u32, u32)> {
+        self.pending_editor_2d_size.take()
+    }
+
+    pub(crate) fn resize_editor_2d(
+        &mut self,
+        size: (u32, u32),
+        imgui_renderer: &mut dear_imgui_glow::GlowRenderer,
+        skia_context: &mut skia_safe::gpu::DirectContext,
+        gl: &std::rc::Rc<glow::Context>,
+    ) {
+        if self.editor_2d.size() == size {
+            return;
+        }
+
+        let replacement = Canvas::new(size, imgui_renderer, skia_context, gl);
+
+        self.editor_2d.unregister(imgui_renderer);
+
+        self.editor_2d = replacement;
+        self.editor_rendered = None;
+
+        self.set_editor_2d_viewport([size.0 as f32, size.1 as f32]);
     }
 
     pub(crate) fn resize_editor_3d(
@@ -2079,6 +2148,7 @@ impl Editor {
             view.rotation,
             view.correction,
             view.canvas_view,
+            self.viewport_qualities.editor_2d.scale(),
         ) {
             self.render_error = Some(error);
 
@@ -2145,6 +2215,7 @@ impl Editor {
             &camera,
             self.displayed_projection_3d,
             &guides,
+            self.viewport_qualities.editor_3d.scale(),
         ) {
             self.render_error = Some(error);
 

@@ -113,6 +113,40 @@ pub fn color(ui: &Ui, label: &str, value: &mut [f32; 4]) -> bool {
     ui.color_edit4(label, value)
 }
 
+pub fn choice_button(
+    ui: &Ui,
+    label: &str,
+    current: &mut usize,
+    options: &[&str],
+    size: [f32; 2],
+) -> bool {
+    let _id = ui.push_id(label);
+
+    if button_sized(ui, options[*current], size) {
+        ui.open_popup(label);
+    }
+    if ui.is_item_hovered() {
+        crate::widgets::tooltip(ui, label);
+    }
+
+    let mut changed = false;
+
+    if let Some(_popup) = ui.begin_popup(label) {
+        for (index, option) in options.iter().enumerate() {
+            if ui
+                .selectable_config(option)
+                .selected(*current == index)
+                .build()
+            {
+                changed = *current != index;
+                *current = index;
+            }
+        }
+    }
+
+    changed
+}
+
 pub fn choice<S: AsRef<str>>(ui: &Ui, label: &str, current: &mut usize, options: &[S]) -> bool {
     let preview = options.get(*current).map_or("Select...", AsRef::as_ref);
     let Some(_combo) = ui.begin_combo(label, preview) else {

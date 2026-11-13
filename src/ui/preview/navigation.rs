@@ -123,6 +123,8 @@ pub(super) fn tools(editor: &mut Editor, ui: &dear_imgui_rs::Ui, min: [f32; 2]) 
 
         (binding.name, binding.display.as_str())
     });
+    let mut qualities = editor.viewport_qualities();
+    let mut quality = super::quality_index(qualities.editor_3d);
     let tools = kinematic_ui::canvas::tools(
         ui,
         min,
@@ -131,7 +133,12 @@ pub(super) fn tools(editor: &mut Editor, ui: &dear_imgui_rs::Ui, min: [f32; 2]) 
         &editor.editor_3d_axes(),
         super::camera_shortcuts(),
         &entries,
+        &mut quality,
+        &crate::editor::PreviewQuality::LABELS,
     );
+
+    qualities.editor_3d = crate::editor::PreviewQuality::ALL[quality];
+    editor.set_viewport_qualities(qualities);
 
     if tools.camera {
         editor.toggle_editor_3d_camera_view();

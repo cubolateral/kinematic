@@ -115,11 +115,17 @@ pub fn draw_navigable(
             .mouse_buttons(dear_imgui_rs::InvisibleButtonMouseButtons::MIDDLE),
     );
 
-    let mouse = ui.io().mouse_pos();
-    let over_tools = mouse[0] >= origin[0] + 8.0
-        && mouse[0] <= origin[0] + 16.0 + ui.frame_height() * 2.0
-        && mouse[1] >= origin[1] + 8.0
-        && mouse[1] <= origin[1] + 8.0 + ui.frame_height();
+    let over_tools = ui.is_mouse_hovering_rect(
+        [origin[0] + 8.0, origin[1] + 8.0],
+        [
+            origin[0]
+                + 8.0
+                + quality_width(ui)
+                + ui.frame_height() * 2.0
+                + ui.clone_style().item_spacing()[0] * 2.0,
+            origin[1] + 8.0 + ui.frame_height(),
+        ],
+    );
     let hovered = ui.is_item_hovered() && !over_tools;
 
     let dragging = !over_tools
@@ -664,7 +670,7 @@ pub fn tools_contains(ui: &dear_imgui_rs::Ui, min: [f32; 2]) -> bool {
     ui.is_mouse_hovering_rect(
         [min[0] + 8.0, min[1] + 8.0],
         [
-            min[0] + 8.0 + ui.frame_height() * 4.0 + spacing * 3.0,
+            min[0] + 8.0 + quality_width(ui) + ui.frame_height() * 4.0 + spacing * 4.0,
             min[1] + 8.0 + ui.frame_height(),
         ],
     )
@@ -687,8 +693,13 @@ pub fn tools(
     enabled_axes: &[bool],
     shortcuts: [&str; 3],
     entries: &[(&str, &str)],
+    quality: &mut usize,
+    quality_options: &[&str],
 ) -> Tools {
     ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + 8.0]);
+
+    quality_button(ui, quality, quality_options);
+    ui.same_line();
 
     let camera = crate::controls::icon_toggle(ui, crate::icons::VIDEO_CAMERA, camera_view);
 
@@ -761,15 +772,34 @@ pub fn tools(
     }
 }
 
+fn quality_width(ui: &dear_imgui_rs::Ui) -> f32 {
+    ui.calc_text_size("1/8x")[0] + ui.clone_style().frame_padding()[0] * 2.0
+}
+
+fn quality_button(ui: &dear_imgui_rs::Ui, quality: &mut usize, options: &[&str]) {
+    crate::controls::choice_button(
+        ui,
+        "Viewport quality",
+        quality,
+        options,
+        [quality_width(ui), ui.frame_height()],
+    );
+}
+
 pub fn preview_tools(
     ui: &dear_imgui_rs::Ui,
     min: [f32; 2],
     view: &mut View,
     margin: bool,
     shortcuts: [&str; 2],
+    quality: &mut usize,
+    quality_options: &[&str],
 ) -> bool {
     ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + 8.0]);
     ui.set_next_item_allow_overlap();
+
+    quality_button(ui, quality, quality_options);
+    ui.same_line();
 
     if crate::controls::text_button(ui, crate::icons::RESET, [ui.frame_height(); 2]) {
         *view = View::default();
@@ -887,7 +917,11 @@ mod navigation_tests {
                     let origin = ui.cursor_screen_pos();
 
                     targets[0] = [
-                        origin[0] + 8.0 + ui.frame_height() * 0.5,
+                        origin[0]
+                            + 8.0
+                            + super::quality_width(ui)
+                            + ui.clone_style().item_spacing()[0]
+                            + ui.frame_height() * 0.5,
                         origin[1] + 8.0 + ui.frame_height() * 0.5,
                     ];
 
@@ -905,7 +939,7 @@ mod navigation_tests {
                         ui.io().mouse_delta(),
                     );
 
-                    margin = preview_tools(ui, origin, view, false, ["0", "M"]);
+                    margin = preview_tools(ui, origin, view, false, ["0", "M"], &mut 0, &["1x"]);
 
                     let min = ui.item_rect_min();
                     let max = ui.item_rect_max();

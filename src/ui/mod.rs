@@ -38,6 +38,7 @@ pub(crate) struct Ui {
     appearance: theme::Appearance,
     is_fullscreen: bool,
     audio_volume: i32,
+    viewport_qualities: crate::editor::ViewportQualities,
     preview: preview::State,
     inspector: inspector::State,
     settings: settings::State,
@@ -225,6 +226,11 @@ impl Ui {
             appearance: settings::load(),
             is_fullscreen: false,
             audio_volume: cache.audio_volume,
+            viewport_qualities: crate::editor::ViewportQualities {
+                preview: cache.viewport_quality,
+                editor_2d: cache.editor_2d_quality,
+                editor_3d: cache.editor_3d_quality,
+            },
             preview: preview::State::new(crate::editor::EditorMode::default()),
             inspector: inspector::State::default(),
             settings: settings::State::default(),
@@ -237,12 +243,19 @@ impl Ui {
     pub(crate) fn save_cache(&self) {
         cache::Cache {
             audio_volume: self.audio_volume,
+            viewport_quality: self.viewport_qualities.preview,
+            editor_2d_quality: self.viewport_qualities.editor_2d,
+            editor_3d_quality: self.viewport_qualities.editor_3d,
             project_directory: self.code.project_directory(),
             recent_projects: self.home.recent.clone(),
             project_details: self.home.details.clone(),
             workspace: self.panels.layout.clone(),
         }
         .save();
+    }
+
+    pub(crate) fn viewport_qualities(&self) -> crate::editor::ViewportQualities {
+        self.viewport_qualities
     }
 
     pub(crate) fn audio_volume(&self) -> f32 {
@@ -274,6 +287,8 @@ impl Ui {
             }
 
             let fullscreen_button = preview::draw_fullscreen(editor, ui, &mut self.audio_volume);
+
+            self.viewport_qualities = editor.viewport_qualities();
 
             if fullscreen_shortcut || fullscreen_button {
                 self.is_fullscreen = false;
@@ -351,6 +366,8 @@ impl Ui {
                 &mut self.audio_volume,
                 &mut self.panels,
             );
+
+            self.viewport_qualities = editor.viewport_qualities();
 
             if !self.panels.hidden {
                 inspector::draw(editor, ui, &mut self.inspector, &mut self.panels);

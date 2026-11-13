@@ -46,6 +46,15 @@ Press `0` to switch the camera view and `R` to reset the navigation transform. I
 use W/A/S/D to move, Shift to move faster, and the directional views listed in **Editor
 settings → Shortcuts**. Press `F` for fullscreen and `M` to show or hide margins.
 
+The first button in each viewport toolbar controls its quality and offers
+**1/8x**, **1/4x**, **1/2x**, **1x** (default), and **2x**. **Preview**,
+**2D**, and **3D** each keep an independent quality, restored from the user cache
+when you reopen the editor. Lower values reduce internal rendering detail and GPU work for complex
+scenes; **2x** increases detail. In **2D** and **3D**, internal buffer sizes follow
+the visible viewport. Selection, guides, and controls remain at normal display
+resolution. The composition, project resolution, screenshots, and MP4 exports keep
+their original resolution and quality.
+
 Pan, zoom, resets, camera locking, and 3D view changes ease toward their destination
 with frame-rate-independent smoothing.
 

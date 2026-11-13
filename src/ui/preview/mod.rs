@@ -132,6 +132,9 @@ pub(super) fn draw(
                     );
                 }
 
+                let mut qualities = editor.viewport_qualities();
+                let mut quality = quality_index(qualities.preview);
+
                 if kinematic_ui::canvas::preview_tools(
                     ui,
                     min,
@@ -147,9 +150,14 @@ pub(super) fn draw(
                             .display
                             .as_str(),
                     ],
+                    &mut quality,
+                    &crate::editor::PreviewQuality::LABELS,
                 ) {
                     editor.toggle_margin();
                 }
+
+                qualities.preview = crate::editor::PreviewQuality::ALL[quality];
+                editor.set_viewport_qualities(qualities);
 
                 if let Some(error) = editor.render_error() {
                     ui.set_cursor_screen_pos([min[0] + 8.0, min[1] + ui.frame_height() + 16.0]);
@@ -259,6 +267,8 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         draw_project_outline(ui, min, available, canvas_aspect);
     }
 
+    let mut qualities = editor.viewport_qualities();
+    let mut quality = quality_index(qualities.editor_2d);
     let tools = kinematic_ui::canvas::tools(
         ui,
         min,
@@ -267,7 +277,12 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
         &editor.editor_2d_axes(),
         camera_shortcuts(),
         &[],
+        &mut quality,
+        &crate::editor::PreviewQuality::LABELS,
     );
+
+    qualities.editor_2d = crate::editor::PreviewQuality::ALL[quality];
+    editor.set_viewport_qualities(qualities);
 
     if tools.camera {
         editor.toggle_editor_2d_camera_view();
@@ -288,6 +303,13 @@ fn draw_editor_2d(editor: &mut Editor, ui: &dear_imgui_rs::Ui) {
     if let Some(error) = editor.render_error() {
         widgets::message(ui, error);
     }
+}
+
+fn quality_index(quality: crate::editor::PreviewQuality) -> usize {
+    crate::editor::PreviewQuality::ALL
+        .iter()
+        .position(|value| *value == quality)
+        .unwrap()
 }
 
 fn camera_shortcuts() -> [&'static str; 3] {
