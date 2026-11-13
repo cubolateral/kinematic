@@ -447,7 +447,54 @@ pub(crate) fn extruded_path_mesh(path: &skia_safe::Path, tolerance: f32) -> thre
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::objects::{
+        latex_geometry::morph_geometry, text_2d::text_parts, text_morph::morph_parts,
+    };
     use crate::test_support::{Object3DHandler, Scene, vec3};
+
+    #[test]
+    fn morph_meshes_reach_destination_without_a_position_jump() {
+        let shape = Text3DShape::default();
+
+        for (from, to) in [
+            (
+                text_parts(&shape.text_shape("ab")),
+                text_parts(&shape.text_shape("a\nb")),
+            ),
+            (
+                morph_geometry("x", 0.0),
+                morph_geometry(r"\frac{x}{y}", 0.0),
+            ),
+        ] {
+            for group in [false, true] {
+                let draws = morph_parts(&from, &to, 1.0, group);
+
+                for draw in draws.iter().filter(|draw| draw.opacity > 0.0) {
+                    let target = to.iter().find(|part| part.key == draw.part.key).unwrap();
+                    let bounds = target.path.compute_tight_bounds();
+                    let mesh = extruded_path_mesh(&draw.part.path, 0.0001);
+                    let three_d::Positions::F32(positions) = mesh.positions else {
+                        panic!("Expected float positions.");
+                    };
+                    let mut min = glam::Vec2::splat(f32::INFINITY);
+                    let mut max = glam::Vec2::splat(f32::NEG_INFINITY);
+
+                    for position in positions {
+                        let position = draw
+                            .transform()
+                            .transform_point3(glam::Vec3::new(position.x, position.y, position.z))
+                            .truncate();
+
+                        min = min.min(position);
+                        max = max.max(position);
+                    }
+
+                    assert!((min - glam::Vec2::new(bounds.left, -bounds.bottom)).length() < 0.001);
+                    assert!((max - glam::Vec2::new(bounds.right, -bounds.top)).length() < 0.001);
+                }
+            }
+        }
+    }
 
     #[test]
     fn depth_is_trackable_and_part_of_the_local_box() {

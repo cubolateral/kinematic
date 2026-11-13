@@ -37,7 +37,8 @@ impl MorphDraw<'_> {
     }
 
     pub fn transform(&self) -> glam::Mat4 {
-        glam::Mat4::from_translation(self.offset.extend(0.0))
+        // Extruded meshes invert the path's Y axis.
+        glam::Mat4::from_translation(glam::Vec3::new(self.offset.x, -self.offset.y, 0.0))
             * glam::Mat4::from_scale(self.scale.extend(1.0))
     }
 }
