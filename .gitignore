@@ -9,6 +9,8 @@
 **/kinematic/*
 !/examples/lua/*/kinematic/project.ron
 !/docs/guide/projects/*/kinematic/project.ron
+/examples/lua/*/.luarc.json
+/docs/guide/projects/*/.luarc.json
 
 # Documentation dependencies and build output.
 /docs/node_modules
