@@ -24,7 +24,7 @@ impl Default for Appearance {
             contrast: visual.contrast,
             scale: visual.scale,
             border_radius: kinematic_ui::theme::CORNER_RADIUS,
-            window_spacing: 4.0,
+            window_spacing: 2.0,
             editor: super::code::Settings::default(),
         }
     }
