@@ -64,7 +64,7 @@ impl Latex3DShape {
 /// Built-in extruded LaTeX math scene object.
 ///
 /// Supports mathematical LaTeX accepted by RaTeX in display style.
-/// Invalid or unsupported source panics when its geometry is first requested.
+/// Invalid or unsupported Lua source is reported as a runtime error.
 #[derive(Object)]
 #[object(spatial = "3d", builder = "latex_3d")]
 pub struct Latex3D {

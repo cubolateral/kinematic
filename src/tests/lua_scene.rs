@@ -1841,3 +1841,50 @@ end
     assert_eq!(radius(&first), 45.0);
     assert_eq!(radius(&second), 30.0);
 }
+
+#[test]
+fn invalid_latex_is_a_runtime_error() {
+    for constructor in ["latex_2d", "latex_3d"] {
+        for statement in [
+            format!(r"k.{constructor}{{text=[[\frac{{x}}]]}}"),
+            format!(r"k.{constructor}{{}}:morph([[\frac{{x}}]])"),
+            format!(r"k.{constructor}{{}}:fade([[\frac{{x}}]])"),
+            format!(r"k.{constructor}{{}}:to{{text=[[\frac{{x}}]]}}:play(1)"),
+            format!(r"k.{constructor}{{}}.text:set([[\frac{{x}}]])"),
+        ] {
+            let result = try_load(&format!("return function() {statement} end"));
+            let error = result.err().expect("Invalid LaTeX must fail to load.");
+
+            assert!(
+                error.to_string().contains("Invalid LaTeX formula"),
+                "{error}"
+            );
+        }
+
+        let world = if constructor == "latex_2d" {
+            "world_2d"
+        } else {
+            "world_3d"
+        };
+        let scene = load(&format!(
+            r"
+            return function()
+                local formula = k.{constructor}{{}}
+                k.{world}():add(formula)
+                formula:signal(function(obj, frame)
+                    if frame.time > 0 then obj.text:set([[\frac{{x}}]]) end
+                end)
+                k.wait(1)
+            end
+        "
+        ));
+        let error = scene
+            .update(0.5)
+            .expect_err("Invalid signal text must fail.");
+
+        assert!(
+            error.to_string().contains("Invalid LaTeX formula"),
+            "{error}"
+        );
+    }
+}

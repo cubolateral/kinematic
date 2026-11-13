@@ -33,7 +33,7 @@ impl Default for Latex2DShape {
 /// Built-in LaTeX math scene object, rendered with embedded KaTeX fonts.
 ///
 /// Supports mathematical LaTeX accepted by RaTeX in display style.
-/// Invalid or unsupported source panics when its geometry is first requested.
+/// Invalid or unsupported Lua source is reported as a runtime error.
 ///
 #[derive(Object)]
 #[object(spatial = "2d", builder = "latex_2d")]

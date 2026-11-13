@@ -1715,6 +1715,18 @@ impl PropertyHandle {
     pub(super) fn validate(&self, value: &TrackValue) -> Result<()> {
         value.validate().map_err(mlua::Error::runtime)?;
 
+        if let (TrackTarget::Property { type_id, .. }, TrackValue::String(text)) =
+            (&self.target, value)
+        {
+            use crate::core::objects::{Latex2DShape, Latex3DShape, validate_latex};
+
+            if *type_id == std::any::TypeId::of::<Latex2DShape>()
+                || *type_id == std::any::TypeId::of::<Latex3DShape>()
+            {
+                validate_latex(text).map_err(mlua::Error::runtime)?;
+            }
+        }
+
         if let TrackTarget::Dynamic(schema) = &self.target {
             schema.validate(value).map_err(mlua::Error::runtime)?;
         } else if self.target.clamp(value.clone()) != *value {

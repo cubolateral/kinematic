@@ -502,12 +502,17 @@ impl AnimationDefinition {
                 duration,
                 ..
             } => {
+                let property = PropertyHandle {
+                    object,
+                    target,
+                    channel: None,
+                };
+
+                property.validate(&from)?;
+                property.validate(&to)?;
+
                 result.destinations.push(Destination {
-                    property: PropertyHandle {
-                        object,
-                        target,
-                        channel: None,
-                    },
+                    property,
                     start: if implicit { None } else { Some(from) },
                     finish: to,
                     operation: Operation::To,

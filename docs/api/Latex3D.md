@@ -16,7 +16,7 @@ Source: [shared declarations](https://github.com/cubolateral/kinematic/blob/main
 Built-in extruded LaTeX math scene object.
 
 Supports mathematical LaTeX accepted by RaTeX in display style.
-Invalid or unsupported source panics when its geometry is first requested.
+Invalid or unsupported Lua source is reported as a runtime error.
 
 **Inherits:** <code class="api-signature"><a class="api-type-name" href="Spatial3D.html">Spatial3D</a></code>
 

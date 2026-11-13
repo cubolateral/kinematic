@@ -22,6 +22,7 @@ pub(crate) use image_shader::{
     set_shader_uniform, shader_uniform, shader_uniforms, validate_shader_track_value,
     validate_shader_values,
 };
+pub(crate) use latex_geometry::validate_latex;
 pub(crate) use mesh_shader::{EffectiveMeshShader, effective_mesh_shader};
 pub use mesh_shader::{MeshShader, MeshShaderData, MeshShaderUniform};
 pub use node::*;

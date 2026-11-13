@@ -103,6 +103,7 @@ The renderer accepts a subset of mathematical display-style syntax, not full LaT
 documents. Do not include preambles, `\documentclass`, or package-loading commands.
 Installing TeX does not extend the supported syntax.
 
+Invalid or unsupported formulas are reported as runtime errors without closing the editor.
 If a formula fails, first check balanced braces and backslashes. A quoted Lua string
 needs `"\\frac{a}{b}"`. A long string needs `[[\frac{a}{b}]]`. Try the shortest failing
 expression to isolate an unsupported command. Check every destination formula too,

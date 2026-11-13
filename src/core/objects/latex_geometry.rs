@@ -49,6 +49,12 @@ thread_local! {
     static CACHE: RefCell<FormulaCache> = RefCell::new(FormulaCache::default());
 }
 
+pub(crate) fn validate_latex(text: &str) -> Result<(), String> {
+    ratex_parser::parser::parse(text)
+        .map(|_| ())
+        .map_err(|error| format!("Invalid LaTeX formula `{text}`: {error}."))
+}
+
 // Cache in em units so size, color, and transform animation reuse the same layout.
 pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
     CACHE.with_borrow_mut(|cache| {
