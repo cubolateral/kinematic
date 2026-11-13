@@ -636,6 +636,7 @@ impl Scene {
         camera: &crate::core::components::Camera3D,
         resolution: (u32, u32),
         point: Vector2,
+        projection: Option<glam::Mat4>,
     ) -> Option<hecs::Entity> {
         crate::core::objects::pick_canvas3d_with_camera(
             &self.world.borrow(),
@@ -643,6 +644,7 @@ impl Scene {
             camera,
             resolution,
             point,
+            projection,
         )
     }
 
@@ -1032,6 +1034,58 @@ mod tests {
             12
         );
         assert!(scene.selection_outline(rectangle.entity()).is_none());
+    }
+
+    #[test]
+    fn editor_3d_picking_matches_blended_projections() {
+        use crate::core::components::{Camera3D, Camera3DMode};
+        use crate::core::objects::camera_projection;
+
+        let mut scene = Scene::new_with_resolution((640, 480));
+        let position = vec3(1.0, 0.0, -2.0);
+        let object = cube().position(position).build(&mut scene);
+        let canvas = scene.world_3d();
+
+        canvas.add(&object);
+
+        let camera = Camera3D::default();
+        let perspective = camera_projection(&camera, (640, 480)).unwrap() * (1.0 / 3.0);
+        let orthographic = camera_projection(
+            &Camera3D {
+                camera_mode: Camera3DMode::Orthogonal,
+                camera_fov: 6.0 * (camera.camera_fov * 0.5).tan(),
+                ..camera.clone()
+            },
+            (640, 480),
+        )
+        .unwrap();
+
+        for weight in [0.0, 0.25, 0.75, 1.0] {
+            let projection = perspective * (1.0 - weight) + orthographic * weight;
+            let point = (projection * camera.matrix().inverse()).project_point3(position);
+
+            assert_eq!(
+                scene.pick_editor_3d(
+                    canvas.entity(),
+                    &camera,
+                    (640, 480),
+                    vec2(point.x * 320.0, -point.y * 240.0),
+                    Some(projection),
+                ),
+                Some(object.entity())
+            );
+            assert!(
+                scene
+                    .pick_editor_3d(
+                        canvas.entity(),
+                        &camera,
+                        (640, 480),
+                        vec2(-300.0, 200.0),
+                        Some(projection),
+                    )
+                    .is_none()
+            );
+        }
     }
 
     #[test]

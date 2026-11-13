@@ -1,5 +1,5 @@
 use crate::core::components::{Camera3D, Camera3DMode};
-use three_d::{Geometry, Viewer};
+use three_d::Geometry;
 
 pub(crate) struct EditorGuides3D {
     pub axes: [bool; 3],
@@ -28,7 +28,7 @@ impl EditorGuideRenderer {
     pub(in crate::renderer) fn render(
         &mut self,
         context: &three_d::Context,
-        camera: &three_d::Camera,
+        camera: &dyn three_d::Viewer,
         view_camera: &Camera3D,
         guides: &EditorGuides3D,
     ) -> Result<(), String> {

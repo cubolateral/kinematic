@@ -87,16 +87,8 @@ pub(super) fn draw_editor(
     editor.set_editor_2d_viewport(size);
 
     let camera_view = editor.editor_2d_camera_view();
-    let display_scale = if camera_view {
-        camera_scale
-    } else {
-        free_scale
-    };
-    let (pan, zoom, rotation) = if camera_view {
-        ([0.0; 2], 1.0, 0.0)
-    } else {
-        editor.editor_2d_view()
-    };
+    let display_scale = free_scale;
+    let (pan, zoom, rotation) = editor.editor_2d_view();
 
     kinematic_ui::canvas::draw_editor_2d(
         ui,

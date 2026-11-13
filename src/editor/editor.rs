@@ -2,6 +2,8 @@
 mod audio;
 #[path = "navigation_3d.rs"]
 mod navigation_3d;
+#[path = "navigation_smoothing.rs"]
+mod navigation_smoothing;
 
 use crate::{
     core::{
@@ -220,9 +222,13 @@ pub(crate) struct Editor {
     preview: Canvas,
     editor_2d: Canvas,
     editor_view_2d: EditorView2D,
+    displayed_2d: Option<EditorView2D>,
+    camera_2d_scale: f32,
     editor_rendered: Option<((u64, u64), hecs::Entity, [u32; 7])>,
     editor_3d: Canvas,
     editor_view_3d: EditorView3D,
+    displayed_3d: Option<crate::core::components::Camera3D>,
+    displayed_projection_3d: Option<glam::Mat4>,
     editor_3d_rendered: Option<((u64, u64), hecs::Entity, Option<hecs::Entity>, [u32; 11])>,
     pending_editor_3d_size: Option<(u32, u32)>,
     pending_mouse_warp: Option<[f32; 2]>,
@@ -412,6 +418,8 @@ impl Editor {
                 axes: cache.camera_2d.axes,
                 ..EditorView2D::default()
             },
+            displayed_2d: None,
+            camera_2d_scale: 1.0,
             editor_rendered: None,
             editor_3d,
             editor_view_3d: EditorView3D {
@@ -426,6 +434,8 @@ impl Editor {
                 canvas_view: cache.camera_3d.camera_view,
                 axes: cache.camera_3d.axes,
             },
+            displayed_3d: None,
+            displayed_projection_3d: None,
             editor_3d_rendered: None,
             pending_editor_3d_size: None,
             pending_mouse_warp: None,
@@ -942,6 +952,8 @@ impl Editor {
         if self.render_error.is_some() {
             return;
         }
+
+        self.smooth_editor_navigation(self.window_timer.delta_time());
 
         let scene = &self.scenes[self.active_scene].scene;
         let key = scene.render_key();
@@ -1550,6 +1562,8 @@ impl Editor {
 
     pub(crate) fn reset_editor_3d_view(&mut self) {
         self.editor_view_3d = EditorView3D::default();
+        self.displayed_3d = None;
+        self.displayed_projection_3d = None;
         self.editor_3d_rendered = None;
     }
 
@@ -1582,6 +1596,12 @@ impl Editor {
     }
 
     pub(crate) fn editor_3d_camera(&self) -> crate::core::components::Camera3D {
+        self.displayed_3d
+            .clone()
+            .unwrap_or_else(|| self.target_editor_3d_camera())
+    }
+
+    fn target_editor_3d_camera(&self) -> crate::core::components::Camera3D {
         let canvas = self.editor_3d_canvas();
 
         if self.editor_view_3d.canvas_view {
@@ -1645,16 +1665,20 @@ impl Editor {
         let camera = self.editor_3d_camera();
         let size = self.editor_3d.size();
 
-        match self.scenes[self.active_scene]
-            .scene
-            .pick_editor_3d(canvas, &camera, size, point)
-        {
+        match self.scenes[self.active_scene].scene.pick_editor_3d(
+            canvas,
+            &camera,
+            size,
+            point,
+            self.displayed_projection_3d,
+        ) {
             Some(entity) => self.selection.select(self.active_scene, entity),
             None => self.clear_selection(),
         }
     }
 
     pub(crate) fn reset_editor_2d_view(&mut self) {
+        self.displayed_2d = None;
         self.editor_view_2d.pan = [0.0; 2];
         self.editor_view_2d.zoom = 1.0;
         self.editor_view_2d.rotation = 0.0;
@@ -1699,15 +1723,17 @@ impl Editor {
 
     pub(crate) fn set_editor_2d_viewport(&mut self, display_size: [f32; 2]) {
         let target_size = self.editor_2d.size();
-        let content_size = if self.editor_view_2d.canvas_view {
-            self.editor_2d_canvas_size()
-        } else {
-            target_size
-        };
+        let canvas_size = self.editor_2d_canvas_size();
+        let camera_scale = (display_size[0].max(1.0) / canvas_size.0.max(1) as f32)
+            .min(display_size[1].max(1.0) / canvas_size.1.max(1) as f32);
+        let free_scale = (display_size[0].max(1.0) / target_size.0.max(1) as f32)
+            .min(display_size[1].max(1.0) / target_size.1.max(1) as f32);
+
+        self.camera_2d_scale = camera_scale / free_scale;
         let display_x = display_size[0].max(1.0) / target_size.0.max(1) as f32;
         let display_y = display_size[1].max(1.0) / target_size.1.max(1) as f32;
-        let content_scale = (display_size[0].max(1.0) / content_size.0.max(1) as f32)
-            .min(display_size[1].max(1.0) / content_size.1.max(1) as f32);
+        let content_scale = (display_size[0].max(1.0) / target_size.0.max(1) as f32)
+            .min(display_size[1].max(1.0) / target_size.1.max(1) as f32);
         let correction = [content_scale / display_x, content_scale / display_y];
 
         if self.editor_view_2d.correction != correction {
@@ -1747,11 +1773,9 @@ impl Editor {
     }
 
     pub(crate) fn editor_2d_view(&self) -> ([f32; 2], f32, f32) {
-        (
-            self.editor_view_2d.pan,
-            self.editor_view_2d.zoom,
-            self.editor_view_2d.rotation,
-        )
+        let view = self.displayed_editor_2d_view();
+
+        (view.pan, view.zoom, view.rotation)
     }
 
     pub(crate) fn release_editor_2d_camera(&mut self, scale: f32) {
@@ -2024,7 +2048,7 @@ impl Editor {
         scene_key: (u64, u64),
     ) {
         let canvas = self.editor_2d_canvas();
-        let view = self.editor_view_2d;
+        let view = self.displayed_editor_2d_view();
         let key = (
             scene_key,
             canvas,
@@ -2119,6 +2143,7 @@ impl Editor {
             &mut self.editor_3d.target,
             skia_context,
             &camera,
+            self.displayed_projection_3d,
             &guides,
         ) {
             self.render_error = Some(error);

@@ -105,14 +105,31 @@ pub(super) fn draw(
                 let available = ui.content_region_avail();
                 let margin = editor.margin_visible().then(|| editor.margin_size());
 
-                if image::draw_navigable(
+                let delta = editor.editor_mouse_delta(ui.io().mouse_delta());
+                let (clicked, dragging) = image::draw_navigable(
                     ui,
                     image::preview(editor),
                     available,
                     margin,
                     &mut state.view,
-                ) {
+                    &mut state.displayed,
+                    delta,
+                );
+
+                if clicked {
                     editor.clear_selection();
+                }
+
+                if dragging {
+                    image::wrap_pointer(
+                        ui,
+                        editor,
+                        min,
+                        [
+                            min[0] + available[0].max(1.0),
+                            min[1] + available[1].max(1.0),
+                        ],
+                    );
                 }
 
                 if kinematic_ui::canvas::preview_tools(

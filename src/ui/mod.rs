@@ -492,6 +492,7 @@ impl Ui {
         self.settings = settings::State::default();
         self.preview = preview::State::new(mode);
         self.preview.view = kinematic_ui::canvas::View { pan, zoom };
+        self.preview.displayed = self.preview.view;
         self.is_fullscreen = fullscreen;
     }
 

@@ -8,7 +8,7 @@ use crate::core::{
     components::Material,
     objects::{CanvasTexture, EffectiveMeshShader},
 };
-use three_d::{Geometry, InnerSpace, SquareMatrix, Viewer};
+use three_d::{Geometry, InnerSpace, SquareMatrix};
 
 pub(crate) struct CachedGeometry {
     mesh: three_d::Mesh,
@@ -213,7 +213,7 @@ impl GeometryKey {
 /// shaders require `render_material`; direct three-d drawing has no compatible interception
 /// point and is rejected when a shader is configured or inherited.
 pub struct RenderContext3D<'a> {
-    pub camera: &'a three_d::Camera,
+    pub camera: &'a dyn three_d::Viewer,
     pub target: &'a three_d::RenderTarget<'static>,
     pub three_d: &'a three_d::Context,
     geometries: &'a mut HashMap<GeometryKey, CachedGeometry>,
@@ -234,7 +234,7 @@ pub struct RenderContext3D<'a> {
 impl<'a> RenderContext3D<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        camera: &'a three_d::Camera,
+        camera: &'a dyn three_d::Viewer,
         target: &'a three_d::RenderTarget<'static>,
         three_d: &'a three_d::Context,
         geometries: &'a mut HashMap<GeometryKey, CachedGeometry>,
@@ -715,7 +715,7 @@ fn use_uniforms(
     program: &three_d::Program,
     shader: &EffectiveMeshShader,
     attributes: MeshAttributes,
-    camera: &three_d::Camera,
+    camera: &dyn three_d::Viewer,
     time: f32,
     material: &Material,
 ) -> Result<(), String> {

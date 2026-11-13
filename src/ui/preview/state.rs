@@ -8,6 +8,7 @@ pub(super) enum Mode {
 
 pub(in crate::ui) struct State {
     pub(in crate::ui) view: View,
+    pub(in crate::ui) displayed: View,
     mode: Mode,
     pub(super) orientation: kinematic_ui::canvas::orientation::State,
     requested_mode: Option<Mode>,
@@ -31,6 +32,7 @@ impl State {
 
         Self {
             view: View::default(),
+            displayed: View::default(),
             orientation: Default::default(),
             mode,
             requested_mode: Some(mode),

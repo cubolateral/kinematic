@@ -696,18 +696,16 @@ pub(crate) fn draw_canvas2d_editor_with_images(
 
     let mut camera_base = None;
 
-    if camera_view {
-        canvas.scale((correction[0], correction[1]));
+    canvas.translate((pan[0] * correction[0], pan[1] * correction[1]));
+    canvas.scale((zoom * correction[0], zoom * correction[1]));
+    canvas.rotate(rotation.to_degrees(), None);
 
+    if camera_view {
         camera_base = Some(canvas.local_to_device());
 
         if let Some(view) = camera_matrix2d(world, entity).and_then(|camera| camera.invert()) {
             canvas.concat(&view);
         }
-    } else {
-        canvas.translate((pan[0] * correction[0], pan[1] * correction[1]));
-        canvas.scale((zoom * correction[0], zoom * correction[1]));
-        canvas.rotate(rotation.to_degrees(), None);
     }
 
     for child in children_by_z_index(world, entity) {
@@ -899,7 +897,7 @@ pub(crate) fn pick_canvas3d(
     let camera = world.get::<&Camera3D>(scope).ok()?;
     let settings = world.get::<&CanvasSettings>(scope).ok()?;
 
-    pick_canvas3d_with_camera(world, scope, &camera, settings.resolution, point)
+    pick_canvas3d_with_camera(world, scope, &camera, settings.resolution, point, None)
 }
 
 pub(crate) fn pick_canvas3d_with_camera(
@@ -908,6 +906,7 @@ pub(crate) fn pick_canvas3d_with_camera(
     camera: &Camera3D,
     resolution: (u32, u32),
     point: Vector2,
+    projection: Option<glam::Mat4>,
 ) -> Option<hecs::Entity> {
     if !world
         .get::<&Draw3D>(scope)
@@ -918,7 +917,29 @@ pub(crate) fn pick_canvas3d_with_camera(
 
     camera.validate().ok()?;
 
-    let ray = camera_ray(camera, resolution, point)?;
+    let ray = if let Some(projection) = projection {
+        let inverse = camera.matrix() * projection.inverse();
+        let ndc = glam::vec2(
+            point.x * 2.0 / resolution.0.max(1) as f32,
+            -point.y * 2.0 / resolution.1.max(1) as f32,
+        );
+        let near = inverse.project_point3(ndc.extend(-1.0));
+        let far = inverse.project_point3(ndc.extend(1.0));
+        let direction = (far - near).normalize();
+
+        if !near.is_finite() || !far.is_finite() || !direction.is_finite() {
+            return None;
+        }
+
+        Ray3D {
+            origin: near,
+            direction,
+            near: 0.0,
+            far: near.distance(far),
+        }
+    } else {
+        camera_ray(camera, resolution, point)?
+    };
 
     crate::core::objects::child_iter(world, scope)
         .filter_map(|child| pick_entity3d(world, child, ray))
@@ -1149,8 +1170,7 @@ fn ray_cuboid_intersection(
     Some(near)
 }
 
-#[cfg(test)]
-fn camera_projection(camera: &Camera3D, resolution: (u32, u32)) -> Option<glam::Mat4> {
+pub(crate) fn camera_projection(camera: &Camera3D, resolution: (u32, u32)) -> Option<glam::Mat4> {
     let aspect = resolution.0 as f32 / resolution.1.max(1) as f32;
     let projection = match camera.camera_mode {
         Camera3DMode::Perspective => glam::camera::rh::proj::opengl::perspective(

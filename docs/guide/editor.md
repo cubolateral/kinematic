@@ -46,6 +46,9 @@ Press `0` to switch the camera view and `R` to reset the navigation transform. I
 use W/A/S/D to move, Shift to move faster, and the directional views listed in **Editor
 settings → Shortcuts**. Press `F` for fullscreen and `M` to show or hide margins.
 
+Pan, zoom, resets, camera locking, and 3D view changes ease toward their destination
+with frame-rate-independent smoothing.
+
 The video camera belongs to the canvas. Change it in code to affect the result.
 Selection and navigation overlays do not appear in the MP4.
 

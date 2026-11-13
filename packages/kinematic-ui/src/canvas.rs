@@ -24,7 +24,33 @@ impl Default for View {
     }
 }
 
+pub const NAVIGATION_LERP_WEIGHT: f32 = 0.5;
+
+pub fn navigation_lerp_factor(delta: f32) -> f32 {
+    1.0 - (1.0 - NAVIGATION_LERP_WEIGHT).powf(delta.max(0.0) * 60.0)
+}
+
+pub fn navigation_lerp(current: f32, target: f32, weight: f32) -> f32 {
+    let value = current + (target - current) * weight;
+
+    if (value - target).abs() <= 1e-6 {
+        target
+    } else {
+        value
+    }
+}
+
 impl View {
+    pub fn smooth_towards(&mut self, target: Self, delta: f32) {
+        let weight = navigation_lerp_factor(delta);
+
+        for axis in 0..2 {
+            self.pan[axis] = navigation_lerp(self.pan[axis], target.pan[axis], weight);
+        }
+
+        self.zoom = navigation_lerp(self.zoom, target.zoom, weight);
+    }
+
     pub fn zoom_at(&mut self, wheel: f32, anchor: [f32; 2]) {
         if wheel == 0.0 {
             return;
@@ -72,7 +98,9 @@ pub fn draw_navigable(
     available: [f32; 2],
     margin: Option<[f32; 4]>,
     view: &mut View,
-) -> bool {
+    displayed: &mut View,
+    delta: [f32; 2],
+) -> (bool, bool) {
     let origin = ui.cursor_screen_pos();
     let size = [available[0].max(1.0), available[1].max(1.0)];
     let max = [origin[0] + size[0], origin[1] + size[1]];
@@ -94,12 +122,11 @@ pub fn draw_navigable(
         && mouse[1] <= origin[1] + 8.0 + ui.frame_height();
     let hovered = ui.is_item_hovered() && !over_tools;
 
-    if !over_tools
+    let dragging = !over_tools
         && ui.is_item_active()
-        && ui.is_mouse_dragging(dear_imgui_rs::MouseButton::Middle)
-    {
-        let delta = ui.io().mouse_delta();
+        && ui.is_mouse_dragging(dear_imgui_rs::MouseButton::Middle);
 
+    if dragging {
         for axis in 0..2 {
             view.pan[axis] += delta[axis] / scale;
         }
@@ -119,6 +146,9 @@ pub fn draw_navigable(
         );
     }
 
+    displayed.smooth_towards(*view, ui.io().delta_time());
+
+    let view = displayed;
     let min = [
         center[0] + view.pan[0] * scale - fitted[0] * view.zoom * 0.5,
         center[1] + view.pan[1] * scale - fitted[1] * view.zoom * 0.5,
@@ -146,7 +176,10 @@ pub fn draw_navigable(
         draw_margin(ui, &draw, min, image_max, preview.size, margin);
     }
 
-    hovered && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)
+    (
+        hovered && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left),
+        dragging,
+    )
 }
 
 fn placement(
@@ -256,7 +289,30 @@ fn set_sampler(draw_list: &dear_imgui_rs::DrawListMut<'_>, nearest: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::placement;
+    use super::{View, placement};
+
+    #[test]
+    fn navigation_smoothing_preserves_the_zoom_anchor_at_different_frame_rates() {
+        let anchor = [180.0, -70.0];
+        let mut target = View::default();
+        let mut at_30 = target;
+        let mut at_120 = target;
+
+        target.zoom_at(3.0, anchor);
+        at_30.smooth_towards(target, 1.0 / 30.0);
+
+        for _ in 0..4 {
+            at_120.smooth_towards(target, 1.0 / 120.0);
+        }
+
+        for axis in 0..2 {
+            assert!((at_30.pan[axis] - at_120.pan[axis]).abs() < 1e-4);
+            assert!((at_30.pan[axis] + anchor[axis] * at_30.zoom - anchor[axis]).abs() < 1e-4);
+        }
+
+        assert!((at_30.zoom - at_120.zoom).abs() < 1e-6);
+        assert!(at_30.zoom > 1.0 && at_30.zoom < target.zoom);
+    }
 
     #[test]
     fn fitted_video_preserves_aspect_and_stays_above_the_footer() {
@@ -845,6 +901,8 @@ mod navigation_tests {
                         [624.0, 300.0],
                         None,
                         view,
+                        &mut View::default(),
+                        ui.io().mouse_delta(),
                     );
 
                     margin = preview_tools(ui, origin, view, false, ["0", "M"]);

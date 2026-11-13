@@ -240,6 +240,7 @@ impl Canvases {
         target: &mut Target,
         skia: &mut skia_safe::gpu::DirectContext,
         camera_component: &Camera3D,
+        projection: Option<glam::Mat4>,
         guides: &EditorGuides3D,
     ) -> Result<(), String> {
         let plan = canvas_plan_for(scene, entity)?;
@@ -264,6 +265,13 @@ impl Canvases {
         reset_gl(&self.gl, target.size);
 
         let camera = camera_from_component(camera_component, target.size)?;
+        let camera = EditorCamera {
+            projection: projection.map_or_else(
+                || three_d::Viewer::projection(&camera),
+                |matrix| matrix.to_cols_array_2d().into(),
+            ),
+            camera,
+        };
 
         unsafe {
             self.gl
@@ -872,6 +880,45 @@ fn camera_from_component(
     Ok(camera)
 }
 
+struct EditorCamera {
+    camera: three_d::Camera,
+    projection: three_d::Mat4,
+}
+
+impl three_d::Viewer for EditorCamera {
+    fn position(&self) -> three_d::Vec3 {
+        self.camera.position()
+    }
+
+    fn view(&self) -> three_d::Mat4 {
+        self.camera.view()
+    }
+
+    fn projection(&self) -> three_d::Mat4 {
+        self.projection
+    }
+
+    fn viewport(&self) -> three_d::Viewport {
+        self.camera.viewport()
+    }
+
+    fn z_near(&self) -> f32 {
+        self.camera.z_near()
+    }
+
+    fn z_far(&self) -> f32 {
+        self.camera.z_far()
+    }
+
+    fn color_mapping(&self) -> three_d::ColorMapping {
+        self.camera.color_mapping
+    }
+
+    fn tone_mapping(&self) -> three_d::ToneMapping {
+        self.camera.tone_mapping
+    }
+}
+
 /// Borrows a framebuffer owned by Target without transferring its destruction to three-d.
 struct FramebufferPass(Option<three_d::RenderTarget<'static>>);
 
@@ -906,7 +953,6 @@ mod graphics_tests;
 mod tests {
     use super::camera;
     use crate::test_support::*;
-    use three_d::Viewer;
 
     #[test]
     fn eviction_retains_recent_resources_and_reclaims_one_old_resource() {
