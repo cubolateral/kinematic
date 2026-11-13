@@ -10,8 +10,7 @@ use crate::core::{
 
 use super::{super::two_d::text_2d::weighted_path, text_3d::extruded_path_mesh};
 
-// A visible polygonal curve keeps formula meshes compact.
-const LATEX_TESSELLATION_TOLERANCE: f32 = 0.005;
+const LATEX_TESSELLATION_TOLERANCE: f32 = 0.0001;
 
 /// Mathematical source, size and extrusion depth of a 3D LaTeX object.
 #[derive(Clone, Trackable)]
@@ -250,6 +249,37 @@ mod tests {
 
         assert_eq!(formula.depth.get(), 0.25);
         assert_eq!(formula.box_size().z, 0.25);
+    }
+
+    #[test]
+    fn fraction_bar_keeps_its_rectangular_area() {
+        let formula = geometry(r"\frac{\color{red}{x}}{\color{blue}{y}}");
+        let bar = &formula
+            .parts
+            .iter()
+            .find(|part| part.color.is_none())
+            .unwrap()
+            .path;
+        let bounds = bar.compute_tight_bounds();
+        let mesh = extruded_path_mesh(bar, LATEX_TESSELLATION_TOLERANCE);
+        let three_d::Positions::F32(positions) = mesh.positions else {
+            panic!("Expected float positions.");
+        };
+        let three_d::Indices::U32(indices) = mesh.indices else {
+            panic!("Expected indexed triangles.");
+        };
+        let mut area = 0.0;
+
+        for triangle in indices.chunks_exact(3) {
+            let [a, b, c] =
+                [triangle[0], triangle[1], triangle[2]].map(|index| positions[index as usize]);
+
+            if a.z == 0.5 && b.z == 0.5 && c.z == 0.5 {
+                area += ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)).abs() * 0.5;
+            }
+        }
+
+        assert!((area - bounds.width() * bounds.height()).abs() < 1e-6);
     }
 
     #[test]

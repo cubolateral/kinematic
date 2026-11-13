@@ -127,6 +127,9 @@ change bounds. `thickness` expands glyph strokes. Check alignment after such cha
 
 ## Text in 3D
 
+The 3D mesh follows the same outlines as the 2D version, with finely sampled curves
+and extrusion depth.
+
 Use `text_3d` to place text in space. A full turn makes the perspective visible
 from every angle. Its size uses spatial units, and `albedo` supplies its material color. An unlit material keeps it readable without adding lights.
 

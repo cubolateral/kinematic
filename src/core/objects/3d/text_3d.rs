@@ -22,7 +22,7 @@ use super::super::two_d::text_2d::{text_box, text_path};
 struct TextMorphMesh;
 
 const TEXT_GEOMETRY_SCALE: f32 = 64.0;
-const TEXT_TESSELLATION_TOLERANCE: f32 = 0.005;
+const TEXT_TESSELLATION_TOLERANCE: f32 = 0.0001;
 
 /// Content, typography and extrusion depth of a 3D text object.
 #[derive(Clone, Trackable)]
@@ -196,7 +196,8 @@ fn draw_text_object(
                 || {
                     extruded_path_mesh(
                         &part.part.path,
-                        (shape.size * TEXT_GEOMETRY_SCALE * TEXT_TESSELLATION_TOLERANCE).max(0.05),
+                        (shape.size * TEXT_GEOMETRY_SCALE * TEXT_TESSELLATION_TOLERANCE)
+                            .max(f32::EPSILON),
                     )
                 },
                 text_transform(&shape, transform) * part.transform(),
@@ -242,7 +243,7 @@ pub fn draw_text_3d(
 
             extruded_path_mesh(
                 &text_path(&text_shape),
-                (text_shape.size * TEXT_TESSELLATION_TOLERANCE).max(0.05),
+                (text_shape.size * TEXT_TESSELLATION_TOLERANCE).max(f32::EPSILON),
             )
         },
         transform,
@@ -253,7 +254,6 @@ pub fn draw_text_3d(
 fn lyon_path(path: &skia_safe::Path) -> Path {
     let mut builder = Path::builder();
     let mut contour_open = false;
-    let mut current = skia_safe::Point::default();
 
     for record in path.iter() {
         let points = record.points();
@@ -264,31 +264,25 @@ fn lyon_path(path: &skia_safe::Path) -> Path {
                     builder.end(false);
                 }
 
-                current = points[0];
-
-                builder.begin(point(current.x, -current.y));
+                builder.begin(point(points[0].x, -points[0].y));
 
                 contour_open = true;
             }
             skia_safe::PathVerb::Line => {
-                current = points[0];
-
-                builder.line_to(point(current.x, -current.y));
+                builder.line_to(point(points[1].x, -points[1].y));
             }
             skia_safe::PathVerb::Quad => {
-                current = points[1];
-
                 builder.quadratic_bezier_to(
-                    point(points[0].x, -points[0].y),
-                    point(current.x, -current.y),
+                    point(points[1].x, -points[1].y),
+                    point(points[2].x, -points[2].y),
                 );
             }
             skia_safe::PathVerb::Conic => {
                 let mut quads = [skia_safe::Point::default(); 9];
                 let count = skia_safe::Path::convert_conic_to_quads(
-                    current,
                     points[0],
                     points[1],
+                    points[2],
                     record.conic_weight(),
                     &mut quads,
                     2,
@@ -301,16 +295,12 @@ fn lyon_path(path: &skia_safe::Path) -> Path {
 
                     builder.quadratic_bezier_to(point(control.x, -control.y), point(end.x, -end.y));
                 }
-
-                current = points[1];
             }
             skia_safe::PathVerb::Cubic => {
-                current = points[2];
-
                 builder.cubic_bezier_to(
-                    point(points[0].x, -points[0].y),
                     point(points[1].x, -points[1].y),
-                    point(current.x, -current.y),
+                    point(points[2].x, -points[2].y),
+                    point(points[3].x, -points[3].y),
                 );
             }
             skia_safe::PathVerb::Close => {
@@ -495,13 +485,34 @@ mod tests {
     }
 
     #[test]
-    fn polygonal_tolerance_reduces_curved_glyph_vertices() {
-        let shape = Text3DShape::default().text_shape("O");
-        let path = text_path(&shape);
-        let detailed = extruded_path_mesh(&path, 0.01);
-        let polygonal =
-            extruded_path_mesh(&path, (shape.size * TEXT_TESSELLATION_TOLERANCE).max(0.05));
+    fn curved_outline_stays_close_to_the_2d_path() {
+        let radius = TEXT_GEOMETRY_SCALE;
+        let path = skia_safe::Path::circle((0.0, 0.0), radius, None);
+        let mesh = extruded_path_mesh(&path, radius * TEXT_TESSELLATION_TOLERANCE);
+        let three_d::Positions::F32(positions) = mesh.positions else {
+            panic!("Expected float positions.");
+        };
 
-        assert!(polygonal.vertex_count() < detailed.vertex_count());
+        let three_d::Indices::U32(indices) = mesh.indices else {
+            panic!("Expected indexed triangles.");
+        };
+        let normals = mesh.normals.unwrap();
+
+        for triangle in indices.chunks_exact(3) {
+            for (a, b) in [
+                (triangle[0], triangle[1]),
+                (triangle[1], triangle[2]),
+                (triangle[2], triangle[0]),
+            ] {
+                if normals[a as usize].z != 0.0 || normals[b as usize].z != 0.0 {
+                    continue;
+                }
+
+                let midpoint = (positions[a as usize] + positions[b as usize]) * 0.5;
+                let distance = midpoint.x.hypot(midpoint.y);
+
+                assert!((distance - radius).abs() < radius * 0.0002);
+            }
+        }
     }
 }
