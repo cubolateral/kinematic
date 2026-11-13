@@ -90,6 +90,19 @@ Schedules the callback animations sequentially on the current timeline.
 
 <section class="api-method">
 
+## <code class="api-signature"><a class="api-type-name" href="k.html">k</a><span class="api-punctuation">.</span><span class="api-function">delay</span><span class="api-punctuation">(</span><span class="api-parameter">seconds</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">schedule</span><span class="api-punctuation">: </span><span class="api-keyword">fun</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">)</span></code> {#k-delay-seconds-schedule}
+
+<div class="api-description">
+
+Schedules a sequential callback after an initial delay relative to the current scheduling position.
+Seconds must be finite and nonnegative. The delay and callback duration advance the parent timeline.
+
+</div>
+
+</section>
+
+<section class="api-method">
+
 ## <code class="api-signature"><a class="api-type-name" href="k.html">k</a><span class="api-punctuation">.</span><span class="api-function">parallel</span><span class="api-punctuation">(</span><span class="api-parameter">schedule</span><span class="api-punctuation">: </span><span class="api-keyword">fun</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">)</span></code> {#k-parallel-schedule}
 
 <div class="api-description">
@@ -653,7 +666,7 @@ Creates an object in this scene; attach it to a group or canvas to activate it.
 Built-in LaTeX math scene object, rendered with embedded KaTeX fonts.
 
 Supports mathematical LaTeX accepted by RaTeX in display style.
-Invalid or unsupported source panics when its geometry is first requested.
+Invalid or unsupported Lua source is reported as a runtime error.
 Creates an object in this scene; attach it to a group or canvas to activate it.
 
 <div class="api-arguments">
@@ -922,7 +935,7 @@ Creates an object in this scene; attach it to a group or canvas to activate it.
 Built-in extruded LaTeX math scene object.
 
 Supports mathematical LaTeX accepted by RaTeX in display style.
-Invalid or unsupported source panics when its geometry is first requested.
+Invalid or unsupported Lua source is reported as a runtime error.
 Creates an object in this scene; attach it to a group or canvas to activate it.
 
 <div class="api-arguments">

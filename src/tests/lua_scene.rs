@@ -566,7 +566,7 @@ end
 }
 
 #[test]
-fn animation_definitions_only_expose_play() {
+fn animation_definitions_expose_delay_and_play() {
     load(
         r#"
 return function()
@@ -580,6 +580,7 @@ return function()
     }
     for _,animation in ipairs(animations) do
         assert(type(animation.play)=='function')
+        assert(type(animation.delay)=='function')
         for _,name in ipairs({'to','by','from','morph','fade'}) do
             assert(not pcall(function() animation[name](animation,{}) end))
         end
@@ -587,6 +588,102 @@ return function()
 end
 "#,
     );
+}
+
+#[test]
+fn animation_delay_offsets_all_tracks_and_preserves_reusable_definitions() {
+    let scene = load(
+        r#"
+return function()
+    local ball=k.world_2d():add(k.circle{id='ball',radius=10})
+    local step=ball:by{position={x=100},radius=20}
+    local delayed=step:delay(2):delay(0.5)
+    delayed:play(1,'linear')
+    step:play(1,'linear')
+    delayed:play(1,'linear')
+end
+"#,
+    );
+    let entity = scene.entity("ball").unwrap();
+
+    assert_eq!(scene.duration(), 4.0);
+
+    for (time, x, radius) in [
+        (0.25, 0.0, 10.0),
+        (1.0, 50.0, 20.0),
+        (2.0, 150.0, 40.0),
+        (2.75, 200.0, 50.0),
+        (3.5, 250.0, 60.0),
+        (4.0, 300.0, 70.0),
+        (0.0, 0.0, 10.0),
+    ] {
+        scene.update(time).unwrap();
+
+        let world = scene.scene().world();
+
+        assert_eq!(world.get::<&Transform2D>(entity).unwrap().position.x, x);
+        assert_eq!(world.get::<&CircleShape>(entity).unwrap().radius, radius);
+    }
+}
+
+#[test]
+fn delay_scopes_sequence_children_and_respect_all_and_parallel() {
+    let scene = load(
+        r#"
+return function()
+    local ball=k.world_2d():add(k.circle{id='ball',radius=10})
+    k.all(function()
+        ball.position.x:to(100):delay(0.5):play(1,'linear')
+        k.delay(0.25,function()
+            ball.radius:to(20):play(0.5,'linear')
+            ball.radius:to(30):play(1,'linear')
+        end)
+    end)
+    k.parallel(function()
+        k.delay(1,function() ball.opacity:to(0):delay(1):play(2) end)
+    end)
+end
+"#,
+    );
+    let entity = scene.entity("ball").unwrap();
+
+    assert_eq!(scene.duration(), 1.75);
+
+    for (time, x, radius) in [
+        (0.25, 0.0, 10.0),
+        (0.5, 0.0, 15.0),
+        (1.25, 75.0, 25.0),
+        (1.75, 100.0, 30.0),
+        (0.0, 0.0, 10.0),
+    ] {
+        scene.update(time).unwrap();
+
+        let world = scene.scene().world();
+
+        assert_eq!(world.get::<&Transform2D>(entity).unwrap().position.x, x);
+        assert_eq!(world.get::<&CircleShape>(entity).unwrap().radius, radius);
+    }
+}
+
+#[test]
+fn delays_validate_seconds_and_restore_scopes_after_callback_errors() {
+    let scene = load(
+        r#"
+return function()
+    local ball=k.world_2d():add(k.circle{})
+    for _,seconds in ipairs({-1,math.huge,-math.huge,0/0}) do
+        assert(not pcall(function() ball.radius:to(20):delay(seconds) end))
+        assert(not pcall(function() k.delay(seconds,function() error('Unexpected callback.') end) end))
+    end
+    assert(not pcall(function()
+        k.delay(0.5,function() error('Callback failed.') end)
+    end))
+    k.delay(0,function() ball.radius:to(20):delay(0):play(1) end)
+end
+"#,
+    );
+
+    assert_eq!(scene.duration(), 1.5);
 }
 
 #[test]

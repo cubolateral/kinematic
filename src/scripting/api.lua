@@ -24,11 +24,17 @@ local CodeRangeList = {}
 --- Vector, color, quaternion, or quad value.
 ---@alias Kinematic.Value Kinematic.Vec2|Kinematic.Vec3|Kinematic.Color|Kinematic.Quaternion|Kinematic.Quad
 
---- Reusable animation exposing only :play. Preparing it leaves the timeline unchanged.
+--- Reusable animation exposing :delay and :play. Preparing it leaves the timeline unchanged.
 ---@class Kinematic.Animation
 local Animation = {}
 
---- Schedules an independent execution at the current scene time.
+--- Returns a copy with an initial delay for all tracks. Preparing it leaves the timeline unchanged.
+--- Seconds must be finite and nonnegative. Replaces any previous delay; each play includes the delay in its duration.
+---@param seconds number
+---@return Kinematic.Animation
+function Animation:delay(seconds) end
+
+--- Schedules an independent execution at the current scene time, including its configured delay.
 --- Duration is in seconds and defaults to zero for an instantaneous change. Easing accepts only snake_case strings and defaults to "cubic_in_out".
 ---@param duration? number
 ---@param easing? Kinematic.Easing
@@ -156,6 +162,12 @@ function k.all(schedule) end
 --- Schedules the callback animations sequentially on the current timeline.
 ---@param schedule fun()
 function k.chain(schedule) end
+
+--- Schedules a sequential callback after an initial delay relative to the current scheduling position.
+--- Seconds must be finite and nonnegative. The delay and callback duration advance the parent timeline.
+---@param seconds number
+---@param schedule fun()
+function k.delay(seconds, schedule) end
 
 --- Schedules the callback without advancing or extending the parent timeline.
 --- Animations inside the callback are sequential unless grouped with k.all.

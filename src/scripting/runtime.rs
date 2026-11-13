@@ -6,7 +6,10 @@ use crate::core::{
     components::{Name, TreeNode},
     objects::{ObjectHandler, attach_child, deactivate_subtree},
 };
-use mlua::{Function, Lua, MetaMethod, Result, Table, UserData, UserDataMethods, Value};
+use mlua::{
+    FromLuaMulti, Function, Lua, MetaMethod, MultiValue, Result, Table, UserData, UserDataMethods,
+    Value,
+};
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet},
@@ -1162,10 +1165,17 @@ fn register_scene(lua: &Lua, api: &Table) -> Result<()> {
         })?,
     )?;
 
-    for name in ["chain", "all", "parallel", "loop"] {
+    for name in ["chain", "all", "parallel", "loop", "delay"] {
         api.set(
             name,
-            lua.create_function(move |lua, callback: Function| {
+            lua.create_function(move |lua, args: MultiValue| {
+                let (seconds, callback) = if name == "delay" {
+                    let (seconds, callback) = <(f32, Function)>::from_lua_multi(args, lua)?;
+
+                    (duration(seconds)?, callback)
+                } else {
+                    (0.0, Function::from_lua_multi(args, lua)?)
+                };
                 let runtime = Runtime::from_lua(lua)?;
 
                 runtime.construction()?;
@@ -1201,7 +1211,13 @@ fn register_scene(lua: &Lua, api: &Table) -> Result<()> {
                         .unwrap()
                         .begin_schedule(name == "all", repeating)
                 })?;
-                let result = callback.call::<()>(());
+                let result = (|| {
+                    if name == "delay" {
+                        engine(|| runtime.scene.borrow_mut().as_mut().unwrap().wait(seconds))?;
+                    }
+
+                    callback.call::<()>(())
+                })();
                 let close = engine(|| {
                     runtime.scene.borrow_mut().as_mut().unwrap().end_schedule(
                         scope,

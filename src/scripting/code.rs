@@ -10,6 +10,7 @@ use crate::core::{
 };
 use mlua::{FromLuaMulti, IntoLua, Lua, MultiValue, Result, Table, Value};
 
+#[derive(Clone)]
 pub(super) enum CodeAction {
     Morph(String, bool),
     Fade(String),
@@ -784,6 +785,39 @@ end
                 assert!(fade.active && fade.morph, "{builder}");
                 assert_eq!(fade.group, group, "{builder} at {time}");
             }
+        }
+    }
+
+    #[test]
+    fn delayed_edits_resolve_at_their_delayed_scheduling_position() {
+        let scene = load(
+            r#"
+return function()
+    local c=k.world_2d():add(k.code{id='code',code='a'})
+    k.all(function()
+        c:insert({1,2},'b'):play(0.5,'linear')
+        c:insert({1,3},'c'):delay(1):play(0.5,'linear')
+    end)
+end
+"#,
+        )
+        .unwrap();
+        let entity = scene.entity("code").unwrap();
+
+        assert_eq!(scene.duration(), 1.5);
+
+        for (time, expected) in [(0.75, "ab"), (1.5, "abc"), (0.0, "a")] {
+            scene.update(time).unwrap();
+
+            assert_eq!(
+                scene
+                    .scene()
+                    .world()
+                    .get::<&CodeShape>(entity)
+                    .unwrap()
+                    .code,
+                expected
+            );
         }
     }
 

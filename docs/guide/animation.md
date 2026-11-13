@@ -93,8 +93,42 @@ ball:to {radius = 50}:play(1, "cubic_out")
 ```
 
 See [easing](easing.md) to compare curves. Easing names are exact `snake_case` strings.
-An animation definition exposes `play`, not additional object methods: schedule the
-next animation on the object itself.
+An animation definition exposes `delay` and `play`. Schedule the next animation on
+the object itself.
+
+## Delay an animation
+
+Use `:delay(seconds)` before `:play` to offset the whole animation, including all
+properties in a `to`, `by`, or `from` table:
+
+```lua
+ball:to {
+    position = {x = 200, y = 100},
+    radius = 50,
+    opacity = 0.5,
+}:delay(0.3):play(1, "cubic_out")
+```
+
+All tracks start after 0.3 seconds and animate together for one second. The operation
+occupies 1.3 seconds in the current sequence. Delay must be finite and nonnegative.
+Zero adds no pause, including when `play()` applies an instantaneous change.
+
+`delay` returns a new definition without scheduling or changing the original. Each
+play of that definition includes its delay; calling `delay` again replaces the delay.
+Implicit starting values are resolved at the delayed start time.
+
+For different delays per property, schedule separate animations in `all`:
+
+```lua
+k.all(function()
+    ball.position:to(k.vec2(200, 100)):play(1)
+    ball.radius:to(50):delay(0.2):play(1)
+    ball.opacity:to(0.5):delay(0.4):play(1)
+end)
+```
+
+The block takes 1.4 seconds. To delay a whole sequence, use
+[`k.delay(seconds, schedule)`](sequences.md#delay-a-sequence).
 
 ## Sequences, parallel work, and loops
 

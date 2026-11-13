@@ -25,6 +25,27 @@ White:    [ To center. ][ To right.  ][ Hold. ]
 Blue:     [ To right.  ][       Hold.         ]
 ```
 
+## Delay a sequence
+
+`k.delay(seconds, schedule)` creates a sequential scope with an initial pause relative
+to the current scheduling position. Seconds must be finite and nonnegative.
+
+```lua
+k.all(function()
+    title.opacity:to(1):play(0.4)
+    k.delay(0.2, function()
+        subtitle.opacity:to(1):play(0.4)
+        subtitle.position.y:by(-20):play(0.3)
+    end)
+end)
+```
+
+The delayed sequence starts at 0.2 seconds and finishes at 0.9 seconds, which is also
+the duration of `all`. This is equivalent to a `chain` beginning with `k.wait(0.2)`.
+The callback runs once during scene construction to schedule work at that offset.
+Inside `parallel`, the delay and its children leave the parent duration unchanged.
+Use [`:delay(seconds)`](animation.md#delay-an-animation) for a single animation.
+
 ## Work alongside the main sequence
 
 `parallel` schedules work without advancing or extending its parent. Reserve time in the

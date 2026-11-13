@@ -9,6 +9,7 @@ pub(super) enum Operation {
     From,
 }
 
+#[derive(Clone)]
 struct Destination {
     property: PropertyHandle,
     start: Option<TrackValue>,
@@ -19,9 +20,11 @@ struct Destination {
     rotation: Option<(glam::Vec3, f32)>,
 }
 
+#[derive(Clone)]
 pub(crate) struct AnimationDefinition {
     pub(super) object: ObjectHandle,
     destinations: Vec<Destination>,
+    delay: f32,
     code_action: Option<super::code::CodeAction>,
 }
 
@@ -198,6 +201,7 @@ impl AnimationDefinition {
         Self {
             object,
             destinations: Vec::new(),
+            delay: 0.0,
             code_action: None,
         }
     }
@@ -206,6 +210,7 @@ impl AnimationDefinition {
         Self {
             object,
             destinations: Vec::new(),
+            delay: 0.0,
             code_action: Some(action),
         }
     }
@@ -322,6 +327,7 @@ impl AnimationDefinition {
             .map_or((1 << finish.channels()) - 1, |c| 1 << c);
 
         Ok(Self {
+            delay: 0.0,
             code_action: None,
             object: property.object.clone(),
             destinations: vec![Destination {
@@ -340,6 +346,35 @@ impl AnimationDefinition {
         let runtime = self.object.runtime()?;
 
         runtime.construction()?;
+
+        if self.delay == 0.0 {
+            return self.play_now(seconds, ease);
+        }
+
+        let scope = engine(|| {
+            let mut scene = runtime.scene.borrow_mut();
+            let scene = scene.as_mut().unwrap();
+            let scope = scene.begin_schedule(false, false);
+
+            scene.wait(self.delay);
+
+            scope
+        })?;
+        let result = self.play_now(seconds, ease);
+        let close = engine(|| {
+            runtime
+                .scene
+                .borrow_mut()
+                .as_mut()
+                .unwrap()
+                .end_schedule(scope, false, false)
+        });
+
+        result.and(close)
+    }
+
+    fn play_now(&self, seconds: Option<f32>, ease: Option<String>) -> Result<()> {
+        let runtime = self.object.runtime()?;
 
         if let Some(action) = &self.code_action {
             return super::code::resolve(&self.object, action)?.play(seconds, ease);
@@ -464,6 +499,7 @@ impl AnimationDefinition {
 
         Self {
             object: object.clone(),
+            delay: 0.0,
             code_action: None,
             destinations: vec![Destination {
                 property: PropertyHandle {
@@ -549,6 +585,15 @@ impl AnimationDefinition {
 
 impl UserData for AnimationDefinition {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("delay", |_, this, seconds: f32| {
+            this.object.runtime()?.construction()?;
+
+            let mut delayed = this.clone();
+
+            delayed.delay = duration(seconds)?;
+
+            Ok(delayed)
+        });
         methods.add_method(
             "play",
             |_, this, (seconds, ease): (Option<f32>, Option<String>)| this.play(seconds, ease),
