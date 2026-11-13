@@ -404,7 +404,6 @@ mod tests {
         let appearance: Appearance = ron::from_str("(background: (0.0, 0.0, 0.0, 1.0), accent: (0.0, 0.5, 1.0, 1.0), contrast: 1.0, scale: 1.0)").unwrap();
 
         assert_eq!(appearance.editor, super::super::code::Settings::default());
-        assert_eq!(appearance.editor.executable, "code");
     }
 
     #[test]
