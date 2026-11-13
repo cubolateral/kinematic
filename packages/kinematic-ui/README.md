@@ -4,10 +4,12 @@ Shared ImGui components and the minimal visual style used by Kinematic. The crat
 dependency on the application, its editor, scene model, Lua runtime, SDL,
 OpenGL, or export loop.
 
-- `theme`: Palette, 2 px corners, shared window outlines, borderless controls, scale, and font setup. The caller owns
+- `theme`: Palette, configurable corners, borderless surfaces, background-derived dark dividers, scale, and font setup. The caller owns
   font assets and serialized preferences.
-- `windows`: Docked panels, centered floating windows, tabs, and dialogs.
+- `windows`: Fixed docked panels, centered floating windows, panels with embedded footers, tabs, and dialogs.
+- `docking`: Single-row panel titles, centered mode controls with a fixed left action, bottom panel selectors with right-aligned metadata, sidebar position grids, and draggable workspace separators. Inactive titles are muted and hover uses the accent.
 - `controls`: Buttons, choices, text and color inputs, sliders, menus, and progress.
+- `status_bar`: Repository and version information inside panel footers and the seamless Home footer.
 - `title_bar`: Window control buttons and their platform layout. The caller supplies available actions and applies window state changes.
 - `properties`: Label/value rows, component groups, reset buttons, sections,
   read-only values, and sliders. Shared by Inspector, Sound, and Settings.

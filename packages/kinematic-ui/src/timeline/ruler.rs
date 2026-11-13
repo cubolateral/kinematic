@@ -5,24 +5,6 @@ use super::{
     metrics::{GRID_TARGET_SPACING, LABEL_PADDING, SCRUBBER_HEIGHT},
 };
 
-pub fn draw_scrubber(
-    ui: &dear_imgui_rs::Ui,
-    draw_list: &dear_imgui_rs::DrawListMut<'_>,
-    layout: Layout,
-    time: TimeRange,
-    fps: u32,
-) {
-    let text_y = layout.top + 8.0;
-    let end_text = format_grid_time(time.end, grid_step(time, layout.timeline_width), fps);
-    let end_width = text_size(ui, &end_text)[0];
-
-    draw_list.add_text(
-        [layout.timeline_right() - end_width, text_y],
-        ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
-        end_text,
-    );
-}
-
 pub fn draw_time_grid_lines(
     ui: &dear_imgui_rs::Ui,
     draw_list: &dear_imgui_rs::DrawListMut<'_>,
@@ -36,7 +18,7 @@ pub fn draw_time_grid_lines(
     }
 
     let first_tick = (time.start / step).ceil() * step;
-    let color = ui.get_color_u32(dear_imgui_rs::StyleColor::Separator);
+    let color = ui.get_color_u32(dear_imgui_rs::StyleColor::TreeLines);
     let mut tick = first_tick;
 
     while tick <= time.end + step * 0.001 {
@@ -75,7 +57,7 @@ pub fn draw_time_grid_labels(
         draw_list.add_text(
             [time.x(layout, tick) + 3.0, layout.top + 8.0],
             color,
-            format_grid_time(tick, step, fps),
+            format_timecode(tick, fps),
         );
 
         tick += step;
@@ -107,7 +89,7 @@ pub fn draw_time_panel(
 ) {
     let accent = ui.style_color(dear_imgui_rs::StyleColor::CheckMark);
     let text_color = crate::theme::contrast_text(accent);
-    let text = format_grid_time(time.current, grid_step(time, layout.timeline_width), fps);
+    let text = format_timecode(time.current, fps);
     let size = text_size(ui, &text);
     let position = [playhead_x - size[0] * 0.5, layout.top + 8.0];
     let min = [
@@ -132,7 +114,7 @@ pub fn draw_time_panel(
             max,
             ui.get_color_u32(dear_imgui_rs::StyleColor::CheckMark),
         )
-        .rounding(crate::theme::CORNER_RADIUS)
+        .rounding(ui.clone_style().frame_rounding())
         .filled(true)
         .build();
     draw_list.add_text(position, text_color, text);
@@ -184,26 +166,19 @@ fn grid_step(time: TimeRange, width: f32) -> f32 {
     multiple * magnitude
 }
 
-fn format_grid_time(time: f32, step: f32, fps: u32) -> String {
-    if step < 1.0 && fps > 0 {
-        let total_frames = (time.max(0.0) as f64 * fps as f64).round() as u64;
-        let frames = total_frames % fps as u64;
-        let seconds = total_frames / fps as u64;
-        let frame_width = fps.saturating_sub(1).to_string().len().max(2);
+pub fn format_timecode(time: f32, fps: u32) -> String {
+    let fps = fps.max(1) as u64;
+    let total_frames = (time.max(0.0) as f64 * fps as f64).round() as u64;
+    let frames = total_frames % fps;
+    let total_seconds = total_frames / fps;
 
-        return format!("{}:{frames:0frame_width$}", format_time(seconds as f32, 0));
-    }
-
-    let mut decimals = 0;
-    let mut value = step.abs();
-
-    while value > 0.0 && value < 1.0 && decimals < 6 {
-        value *= 10.0;
-
-        decimals += 1;
-    }
-
-    format_time(time, decimals)
+    format!(
+        "{:02}:{:02}:{:02}:{:02}",
+        total_seconds / 3600,
+        (total_seconds / 60) % 60,
+        total_seconds % 60,
+        frames
+    )
 }
 
 pub fn format_time(time: f32, decimals: usize) -> String {
@@ -228,16 +203,14 @@ pub fn format_time(time: f32, decimals: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_grid_time, format_time};
+    use super::{format_time, format_timecode};
 
     #[test]
-    fn grid_time_precision_follows_the_grid_step() {
-        assert_eq!(format_grid_time(5.0, 1.0, 60), "00:05");
-        assert_eq!(format_grid_time(0.5, 0.1, 60), "00:00:30");
-        assert_eq!(format_grid_time(0.5, 0.1, 30), "00:00:15");
-        assert_eq!(format_grid_time(60.0, 1.0, 60), "01:00");
-        assert_eq!(format_grid_time(65.25, 1.0, 60), "01:05");
-        assert_eq!(format_grid_time(65.5, 0.1, 60), "01:05:30");
+    fn timecode_always_includes_padded_hours_and_frames() {
+        assert_eq!(format_timecode(5.0, 60), "00:00:05:00");
+        assert_eq!(format_timecode(0.5, 60), "00:00:00:30");
+        assert_eq!(format_timecode(65.25, 60), "00:01:05:15");
+        assert_eq!(format_timecode(3661.5, 60), "01:01:01:30");
     }
 
     #[test]
@@ -277,13 +250,14 @@ pub fn progress_line(
 pub fn duration_bar(ui: &dear_imgui_rs::Ui, time: f32, duration: f32) {
     let min = ui.cursor_screen_pos();
     let width = ui.content_region_avail_width().max(1.0);
+    let line_y = min[1] + 1.0;
 
     ui.dummy([width, 3.0]);
 
     progress_line(
         ui,
         &ui.get_window_draw_list(),
-        [min[0], min[1] + 1.0],
+        [min[0], line_y],
         width,
         if duration > 0.0 { time / duration } else { 0.0 },
     );

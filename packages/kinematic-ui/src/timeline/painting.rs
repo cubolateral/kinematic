@@ -4,7 +4,7 @@ use super::metrics::{CLIP_HANDLE, EVENT_HEIGHT, PANEL_TEXT_PADDING};
 use dear_imgui_rs::{DrawListMut, StyleColor, Ui};
 
 pub fn separator(ui: &Ui, draw: &DrawListMut<'_>, left: f32, right: f32, y: f32) {
-    draw.add_line_h(left, right, y, ui.get_color_u32(StyleColor::Separator), 1.0);
+    draw.add_line_h(left, right, y, ui.get_color_u32(StyleColor::TreeLines), 1.0);
 }
 
 pub fn scene(
@@ -26,7 +26,7 @@ pub fn scene(
     });
 
     draw.add_rect(min, [(max[0] - 1.0).max(min[0]), max[1]], fill)
-        .rounding(0.0)
+        .rounding(ui.clone_style().frame_rounding())
         .filled(true)
         .build();
 
@@ -108,11 +108,8 @@ pub fn audio_header(
     draw: &DrawListMut<'_>,
     min: [f32; 2],
     width: f32,
-    height: f32,
     collapsed: bool,
 ) -> bool {
-    separator(ui, draw, min[0], min[0] + width, min[1] + height);
-
     let clicked = ui.invisible_button("##audio_header", [width, 24.0]);
 
     draw.add_text(
@@ -153,7 +150,7 @@ pub fn audio(
             StyleColor::Header
         }),
     )
-    .rounding(0.0)
+    .rounding(ui.clone_style().frame_rounding())
     .filled(true)
     .build();
 }

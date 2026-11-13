@@ -4,10 +4,7 @@ mod scene;
 mod state;
 
 use crate::editor::Editor;
-use kinematic_ui::{
-    timeline::{layout, metrics, ruler, waveform},
-    windows,
-};
+use kinematic_ui::timeline::{layout, metrics, ruler, waveform};
 
 use crate::ui::preview::shortcuts;
 use layout::{Layout, TimeRange};
@@ -30,6 +27,7 @@ pub(super) fn draw(
     state: &mut State,
     keyboard: bool,
     dragged_audio: Option<&std::path::Path>,
+    workspace: &mut super::workspace::State,
 ) {
     let is_exporting = editor.is_exporting();
     let fps = editor.project_info().1.fps;
@@ -40,7 +38,7 @@ pub(super) fn draw(
 
     shortcuts(editor.timeline_mut(), ui, !is_exporting && keyboard);
 
-    windows::panel(ui, WINDOW_NAME, || {
+    workspace.bottom_panel(ui, WINDOW_NAME, || {
         audio_shortcuts(editor, ui, keyboard);
 
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
@@ -108,7 +106,6 @@ pub(super) fn draw(
         let draw_list = ui.get_window_draw_list();
         let playhead_x = time.x(layout, time.current);
 
-        ruler::draw_scrubber(ui, &draw_list, layout, time, fps);
         ruler::draw_time_grid_lines(ui, &draw_list, layout, time);
         ruler::draw_time_grid_labels(ui, &draw_list, layout, time, fps);
         ruler::draw_time_panel(ui, &draw_list, layout, time, playhead_x, fps);

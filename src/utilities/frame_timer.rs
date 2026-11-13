@@ -1,7 +1,6 @@
 pub(crate) struct FrameTimer {
     last_tick: std::time::Instant,
     delta_time: f32,
-    fps: f32,
 }
 
 impl FrameTimer {
@@ -9,7 +8,6 @@ impl FrameTimer {
         Self {
             last_tick: std::time::Instant::now(),
             delta_time: 0.0,
-            fps: 0.0,
         }
     }
 
@@ -20,14 +18,6 @@ impl FrameTimer {
 
         self.delta_time = now.duration_since(self.last_tick).as_secs_f32();
         self.last_tick = now;
-
-        if self.delta_time > 0.0 {
-            self.fps = 1.0 / self.delta_time;
-        }
-    }
-
-    pub fn fps(&self) -> f32 {
-        self.fps
     }
 
     pub fn delta_time(&self) -> f32 {

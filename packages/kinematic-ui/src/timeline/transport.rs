@@ -1,13 +1,12 @@
 //! Playback presentation. The caller applies returned transport actions.
 
-use super::format_time;
 use crate::{
     controls, icons,
     widgets::{self, text_size},
 };
 
 pub const BUTTON_SIZE: f32 = 25.0;
-pub const FULLSCREEN_SCRUBBER_HEIGHT: f32 = 12.0;
+pub const FULLSCREEN_SCRUBBER_HEIGHT: f32 = 10.0;
 const FULLSCREEN_SCRUBBER_THICKNESS: f32 = 3.0;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -18,6 +17,7 @@ pub enum Action {
     Next,
     End,
     Loop,
+    Screenshot,
     Fullscreen,
 }
 
@@ -26,7 +26,7 @@ pub struct State<'a> {
     pub looping: bool,
     pub fullscreen: bool,
     pub interactive: bool,
-    pub status: &'a str,
+    pub time_labels: [&'a str; 2],
     pub shortcuts: [&'a str; 7],
 }
 
@@ -38,17 +38,34 @@ pub fn draw(
 ) -> Option<Action> {
     let _disabled = ui.begin_disabled_with_cond(!state.interactive);
     let top = ui.cursor_screen_pos();
-    let bottom = ui.window_pos()[1] + ui.window_size()[1];
+    let available_width = ui.content_region_avail_width();
+    let available_height = ui.content_region_avail_height();
+    let controls_y = if state.fullscreen {
+        top[1]
+    } else {
+        top[1] + ((available_height - BUTTON_SIZE) * 0.5).max(0.0)
+    };
 
-    ui.set_cursor_screen_pos([
-        top[0],
-        top[1] + ((bottom - top[1] - BUTTON_SIZE) * 0.5).max(0.0),
-    ]);
+    ui.set_cursor_screen_pos([top[0], controls_y]);
+
+    let draw = ui.get_window_draw_list();
+    let text_y = controls_y + (BUTTON_SIZE - ui.text_line_height()) * 0.5;
+    let end_width = text_size(ui, state.time_labels[1])[0];
+    draw.add_text(
+        [top[0], text_y],
+        ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+        state.time_labels[0],
+    );
+    draw.add_text(
+        [top[0] + available_width - end_width, text_y],
+        ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
+        state.time_labels[1],
+    );
+    drop(draw);
 
     let spacing = ui.clone_style().item_spacing()[0];
-    let status_width = text_size(ui, "FPS: 99999.99")[0];
     let speed_width = text_size(ui, "1.00x")[0] + ui.clone_style().frame_padding()[0] * 2.0;
-    let width = BUTTON_SIZE * 8.0 + speed_width + spacing * 9.0 + status_width;
+    let width = BUTTON_SIZE * 9.0 + speed_width + spacing * 10.0;
 
     ui.set_cursor_pos_x(
         ui.cursor_pos_x() + ((ui.content_region_avail_width() - width) * 0.5).max(0.0),
@@ -108,6 +125,14 @@ pub fn draw(
 
     ui.same_line();
 
+    if controls::text_button(ui, icons::CAMERA, [BUTTON_SIZE; 2]) {
+        clicked = Some(Action::Screenshot);
+    }
+
+    crate::shortcut::tooltip(ui, "Save screenshot", "");
+
+    ui.same_line();
+
     if controls::text_button(
         ui,
         if state.fullscreen {
@@ -129,10 +154,6 @@ pub fn draw(
         },
         state.shortcuts[6],
     );
-
-    ui.same_line();
-
-    widgets::text(ui, state.status);
 
     clicked.filter(|_| state.interactive)
 }
@@ -224,21 +245,8 @@ pub fn scrubber(
         0.0
     };
     let progress_x = min[0] + width * ratio;
-    let line_y = min[1] + FULLSCREEN_SCRUBBER_HEIGHT * 0.5;
+    let line_y = min[1] + 1.5;
     let draw_list = ui.get_window_draw_list();
-    let current = format_time(current_time, 0);
-    let duration = format_time(duration, 0);
-    let current_size = text_size(ui, &current);
-    let duration_size = text_size(ui, &duration);
-    let current_x = (progress_x - current_size[0] * 0.5)
-        .clamp(min[0], min[0] + (width - current_size[0]).max(0.0));
-    let duration_x = min[0] + width - duration_size[0];
-
-    draw_list.add_text(
-        [current_x, line_y + 4.0],
-        ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
-        &current,
-    );
     draw_list.add_line_h(
         min[0],
         min[0] + width,
@@ -261,11 +269,6 @@ pub fn scrubber(
         )
         .filled(true)
         .build();
-    draw_list.add_text(
-        [duration_x, line_y + 4.0],
-        ui.get_color_u32(dear_imgui_rs::StyleColor::Text),
-        &duration,
-    );
 }
 
 pub fn time_at_position(position: f32, start: f32, width: f32, duration: f32) -> f32 {
@@ -371,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn playback_status_does_not_move_controls() {
+    fn playback_state_does_not_move_controls() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
 
@@ -386,7 +389,7 @@ mod tests {
 
         let mut positions = Vec::new();
 
-        for status in ["PAUSED", "FPS: 9.00", "FPS: 144.00", "EXPORTING"] {
+        for playing in [false, true] {
             let ui = context.frame();
 
             ui.window("Transport")
@@ -395,11 +398,11 @@ mod tests {
                     super::draw(
                         ui,
                         super::State {
-                            playing: status.starts_with("FPS"),
+                            playing,
                             looping: false,
                             fullscreen: false,
                             interactive: true,
-                            status,
+                            time_labels: ["00:00:00:00"; 2],
                             shortcuts: [""; 7],
                         },
                         &mut 100,

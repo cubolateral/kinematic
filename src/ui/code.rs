@@ -359,20 +359,34 @@ impl State {
         self.ready = Some(pending);
         self.pending = None;
     }
-    pub fn draw(&mut self, documents: &mut Documents, settings: &Settings, ui: &dear_imgui_rs::Ui) {
+    pub fn draw(
+        &mut self,
+        documents: &mut Documents,
+        settings: &Settings,
+        ui: &dear_imgui_rs::Ui,
+        workspace: &mut super::workspace::State,
+    ) {
         if let Some(Err(error)) = self.launcher.poll() {
             self.error = Some(error);
         }
-        super::windows::panel(ui, FILES_WINDOW, || {
-            self.files.draw(documents, ui, &mut self.error);
-            if let Some(path) = self.files.open_requested.take() {
-                self.error = self
-                    .launcher
-                    .open(settings, &documents.context, Some((&path, 1, 1)))
-                    .err();
-            }
-        });
-        super::windows::panel(ui, CONSOLE_WINDOW, || {
+        self.files.focused = false;
+
+        if !workspace.hidden {
+            super::windows::panel(ui, FILES_WINDOW, || {
+                workspace.position_menu(ui, 0);
+                self.files.draw(documents, ui, &mut self.error);
+                if let Some(path) = self.files.open_requested.take() {
+                    self.error = self
+                        .launcher
+                        .open(settings, &documents.context, Some((&path, 1, 1)))
+                        .err();
+                }
+            });
+        } else {
+            self.files.dragged_audio = None;
+        }
+
+        workspace.bottom_panel(ui, CONSOLE_WINDOW, || {
             let mut messages = documents.diagnostic_messages();
             messages.extend(self.error.iter().cloned());
             let height = self.diagnostics.height(ui, &messages);

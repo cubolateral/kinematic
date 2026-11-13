@@ -3,6 +3,7 @@
 pub mod canvas;
 pub mod controls;
 pub mod diagnostics;
+pub mod docking;
 pub mod icons;
 pub mod lists;
 pub mod menu;

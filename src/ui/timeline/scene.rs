@@ -19,14 +19,6 @@ pub(super) fn draw(
 
     let top = ui.cursor_screen_pos()[1];
 
-    painting::separator(
-        ui,
-        draw_list,
-        layout.timeline_left,
-        layout.timeline_right(),
-        top + SCENE_HEIGHT + 2.0,
-    );
-
     ui.dummy([layout.timeline_right() - layout.content_left, SCENE_HEIGHT]);
 
     let clip = draw_list.push_clip_rect(

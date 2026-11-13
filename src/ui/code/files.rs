@@ -1,7 +1,7 @@
 use crate::editor::documents::{Documents, FileEntry, SceneTemplate};
 use crate::ui::inputs::{self, Action as InputAction};
 use crate::utilities::terminal::open_terminal;
-use dear_imgui_rs::{Condition, MouseButton, Ui};
+use dear_imgui_rs::{Condition, MouseButton, StyleColor, Ui};
 use kinematic_ui::widgets;
 use kinematic_ui::{controls, icons, menu};
 use std::{
@@ -177,6 +177,15 @@ impl State {
         );
 
         self.visible = visible;
+
+        if ui.is_window_hovered()
+            && !ui.is_any_item_hovered()
+            && ui.is_mouse_clicked(MouseButton::Left)
+        {
+            self.selected.clear();
+            self.anchor = None;
+            self.pending_click = None;
+        }
 
         if let Some(folder) = self.drop_folder.take() {
             match documents.move_files(&self.dragged, &folder) {
@@ -479,14 +488,14 @@ impl State {
         let _id = ui.push_id(path.to_string_lossy().as_ref());
         let position = ui.cursor_screen_pos();
         let forced = self.pending_expansion.remove(path);
+        let _header = ui.push_style_color(StyleColor::Header, [0.0; 4]);
+        let _text = ui.push_style_color(StyleColor::Text, [0.0; 4]);
         let node = ui
             .tree_node_config("##Entry")
-            .selected(
-                self.selected.contains(path)
-                    || (self.selected.is_empty() && documents.active.as_ref() == Some(path)),
-            )
+            .selected(self.selected.contains(path))
             .leaf(!entry.directory)
-            .span_avail_width(true)
+            .span_full_width(true)
+            .framed(true)
             .frame_padding(true)
             .open_on_arrow(true)
             .open_on_double_click(true)
@@ -499,6 +508,7 @@ impl State {
                 },
             )
             .push();
+        drop(_text);
         let clicked = ui.is_item_clicked();
         let confirmed = ui.is_item_focused() && inputs::active(ui, InputAction::Confirm);
         let hovered = ui.is_item_hovered();
@@ -571,7 +581,26 @@ impl State {
             }
         }
 
-        kinematic_ui::lists::file_label(ui, position, name, entry.directory);
+        let selected = self.selected.contains(path);
+        kinematic_ui::lists::file_label(ui, position, name, entry.directory, selected);
+
+        if entry.directory {
+            let icon = if node.is_some() {
+                icons::CHEVRON_DOWN
+            } else {
+                icons::CHEVRON_RIGHT
+            };
+            let size = ui.calc_text_size(icon);
+
+            ui.get_window_draw_list().add_text(
+                [
+                    position[0] + (ui.tree_node_to_label_spacing() - size[0]) * 0.5,
+                    position[1] + (ui.frame_height() - size[1]) * 0.5,
+                ],
+                ui.get_color_u32(StyleColor::TextDisabled),
+                icon,
+            );
+        }
 
         if open
             && !entry.directory
@@ -584,14 +613,17 @@ impl State {
         if let Some(_node) = node {
             if entry.directory {
                 if let Some(entries) = children.get(path.as_path()) {
-                    let mut previous = position;
-
                     for child in entries {
                         let child_position = ui.cursor_screen_pos();
 
-                        kinematic_ui::lists::file_branch(ui, position, previous, child_position);
-
-                        previous = child_position;
+                        if self.selection_related(&child.path) {
+                            kinematic_ui::lists::file_branch(
+                                ui,
+                                position,
+                                child_position,
+                                child.directory,
+                            );
+                        }
 
                         let name = child.path.file_name().unwrap_or_default().to_string_lossy();
 
@@ -610,6 +642,12 @@ impl State {
                 }
             }
         }
+    }
+
+    fn selection_related(&self, path: &Path) -> bool {
+        self.selected.iter().map(PathBuf::as_path).any(|selected| {
+            selected == path || selected.starts_with(path) || path.starts_with(selected)
+        })
     }
 
     fn dialog(&mut self, documents: &mut Documents, ui: &Ui, error: &mut Option<String>) -> bool {
@@ -828,6 +866,23 @@ fn filename(name: &str, scene: bool) -> Result<String, String> {
 mod tests {
     use super::*;
     use dear_imgui_rs::Key;
+
+    #[test]
+    fn selection_guides_follow_the_selected_path() {
+        let mut state = State::default();
+        let selected = Path::new("scenes/intro.lua");
+
+        state.selected.insert(selected.into());
+
+        assert!(state.selection_related(Path::new("")));
+        assert!(state.selection_related(Path::new("scenes")));
+        assert!(state.selection_related(selected));
+        assert!(!state.selection_related(Path::new("assets")));
+
+        state.selected.clear();
+
+        assert!(!state.selection_related(Path::new("scenes")));
+    }
 
     #[test]
     fn double_click_shift_selection_drag_and_batch_delete_work_together() {

@@ -10,6 +10,7 @@ const CACHE_PATH: &str = "cache/editor.ron";
 #[serde(default)]
 pub(super) struct Cache {
     pub audio_volume: i32,
+    pub workspace: super::workspace::Layout,
     pub project_directory: Option<std::path::PathBuf>,
     pub recent_projects: Vec<std::path::PathBuf>,
     pub project_details: BTreeMap<std::path::PathBuf, ProjectDetails>,
@@ -19,6 +20,7 @@ impl Default for Cache {
     fn default() -> Self {
         Self {
             audio_volume: 100,
+            workspace: super::workspace::Layout::default(),
             project_directory: None,
             recent_projects: Vec::new(),
             project_details: BTreeMap::new(),
@@ -50,6 +52,10 @@ impl Cache {
     fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
         if !(0..=100).contains(&self.audio_volume) {
             return Err("Editor cache volume must be within range.".into());
+        }
+
+        if !self.workspace.valid() {
+            return Err("Editor sidebar layout is invalid.".into());
         }
 
         Ok(())
@@ -102,6 +108,7 @@ mod tests {
         let path = root.join("cache/editor.ron");
         let cache = Cache {
             audio_volume: 35,
+            workspace: super::super::workspace::Layout::default(),
             project_directory: Some(root.clone()),
             recent_projects: vec![root.join("Project")],
             project_details: [(

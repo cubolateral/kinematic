@@ -16,6 +16,7 @@ pub(super) enum Action {
     FileDelete,
     FileTerminal,
     ToggleFullscreen,
+    TogglePanels,
     ToggleMargin,
     Preview,
     Edit2d,
@@ -130,6 +131,7 @@ impl Default for InputMap {
                     "F",
                     &[Key::F],
                 ),
+                Binding::new(TogglePanels, Editor, "Toggle sidebars", "Tab", &[Key::Tab]),
                 Binding::new(ToggleMargin, Editor, "Toggle margins", "M", &[Key::M]),
                 Binding::new(Preview, Editor, "Preview mode", "F1", &[Key::F1]),
                 Binding::new(Edit2d, Editor, "2D editor mode", "F2", &[Key::F2]),
@@ -526,6 +528,8 @@ mod tests {
         let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
 
         for (action, key, modifiers, expected) in [
+            (Action::TogglePanels, Key::Tab, KeyMods::empty(), true),
+            (Action::TogglePanels, Key::Tab, KeyMods::SHIFT, false),
             (Action::FileRename, Key::F2, KeyMods::empty(), true),
             (Action::FileDuplicate, Key::D, KeyMods::CTRL, true),
             (Action::FileDelete, Key::Delete, KeyMods::empty(), true),

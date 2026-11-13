@@ -22,7 +22,7 @@ impl State {
     pub fn logo(&self, ui: &Ui) {
         let [x, y] = ui.cursor_screen_pos();
         let frame = ui.frame_height();
-        let size = ui.calc_text_size(icons::HOME)[0];
+        let size = ui.calc_text_size(icons::HOME)[0] * 1.5;
         let padding = (frame - size) * 0.5;
         let point = |px: f32, py: f32| {
             [
@@ -49,6 +49,7 @@ impl State {
     }
 
     pub fn finish(&mut self, ui: &Ui, settings_open: Option<&mut bool>) {
+        let divider = settings_open.is_none();
         let spacing = ui.clone_style().item_spacing()[0];
         let settings_width = if settings_open.is_some() {
             ui.frame_height() + spacing
@@ -97,10 +98,15 @@ impl State {
             self.action = self.controls.draw(ui).or(self.action);
         }
 
-        widgets::horizontal_border(
-            ui,
-            position[1] + ui.window_size()[1] - kinematic_ui::theme::BORDER_WIDTH,
-        );
+        if divider {
+            widgets::horizontal_divider(
+                ui,
+                position[1] + ui.window_size()[1]
+                    - ui.clone_style()
+                        .docking_separator_size()
+                        .min(kinematic_ui::theme::FRAME_PADDING[1]),
+            );
+        }
     }
 
     pub fn drag_area(&self, ui: &Ui) -> Option<[[f32; 2]; 2]> {
@@ -148,7 +154,7 @@ mod tests {
                 let ui = context.frame();
                 let mut settings_open = false;
 
-                if let Some(_menu) = ui.begin_main_menu_bar() {
+                if let Some(_menu) = kinematic_ui::title_bar::begin(ui) {
                     bar.begin(ui);
 
                     if !home {
@@ -160,6 +166,21 @@ mod tests {
                     let menu_end = ui.cursor_screen_pos()[0];
 
                     bar.finish(ui, home.then_some(&mut settings_open));
+
+                    if !macos {
+                        let (button_min, button_max) = ui.item_rect();
+                        let top = button_min[1] - ui.window_pos()[1];
+                        let bottom = ui.window_pos()[1] + ui.window_size()[1]
+                            - button_max[1]
+                            - ui.clone_style()
+                                .docking_separator_size()
+                                .min(kinematic_ui::theme::FRAME_PADDING[1]);
+
+                        assert!(
+                            (top - bottom).abs() < 1.0,
+                            "Title bar controls need equal vertical margins."
+                        );
+                    }
 
                     let [min, max] = bar.drag_area(ui).unwrap();
 

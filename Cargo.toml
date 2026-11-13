@@ -32,13 +32,23 @@ ratex-parser = "0.1.14"
 ratex-types = "0.1.14"
 ratex-font = "0.1.14"
 ratex-katex-fonts = "0.1.14"
-syntect = { version = "5.3", default-features = false, features = ["parsing", "yaml-load", "dump-load", "regex-onig"] }
+syntect = { version = "5.3", default-features = false, features = [
+    "parsing",
+    "yaml-load",
+    "dump-load",
+    "regex-onig",
+] }
 two-face = "0.5.2"
 flate2 = "1.1"
 tar = "0.4"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1.34"

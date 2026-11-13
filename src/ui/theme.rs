@@ -8,6 +8,8 @@ pub(super) struct Appearance {
     pub accent: [f32; 4],
     pub contrast: f32,
     pub scale: f32,
+    pub border_radius: f32,
+    pub window_spacing: f32,
     #[serde(rename = "external_editor")]
     pub editor: super::code::Settings,
 }
@@ -21,6 +23,8 @@ impl Default for Appearance {
             accent: visual.accent,
             contrast: visual.contrast,
             scale: visual.scale,
+            border_radius: kinematic_ui::theme::CORNER_RADIUS,
+            window_spacing: 4.0,
             editor: super::code::Settings::default(),
         }
     }

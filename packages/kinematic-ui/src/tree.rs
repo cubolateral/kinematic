@@ -12,6 +12,7 @@ pub struct Row<'a> {
     pub expanded: bool,
     pub has_children: bool,
     pub highlighted: bool,
+    pub lines_visible: bool,
     pub visibility: Option<bool>,
     pub effective_visibility: bool,
 }
@@ -44,46 +45,47 @@ pub fn row(ui: &dear_imgui_rs::Ui, row: Row<'_>) -> Response {
         [position[0] + selectable_width, position[1] + ROW_HEIGHT],
         true,
     );
-    let line_color = ui.get_color_u32(dear_imgui_rs::StyleColor::TreeLines);
+    let line_color = ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled);
     let middle = position[1] + ROW_HEIGHT * 0.5;
-
-    for (depth, continues) in row.branches.iter().enumerate() {
-        if *continues {
-            let x = position[0] + INDENT * (depth as f32 + 0.5);
-
-            draw_list
-                .add_line([x, position[1]], [x, position[1] + ROW_HEIGHT], line_color)
-                .build();
-        }
-    }
-
     let branch_x = position[0] + INDENT * (row.branches.len() as f32 + 0.5);
     let arrow_x = branch_x + INDENT * 0.5;
 
-    draw_list
-        .add_line(
-            [branch_x, position[1]],
-            [
-                branch_x,
-                if row.is_last {
-                    middle
-                } else {
-                    position[1] + ROW_HEIGHT
-                },
-            ],
-            line_color,
-        )
-        .build();
-    draw_list
-        .add_line([branch_x, middle], [arrow_x, middle], line_color)
-        .build();
+    if row.lines_visible {
+        for (depth, continues) in row.branches.iter().enumerate() {
+            if *continues {
+                let x = position[0] + INDENT * (depth as f32 + 0.5);
 
-    if has_children && row.expanded {
-        let x = arrow_x + INDENT * 0.5;
+                draw_list
+                    .add_line([x, position[1]], [x, position[1] + ROW_HEIGHT], line_color)
+                    .build();
+            }
+        }
 
         draw_list
-            .add_line([x, middle + 6.0], [x, position[1] + ROW_HEIGHT], line_color)
+            .add_line(
+                [branch_x, position[1]],
+                [
+                    branch_x,
+                    if row.is_last {
+                        middle
+                    } else {
+                        position[1] + ROW_HEIGHT
+                    },
+                ],
+                line_color,
+            )
             .build();
+        draw_list
+            .add_line([branch_x, middle], [arrow_x, middle], line_color)
+            .build();
+
+        if has_children && row.expanded {
+            let x = arrow_x + INDENT * 0.5;
+
+            draw_list
+                .add_line([x, middle + 6.0], [x, position[1] + ROW_HEIGHT], line_color)
+                .build();
+        }
     }
 
     draw_list.add_text(
@@ -158,25 +160,21 @@ pub fn row(ui: &dear_imgui_rs::Ui, row: Row<'_>) -> Response {
 }
 
 fn draw_arrow(ui: &dear_imgui_rs::Ui, position: [f32; 2], expanded: bool, clicked: bool) -> bool {
-    let center = [position[0] + INDENT * 0.5, position[1] + ROW_HEIGHT * 0.5];
-    let (a, b, c) = if expanded {
-        (
-            [center[0] - 4.0, center[1] - 2.0],
-            [center[0] + 4.0, center[1] - 2.0],
-            [center[0], center[1] + 3.0],
-        )
+    let icon = if expanded {
+        crate::icons::CHEVRON_DOWN
     } else {
-        (
-            [center[0] - 2.0, center[1] - 4.0],
-            [center[0] + 3.0, center[1]],
-            [center[0] - 2.0, center[1] + 4.0],
-        )
+        crate::icons::CHEVRON_RIGHT
     };
+    let size = text_size(ui, icon);
 
-    ui.get_window_draw_list()
-        .add_triangle(a, b, c, ui.get_color_u32(dear_imgui_rs::StyleColor::Text))
-        .filled(true)
-        .build();
+    ui.get_window_draw_list().add_text(
+        [
+            position[0] + (INDENT - size[0]) * 0.5,
+            position[1] + (ROW_HEIGHT - size[1]) * 0.5,
+        ],
+        ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled),
+        icon,
+    );
 
     let mouse_x = ui.io().mouse_pos()[0];
 
@@ -186,9 +184,6 @@ fn draw_arrow(ui: &dear_imgui_rs::Ui, position: [f32; 2], expanded: bool, clicke
 fn selectable_row(ui: &dear_imgui_rs::Ui, id: String, size: [f32; 2]) -> bool {
     let transparent = [0.0; 4];
     let _header = ui.push_style_color(dear_imgui_rs::StyleColor::Header, transparent);
-    let _header_hovered =
-        ui.push_style_color(dear_imgui_rs::StyleColor::HeaderHovered, transparent);
-    let _header_active = ui.push_style_color(dear_imgui_rs::StyleColor::HeaderActive, transparent);
 
     ui.selectable_config(id).selected(false).size(size).build()
 }
@@ -199,6 +194,7 @@ pub fn root(
     expanded: bool,
     has_children: bool,
     selected: bool,
+    lines_visible: bool,
 ) -> Response {
     let spacing = ui.clone_style().item_spacing();
     let _spacing = ui.push_style_var(dear_imgui_rs::StyleVar::ItemSpacing([spacing[0], 0.0]));
@@ -219,14 +215,14 @@ pub fn root(
         label,
     );
 
-    if expanded && has_children {
+    if lines_visible && expanded && has_children {
         let x = position[0] + INDENT * 0.5;
 
         draw_list
             .add_line(
                 [x, position[1] + ROW_HEIGHT * 0.5 + 6.0],
                 [x, position[1] + ROW_HEIGHT],
-                ui.get_color_u32(dear_imgui_rs::StyleColor::TreeLines),
+                ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled),
             )
             .build();
     }
@@ -301,6 +297,7 @@ mod tests {
                             expanded: true,
                             has_children: true,
                             highlighted: false,
+                            lines_visible: false,
                             visibility: Some(true),
                             effective_visibility: true,
                         },

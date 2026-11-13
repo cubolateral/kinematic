@@ -156,7 +156,7 @@ pub fn read_only(ui: &dear_imgui_rs::Ui, name: &str, value: &str) {
 
 pub fn section(ui: &dear_imgui_rs::Ui, title: &str) {
     ui.spacing();
-    ui.separator_with_text(title);
+    crate::widgets::muted(ui, title);
     ui.spacing();
 }
 

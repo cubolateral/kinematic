@@ -553,10 +553,7 @@ mod tests {
         home.draw(&mut code, ui);
 
         assert!(ui.is_popup_open("Rename project"));
-        assert_eq!(
-            ui.clone_style().window_border_size(),
-            kinematic_ui::theme::BORDER_WIDTH
-        );
+        assert_eq!(ui.clone_style().window_border_size(), 0.0);
 
         drop(_font);
 
@@ -564,7 +561,7 @@ mod tests {
     }
 
     #[test]
-    fn home_fills_the_viewport_above_the_shared_footer() {
+    fn home_keeps_a_footer_without_gaps() {
         let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
         let mut context = dear_imgui_rs::Context::create();
 
@@ -589,8 +586,6 @@ mod tests {
 
                 home.draw(&mut code, ui);
 
-                kinematic_ui::status_bar::draw(ui, env!("CARGO_PKG_VERSION"), false);
-
                 let mut bottom = 0.0;
 
                 ui.window("Kinematic home").build(|| {
@@ -599,7 +594,8 @@ mod tests {
 
                     bottom = ui.window_pos()[1] + ui.window_size()[1];
                 });
-                ui.window("Project status").build(|| {
+                kinematic_ui::status_bar::home(ui, env!("CARGO_PKG_VERSION"));
+                ui.window("Home status").build(|| {
                     assert_eq!(ui.window_pos()[1], bottom);
                     assert_eq!(ui.window_pos()[1] + ui.window_size()[1], size[1]);
                 });

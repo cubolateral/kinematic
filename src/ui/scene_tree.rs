@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use crate::{
     core::{
         Scene,
-        components::{Draw2D, Draw3D, Inspection, Name, TreeNode},
+        components::{Draw2D, Draw3D, Name, TreeNode},
         objects::ObjectHandler,
     },
     editor::Editor,
@@ -44,11 +44,16 @@ struct ObjectRow {
     entity: hecs::Entity,
     branches: Vec<bool>,
     is_last: bool,
-    ancestor_selected: bool,
+    lines_visible: bool,
     ancestor_visible: bool,
 }
 
-pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) -> bool {
+pub(super) fn draw(
+    editor: &mut Editor,
+    ui: &dear_imgui_rs::Ui,
+    state: &mut State,
+    workspace: &mut super::workspace::State,
+) -> bool {
     let is_exporting = editor.is_exporting();
     let selected = editor.selected_entity();
 
@@ -62,6 +67,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
     let mut visibility_changed = false;
 
     kinematic_ui::windows::panel(ui, WINDOW_NAME, || {
+        workspace.position_menu(ui, 1);
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
         let root_name = world
             .get::<&Name>(root)
@@ -72,6 +78,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
             state.expanded.contains(&root),
             !active_children(&world, root).is_empty(),
             selected == Some(root),
+            false,
         );
 
         if root_response.toggled {
@@ -97,6 +104,48 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut Stat
         if rows.is_empty() && state.expanded.contains(&root) {
             widgets::muted(ui, "   No objects.");
         } else {
+            let origin = ui.cursor_screen_pos();
+            let mut parents = vec![[origin[0] + 8.0, origin[1] - 12.0]];
+            let draw = ui.get_window_draw_list();
+            let color = ui.get_color_u32(dear_imgui_rs::StyleColor::TextDisabled);
+            let arrow = ui.calc_text_size(kinematic_ui::icons::CHEVRON_DOWN);
+            let margin = 4.0;
+
+            for (index, row) in rows.iter().enumerate() {
+                let depth = row.branches.len();
+                let middle = origin[1] + index as f32 * 24.0 + 12.0;
+                let parent = parents[depth];
+
+                if row.lines_visible {
+                    draw.add_line(
+                        [parent[0], parent[1] + arrow[1] * 0.5 + margin],
+                        [parent[0], middle],
+                        color,
+                    )
+                    .thickness(1.0)
+                    .build();
+                    draw.add_line(
+                        [parent[0], middle],
+                        [
+                            origin[0] + (depth as f32 + 2.0) * 16.0 + 4.0
+                                - if active_children(&world, row.entity).is_empty() {
+                                    margin
+                                } else {
+                                    12.0 + arrow[0] * 0.5 + margin
+                                },
+                            middle,
+                        ],
+                        color,
+                    )
+                    .thickness(1.0)
+                    .build();
+                }
+
+                parents.truncate(depth + 1);
+                parents.push([origin[0] + (depth as f32 + 1.5) * 16.0, middle]);
+            }
+            drop(draw);
+
             for index in dear_imgui_rs::ListClipper::new(rows.len()).begin(ui).iter() {
                 draw_row(
                     &world,
@@ -164,17 +213,12 @@ fn draw_row(
             is_last: row.is_last,
             expanded: state.expanded.contains(&entity),
             has_children: !active_children(world, entity).is_empty(),
-            highlighted: row.ancestor_selected || selected == Some(entity),
+            highlighted: selected == Some(entity),
+            lines_visible: false,
             visibility,
             effective_visibility: row.ancestor_visible && visibility.unwrap_or(true),
         },
     );
-
-    if response.hovered {
-        if let Ok(inspection) = world.get::<&Inspection>(entity) {
-            widgets::tooltip(ui, format!("Type: {}", inspection.object_name));
-        }
-    }
 
     if response.toggled {
         state.toggle(entity);
@@ -212,41 +256,48 @@ fn collect_rows(
     ancestor_selected: bool,
     ancestor_visible: bool,
     rows: &mut Vec<ObjectRow>,
-) {
+) -> bool {
     if !expanded.contains(&parent) {
-        return;
+        return selected == Some(parent);
     }
 
     let children = active_children(world, parent);
+    let mut contains_selected = selected == Some(parent);
+    let selected_ancestor = ancestor_selected || contains_selected;
 
     for (index, entity) in children.iter().copied().enumerate() {
         let is_last = index + 1 == children.len();
-        let is_selected = ancestor_selected || selected == Some(entity);
         let visibility = object_visibility(world, entity).unwrap_or(true);
+        let row_index = rows.len();
 
         rows.push(ObjectRow {
             entity,
             branches: branches.clone(),
             is_last,
-            ancestor_selected,
+            lines_visible: false,
             ancestor_visible,
         });
 
         branches.push(!is_last);
 
-        collect_rows(
+        let child_contains_selected = collect_rows(
             world,
             expanded,
             entity,
             branches,
             selected,
-            is_selected,
+            selected_ancestor,
             ancestor_visible && visibility,
             rows,
         );
 
         branches.pop();
+        contains_selected |= child_contains_selected;
+        rows[row_index].lines_visible =
+            selected_ancestor || selected == Some(entity) || child_contains_selected;
     }
+
+    contains_selected
 }
 
 fn object_visibility(world: &hecs::World, entity: hecs::Entity) -> Option<bool> {
@@ -363,7 +414,9 @@ mod tests {
         );
         assert_eq!(rows[1].branches, vec![true]);
         assert!(rows[1].is_last);
-        assert!(rows[1].ancestor_selected);
+        assert!(rows[0].lines_visible);
+        assert!(rows[1].lines_visible);
+        assert!(!rows[2].lines_visible);
         assert!(rows[2].is_last);
 
         state.toggle(node);

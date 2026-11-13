@@ -24,6 +24,7 @@ pub(super) fn draw(
     state: &mut State,
     keyboard_enabled: bool,
     volume: &mut i32,
+    workspace: &mut super::workspace::State,
 ) -> bool {
     let mut toggle_fullscreen = false;
     let is_exporting = editor.is_exporting();
@@ -62,29 +63,44 @@ pub(super) fn draw(
             match state.mode() {
                 Mode::Two => editor.reset_editor_2d_camera_transform(),
                 Mode::Three => editor.reset_editor_3d_camera_transform(),
-                Mode::Preview => {}
+                Mode::Preview => state.view = kinematic_ui::canvas::View::default(),
             }
         }
 
-        kinematic_ui::windows::viewport_body(ui, || {
-            let Some(_tabs) = ui.tab_bar("Preview modes") else {
-                return;
-            };
-            let preview_tab = ui.tab_item_with_flags(
-                "PREVIEW",
-                None,
-                tab_flags(requested == Some(Mode::Preview)),
-            );
+        let modes = [Mode::Preview, Mode::Two, Mode::Three];
+        let labels = [
+            format!("{} Preview", kinematic_ui::icons::FILM),
+            format!("{} 2D", kinematic_ui::icons::SQUARE),
+            format!("{} 3D", kinematic_ui::icons::CUBE),
+        ];
+        let labels = labels.each_ref().map(String::as_str);
+        let selected = modes.iter().position(|mode| *mode == state.mode()).unwrap();
 
-            if ui.is_item_hovered() {
-                inputs::tooltip(ui, InputAction::Preview, "Show the final exported view");
-            }
+        let tooltips = [
+            ("Show the final exported view", "F1"),
+            ("Edit the selected Canvas2D", "F2"),
+            ("Edit the selected Canvas3D", "F3"),
+        ];
+        let (selected, toggle) = kinematic_ui::docking::centered_header(
+            ui,
+            selected,
+            &labels,
+            kinematic_ui::icons::LAYOUT_SIDEBAR_LEFT,
+            &tooltips,
+        );
 
-            if let Some(_tab) = preview_tab
-                && requested.is_none_or(|mode| mode == Mode::Preview)
-            {
-                state.set_mode(Mode::Preview);
+        if let Some(index) = selected {
+            state.set_mode(modes[index]);
+        }
+        if toggle {
+            workspace.toggle();
+        }
+        if ui.is_item_hovered() {
+            inputs::tooltip(ui, InputAction::TogglePanels, "Toggle sidebars");
+        }
 
+        kinematic_ui::windows::viewport_body(ui, || match state.mode() {
+            Mode::Preview => {
                 let min = ui.cursor_screen_pos();
                 let available = ui.content_region_avail();
                 let margin = editor.margin_visible().then(|| editor.margin_size());
@@ -106,7 +122,7 @@ pub(super) fn draw(
                     editor.margin_visible(),
                     [
                         inputs::map()
-                            .binding(InputAction::ToggleCamera)
+                            .binding(InputAction::ResetCamera)
                             .display
                             .as_str(),
                         inputs::map()
@@ -125,18 +141,7 @@ pub(super) fn draw(
                 }
             }
 
-            let editor_2d_tab =
-                ui.tab_item_with_flags("2D", None, tab_flags(requested == Some(Mode::Two)));
-
-            if ui.is_item_hovered() {
-                inputs::tooltip(ui, InputAction::Edit2d, "Edit the selected Canvas2D");
-            }
-
-            if let Some(_tab) = editor_2d_tab
-                && requested.is_none_or(|mode| mode == Mode::Two)
-            {
-                state.set_mode(Mode::Two);
-
+            Mode::Two => {
                 let canvas = editor.editor_2d_canvas();
 
                 if state.sync_canvas_2d(editor.active_scene_index(), canvas) {
@@ -146,18 +151,7 @@ pub(super) fn draw(
                 draw_editor_2d(editor, ui);
             }
 
-            let editor_3d_tab =
-                ui.tab_item_with_flags("3D", None, tab_flags(requested == Some(Mode::Three)));
-
-            if ui.is_item_hovered() {
-                inputs::tooltip(ui, InputAction::Edit3d, "Edit the selected Canvas3D");
-            }
-
-            if let Some(_tab) = editor_3d_tab
-                && requested.is_none_or(|mode| mode == Mode::Three)
-            {
-                state.set_mode(Mode::Three);
-
+            Mode::Three => {
                 let canvas = editor.editor_3d_canvas();
 
                 if state.sync_canvas_3d(editor.active_scene_index(), canvas) {
@@ -175,10 +169,7 @@ pub(super) fn draw(
 
         ui.set_cursor_screen_pos([ui.cursor_screen_pos()[0], ui.item_rect_max()[1]]);
 
-        let fps = editor.preview_fps();
-
-        toggle_fullscreen =
-            playback::draw(editor.timeline_mut(), ui, fps, !is_exporting, false, volume);
+        toggle_fullscreen = playback::draw(editor, ui, !is_exporting, false, volume);
     });
 
     toggle_fullscreen
@@ -304,14 +295,6 @@ fn shortcut_mode(ui: &dear_imgui_rs::Ui, enabled: bool) -> Option<Mode> {
         Some(Mode::Three)
     } else {
         None
-    }
-}
-
-fn tab_flags(selected: bool) -> dear_imgui_rs::TabItemFlags {
-    if selected {
-        dear_imgui_rs::TabItemFlags::SET_SELECTED
-    } else {
-        dear_imgui_rs::TabItemFlags::NONE
     }
 }
 

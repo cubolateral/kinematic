@@ -31,8 +31,6 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, volume: &mut i32
         },
     );
 
-    let fps = editor.preview_fps();
-
     playback::shortcuts(editor.timeline_mut(), ui, !is_exporting);
 
     let is_controlling = editor.timeline_mut().is_controlling;
@@ -63,13 +61,7 @@ pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, volume: &mut i32
         controls_size,
         true,
         || {
-            toggle_fullscreen = playback::fullscreen_controls(
-                editor.timeline_mut(),
-                ui,
-                fps,
-                !is_exporting,
-                volume,
-            );
+            toggle_fullscreen = playback::fullscreen_controls(editor, ui, !is_exporting, volume);
         },
     );
 

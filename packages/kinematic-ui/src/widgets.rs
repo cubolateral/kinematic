@@ -2,10 +2,14 @@ pub fn text_size(ui: &dear_imgui_rs::Ui, text: &str) -> [f32; 2] {
     ui.calc_text_size(text)
 }
 
-pub fn hide_single_window_tab(ui: &dear_imgui_rs::Ui) {
+pub fn hide_window_tab_bar(ui: &dear_imgui_rs::Ui) {
     ui.set_next_window_class(
         &dear_imgui_rs::WindowClass::default().dock_node_flags_override_set(
-            dear_imgui_rs::WindowClassDockNodeFlags::AUTO_HIDE_TAB_BAR,
+            dear_imgui_rs::WindowClassDockNodeFlags::NO_TAB_BAR
+                | dear_imgui_rs::WindowClassDockNodeFlags::NO_UNDOCKING
+                | dear_imgui_rs::WindowClassDockNodeFlags::NO_DOCKING_SPLIT
+                | dear_imgui_rs::WindowClassDockNodeFlags::NO_WINDOW_MENU_BUTTON
+                | dear_imgui_rs::WindowClassDockNodeFlags::NO_CLOSE_BUTTON,
         ),
     );
 }
@@ -27,19 +31,44 @@ pub fn message(ui: &dear_imgui_rs::Ui, text: impl AsRef<str>) {
 }
 
 pub fn separator(ui: &dear_imgui_rs::Ui) {
-    ui.separator();
-}
-
-pub fn horizontal_border(ui: &dear_imgui_rs::Ui, y: f32) {
-    let x = ui.window_pos()[0];
+    let position = ui.cursor_screen_pos();
+    let size = [
+        ui.content_region_avail_width(),
+        ui.clone_style().docking_separator_size(),
+    ];
 
     ui.get_window_draw_list()
-        .add_line(
-            [x, y],
-            [x + ui.window_size()[0], y],
-            ui.get_color_u32(dear_imgui_rs::StyleColor::Border),
+        .add_rect(
+            position,
+            [position[0] + size[0], position[1] + size[1]],
+            ui.style_color(dear_imgui_rs::StyleColor::Separator),
         )
-        .thickness(crate::theme::BORDER_WIDTH)
+        .filled(true)
+        .build();
+    ui.dummy(size);
+}
+
+pub fn horizontal_divider(ui: &dear_imgui_rs::Ui, y: f32) {
+    let position = ui.window_pos();
+    let size = ui.window_size();
+    let x = position[0];
+    let _clip = ui.push_clip_rect(
+        position,
+        [position[0] + size[0], position[1] + size[1]],
+        false,
+    );
+    let height = ui
+        .clone_style()
+        .docking_separator_size()
+        .min(crate::theme::FRAME_PADDING[1]);
+
+    ui.get_window_draw_list()
+        .add_rect(
+            [x, y],
+            [x + ui.window_size()[0], y + height],
+            ui.style_color(dear_imgui_rs::StyleColor::DockingEmptyBg),
+        )
+        .filled(true)
         .build();
 }
 

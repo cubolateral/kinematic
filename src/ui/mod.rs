@@ -30,6 +30,7 @@ static IMGUI_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub(crate) struct Ui {
     needs_initial_layout: bool,
+    panels: workspace::State,
     messages: message_box::State,
     code: code::State,
     home: home::State,
@@ -53,46 +54,61 @@ fn draw_top_bar(
     messages: &mut message_box::State,
     title_bar: &mut title_bar::State,
 ) -> bool {
-    let Some(_bar) = ui.begin_main_menu_bar() else {
+    let Some(_bar) = kinematic_ui::title_bar::begin(ui) else {
         return false;
     };
 
     title_bar.begin(ui);
     title_bar.logo(ui);
 
-    {
-        let _disabled = ui.begin_disabled_with_cond(editor.is_exporting());
-
-        if controls::text_button(ui, kinematic_ui::icons::HOME, [ui.frame_height(); 2]) {
-            code.request_project(ProjectAction::Close);
-        }
-
-        inputs::tooltip(ui, InputAction::ProjectList, "Home");
-    }
-
-    let menu_width =
-        ui.calc_text_size("ProjectEditorExport")[0] + ui.clone_style().frame_padding()[0] * 6.0;
+    let menu_width = ui.calc_text_size("ProjectEditorHelp")[0]
+        + ui.calc_text_size(kinematic_ui::icons::EXPORT)[0]
+        + ui.clone_style().frame_padding()[0] * 8.0;
     let controls_width = if title_bar.controls.macos {
         0.0
     } else {
         title_bar.controls.width(ui)
     };
     let available = ui.window_size()[0] - ui.cursor_pos()[0] - controls_width;
+    let mut export_drag_area = None;
     let started = if available < menu_width + ui.frame_height() {
         if let Some(_menu) = controls::menu(ui, "Menu") {
-            draw_project_menu(settings, editor, messages, ui);
+            draw_project_menu(settings, editor, code, messages, ui);
 
+            draw_help_menu(messages, ui);
             export::draw(editor, ui)
         } else {
             false
         }
     } else {
-        draw_project_menu(settings, editor, messages, ui);
+        draw_project_menu(settings, editor, code, messages, ui);
+        draw_help_menu(messages, ui);
+
+        let export_width = ui.calc_text_size(kinematic_ui::icons::EXPORT)[0]
+            + ui.clone_style().frame_padding()[0] * 2.0;
+        let right = ui.window_size()[0] - ui.clone_style().window_padding()[0] - controls_width;
+        let drag_start = ui.cursor_pos_x();
+        let export_start = (right - export_width).max(drag_start);
+        ui.set_cursor_pos_x(export_start);
+        export_drag_area = Some((drag_start, export_start));
 
         export::draw(editor, ui)
     };
 
     title_bar.finish(ui, None);
+
+    if let Some((start, end)) = export_drag_area {
+        let position = ui.window_pos();
+        let viewport = ui.main_viewport().pos();
+
+        title_bar.drag_area = (title_bar.controls.visible && end > start).then_some([
+            [position[0] - viewport[0] + start, position[1] - viewport[1]],
+            [
+                position[0] - viewport[0] + end,
+                position[1] - viewport[1] + ui.window_size()[1],
+            ],
+        ]);
+    }
 
     started
 }
@@ -100,6 +116,7 @@ fn draw_top_bar(
 fn draw_project_menu(
     settings: &mut settings::State,
     editor: &mut Editor,
+    code: &mut code::State,
     messages: &mut message_box::State,
     ui: &dear_imgui_rs::Ui,
 ) {
@@ -120,6 +137,22 @@ fn draw_project_menu(
             if controls::menu_item(ui, "Project settings") {
                 settings.project_open = true;
             }
+
+            if kinematic_ui::menu::item(
+                ui,
+                "Quit to project list",
+                &inputs::map().binding(InputAction::ProjectList).display,
+            ) {
+                code.request_project(ProjectAction::Close);
+            }
+        }
+
+        if kinematic_ui::menu::item(
+            ui,
+            "Quit",
+            &inputs::map().binding(InputAction::Quit).display,
+        ) {
+            code.request_exit();
         }
     }
 
@@ -127,6 +160,24 @@ fn draw_project_menu(
         if controls::menu_item(ui, "Editor settings") {
             settings.editor_open = true;
         }
+    }
+}
+
+fn draw_help_menu(messages: &mut message_box::State, ui: &dear_imgui_rs::Ui) {
+    if let Some(_menu) = controls::menu(ui, "Help") {
+        if controls::menu_item(ui, &format!("{}  Documentation", kinematic_ui::icons::BOOK)) {
+            open_url("https://cubolateral.github.io/kinematic/", messages);
+        }
+
+        if controls::menu_item(ui, &format!("{}  Repository", kinematic_ui::icons::GITHUB)) {
+            open_url("https://github.com/cubolateral/kinematic", messages);
+        }
+    }
+}
+
+fn open_url(url: &str, messages: &mut message_box::State) {
+    if let Err(error) = sdl3::url::open_url(url) {
+        messages.show(Kind::Error, format!("Could not open the link: {error}."));
     }
 }
 
@@ -166,6 +217,7 @@ impl Ui {
 
         Self {
             needs_initial_layout: true,
+            panels: workspace::State::new(cache.workspace),
             messages: message_box::State::default(),
             code,
             home,
@@ -188,6 +240,7 @@ impl Ui {
             project_directory: self.code.project_directory(),
             recent_projects: self.home.recent.clone(),
             project_details: self.home.details.clone(),
+            workspace: self.panels.layout.clone(),
         }
         .save();
     }
@@ -198,7 +251,11 @@ impl Ui {
 
     pub fn draw(&mut self, editor: &mut Editor, ui: &mut dear_imgui_rs::Ui) {
         let _theme = self.appearance.push(ui);
-        let _window_style = windows::style(ui);
+        let _window_style = windows::style(
+            ui,
+            self.appearance.border_radius.clamp(0.0, 12.0),
+            self.appearance.window_spacing.clamp(1.0, 16.0),
+        );
         let _font = ui.push_font(self.font);
         let io = ui.io();
         let plain_keyboard_input =
@@ -221,10 +278,22 @@ impl Ui {
             if fullscreen_shortcut || fullscreen_button {
                 self.is_fullscreen = false;
 
-                ui.set_window_focus(Some(inspector::WINDOW_NAME));
+                ui.set_window_focus(Some(if !self.panels.hidden {
+                    inspector::WINDOW_NAME
+                } else {
+                    preview::WINDOW_NAME
+                }));
             }
 
             return;
+        }
+
+        if !io.want_text_input()
+            && !ui.is_any_item_active()
+            && !ui.is_popup_open_with_flags("", dear_imgui_rs::PopupQueryFlags::ANY_POPUP)
+            && inputs::active(ui, InputAction::TogglePanels)
+        {
+            self.panels.toggle();
         }
 
         let export_started = draw_top_bar(
@@ -240,7 +309,8 @@ impl Ui {
             self.preview.show_preview();
         }
 
-        workspace::draw(ui);
+        self.panels
+            .draw(ui, self.appearance.window_spacing.clamp(1.0, 16.0));
 
         let initial_layout = self.needs_initial_layout;
 
@@ -249,7 +319,8 @@ impl Ui {
         }
 
         if let Some(documents) = &mut editor.documents {
-            self.code.draw(documents, &self.appearance.editor, ui);
+            self.code
+                .draw(documents, &self.appearance.editor, ui, &mut self.panels);
         }
 
         if !editor.is_exporting() && inputs::active(ui, InputAction::SaveProject) {
@@ -262,7 +333,9 @@ impl Ui {
         let fullscreen_button = {
             let _disabled = ui.begin_disabled_with_cond(is_exporting);
 
-            if scene_tree::draw(editor, ui, &mut self.scene_tree) {
+            if !self.panels.hidden
+                && scene_tree::draw(editor, ui, &mut self.scene_tree, &mut self.panels)
+            {
                 self.preview.edit_canvas(editor.selected_canvas());
             }
 
@@ -276,9 +349,12 @@ impl Ui {
                 &mut self.preview,
                 !self.code.files_focused(),
                 &mut self.audio_volume,
+                &mut self.panels,
             );
 
-            inspector::draw(editor, ui, &mut self.inspector);
+            if !self.panels.hidden {
+                inspector::draw(editor, ui, &mut self.inspector, &mut self.panels);
+            }
 
             timeline::draw(
                 editor,
@@ -286,14 +362,13 @@ impl Ui {
                 &mut self.timeline,
                 !self.code.files_focused(),
                 self.code.dragged_audio(),
+                &mut self.panels,
             );
 
             fullscreen_button
         };
 
-        self.draw_status_bar(ui, true);
-
-        if initial_layout {
+        if initial_layout && !self.panels.hidden {
             ui.set_window_focus(Some(inspector::WINDOW_NAME));
         }
 
@@ -312,13 +387,17 @@ impl Ui {
 
     pub(crate) fn draw_projects(&mut self, editor: Option<&mut Editor>, ui: &dear_imgui_rs::Ui) {
         let _theme = self.appearance.push(ui);
-        let _window_style = windows::style(ui);
+        let _window_style = windows::style(
+            ui,
+            self.appearance.border_radius.clamp(0.0, 12.0),
+            self.appearance.window_spacing.clamp(1.0, 16.0),
+        );
         let _font = ui.push_font(self.font);
 
         if editor.is_none() {
             let _border = ui.push_style_var(dear_imgui_rs::StyleVar::WindowBorderSize(0.0));
 
-            if let Some(_bar) = ui.begin_main_menu_bar() {
+            if let Some(_bar) = kinematic_ui::title_bar::begin(ui) {
                 self.title_bar.begin(ui);
                 self.title_bar.logo(ui);
                 self.title_bar
@@ -371,21 +450,10 @@ impl Ui {
         }
 
         if !has_editor {
-            self.draw_status_bar(ui, false);
+            kinematic_ui::status_bar::home(ui, env!("CARGO_PKG_VERSION"));
         }
 
         self.messages.draw(ui);
-    }
-
-    fn draw_status_bar(&mut self, ui: &dear_imgui_rs::Ui, top_border: bool) {
-        if kinematic_ui::status_bar::draw(ui, env!("CARGO_PKG_VERSION"), top_border) {
-            if let Err(error) = sdl3::url::open_url("https://github.com/cubolateral/kinematic") {
-                self.messages.show(
-                    Kind::Error,
-                    format!("Could not open the repository: {error}."),
-                );
-            }
-        }
     }
 
     pub(crate) fn remember_project(&mut self, root: &std::path::Path) {

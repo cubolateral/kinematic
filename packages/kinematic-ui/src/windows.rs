@@ -2,16 +2,30 @@
 
 use dear_imgui_rs::{Condition, ModalPopupToken, StyleColor, StyleVar, Ui, Window, WindowFlags};
 
-pub fn style(ui: &Ui) -> Vec<dear_imgui_rs::StyleStackToken<'_>> {
+pub fn style(
+    ui: &Ui,
+    border_radius: f32,
+    window_spacing: f32,
+) -> Vec<dear_imgui_rs::StyleStackToken<'_>> {
     let mut tokens = [
+        StyleVar::DockingSeparatorSize(window_spacing),
         StyleVar::WindowPadding(crate::theme::WINDOW_PADDING),
         StyleVar::FramePadding(crate::theme::FRAME_PADDING),
         StyleVar::ItemSpacing(crate::theme::ITEM_SPACING),
-        StyleVar::WindowRounding(crate::theme::CORNER_RADIUS),
-        StyleVar::PopupRounding(crate::theme::CORNER_RADIUS),
-        StyleVar::FrameRounding(crate::theme::CORNER_RADIUS),
-        StyleVar::WindowBorderSize(crate::theme::BORDER_WIDTH),
-        StyleVar::PopupBorderSize(crate::theme::BORDER_WIDTH),
+        StyleVar::WindowRounding(border_radius),
+        StyleVar::PopupRounding(border_radius),
+        StyleVar::FrameRounding(border_radius),
+        StyleVar::MenuItemRounding(border_radius),
+        StyleVar::SelectableRounding(border_radius),
+        StyleVar::ChildRounding(border_radius),
+        StyleVar::GrabRounding(border_radius),
+        StyleVar::TabRounding(border_radius),
+        StyleVar::ScrollbarRounding(border_radius),
+        StyleVar::ImageRounding(border_radius),
+        StyleVar::DragDropTargetRounding(border_radius),
+        StyleVar::ChildBorderSize(0.0),
+        StyleVar::WindowBorderSize(0.0),
+        StyleVar::PopupBorderSize(0.0),
         StyleVar::FrameBorderSize(0.0),
     ]
     .into_iter()
@@ -152,12 +166,47 @@ fn set_next_size(size: [f32; 2], condition: Condition) {
 }
 
 pub fn panel<T>(ui: &Ui, title: &str, content: impl FnOnce() -> T) -> Option<T> {
-    crate::widgets::hide_single_window_tab(ui);
+    crate::widgets::hide_window_tab_bar(ui);
 
     ui.window(title)
         .collapsed(false, Condition::Always)
         .flags(WindowFlags::NO_COLLAPSE)
         .build(content)
+}
+
+pub fn panel_with_footer<R>(
+    ui: &Ui,
+    title: &str,
+    expanded: bool,
+    content: impl FnOnce(),
+    footer: impl FnOnce() -> R,
+) -> Option<R> {
+    crate::widgets::hide_window_tab_bar(ui);
+
+    ui.window(title)
+        .collapsed(false, Condition::Always)
+        .flags(
+            WindowFlags::NO_COLLAPSE
+                | WindowFlags::NO_SCROLLBAR
+                | WindowFlags::NO_SCROLL_WITH_MOUSE,
+        )
+        .build(|| {
+            let origin = ui.cursor_screen_pos();
+            let available = ui.content_region_avail();
+            let bottom = ui.window_pos()[1] + ui.window_size()[1];
+            let footer_y = bottom - ui.clone_style().window_padding()[1] - ui.frame_height();
+
+            if expanded {
+                let height = (footer_y - origin[1] - ui.clone_style().item_spacing()[1]).max(1.0);
+                ui.child_window("Panel contents")
+                    .size([available[0], height])
+                    .build(ui, content);
+            }
+
+            ui.set_cursor_screen_pos([origin[0], footer_y]);
+
+            footer()
+        })
 }
 
 pub fn tabs<'ui>(ui: &'ui Ui, id: &str) -> Option<dear_imgui_rs::TabBarToken<'ui>> {
@@ -176,9 +225,8 @@ pub fn anchored<R>(
     flags: WindowFlags,
     content: impl FnOnce() -> R,
 ) -> Option<R> {
-    let _rounding = ui.push_style_var(StyleVar::WindowRounding(crate::theme::CORNER_RADIUS));
     let _padding = ui.push_style_var(StyleVar::WindowPadding([12.0, 12.0]));
-    let _border = ui.push_style_var(StyleVar::WindowBorderSize(crate::theme::BORDER_WIDTH));
+    let _border = ui.push_style_var(StyleVar::WindowBorderSize(0.0));
     let background = ui.clone_style().color(StyleColor::WindowBg);
     let _background = ui.push_style_color(StyleColor::WindowBg, background);
     let _child = ui.push_style_color(StyleColor::ChildBg, background);
@@ -237,7 +285,7 @@ pub fn fullscreen<R>(
 }
 
 pub fn viewport_panel<R>(ui: &Ui, title: &str, content: impl FnOnce() -> R) -> Option<R> {
-    crate::widgets::hide_single_window_tab(ui);
+    crate::widgets::hide_window_tab_bar(ui);
 
     ui.window(title)
         .collapsed(false, Condition::Always)

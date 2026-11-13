@@ -64,11 +64,6 @@ pub fn draw(ui: &dear_imgui_rs::Ui, preview: Image, available: [f32; 2], margin:
             margin,
         );
     }
-
-    ui.get_window_draw_list()
-        .add_rect(min, max, ui.style_color(dear_imgui_rs::StyleColor::Border))
-        .thickness(1.0)
-        .build();
 }
 
 pub fn draw_navigable(
@@ -151,14 +146,6 @@ pub fn draw_navigable(
         draw_margin(ui, &draw, min, image_max, preview.size, margin);
     }
 
-    draw.add_rect(
-        min,
-        image_max,
-        ui.style_color(dear_imgui_rs::StyleColor::Border),
-    )
-    .thickness(1.0)
-    .build();
-
     hovered && ui.is_mouse_clicked(dear_imgui_rs::MouseButton::Left)
 }
 
@@ -199,7 +186,7 @@ pub fn camera_mask(ui: &dear_imgui_rs::Ui, min: [f32; 2], size: [f32; 2], camera
     draw.add_rect(
         rect_min,
         rect_max,
-        ui.style_color(dear_imgui_rs::StyleColor::Border),
+        ui.style_color(dear_imgui_rs::StyleColor::TextDisabled),
     )
     .thickness(1.0)
     .build();
@@ -225,7 +212,7 @@ pub fn project_outline(ui: &dear_imgui_rs::Ui, min: [f32; 2], size: [f32; 2], as
         .add_rect(
             rect_min,
             rect_max,
-            ui.style_color(dear_imgui_rs::StyleColor::Border),
+            ui.style_color(dear_imgui_rs::StyleColor::TextDisabled),
         )
         .thickness(1.0)
         .build();
@@ -361,7 +348,7 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
         pan,
         zoom,
         props.rotation,
-        ui.style_color(dear_imgui_rs::StyleColor::Border),
+        ui.style_color(dear_imgui_rs::StyleColor::TextDisabled),
         1.0,
     );
 
@@ -417,7 +404,7 @@ pub fn draw_editor_2d(ui: &dear_imgui_rs::Ui, props: &Editor2D) {
             pan,
             zoom,
             props.rotation,
-            ui.style_color(dear_imgui_rs::StyleColor::Border),
+            ui.style_color(dear_imgui_rs::StyleColor::TextDisabled),
             1.0,
         );
     }

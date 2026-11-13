@@ -9,7 +9,7 @@ interaction belongs in the panel modules. Reusable presentation belongs in
 
 - `browser.rs`: Internal folder picker with asynchronous listing and navigation.
 - `theme.rs`: Persisted appearance settings and application font assets. Delegates styling to `kinematic_ui::theme`.
-- `workspace.rs`: Default docking layout. It refers to panels through their
+- `workspace.rs`: Fixed sidebar positions, resizing, bottom panel selectors, and the center docking layout. It refers to panels through their
   `WINDOW_NAME` constants.
 - `inputs.rs`: Action bindings, modifier matching, and shortcut display names.
 - `settings.rs`: Separate Project settings and Editor settings windows opened from the menus.
@@ -20,12 +20,12 @@ interaction belongs in the panel modules. Reusable presentation belongs in
 - `scene_tree.rs`: Active scene hierarchy and entity selection.
 - `inspector.rs`: Selected entity inspection.
 - `inspector/audio.rs`: Independent audio selection and volume/pan editing, including obscured overlaps.
-- `export.rs`: Export menu, screenshots and progress.
+- `export.rs`: Export menu and progress.
 - `preview/`: Canvas preview, zoom/pan, playback controls, hit testing, and fullscreen presentation.
 - `timeline/`: Timeline composition and its independent responsibilities.
 
 The Home bar shows editor settings. The project bar shows the project, editor,
-and export menus. Window controls share that bar. SDL handles dragging and edge
+view, and export menus. Window controls share that bar. SDL handles dragging and edge
 resizing, with native decorations retained if hit testing is unavailable.
 On Linux, button availability follows the desktop session because SDL does not
 expose the compositor's individual window management capabilities.
@@ -59,13 +59,16 @@ To add a panel:
 1. Create its module with a `WINDOW_NAME` constant and a `draw` function.
 2. Store panel state beside the other fields in `ui::Ui`, if needed.
 3. Call it from `Ui::draw`.
-4. Add it to `workspace::draw`.
+4. Add its fixed position and dock assignment to `workspace::State`.
 
 Use `kinematic_ui::windows::panel` for docked panels, `windows::window` for
 floating windows, `windows::modal` for dialogs, and `windows::sized_modal` when
 a dialog needs a specific size. These templates own positioning and sizing.
 callers supply content and actions. Keep them independent of editor and project types.
-Context menus keep their contextual anchors.
+Context menus keep their contextual anchors. Panel groups use `docking::header`
+for a single row of titles. Apply requested panel changes before drawing docked
+windows. Shared windows inherit borderless surfaces and the configured corner
+radius; workspace gaps derive their darker color from the theme background and contrast.
 
 To change Timeline behavior, update the module that owns that responsibility.
 Pure calculations should remain independent of Dear ImGui and have unit tests.

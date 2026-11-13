@@ -3,7 +3,6 @@
 use dear_imgui_rs::{ColorStackToken, Context, FontId, StyleColor, Ui};
 
 pub const CORNER_RADIUS: f32 = 4.0;
-pub const BORDER_WIDTH: f32 = 1.0;
 pub const WINDOW_PADDING: [f32; 2] = [8.0, 8.0];
 pub const FRAME_PADDING: [f32; 2] = [6.0, 4.0];
 pub const ITEM_SPACING: [f32; 2] = [8.0, 5.0];
@@ -40,7 +39,7 @@ pub struct Theme {
 impl Default for Theme {
     fn default() -> Self {
         Self {
-            background: [10.0 / 255.0, 10.0 / 255.0, 10.0 / 255.0, 1.0],
+            background: [24.0 / 255.0, 25.0 / 255.0, 28.0 / 255.0, 1.0],
             accent: [0.0, 0.549, 1.0, 1.0],
             contrast: 0.5,
             scale: 1.0,
@@ -49,6 +48,17 @@ impl Default for Theme {
 }
 
 impl Theme {
+    pub fn divider(&self) -> [f32; 4] {
+        let factor = 1.0 - (0.2 + 0.4 * self.contrast.clamp(0.0, 1.0));
+
+        [
+            self.background[0] * factor,
+            self.background[1] * factor,
+            self.background[2] * factor,
+            self.background[3],
+        ]
+    }
+
     pub fn apply_scale(&self, context: &mut Context) {
         context
             .style_mut()
@@ -70,7 +80,8 @@ impl Theme {
         let surface = mix(0.08);
         let hover = mix(0.14);
         let active = mix(0.22);
-        let border = mix(0.12);
+        let divider = self.divider();
+        let guide = mix(0.12);
         let disabled = mix(0.50);
         let accent = self.accent;
         let colors = [
@@ -81,8 +92,8 @@ impl Theme {
             (StyleColor::WindowBg, background),
             (StyleColor::ChildBg, background),
             (StyleColor::PopupBg, background),
-            (StyleColor::DockingEmptyBg, background),
-            (StyleColor::Border, border),
+            (StyleColor::DockingEmptyBg, divider),
+            (StyleColor::Border, [0.0; 4]),
             (StyleColor::BorderShadow, [0.0; 4]),
             (StyleColor::FrameBg, surface),
             (StyleColor::FrameBgHovered, hover),
@@ -105,7 +116,7 @@ impl Theme {
             (StyleColor::ScrollbarGrab, surface),
             (StyleColor::ScrollbarGrabHovered, hover),
             (StyleColor::ScrollbarGrabActive, active),
-            (StyleColor::Separator, border),
+            (StyleColor::Separator, divider),
             (StyleColor::SeparatorHovered, hover),
             (StyleColor::SeparatorActive, active),
             (StyleColor::ResizeGrip, surface),
@@ -113,19 +124,19 @@ impl Theme {
             (StyleColor::ResizeGripActive, active),
             (StyleColor::Tab, surface),
             (StyleColor::TabHovered, hover),
-            (StyleColor::TabSelected, active),
-            (StyleColor::TabSelectedOverline, active),
+            (StyleColor::TabSelected, background),
+            (StyleColor::TabSelectedOverline, [0.0; 4]),
             (StyleColor::TabDimmed, background),
             (StyleColor::TabDimmedSelected, active),
-            (StyleColor::TabDimmedSelectedOverline, active),
+            (StyleColor::TabDimmedSelectedOverline, [0.0; 4]),
             (StyleColor::DockingPreview, active),
             (StyleColor::TableHeaderBg, surface),
-            (StyleColor::TableBorderStrong, border),
-            (StyleColor::TableBorderLight, border),
+            (StyleColor::TableBorderStrong, [0.0; 4]),
+            (StyleColor::TableBorderLight, [0.0; 4]),
             (StyleColor::TableRowBg, background),
             (StyleColor::TableRowBgAlt, surface),
             (StyleColor::InputTextCursor, foreground),
-            (StyleColor::TreeLines, border),
+            (StyleColor::TreeLines, guide),
             (StyleColor::DragDropTarget, accent),
             (StyleColor::DragDropTargetBg, surface),
             (StyleColor::NavCursor, accent),
@@ -176,15 +187,20 @@ fn apply_geometry(context: &mut Context) {
     style.set_child_rounding(CORNER_RADIUS);
     style.set_popup_rounding(CORNER_RADIUS);
     style.set_frame_rounding(CORNER_RADIUS);
+    style.set_menu_item_rounding(CORNER_RADIUS);
+    style.set_selectable_rounding(CORNER_RADIUS);
     style.set_grab_rounding(CORNER_RADIUS);
     style.set_tab_rounding(CORNER_RADIUS);
     style.set_scrollbar_rounding(CORNER_RADIUS);
     style.set_image_rounding(CORNER_RADIUS);
     style.set_drag_drop_target_rounding(CORNER_RADIUS);
-    style.set_window_border_size(BORDER_WIDTH);
+    style.set_window_border_size(0.0);
     style.set_child_border_size(0.0);
-    style.set_popup_border_size(BORDER_WIDTH);
+    style.set_popup_border_size(0.0);
     style.set_frame_border_size(0.0);
+    style.set_tab_border_size(0.0);
+    style.set_tab_bar_border_size(0.0);
+    style.set_tab_bar_overline_size(0.0);
     style.set_window_padding(WINDOW_PADDING);
     style.set_frame_padding(FRAME_PADDING);
     style.set_item_spacing(ITEM_SPACING);
@@ -209,16 +225,41 @@ mod tests {
     }
 
     #[test]
-    fn the_shared_theme_has_consistent_borders_and_supports_dark_and_light_backgrounds() {
+    fn dividers_preserve_background_tint_and_follow_contrast() {
+        let background = [0.2, 0.3, 0.4, 1.0];
+        let mut theme = Theme {
+            background,
+            contrast: 0.25,
+            ..Theme::default()
+        };
+        let subtle = theme.divider();
+
+        theme.contrast = 1.0;
+
+        let strong = theme.divider();
+
+        for channel in 0..3 {
+            assert!(strong[channel] > 0.0);
+            assert!(strong[channel] < subtle[channel]);
+            assert!(subtle[channel] < background[channel]);
+            assert!((strong[channel] / background[channel] - 0.4).abs() < 0.0001);
+        }
+        assert_eq!(strong[3], background[3]);
+    }
+
+    #[test]
+    fn the_shared_theme_is_borderless_and_supports_dark_and_light_backgrounds() {
         let _lock = crate::TEST_LOCK.lock().unwrap();
         let mut context = Context::create();
 
         apply_geometry(&mut context);
 
         assert_eq!(context.style().frame_border_size(), 0.0);
-        assert_eq!(context.style().window_border_size(), BORDER_WIDTH);
-        assert_eq!(context.style().popup_border_size(), BORDER_WIDTH);
+        assert_eq!(context.style().window_border_size(), 0.0);
+        assert_eq!(context.style().popup_border_size(), 0.0);
         assert_eq!(context.style().frame_rounding(), CORNER_RADIUS);
+        assert_eq!(context.style().menu_item_rounding(), CORNER_RADIUS);
+        assert_eq!(context.style().selectable_rounding(), CORNER_RADIUS);
 
         context.set_ini_filename(None::<&str>).unwrap();
         context
@@ -238,16 +279,14 @@ mod tests {
 
             {
                 let _colors = theme.push(ui);
-                let border = ui.style_color(StyleColor::Border)[0];
+                let divider = ui.style_color(StyleColor::DockingEmptyBg)[0];
 
-                assert_eq!(
-                    ui.style_color(StyleColor::Border),
-                    ui.style_color(StyleColor::Separator)
-                );
+                assert_eq!(ui.style_color(StyleColor::Border), [0.0; 4]);
+                assert_eq!(ui.style_color(StyleColor::Separator), theme.divider());
 
                 let frame = ui.style_color(StyleColor::FrameBg)[0];
 
-                assert!((border - background[0]).abs() <= 0.121);
+                assert!(divider <= background[0]);
                 assert_ne!(frame, background[0]);
             }
 

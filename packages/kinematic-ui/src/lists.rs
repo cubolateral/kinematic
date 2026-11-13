@@ -31,8 +31,13 @@ fn file_icon(ui: &Ui, label: &str, directory: bool) -> (&'static str, [f32; 4]) 
     )
 }
 
-pub fn file_label(ui: &Ui, position: [f32; 2], label: &str, directory: bool) {
-    let (icon, color) = file_icon(ui, label, directory);
+pub fn file_label(ui: &Ui, position: [f32; 2], label: &str, directory: bool, selected: bool) {
+    let (icon, _) = file_icon(ui, label, directory);
+    let color = ui.get_color_u32(if selected {
+        StyleColor::CheckMark
+    } else {
+        StyleColor::Text
+    });
     let x = position[0] + ui.tree_node_to_label_spacing();
     let y = position[1] + ui.clone_style().frame_padding()[1];
     let draw = ui.get_window_draw_list();
@@ -43,20 +48,35 @@ pub fn file_label(ui: &Ui, position: [f32; 2], label: &str, directory: bool) {
             x + ui.calc_text_size(icon)[0] + ui.clone_style().item_spacing()[0].max(10.0),
             y,
         ],
-        ui.get_color_u32(StyleColor::Text),
+        color,
         label,
     );
 }
 
-pub fn file_branch(ui: &Ui, parent: [f32; 2], previous: [f32; 2], child: [f32; 2]) {
+pub fn file_branch(ui: &Ui, parent: [f32; 2], child: [f32; 2], directory: bool) {
     let middle = ui.frame_height() * 0.5;
     let x = parent[0] + ui.tree_node_to_label_spacing() * 0.5;
-    let color = ui.get_color_u32(StyleColor::TreeLines);
+    let color = ui.get_color_u32(StyleColor::TextDisabled);
     let draw = ui.get_window_draw_list();
 
-    draw.add_line([x, previous[1] + middle], [x, child[1] + middle], color)
-        .build();
-    draw.add_line([x, child[1] + middle], [child[0], child[1] + middle], color)
+    let gap = 4.0;
+    let arrow = ui.calc_text_size(crate::icons::CHEVRON_DOWN);
+    let end = child[0] + ui.tree_node_to_label_spacing()
+        - if directory {
+            (ui.tree_node_to_label_spacing() + arrow[0]) * 0.5 + gap
+        } else {
+            gap
+        };
+
+    draw.add_line(
+        [x, parent[1] + middle + arrow[1] * 0.5 + gap],
+        [x, child[1] + middle],
+        color,
+    )
+    .thickness(1.0)
+    .build();
+    draw.add_line([x, child[1] + middle], [end, child[1] + middle], color)
+        .thickness(1.0)
         .build();
 }
 

@@ -1981,10 +1981,6 @@ impl Editor {
         self.editor_3d_rendered = None;
     }
 
-    pub fn preview_fps(&self) -> f32 {
-        self.canvas_timer.fps()
-    }
-
     fn process_export_frame(&mut self, gl: &glow::Context) {
         if let Err(error) = self.export_audio() {
             self.renderer

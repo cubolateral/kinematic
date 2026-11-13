@@ -45,12 +45,18 @@ impl RotationEdit {
     }
 }
 
-pub(super) fn draw(editor: &mut Editor, ui: &dear_imgui_rs::Ui, state: &mut State) {
+pub(super) fn draw(
+    editor: &mut Editor,
+    ui: &dear_imgui_rs::Ui,
+    state: &mut State,
+    workspace: &mut super::workspace::State,
+) {
     let selected = editor.selected_object();
     let is_exporting = editor.is_exporting();
     let is_playing = editor.timeline_mut().is_playing();
 
     windows::panel(ui, WINDOW_NAME, || {
+        workspace.position_menu(ui, 2);
         super::timeline::audio_shortcuts(editor, ui, true);
 
         if let Some(clip) = editor.selected_audio() {

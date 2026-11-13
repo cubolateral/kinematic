@@ -255,7 +255,6 @@ pub(super) fn draw(
         draw_list,
         panel_top,
         layout.timeline_width,
-        panel_height,
         state.audio_collapsed,
     );
 

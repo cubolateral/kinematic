@@ -25,8 +25,6 @@ pub(super) struct State {
     fps: i32,
     margin: Margin,
     numeric: numbers::State,
-    launcher: crate::editor::external::Launcher,
-    editor_result: Option<String>,
 }
 
 pub(super) fn load() -> Appearance {
@@ -227,22 +225,6 @@ pub(super) fn draw(
         .opened(&mut open)
         .build(|| {
             if let Some(_tabs) = super::windows::tabs(ui, "Editor settings sections") {
-                if let Some(_editor) = super::windows::tab(ui, "External editor") {
-                    changed |= draw_external(
-                        &mut appearance.editor,
-                        ui,
-                        &mut state.launcher,
-                        &mut state.editor_result,
-                        editor
-                            .as_deref()
-                            .and_then(|editor| editor.documents.as_ref()),
-                    );
-                }
-
-                if let Some(_shortcuts) = super::windows::tab(ui, "Shortcuts") {
-                    draw_shortcuts(ui);
-                }
-
                 if let Some(_appearance) = super::windows::tab(ui, "Appearance") {
                     let defaults = Appearance::default();
 
@@ -272,11 +254,34 @@ pub(super) fn draw(
 
                     changed |= field(
                         ui,
+                        "Border radius",
+                        &mut appearance.border_radius,
+                        defaults.border_radius,
+                        |value| input_float(ui, &mut state.numeric, value, 0.0, 12.0),
+                    );
+                    changed |= field(
+                        ui,
+                        "Window spacing",
+                        &mut appearance.window_spacing,
+                        defaults.window_spacing,
+                        |value| input_float(ui, &mut state.numeric, value, 1.0, 16.0),
+                    );
+
+                    changed |= field(
+                        ui,
                         "UI Scale",
                         &mut appearance.scale,
                         defaults.scale,
                         |value| input_float(ui, &mut state.numeric, value, 0.75, 1.25),
                     );
+                }
+
+                if let Some(_shortcuts) = super::windows::tab(ui, "Shortcuts") {
+                    draw_shortcuts(ui);
+                }
+
+                if let Some(_editor) = super::windows::tab(ui, "External editor") {
+                    changed |= draw_external(&mut appearance.editor, ui);
                 }
             }
         });
@@ -403,6 +408,15 @@ mod tests {
     }
 
     #[test]
+    fn former_border_settings_use_the_default_corner_radius() {
+        let appearance: Appearance =
+            ron::from_str("(border_size: 2.0, window_spacing: 6.0)").unwrap();
+
+        assert_eq!(appearance.border_radius, kinematic_ui::theme::CORNER_RADIUS);
+        assert_eq!(appearance.window_spacing, 6.0);
+    }
+
+    #[test]
     fn embedded_editor_preferences_do_not_replace_external_defaults() {
         let appearance: Appearance = ron::from_str("(background: (0.1, 0.2, 0.3, 1.0), editor: (font_size: 18.0, colors: (theme: Custom, values: [])))").unwrap();
         assert_eq!(appearance.background, [0.1, 0.2, 0.3, 1.0]);
@@ -419,6 +433,8 @@ mod tests {
             accent: [0.4, 0.5, 0.6, 1.0],
             contrast: 0.75,
             scale: 1.25,
+            border_radius: 2.0,
+            window_spacing: 6.0,
             editor: super::super::code::Settings {
                 executable: "codium".into(),
                 ..Default::default()
@@ -433,6 +449,8 @@ mod tests {
         assert_eq!(loaded.background, appearance.background);
         assert_eq!(loaded.accent, appearance.accent);
         assert_eq!(loaded.contrast, appearance.contrast);
+        assert_eq!(loaded.border_radius, appearance.border_radius);
+        assert_eq!(loaded.window_spacing, appearance.window_spacing);
         assert_eq!(loaded.scale, appearance.scale);
         assert_eq!(loaded.editor, appearance.editor);
 
@@ -440,20 +458,9 @@ mod tests {
     }
 }
 
-fn draw_external(
-    settings: &mut crate::editor::external::Settings,
-    ui: &dear_imgui_rs::Ui,
-    launcher: &mut crate::editor::external::Launcher,
-    result: &mut Option<String>,
-    documents: Option<&crate::editor::documents::Documents>,
-) -> bool {
-    use kinematic_ui::{controls, properties, widgets, windows};
-    if let Some(completed) = launcher.poll() {
-        *result = Some(completed.map_or_else(
-            |error| error,
-            |()| "Editor test completed successfully.".into(),
-        ));
-    }
+fn draw_external(settings: &mut crate::editor::external::Settings, ui: &dear_imgui_rs::Ui) -> bool {
+    use kinematic_ui::{controls, properties};
+
     let mut profile = settings.profile.min(2);
     let mut changed = properties::row(ui, "Profile", false, || {
         controls::choice(
@@ -476,40 +483,6 @@ fn draw_external(
             controls::text_input(ui, "##value", value)
         })
         .changed;
-    }
-    widgets::muted(
-        ui,
-        "Arguments: JSON arrays. Placeholders: {project}, {file}, {line}, {column}.",
-    );
-    widgets::muted(
-        ui,
-        "Line and column start at 1. Choose a graphical editor executable or its CLI launcher.",
-    );
-    let project = documents.map(|documents| &documents.context);
-    let test_file = documents.and_then(|documents| documents.active.as_deref());
-    match windows::actions(
-        ui,
-        &[
-            ("Test project", project.is_some()),
-            ("Test file", test_file.is_some()),
-        ],
-    ) {
-        Some(action) => {
-            let root = project.unwrap();
-            let file = if action == 1 {
-                test_file.map(|path| (path, 7, 3))
-            } else {
-                None
-            };
-            *result = Some(launcher.open(settings, root, file).map_or_else(
-                |error| error,
-                |()| "Test launched; check the external editor.".into(),
-            ));
-        }
-        _ => {}
-    }
-    if let Some(result) = result {
-        widgets::message(ui, result);
     }
     changed
 }

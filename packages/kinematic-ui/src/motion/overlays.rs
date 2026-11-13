@@ -196,7 +196,8 @@ fn transient(flags: i32) -> bool {
     let flags = WindowFlags::from_bits_truncate(flags);
 
     popup
-        || (flags.contains(WindowFlags::NO_DOCKING | WindowFlags::NO_SAVED_SETTINGS)
+        || (!flags.intersects(WindowFlags::NO_NAV_FOCUS | WindowFlags::NO_BACKGROUND)
+            && flags.contains(WindowFlags::NO_DOCKING | WindowFlags::NO_SAVED_SETTINGS)
             && (!flags.contains(WindowFlags::NO_TITLE_BAR)
                 || flags.contains(WindowFlags::NO_FOCUS_ON_APPEARING)))
 }
@@ -317,6 +318,28 @@ unsafe fn native_slice_mut<'a, T>(data: *mut T, size: i32) -> &'a mut [T] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fixed_layout_windows_do_not_fade_over_fullscreen() {
+        for flags in [
+            WindowFlags::NO_DECORATION
+                | WindowFlags::NO_DOCKING
+                | WindowFlags::NO_SAVED_SETTINGS
+                | WindowFlags::NO_NAV_FOCUS
+                | WindowFlags::NO_FOCUS_ON_APPEARING,
+            WindowFlags::NO_DECORATION
+                | WindowFlags::NO_DOCKING
+                | WindowFlags::NO_SAVED_SETTINGS
+                | WindowFlags::NO_BACKGROUND
+                | WindowFlags::NO_FOCUS_ON_APPEARING,
+        ] {
+            assert!(!transient(flags.bits()));
+        }
+        assert!(transient(
+            (WindowFlags::NO_DOCKING | WindowFlags::NO_SAVED_SETTINGS | WindowFlags::NO_MOVE)
+                .bits()
+        ));
+    }
 
     #[test]
     fn closing_a_modal_keeps_its_last_complete_contents_during_the_fade() {

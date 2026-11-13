@@ -32,11 +32,15 @@ removal. Seek back to recover the object and its earlier appearance.
 
 Scene Tree, Timeline, and Preview share object selection. Inspector reads that
 selection. Audio selection is separate. Inactive objects do not appear in editor views.
-Rearrange panels by docking them. Window positions and layouts are not saved.
+
+Click empty space in Files to clear the file selection.
+Move sidebar panels with their dock position selector. Sidebar positions and sizes
+are saved automatically. Preview remains above the shared Timeline and Console area.
 
 ## Navigate the preview
 
-Press `F1` to focus the preview, `F2` for 2D editing, and `F3` for 3D editing. Editor
+Use the centered **Preview**, **2D**, and **3D** controls above the viewport, or
+press `F1`, `F2`, and `F3` to switch modes. Editor
 cameras let you inspect a composition without changing the scene's animated camera.
 Press `0` to switch the camera view and `R` to reset the navigation transform. In 3D,
 use W/A/S/D to move, Shift to move faster, and the directional views listed in **Editor
@@ -116,23 +120,45 @@ Select a runtime diagnostic in Console to open its file, line, and column extern
 and suppresses consecutive identical prints. The status shows pending edits, replay, or
 failure. A visible image may still belong to the previous revision.
 
+The interface uses borderless surfaces separated by darker gaps derived from the
+background and contrast. **Border radius** rounds shared controls, menu and list highlights, windows, and dialogs;
+timeline blocks keep square corners.
+
+The Home screen keeps its top bar and footer, with no separators against its content.
+
 ## Settings and shortcuts
 
 **Project settings** controls the project. **Editor settings** controls appearance and
-editing behavior, and lists all shortcuts. Global preferences and recent projects are
+editing behavior, including border radius and window spacing, and lists all shortcuts. Global preferences and recent projects are
 stored in `.kinematic` in the user data directory. Fonts and the manifest are stored in
-the project. Preview volume and external editor preferences are restored when you reopen the editor.
+the project. Settings windows and dialogs can be moved; only the dock position popup stays fixed. Preview volume and external editor preferences are restored when you reopen the editor.
 
 | Action | Shortcut |
 | --- | --- |
 | Save project | Ctrl+S. |
 | Return to projects | Ctrl+Shift+Q. |
 | Exit | Ctrl+Q. |
+| Show or hide sidebars | Tab. |
 | Play or pause | Space. |
 | Previous or next frame | Left or right arrow. |
 | Go to start or end | Shift+left or right arrow. |
 | Split audio | Ctrl+B. |
 | Delete selected clip | Delete or Backspace. |
+
+Files, Scene Tree, and Inspector occupy eight fixed dock positions: two columns,
+each with an upper and lower position, on either side of the editor. Use the **...**
+button in a panel to choose its position. Panels in the same position share one title row. Click a title to switch panels;
+the active title uses normal text, other titles are muted, and hovering uses the accent color.
+Resize the sidebars and their occupied divisions by dragging the separators.
+Positions and sidebar sizes are restored when you reopen the editor.
+
+**Tab** or the sidebar button at the left of the Preview mode controls hides and
+restores both sidebars. Empty positions take
+no space. Preview always occupies the center, with Timeline and Console sharing the
+bottom dock. Switch panels using the names below the content. Click the active name
+to collapse the content and expand Preview; click either name to reopen it. Drag the
+separator above the content to resize it. Repository and version information stay
+at the right of this same row inside the active Timeline or Console panel. Panels cannot float or be closed.
 
 Editor shortcuts do not capture keys typed into text fields. Find the full list and
 navigation bindings under **Shortcuts**, generated from the active action map.
