@@ -211,7 +211,7 @@ impl State {
                     sidebar.position[0] += workspace.size[0] - width;
                 }
 
-                center.size[0] -= width + gap;
+                center.size[0] = (center.size[0] - width - gap).max(1.0);
 
                 let position = [
                     if side == 0 {
@@ -439,6 +439,48 @@ mod tests {
         layout.rows[0][0] = f32::NAN;
 
         assert!(!layout.valid());
+    }
+
+    #[test]
+    fn workspace_handles_minimizing_and_restoring() {
+        let _lock = crate::ui::IMGUI_TEST_LOCK.lock().unwrap();
+        let mut context = dear_imgui_rs::Context::create();
+
+        context.set_ini_filename(None::<&str>).unwrap();
+        context
+            .io_mut()
+            .set_config_flags(dear_imgui_rs::ConfigFlags::DOCKING_ENABLE);
+        context.io_mut().set_delta_time(1.0 / 60.0);
+        context
+            .font_atlas()
+            .try_claim_legacy_renderer()
+            .unwrap()
+            .build();
+
+        let mut state = State::default();
+        let layout = state.layout.clone();
+
+        for size in [[1280.0, 720.0], [0.0; 2], [1.0; 2], [1280.0, 720.0]] {
+            context.io_mut().set_display_size(size);
+
+            for _ in 0..3 {
+                let ui = context.frame();
+
+                state.draw(ui, GAP);
+
+                for name in PANEL_NAMES
+                    .into_iter()
+                    .chain([preview::WINDOW_NAME])
+                    .chain(BOTTOM_PANELS)
+                {
+                    kinematic_ui::windows::panel(ui, name, || {});
+                }
+
+                context.end_frame();
+            }
+        }
+
+        assert_eq!(state.layout, layout);
     }
 
     #[test]

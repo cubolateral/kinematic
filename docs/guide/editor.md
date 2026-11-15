@@ -83,7 +83,8 @@ Property channels reflect animations prepared in Lua. For imported sounds, use t
 
 ## Edit and diagnose a revision
 
-Open a file from the **Files** tree to edit it externally. The VS Code and VSCodium
+Double-click a file in the **Files** tree, or select it and press Enter, to edit it
+externally. The VS Code and VSCodium
 profiles also pass the project folder, leaving window selection to the external editor.
 **Editor settings → External editor** offers VS Code, VSCodium, and a custom
 graphical editor. The executable may be a full path or a command on PATH; enter it

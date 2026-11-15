@@ -2,7 +2,7 @@ use crate::core::ProjectContext;
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsString,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::mpsc,
 };
@@ -86,7 +86,13 @@ impl Settings {
                     }
                     std::fs::canonicalize(path)
                 })
-                .map(|path| (path, line.max(1).to_string(), column.max(1).to_string()))
+                .map(|path| {
+                    (
+                        editor_path(&path),
+                        line.max(1).to_string(),
+                        column.max(1).to_string(),
+                    )
+                })
                 .map_err(|error| format!("Could not open source file: {error}."))
             })
             .transpose()?;
@@ -97,7 +103,9 @@ impl Settings {
             // Keep CLI launchers from opening a console window.
             command.creation_flags(0x08000000);
         }
+        // Graphical Electron editors must not inherit a launcher's Node mode.
         command
+            .env_remove("ELECTRON_RUN_AS_NODE")
             .current_dir(root.root())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -112,7 +120,7 @@ impl Settings {
                     .map(|end| start + end)
                     .ok_or("Unclosed argument placeholder.")?;
                 match &rest[start..=end] {
-                    "{project}" => expanded.push(root.root()),
+                    "{project}" => expanded.push(editor_path(root.root())),
                     "{file}" => expanded.push(
                         &location
                             .as_ref()
@@ -145,6 +153,25 @@ impl Settings {
         }
         Ok(command)
     }
+}
+
+fn editor_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        use std::path::{Component, Prefix};
+
+        if let Some(Component::Prefix(prefix)) = path.components().next() {
+            // External editors interpret verbatim paths as network URIs.
+            let mut path_without_prefix = match prefix.kind() {
+                Prefix::VerbatimDisk(drive) => PathBuf::from(format!("{}:", char::from(drive))),
+                Prefix::VerbatimUNC(server, share) => Path::new(r"\\").join(server).join(share),
+                _ => return path.to_owned(),
+            };
+            path_without_prefix.extend(path.components().skip(1));
+            return path_without_prefix;
+        }
+    }
+    path.to_owned()
 }
 
 fn default_executable(profile: usize) -> String {
@@ -304,12 +331,20 @@ mod tests {
         assert_eq!(
             arguments,
             vec![
-                root.root().as_os_str().to_owned(),
+                editor_path(root.root()).into_os_string(),
                 OsString::from("--goto"),
-                OsString::from(format!("{}:12:4", root.root().join(name).display()))
+                OsString::from(format!(
+                    "{}:12:4",
+                    editor_path(&root.root().join(name)).display()
+                ))
             ]
         );
         assert_eq!(command.get_current_dir(), Some(root.root()));
+        assert!(
+            command
+                .get_envs()
+                .any(|(name, value)| { name == "ELECTRON_RUN_AS_NODE" && value.is_none() })
+        );
         assert!(
             settings
                 .command(&root, Some((Path::new("../escape.lua"), 1, 1)))
@@ -340,6 +375,21 @@ mod tests {
         #[cfg(not(windows))]
         assert_eq!(Settings::profile(1).executable, "codium");
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn editor_paths_use_drive_and_unc_paths_without_verbatim_prefixes() {
+        for (input, expected) in [
+            (
+                r"\\?\C:\Project Files\cena ç.lua",
+                r"C:\Project Files\cena ç.lua",
+            ),
+            (r"\\?\UNC\server\share\cena.lua", r"\\server\share\cena.lua"),
+            (r"C:\Project Files\cena.lua", r"C:\Project Files\cena.lua"),
+        ] {
+            assert_eq!(editor_path(Path::new(input)), Path::new(expected));
+        }
     }
 
     #[test]
