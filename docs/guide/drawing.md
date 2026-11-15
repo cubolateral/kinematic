@@ -47,6 +47,31 @@ Bounds are local and also drive selection, anchors, and layout. Include the full
 used by strokes, curves, and effects. For a changing shape, compute bounds from the same
 evaluated properties as the drawing.
 
+## Text and LaTeX
+
+`ctx:text(text, x, y, size, paint, font)` places the left end of the text baseline at
+`(x, y)`. The optional font comes from `k.load_font`; the default system font is reused
+between calls and frames.
+
+`ctx:latex(text, x, y, size, paint)` centers a math formula at `(x, y)`, using the same
+embedded fonts and math syntax as `k.latex_2d`. Omit dollar delimiters and use Lua long
+strings to preserve backslashes:
+
+```lua
+on_draw = function(self, ctx)
+    ctx:text("Integers", -100, -40, 24, self.fill)
+    ctx:latex([[\frac{x^2}{\sqrt{2}}]], 0, 0, 32, self.fill)
+end
+```
+
+Formula layout is cached independently of position, size, and paint. Explicit colors
+inside LaTeX override the supplied paint. Invalid formulas raise a runtime error;
+the callback's commands are discarded. Both methods accept sizes from 0 to 4096 and
+source strings of at most 100,000 bytes. Include labels in `on_bounds`.
+
+For dense plots, read shared properties once before the loop and draw only visible
+labels. Repeated `:get()` calls and labels outside the canvas still consume callback time.
+
 ## Scope clipping and transforms
 
 Save the context before clipping so later drawing can use the full area again.

@@ -5,7 +5,10 @@ use super::{
 use crate::core::{
     TrackValue,
     components::{GeometryKey, Material, RenderContext3D, Simulation},
-    objects::global_matrix3d,
+    objects::{
+        global_matrix3d,
+        latex_geometry::{FormulaGeometry, try_geometry},
+    },
 };
 use mlua::{Lua, Result, Table, UserData, UserDataMethods, Value};
 use std::{
@@ -115,6 +118,10 @@ impl std::fmt::Debug for MeshHandle {
 impl UserData for MeshHandle {}
 static NEXT_MESH: AtomicU64 = AtomicU64::new(1);
 thread_local! {static MESHES:RefCell<BTreeMap<String,Weak<MeshData>>>=RefCell::new(BTreeMap::new());}
+thread_local! {
+    static DRAWING_TYPEFACE: Option<skia_safe::Typeface> = skia_safe::FontMgr::default()
+        .legacy_make_typeface(None, skia_safe::FontStyle::normal());
+}
 
 pub(super) fn release_unused() {
     MESHES.with(|cache| {
@@ -286,6 +293,7 @@ enum Command2D {
     Clip(skia_safe::Path),
     Path(skia_safe::Path, skia_safe::Paint),
     Text(String, f32, f32, skia_safe::Font, skia_safe::Paint),
+    Latex(Rc<FormulaGeometry>, f32, f32, f32, skia_safe::Paint),
     Image(skia_safe::Image, skia_safe::Rect),
 }
 #[derive(Clone)]
@@ -529,14 +537,29 @@ impl UserData for Context2D {
                     font.0.skia_font(size)
                 } else {
                     skia_safe::Font::new(
-                        skia_safe::FontMgr::default()
-                            .legacy_make_typeface(None, skia_safe::FontStyle::normal())
+                        DRAWING_TYPEFACE
+                            .with(Clone::clone)
                             .ok_or_else(|| mlua::Error::runtime("No drawing font is available."))?,
                         size,
                     )
                 };
 
                 this.push(Command2D::Text(text, x, y, font, paint(color, None)?))
+            },
+        );
+        m.add_method(
+            "latex",
+            |_, this, (text, x, y, size, color): (String, f32, f32, f32, Value)| {
+                finite(&[x, y, size])?;
+
+                if !(0.0..=4096.0).contains(&size) || text.len() > 100_000 {
+                    return Err(mlua::Error::runtime("LaTeX exceeds drawing limits."));
+                }
+
+                let paint = paint(color, None)?;
+                let geometry = try_geometry(&text).map_err(mlua::Error::runtime)?;
+
+                this.push(Command2D::Latex(geometry, x, y, size, paint))
             },
         );
     }
@@ -732,6 +755,28 @@ pub(super) fn draw_2d(
                 }
                 Command2D::Text(text, x, y, font, paint) => {
                     canvas.draw_str(text, (*x, *y), font, paint);
+                }
+                Command2D::Latex(geometry, x, y, size, paint) => {
+                    if *size == 0.0 {
+                        continue;
+                    }
+
+                    let mut matrix = skia_safe::Matrix::scale((*size, *size));
+
+                    matrix.post_translate((*x, *y));
+
+                    for part in &geometry.parts {
+                        let mut paint = paint.clone();
+
+                        if let Some(color) = part.color {
+                            let [r, g, b, a] = color.rgba();
+
+                            paint.set_shader(None);
+                            paint.set_color4f(skia_safe::Color4f::new(r, g, b, a), None);
+                        }
+
+                        canvas.draw_path(&part.path.with_transform(&matrix), &paint);
+                    }
                 }
                 Command2D::Image(image, rect) => {
                     canvas.draw_image_rect(image, None, *rect, &skia_safe::Paint::default());

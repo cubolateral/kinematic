@@ -8,6 +8,10 @@ Use `latex_2d` for mathematical notation. Kinematic builds formula geometry with
 and the bundled KaTeX fonts. A separate TeX installation is not needed. Start with a
 formula, then use `morph` to develop it or `fade` to introduce a different expression.
 
+Inside a custom object's `on_draw`, use `ctx:latex(text, x, y, size, paint)` to draw
+a formula centered at local coordinates. It shares the same fonts, syntax, and layout
+cache. See [procedural text and LaTeX](drawing.md#text-and-latex).
+
 ## Create a formula
 
 Pass the expression in `text`, without `$` delimiters. Lua long strings (`[[...]]`)

@@ -166,8 +166,22 @@ Draws an image into the supplied local rectangle.
 
 <div class="api-description">
 
-Draws text at local coordinates with a size, paint, and optional font.
-When omitted, a default system drawing font is used.
+Draws text with its left baseline at (x, y), a size, paint, and optional font.
+When omitted, a cached default system drawing font is used.
+
+</div>
+
+</section>
+
+<section class="api-method">
+
+## <code class="api-signature"><a class="api-type-name" href="Draw2D.html">Draw2D</a><span class="api-punctuation">:</span><span class="api-function">latex</span><span class="api-punctuation">(</span><span class="api-parameter">text</span><span class="api-punctuation">: </span><span class="api-type-name">string</span><span class="api-punctuation">, </span><span class="api-parameter">x</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">y</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">size</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">paint</span><span class="api-punctuation">: </span><span class="api-type-name">Paint</span><span class="api-punctuation">)</span></code> {#draw2d-latex-text-x-y-size-paint}
+
+<div class="api-description">
+
+Draws a LaTeX math formula centered at (x, y), without dollar delimiters.
+Formula layout is cached independently of size and paint. Explicit LaTeX colors override paint.
+Invalid formulas raise a runtime error and discard the callback's drawing commands.
 
 </div>
 

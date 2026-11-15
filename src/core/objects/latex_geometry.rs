@@ -6,14 +6,14 @@ use ratex_types::{display_item::DisplayItem, path_command::PathCommand};
 
 use crate::core::types::{Color, Vector2};
 
-pub(super) struct FormulaPart {
+pub(crate) struct FormulaPart {
     pub path: skia_safe::Path,
     pub color: Option<Color>,
     pub key: String,
     pub group: usize,
 }
 
-pub(super) struct FormulaGeometry {
+pub(crate) struct FormulaGeometry {
     pub size: Vector2,
     pub parts: Vec<FormulaPart>,
 }
@@ -57,13 +57,17 @@ pub(crate) fn validate_latex(text: &str) -> Result<(), String> {
 
 // Cache in em units so size, color, and transform animation reuse the same layout.
 pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
+    try_geometry(text).unwrap_or_else(|error| panic!("{error}"))
+}
+
+pub(crate) fn try_geometry(text: &str) -> Result<Rc<FormulaGeometry>, String> {
     CACHE.with_borrow_mut(|cache| {
         if let Some(geometry) = cache.formulas.get(text) {
-            return geometry.clone();
+            return Ok(geometry.clone());
         }
 
         let ast = ratex_parser::parser::parse(text)
-            .unwrap_or_else(|error| panic!("Invalid LaTeX formula `{text}`: {error}."));
+            .map_err(|error| format!("Invalid LaTeX formula `{text}`: {error}."))?;
         let options = LayoutOptions::default();
         let mut boxes = layout(&ast, &options);
         let display = to_display_list(&boxes);
@@ -162,7 +166,7 @@ pub(super) fn geometry(text: &str) -> Rc<FormulaGeometry> {
 
         cache.formulas.insert(text.to_owned(), geometry.clone());
 
-        geometry
+        Ok(geometry)
     })
 }
 

@@ -733,8 +733,8 @@ function Draw2D:circle(x, y, radius, paint) end
 ---@param height number
 function Draw2D:image(image, x, y, width, height) end
 
---- Draws text at local coordinates with a size, paint, and optional font.
---- When omitted, a default system drawing font is used.
+--- Draws text with its left baseline at (x, y), a size, paint, and optional font.
+--- When omitted, a cached default system drawing font is used.
 ---@param text string
 ---@param x number
 ---@param y number
@@ -742,6 +742,16 @@ function Draw2D:image(image, x, y, width, height) end
 ---@param paint Kinematic.Paint
 ---@param font? Kinematic.Font
 function Draw2D:text(text, x, y, size, paint, font) end
+
+--- Draws a LaTeX math formula centered at (x, y), without dollar delimiters.
+--- Formula layout is cached independently of size and paint. Explicit LaTeX colors override paint.
+--- Invalid formulas raise a runtime error and discard the callback's drawing commands.
+---@param text string
+---@param x number
+---@param y number
+---@param size number
+---@param paint Kinematic.Paint
+function Draw2D:latex(text, x, y, size, paint) end
 
 --- Local 3D drawing context available only during scripted draw callbacks.
 ---@class Kinematic.Draw3D

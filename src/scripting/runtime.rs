@@ -2404,6 +2404,102 @@ end
     }
 
     #[test]
+    fn custom_text_reuses_the_default_font_for_integer_labels() {
+        let scene = load(&SOURCE.replace(
+            "ctx:rect(10,20,30,40,props.fill)",
+            "for n=-50,50 do ctx:text(tostring(n), 10, 40, 16, props.fill) end",
+        ));
+        let mut surface = skia_safe::surfaces::raster_n32_premul((100, 100)).unwrap();
+        let started = Instant::now();
+
+        for _ in 0..3 {
+            scene.scene.draw(surface.canvas());
+        }
+
+        eprintln!("Integer labels, three frames: {:?}.", started.elapsed());
+        assert!(
+            scene.runtime.errors.borrow().is_empty(),
+            "{:?}",
+            scene.runtime.errors.borrow()
+        );
+        let pixels = surface.peek_pixels().unwrap();
+
+        assert!((0..100).any(|y| (0..100).any(|x| pixels.get_color((x, y)).a() > 0)));
+    }
+
+    #[test]
+    fn custom_latex_draws_cached_formulas_and_rejects_invalid_submissions() {
+        let source = SOURCE.replace(
+            "ctx:rect(10,20,30,40,props.fill)",
+            r#"
+            ctx:save()
+            ctx:translate(50, 50)
+            ctx:latex([[\frac{x^2}{\sqrt{2}}+\color{blue}{y}]], 0, 0, 20, props.fill)
+            ctx:restore()
+            "#,
+        );
+        let scene = load(&source);
+        let mut surface = skia_safe::surfaces::raster_n32_premul((100, 100)).unwrap();
+
+        for _ in 0..2 {
+            surface.canvas().clear(skia_safe::colors::TRANSPARENT);
+            scene.scene.draw(surface.canvas());
+
+            let pixels = surface.peek_pixels().unwrap();
+            let colors: Vec<_> = (0..100)
+                .flat_map(|y| (0..100).map(move |x| (x, y)))
+                .map(|point| pixels.get_color(point))
+                .collect();
+
+            assert!(scene.runtime.errors.borrow().is_empty());
+            assert!(
+                colors
+                    .iter()
+                    .any(|c| c.a() > 0 && c.r() > 200 && c.b() < 20)
+            );
+            assert!(
+                colors
+                    .iter()
+                    .any(|c| c.a() > 0 && c.b() > 200 && c.r() < 20)
+            );
+        }
+
+        for (submission, message) in [
+            (
+                r#"ctx:latex([[\invalidcommand{x}]], 50, 50, 20, props.fill)"#,
+                "Invalid LaTeX",
+            ),
+            (
+                "ctx:latex('x', 50, 50, -1, props.fill)",
+                "LaTeX exceeds drawing limits",
+            ),
+            (
+                "ctx:latex('x', 0/0, 50, 20, props.fill)",
+                "Drawing coordinates must be finite",
+            ),
+        ] {
+            let source = SOURCE.replace(
+                "ctx:rect(10,20,30,40,props.fill)",
+                &format!("ctx:rect(10,20,30,40,props.fill); {submission}"),
+            );
+            let scene = load(&source);
+
+            surface.canvas().clear(skia_safe::colors::TRANSPARENT);
+            scene.scene.draw(surface.canvas());
+
+            assert_eq!(surface.peek_pixels().unwrap().get_color((15, 25)).a(), 0);
+            assert!(
+                scene
+                    .runtime
+                    .errors
+                    .borrow()
+                    .iter()
+                    .any(|e| e.contains(message))
+            );
+        }
+    }
+
+    #[test]
     fn custom_drawing_uses_displaced_bounds_and_commits_only_complete_callbacks() {
         let source = SOURCE.replace(
             "ctx:rect(10,20,30,40,props.fill)",

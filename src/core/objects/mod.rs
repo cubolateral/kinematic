@@ -1,7 +1,7 @@
 mod canvas;
 mod image;
 mod image_shader;
-mod latex_geometry;
+pub(crate) mod latex_geometry;
 mod mesh_shader;
 mod node;
 mod object;
