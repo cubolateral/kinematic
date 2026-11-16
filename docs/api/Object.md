@@ -336,7 +336,7 @@ Moves this object to the start of its sibling list, below its siblings.
 
 <section class="api-method">
 
-## <code class="api-signature"><a class="api-type-name" href="Object.html">Object</a><span class="api-punctuation">:</span><span class="api-function">on_bounds</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="RectValue.html">RectValue</a> <span class="api-punctuation">|</span> <a class="api-type-name" href="BoxValue.html">BoxValue</a></code> {#object-on_bounds}
+## <code class="api-signature"><a class="api-type-name" href="Object.html">Object</a><span class="api-punctuation">:</span><span class="api-function">on_bounds</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Rect.html">Rect</a> <span class="api-punctuation">|</span> <a class="api-type-name" href="Box.html">Box</a></code> {#object-on_bounds}
 
 <div class="api-description">
 

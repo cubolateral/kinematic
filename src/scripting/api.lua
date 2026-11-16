@@ -2,6 +2,10 @@
 
 k = {}
 
+--- Project safe area in centered scene coordinates, with margins applied.
+---@return Kinematic.Rect
+function k.margin() end
+
 --- Position written as {line, column}. Both start at 1; columns count Unicode characters.
 ---@class Kinematic.CodePosition
 ---@field [integer] integer
@@ -324,7 +328,7 @@ function Object:move_to_bottom() end
 
 --- Returns the local bounds using evaluated properties and simulation state.
 --- This is also the callback implemented by custom objects.
----@return Kinematic.RectValue|Kinematic.BoxValue
+---@return Kinematic.Rect|Kinematic.Box
 function Object:on_bounds() end
 
 --- Returns the local bounding box dimensions as a vector.
@@ -434,13 +438,13 @@ function k.component(name, fields) end
 --- Scripted 2D callbacks; additional functions are ordinary instance methods or helpers.
 ---@class Kinematic.Object2DOptions: Kinematic.ObjectOptions
 ---@field on_draw? fun(self:Kinematic.Script2DView, context:Kinematic.Draw2D) Draws using evaluated properties and read-only state.
----@field on_bounds? fun(self:Kinematic.Script2DView):Kinematic.RectValue Returns local bounds.
+---@field on_bounds? fun(self:Kinematic.Script2DView):Kinematic.Rect Returns local bounds.
 ---@field on_update? fun(self:Kinematic.Script2DView, frame:Kinematic.Frame, inputs:table) Updates self.state at fixed steps; own values must be declared in inputs when inputs are explicit. Mutable external upvalues are rejected.
 
 --- Scripted 3D callbacks; additional functions are ordinary instance methods or helpers.
 ---@class Kinematic.Object3DOptions: Kinematic.ObjectOptions
 ---@field on_draw? fun(self:Kinematic.Script3DView, context:Kinematic.Draw3D) Draws using evaluated properties and read-only state.
----@field on_bounds? fun(self:Kinematic.Script3DView):Kinematic.BoxValue Returns local bounds.
+---@field on_bounds? fun(self:Kinematic.Script3DView):Kinematic.Box Returns local bounds.
 ---@field on_update? fun(self:Kinematic.Script3DView, frame:Kinematic.Frame, inputs:table) Updates self.state at fixed steps; own values must be declared in inputs when inputs are explicit. Mutable external upvalues are rejected.
 
 --- Callable scripted 2D definition; assign callbacks and functions directly on it.
@@ -487,16 +491,16 @@ function k.quad(a, b, c, d) end
 ---@param y number
 ---@param width number
 ---@param height number
----@return Kinematic.RectValue
+---@return Kinematic.Rect
 function k.rect(x, y, width, height) end
 
 --- Immutable rectangle value with coordinate, dimension, and anchor queries.
----@class Kinematic.RectValue
+---@class Kinematic.Rect
 ---@field x number X component or left coordinate.
 ---@field y number Y component or bottom coordinate.
 ---@field width number Rectangle width in local coordinates.
 ---@field height number Rectangle height in local coordinates.
-local RectValue = {}
+local Rect = {}
 
 --- Creates immutable 3D bounds from local coordinates and nonnegative dimensions.
 ---@param x number
@@ -505,17 +509,18 @@ local RectValue = {}
 ---@param width number
 ---@param height number
 ---@param depth number
----@return Kinematic.BoxValue
+---@return Kinematic.Box
 function k.box(x, y, z, width, height, depth) end
 
 --- Immutable axis-aligned 3D bounding box.
----@class Kinematic.BoxValue
+---@class Kinematic.Box
 ---@field x number Minimum x coordinate.
 ---@field y number Minimum y coordinate.
 ---@field z number Minimum z coordinate.
 ---@field width number Width in local coordinates.
 ---@field height number Height in local coordinates.
 ---@field depth number Depth in local coordinates.
+local Box = {}
 
 --- Deterministic mutable random generator that can be preserved in simulation state.
 ---@class Kinematic.Random
@@ -816,36 +821,52 @@ function Random:shuffle(values) end
 
 --- Returns the middle point of this rectangle as a vec2.
 ---@return Kinematic.Vec2
-function RectValue:middle() end
+function Rect:middle() end
 
 --- Returns the top point of this rectangle as a vec2.
 ---@return Kinematic.Vec2
-function RectValue:top() end
+function Rect:top() end
 
 --- Returns the bottom point of this rectangle as a vec2.
 ---@return Kinematic.Vec2
-function RectValue:bottom() end
+function Rect:bottom() end
 
 --- Returns the left point of this rectangle as a vec2.
 ---@return Kinematic.Vec2
-function RectValue:left() end
+function Rect:left() end
 
 --- Returns the right point of this rectangle as a vec2.
 ---@return Kinematic.Vec2
-function RectValue:right() end
+function Rect:right() end
 
 --- Returns the top_left point of this rectangle as a vec2.
 ---@return Kinematic.Vec2
-function RectValue:top_left() end
+function Rect:top_left() end
 
 --- Returns the bottom_right point of this rectangle as a vec2.
 ---@return Kinematic.Vec2
-function RectValue:bottom_right() end
+function Rect:bottom_right() end
 
 --- Returns the top_right point of this rectangle as a vec2.
 ---@return Kinematic.Vec2
-function RectValue:top_right() end
+function Rect:top_right() end
 
 --- Returns the bottom_left point of this rectangle as a vec2.
 ---@return Kinematic.Vec2
-function RectValue:bottom_left() end
+function Rect:bottom_left() end
+
+--- Returns this rectangle's coordinates as a vec2.
+---@return Kinematic.Vec2
+function Rect:position() end
+
+--- Returns this rectangle's width and height as a vec2.
+---@return Kinematic.Vec2
+function Rect:size() end
+
+--- Returns this box's minimum coordinates as a vec3.
+---@return Kinematic.Vec3
+function Box:position() end
+
+--- Returns this box's width, height, and depth as a vec3.
+---@return Kinematic.Vec3
+function Box:size() end

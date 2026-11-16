@@ -35,7 +35,7 @@ Draws using evaluated properties and read-only state.
 
 <section class="api-member">
 
-### <code class="api-signature"><span class="api-name">on_bounds</span><span class="api-punctuation">?</span><span class="api-punctuation">: </span><span class="api-keyword">fun</span><span class="api-punctuation">(</span><span class="api-parameter">self</span><span class="api-punctuation">:</span> <a class="api-type-name" href="Script2DView.html">Script2DView</a><span class="api-punctuation">)</span><span class="api-punctuation">:</span> <a class="api-type-name" href="RectValue.html">RectValue</a></code> {#property-on_bounds}
+### <code class="api-signature"><span class="api-name">on_bounds</span><span class="api-punctuation">?</span><span class="api-punctuation">: </span><span class="api-keyword">fun</span><span class="api-punctuation">(</span><span class="api-parameter">self</span><span class="api-punctuation">:</span> <a class="api-type-name" href="Script2DView.html">Script2DView</a><span class="api-punctuation">)</span><span class="api-punctuation">:</span> <a class="api-type-name" href="Rect.html">Rect</a></code> {#property-on_bounds}
 
 <div class="api-description">
 

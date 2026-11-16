@@ -15,6 +15,19 @@ Source: [shared declarations](https://github.com/cubolateral/kinematic/blob/main
 
 <section class="api-method">
 
+<section class="api-method">
+
+## <code class="api-signature"><a class="api-type-name" href="k.html">k</a><span class="api-punctuation">.</span><span class="api-function">margin</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Rect.html">Rect</a></code> {#k-margin}
+
+<div class="api-description">
+
+Project safe area in centered scene coordinates, with margins applied.
+
+</div>
+
+</section>
+
+
 ## <code class="api-signature"><a class="api-type-name" href="k.html">k</a><span class="api-punctuation">.</span><span class="api-function">audio</span><span class="api-punctuation">(</span><span class="api-parameter">options</span><span class="api-punctuation">: </span><a class="api-type-name" href="AudioOptions.html">AudioOptions</a><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Audio.html">Audio</a></code> {#k-audio-options}
 
 <div class="api-description">
@@ -354,7 +367,7 @@ For rectangle rounding, channels correspond to top-left, top-right, bottom-right
 
 <section class="api-method">
 
-## <code class="api-signature"><a class="api-type-name" href="k.html">k</a><span class="api-punctuation">.</span><span class="api-function">rect</span><span class="api-punctuation">(</span><span class="api-parameter">x</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">y</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">width</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">height</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="RectValue.html">RectValue</a></code> {#k-rect-x-y-width-height}
+## <code class="api-signature"><a class="api-type-name" href="k.html">k</a><span class="api-punctuation">.</span><span class="api-function">rect</span><span class="api-punctuation">(</span><span class="api-parameter">x</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">y</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">width</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">height</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Rect.html">Rect</a></code> {#k-rect-x-y-width-height}
 
 <div class="api-description">
 
@@ -367,7 +380,7 @@ Use k.panel(options) to create a rectangular scene object.
 
 <section class="api-method">
 
-## <code class="api-signature"><a class="api-type-name" href="k.html">k</a><span class="api-punctuation">.</span><span class="api-function">box</span><span class="api-punctuation">(</span><span class="api-parameter">x</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">y</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">z</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">width</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">height</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">depth</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="BoxValue.html">BoxValue</a></code> {#k-box-x-y-z-width-height-depth}
+## <code class="api-signature"><a class="api-type-name" href="k.html">k</a><span class="api-punctuation">.</span><span class="api-function">box</span><span class="api-punctuation">(</span><span class="api-parameter">x</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">y</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">z</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">width</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">height</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">, </span><span class="api-parameter">depth</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Box.html">Box</a></code> {#k-box-x-y-z-width-height-depth}
 
 <div class="api-description">
 

@@ -171,7 +171,7 @@ fn spatial_definitions(output: &mut String, restricted: &[&str]) {
             }
         }
 
-        let bounds = if three_d { "BoxValue" } else { "RectValue" };
+        let bounds = if three_d { "Box" } else { "Rect" };
         output.push_str(&format!("--- Returns the local bounds at the evaluated time; also used by the engine.\n---@return Kinematic.{bounds}\nfunction {class}:on_bounds() end\n\n"));
 
         for &(name, _, _, z) in super::adapters::ANCHORS {

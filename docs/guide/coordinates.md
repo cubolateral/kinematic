@@ -61,3 +61,7 @@ their drawing so these queries and selection work correctly.
 
 In 3D, rotation uses [quaternions](graphics-3d.md#quaternions), with additional front,
 back, and combined anchors. Continue with [groups and layout](layout.md).
+
+The project safe area is available as `k.margin()`, a rectangle in centered scene
+coordinates with the project margins applied. Use `k.margin():middle()` or
+`k.margin():top_left()` to position objects relative to that area.

@@ -32,6 +32,66 @@ end
 "##;
 
 #[test]
+fn lua_bounds_expose_position_and_size_vectors() {
+    load(
+        r#"
+local rect = k.rect(-10, 20, 30, 40)
+local position, size = rect:position(), rect:size()
+assert(position.x == -10 and position.y == 20)
+assert(size.x == 30 and size.y == 40)
+local box = k.box(-10, 20, -30, 40, 50, 60)
+position, size = box:position(), box:size()
+assert(position.x == -10 and position.y == 20 and position.z == -30)
+assert(size.x == 40 and size.y == 50 and size.z == 60)
+return function() end
+"#,
+    );
+}
+
+#[test]
+fn lua_margin_matches_the_project_safe_area() {
+    for unit in [
+        crate::core::MarginUnit::Pixels,
+        crate::core::MarginUnit::Percentage,
+    ] {
+        let margin = crate::core::Margin {
+            unit,
+            left: 10.0,
+            right: 20.0,
+            top: 5.0,
+            bottom: 15.0,
+        };
+        let [left, right, top, bottom] = margin.pixels((640, 480));
+        let text = format!(
+            r#"
+local margin = k.margin()
+assert(margin.x == {} and margin.y == {})
+assert(margin.width == {} and margin.height == {})
+local middle = margin:middle()
+assert(middle.x == {} and middle.y == {})
+return function() end
+"#,
+            -320.0 + left,
+            -240.0 + top,
+            640.0 - left - right,
+            480.0 - top - bottom,
+            (left - right) / 2.0,
+            (top - bottom) / 2.0,
+        );
+
+        LuaScene::load(
+            ProjectContext::new(".").unwrap(),
+            "intro.lua",
+            sources(&text),
+            (640, 480),
+            60,
+            margin,
+        )
+        .unwrap();
+    }
+}
+
+#[test]
 fn lua_uses_native_tracks_and_seek() {
     let scene = load(SCENE);
     let entity = scene.entity("ball").unwrap();

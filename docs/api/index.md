@@ -17,7 +17,7 @@ Methods are registered for specific types. Requirements for `Object` operations 
 - [AudioPlaybackOptions](AudioPlaybackOptions.md).
 - [AudioResource](AudioResource.md).
 - [AudioSynthOptions](AudioSynthOptions.md).
-- [BoxValue](BoxValue.md).
+- [Box](Box.md).
 - [Canvas2D](Canvas2D.md).
 - [Canvas2DOptions](Canvas2DOptions.md).
 - [Canvas3D](Canvas3D.md).
@@ -95,7 +95,7 @@ Methods are registered for specific types. Requirements for `Object` operations 
 - [Quaternion](Quaternion.md).
 - [QuaternionProperty](QuaternionProperty.md).
 - [Random](Random.md).
-- [RectValue](RectValue.md).
+- [Rect](Rect.md).
 - [RegularPolygon2D](RegularPolygon2D.md).
 - [RegularPolygon2DOptions](RegularPolygon2DOptions.md).
 - [RegularPolygon2DOptions_square](RegularPolygon2DOptions_square.md).

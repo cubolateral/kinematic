@@ -367,6 +367,18 @@ impl UserData for RectHandle {
             }
         });
 
+        m.add_method("position", |_, this, ()| {
+            Ok(ValueHandle(TrackValue::Vector2(glam::vec2(
+                this.0.x, this.0.y,
+            ))))
+        });
+        m.add_method("size", |_, this, ()| {
+            Ok(ValueHandle(TrackValue::Vector2(glam::vec2(
+                this.0.width,
+                this.0.height,
+            ))))
+        });
+
         for (name, anchor) in [
             (
                 "middle",
@@ -398,6 +410,17 @@ impl UserData for BoxHandle {
                 .position(|field| *field == name)
                 .ok_or_else(|| mlua::Error::runtime("Unknown box field."))?;
             Ok(this.0[index])
+        });
+
+        methods.add_method("position", |_, this, ()| {
+            Ok(ValueHandle(TrackValue::Vector3(glam::vec3(
+                this.0[0], this.0[1], this.0[2],
+            ))))
+        });
+        methods.add_method("size", |_, this, ()| {
+            Ok(ValueHandle(TrackValue::Vector3(glam::vec3(
+                this.0[3], this.0[4], this.0[5],
+            ))))
         });
     }
 }

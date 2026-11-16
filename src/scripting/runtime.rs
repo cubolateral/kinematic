@@ -875,6 +875,13 @@ impl Runtime {
 
         let api = lua.create_table()?;
 
+        let margin = self.scene.borrow().as_ref().unwrap().margin();
+
+        api.set(
+            "margin",
+            lua.create_function(move |_, ()| Ok(value::RectHandle(margin)))?,
+        )?;
+
         value::register(lua, &api)?;
 
         extension::register(lua, &api)?;
