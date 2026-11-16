@@ -100,12 +100,12 @@ Repeated :play calls apply the increment at each scheduled start.
 
 <section class="api-method">
 
-## <code class="api-signature"><a class="api-type-name" href="Vec2Property.html">Vec2Property</a><span class="api-punctuation">:</span><span class="api-function">from</span><span class="api-punctuation">(</span><span class="api-parameter">pair</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a><span class="api-punctuation">[</span><span class="api-punctuation">]</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Animation.html">Animation</a></code> {#vec2property-from-pair}
+## <code class="api-signature"><a class="api-type-name" href="Vec2Property.html">Vec2Property</a><span class="api-punctuation">:</span><span class="api-function">from</span><span class="api-punctuation">(</span><span class="api-parameter">from</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a><span class="api-punctuation">, </span><span class="api-parameter">to</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Animation.html">Animation</a></code> {#vec2property-from-from-to}
 
 <div class="api-description">
 
-Creates an animation with explicit {start, finish} endpoints.
-Both endpoints must match the property type. Call :play to schedule it.
+Creates an animation with explicit start and finish values.
+Both values must match the property type. Call :play to schedule it.
 
 </div>
 

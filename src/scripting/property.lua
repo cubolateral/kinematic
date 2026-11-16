@@ -27,13 +27,14 @@ function Property:to(value) end
 ---@return Kinematic.Animation
 function Property:by(delta) end
 
---- Creates an animation with explicit {start, finish} endpoints.
---- Both endpoints must match the property type. Call :play to schedule it.
+--- Creates an animation with explicit start and finish values.
+--- Both values must match the property type. Call :play to schedule it.
 ---@generic T
 ---@param self Kinematic.Property<T>
----@param pair T[]
+---@param from T
+---@param to T
 ---@return Kinematic.Animation
-function Property:from(pair) end
+function Property:from(from, to) end
 
 --- Schedules a callback receiving this property and the frame after scene evaluation.
 --- Writes are temporary for that frame. Signals cannot construct objects or schedule animations; call :stop on the returned handle to end it.

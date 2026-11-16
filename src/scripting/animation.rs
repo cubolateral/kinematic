@@ -292,17 +292,16 @@ impl AnimationDefinition {
     pub(super) fn property(
         lua: &Lua,
         property: PropertyHandle,
+        from: Option<Value>,
         value: Value,
         operation: Operation,
     ) -> Result<Self> {
         property.object.runtime()?.construction()?;
 
-        let (start, finish) = if operation == Operation::From {
-            let (start, finish) = pair(value)?;
-
+        let (start, finish) = if let Some(from) = from {
             (
-                Some(property.parse_value(lua, start, true)?),
-                property.parse_value(lua, finish, true)?,
+                Some(property.parse_value(lua, from, true)?),
+                property.parse_value(lua, value, true)?,
             )
         } else {
             (

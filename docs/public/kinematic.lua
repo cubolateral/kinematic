@@ -825,13 +825,14 @@ function Property:to(value) end
 ---@return Kinematic.Animation
 function Property:by(delta) end
 
---- Creates an animation with explicit {start, finish} endpoints.
---- Both endpoints must match the property type. Call :play to schedule it.
+--- Creates an animation with explicit start and finish values.
+--- Both values must match the property type. Call :play to schedule it.
 ---@generic T
 ---@param self Kinematic.Property<T>
----@param pair T[]
+---@param from T
+---@param to T
 ---@return Kinematic.Animation
-function Property:from(pair) end
+function Property:from(from, to) end
 
 --- Schedules a callback receiving this property and the frame after scene evaluation.
 --- Writes are temporary for that frame. Signals cannot construct objects or schedule animations; call :stop on the returned handle to end it.
@@ -902,12 +903,13 @@ function Vec2Property:to(value) end
 ---@return Kinematic.Animation
 function Vec2Property:by(delta) end
 
---- Creates an animation with explicit {start, finish} endpoints.
---- Both endpoints must match the property type. Call :play to schedule it.
+--- Creates an animation with explicit start and finish values.
+--- Both values must match the property type. Call :play to schedule it.
 ---@param self Kinematic.Vec2Property
----@param pair Kinematic.Vec2[]
+---@param from Kinematic.Vec2
+---@param to Kinematic.Vec2
 ---@return Kinematic.Animation
-function Vec2Property:from(pair) end
+function Vec2Property:from(from, to) end
 
 --- Schedules a callback receiving this property and the frame after scene evaluation.
 --- Writes are temporary for that frame. Signals cannot construct objects or schedule animations; call :stop on the returned handle to end it.
@@ -985,12 +987,13 @@ function Vec3Property:to(value) end
 ---@return Kinematic.Animation
 function Vec3Property:by(delta) end
 
---- Creates an animation with explicit {start, finish} endpoints.
---- Both endpoints must match the property type. Call :play to schedule it.
+--- Creates an animation with explicit start and finish values.
+--- Both values must match the property type. Call :play to schedule it.
 ---@param self Kinematic.Vec3Property
----@param pair Kinematic.Vec3[]
+---@param from Kinematic.Vec3
+---@param to Kinematic.Vec3
 ---@return Kinematic.Animation
-function Vec3Property:from(pair) end
+function Vec3Property:from(from, to) end
 
 --- Schedules a callback receiving this property and the frame after scene evaluation.
 --- Writes are temporary for that frame. Signals cannot construct objects or schedule animations; call :stop on the returned handle to end it.
@@ -1052,12 +1055,13 @@ function ColorProperty:to(value) end
 ---@return Kinematic.Animation
 function ColorProperty:by(delta) end
 
---- Creates an animation with explicit {start, finish} endpoints.
---- Both endpoints must match the property type. Call :play to schedule it.
+--- Creates an animation with explicit start and finish values.
+--- Both values must match the property type. Call :play to schedule it.
 ---@param self Kinematic.ColorProperty
----@param pair Kinematic.Color[]
+---@param from Kinematic.Color
+---@param to Kinematic.Color
 ---@return Kinematic.Animation
-function ColorProperty:from(pair) end
+function ColorProperty:from(from, to) end
 
 --- Schedules a callback receiving this property and the frame after scene evaluation.
 --- Writes are temporary for that frame. Signals cannot construct objects or schedule animations; call :stop on the returned handle to end it.
@@ -1116,12 +1120,13 @@ function QuaternionProperty:to(value) end
 ---@return Kinematic.Animation
 function QuaternionProperty:by(delta) end
 
---- Creates an animation with explicit {start, finish} endpoints.
---- Both endpoints must match the property type. Call :play to schedule it.
+--- Creates an animation with explicit start and finish values.
+--- Both values must match the property type. Call :play to schedule it.
 ---@param self Kinematic.QuaternionProperty
----@param pair Kinematic.Quaternion[]
+---@param from Kinematic.Quaternion
+---@param to Kinematic.Quaternion
 ---@return Kinematic.Animation
-function QuaternionProperty:from(pair) end
+function QuaternionProperty:from(from, to) end
 
 --- Schedules a callback receiving this property and the frame after scene evaluation.
 --- Writes are temporary for that frame. Signals cannot construct objects or schedule animations; call :stop on the returned handle to end it.
@@ -1186,12 +1191,13 @@ function QuadProperty:to(value) end
 ---@return Kinematic.Animation
 function QuadProperty:by(delta) end
 
---- Creates an animation with explicit {start, finish} endpoints.
---- Both endpoints must match the property type. Call :play to schedule it.
+--- Creates an animation with explicit start and finish values.
+--- Both values must match the property type. Call :play to schedule it.
 ---@param self Kinematic.QuadProperty
----@param pair Kinematic.Quad[]
+---@param from Kinematic.Quad
+---@param to Kinematic.Quad
 ---@return Kinematic.Animation
-function QuadProperty:from(pair) end
+function QuadProperty:from(from, to) end
 
 --- Schedules a callback receiving this property and the frame after scene evaluation.
 --- Writes are temporary for that frame. Signals cannot construct objects or schedule animations; call :stop on the returned handle to end it.

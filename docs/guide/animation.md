@@ -42,7 +42,7 @@ time, rather than being frozen when `step` is created.
 | --- | --- | --- |
 | `to` | `ball:to {radius = 50}` | Move to an absolute destination. |
 | `by` | `ball:by {radius = 10}` | Add a relative amount. |
-| `from` | `ball:from {radius = {20, 50}}` | Supply both endpoints explicitly. |
+| `from` | `ball:from {radius = {20, 50}}` or `ball.radius:from(20, 50)` | Supply both endpoints explicitly. |
 
 Omitted channels keep their existing values. For example,
 `ball:from {position = {x = {-120, 240}}}:play(2)` specifies X's endpoints while

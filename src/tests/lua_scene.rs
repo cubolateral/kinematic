@@ -635,7 +635,7 @@ return function()
     local phase=k.track(0)
     local animations={
         ball:to{radius=24}, ball:by{radius=2}, ball:from{radius={16,24}},
-        ball.radius:to(24), ball.radius:by(2), ball.radius:from({16,24}),
+        ball.radius:to(24), ball.radius:by(2), ball.radius:from(16,24),
         phase:to(1), label:morph('New'), label:fade('New'), ball:reset(),
     }
     for _,animation in ipairs(animations) do

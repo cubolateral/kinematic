@@ -1859,12 +1859,21 @@ impl UserData for PropertyHandle {
         for (name, op) in [
             ("to", super::animation::Operation::To),
             ("by", super::animation::Operation::By),
-            ("from", super::animation::Operation::From),
         ] {
             methods.add_method(name, move |lua, this, value: Value| {
-                super::animation::AnimationDefinition::property(lua, this.clone(), value, op)
+                super::animation::AnimationDefinition::property(lua, this.clone(), None, value, op)
             });
         }
+
+        methods.add_method("from", |lua, this, (from, to): (Value, Value)| {
+            super::animation::AnimationDefinition::property(
+                lua,
+                this.clone(),
+                Some(from),
+                to,
+                super::animation::Operation::From,
+            )
+        });
     }
 }
 
