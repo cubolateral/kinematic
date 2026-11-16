@@ -223,8 +223,11 @@ function k.vec2(x, y) end
 ---@return Kinematic.Vec3
 function k.vec3(x, y, z) end
 
---- Creates a color from RGB or RGBA numbers, or a six/eight-digit hexadecimal string.
---- Numeric components use the 0 to 1 convention; omitted alpha defaults to 1. Example: k.color("#60A5FA") or k.color(1,0,0,0.5).
+--- Creates a color from RGB/RGBA channels, a hex string, or a named color.
+--- Channels accept integers or decimals from 0 to 1; omitted alpha defaults to 1.
+--- Named colors are case-insensitive: transparent, red, green, blue, yellow, orange, purple, pink, cyan, magenta, black, white, gray, grey, maroon, olive, lime, teal, and navy.
+--- Additional names: aqua, fuchsia, silver, coral, tomato, salmon, gold, khaki, turquoise, violet, indigo, brown, chocolate, beige, ivory, lavender, plum, orchid, crimson, rebeccapurple, dark_red, dark_green, dark_blue, light_blue, sky_blue, steel_blue, royal_blue, forest_green, sea_green, and slate_gray.
+--- Examples: k.color("#60A5FA"), k.color("red"):set_a(0.5), or k.color(0, 0, 0, 0.5).
 ---@param color string|number
 ---@param g? number
 ---@param b? number
@@ -604,7 +607,7 @@ function k.mesh_shader(options) end
 ---@field source? Kinematic.Image|Kinematic.Texture Image resource for image objects, or live canvas texture for projection objects.
 ---@field font? Kinematic.Font Project font for Text2D, Text3D, or Code; LaTeX uses its mathematical fonts.
 ---@field shader? Kinematic.Shader Image or mesh shader resource.
----@field uniforms? table<string,boolean|number|Kinematic.Value> Initial typed shader uniform values; requires shader.
+---@field uniforms? table<string,boolean|number|Kinematic.Value> Initial typed shader uniform values; requires shader. Color matches GLSL vec3 (RGB, alpha ignored) or vec4 (RGBA).
 ---@field textures? table<string,Kinematic.Texture> Named live textures for image shaders; bindings require shader.
 ---@field resolution? integer[] Required width and height for additional canvases, each 1–8192 pixels.
 ---@field pixels_per_unit? number Image/projection pixels per local 3D unit; positive and finite, default 256.
@@ -1021,6 +1024,26 @@ local Color = {}
 ---@param t number Interpolation factor.
 ---@return Kinematic.Color
 function Color:lerp(other, t) end
+
+--- Returns a copy with the r channel replaced.
+---@param value number Channel value from 0 to 1.
+---@return Kinematic.Color
+function Color:set_r(value) end
+
+--- Returns a copy with the g channel replaced.
+---@param value number Channel value from 0 to 1.
+---@return Kinematic.Color
+function Color:set_g(value) end
+
+--- Returns a copy with the b channel replaced.
+---@param value number Channel value from 0 to 1.
+---@return Kinematic.Color
+function Color:set_b(value) end
+
+--- Returns a copy with the a channel replaced.
+---@param value number Channel value from 0 to 1.
+---@return Kinematic.Color
+function Color:set_a(value) end
 
 --- Animatable Color property.
 ---@class Kinematic.ColorProperty: Kinematic.Property<Kinematic.Color>

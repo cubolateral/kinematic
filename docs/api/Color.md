@@ -99,6 +99,78 @@ Interpolates between compatible values.
 
 </section>
 
+<section class="api-method">
+
+## <code class="api-signature"><a class="api-type-name" href="Color.html">Color</a><span class="api-punctuation">:</span><span class="api-function">set_r</span><span class="api-punctuation">(</span><span class="api-parameter">value</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Color.html">Color</a></code> {#color-set_r-value}
+
+<div class="api-description">
+
+Returns a copy with the r channel replaced.
+
+<div class="api-arguments">
+
+- value: Channel value from 0 to 1.
+
+</div>
+
+</div>
+
+</section>
+
+<section class="api-method">
+
+## <code class="api-signature"><a class="api-type-name" href="Color.html">Color</a><span class="api-punctuation">:</span><span class="api-function">set_g</span><span class="api-punctuation">(</span><span class="api-parameter">value</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Color.html">Color</a></code> {#color-set_g-value}
+
+<div class="api-description">
+
+Returns a copy with the g channel replaced.
+
+<div class="api-arguments">
+
+- value: Channel value from 0 to 1.
+
+</div>
+
+</div>
+
+</section>
+
+<section class="api-method">
+
+## <code class="api-signature"><a class="api-type-name" href="Color.html">Color</a><span class="api-punctuation">:</span><span class="api-function">set_b</span><span class="api-punctuation">(</span><span class="api-parameter">value</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Color.html">Color</a></code> {#color-set_b-value}
+
+<div class="api-description">
+
+Returns a copy with the b channel replaced.
+
+<div class="api-arguments">
+
+- value: Channel value from 0 to 1.
+
+</div>
+
+</div>
+
+</section>
+
+<section class="api-method">
+
+## <code class="api-signature"><a class="api-type-name" href="Color.html">Color</a><span class="api-punctuation">:</span><span class="api-function">set_a</span><span class="api-punctuation">(</span><span class="api-parameter">value</span><span class="api-punctuation">: </span><span class="api-type-name">number</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Color.html">Color</a></code> {#color-set_a-value}
+
+<div class="api-description">
+
+Returns a copy with the a channel replaced.
+
+<div class="api-arguments">
+
+- value: Channel value from 0 to 1.
+
+</div>
+
+</div>
+
+</section>
+
 </div>
 
 :::

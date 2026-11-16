@@ -158,7 +158,8 @@ Start with white objects. Use accent blue sparingly for secondary emphasis. For
 comparisons, choose a few colors from `#FF4040`, `#FFBF40`, `#BFFF40`, `#40FF80`,
 `#40FFFF`, `#4080FF`, `#BF40FF`, and `#FF40BF`. A secondary panel or track can use
 `k.color("#0A0A0A")`, equivalent to RGBA `(10, 10, 10, 255)`. Numeric `k.color` arguments
-use normalized channels, so do not pass those byte values directly. Separate Lua setup,
+accept integers or decimals from `0` to `1`; named colors such as `k.color("red")` and
+`k.color("transparent")` are also available. Separate Lua setup,
 attachment, and scheduling where their purpose changes. Keep related operations together.
 
 ## Maintain the shared documentation colors

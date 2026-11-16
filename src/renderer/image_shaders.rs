@@ -96,13 +96,29 @@ impl ImageShaders {
                 let location = self.gl.get_uniform_location(program, name).ok_or_else(|| {
                     format!("Image shader uniform `{name}` is missing or inactive.")
                 })?;
+
+                if let TrackValue::Color(value) = value {
+                    let [r, g, b, a] = value.rgba();
+
+                    match active_uniform_type(&self.gl, program, name)? {
+                        glow::FLOAT_VEC3 => self.gl.uniform_3_f32(Some(&location), r, g, b),
+                        glow::FLOAT_VEC4 => self.gl.uniform_4_f32(Some(&location), r, g, b, a),
+                        _ => {
+                            return Err(format!(
+                                "Image shader uniform `{name}` has an incompatible GLSL type."
+                            ));
+                        }
+                    }
+
+                    continue;
+                }
+
                 let expected = match value {
                     TrackValue::F32(_) => glow::FLOAT,
                     TrackValue::Vector2(_) => glow::FLOAT_VEC2,
                     TrackValue::Vector3(_) => glow::FLOAT_VEC3,
-                    TrackValue::Quad(_) | TrackValue::Quaternion(_) | TrackValue::Color(_) => {
-                        glow::FLOAT_VEC4
-                    }
+                    TrackValue::Quad(_) | TrackValue::Quaternion(_) => glow::FLOAT_VEC4,
+                    TrackValue::Color(_) => unreachable!(),
                     TrackValue::I32(_) => glow::INT,
                     TrackValue::U32(_) => glow::UNSIGNED_INT,
                     TrackValue::Bool(_) => glow::BOOL,
@@ -131,11 +147,7 @@ impl ImageShaders {
                         self.gl
                             .uniform_4_f32(Some(&location), value.x, value.y, value.z, value.w)
                     }
-                    TrackValue::Color(value) => {
-                        let [r, g, b, a] = value.rgba();
-
-                        self.gl.uniform_4_f32(Some(&location), r, g, b, a)
-                    }
+                    TrackValue::Color(_) => unreachable!(),
                     TrackValue::I32(value) => self.gl.uniform_1_i32(Some(&location), *value),
                     TrackValue::U32(value) => self.gl.uniform_1_u32(Some(&location), *value),
                     TrackValue::Bool(value) => {
@@ -214,22 +226,31 @@ unsafe fn validate_uniform_type(
     name: &str,
     expected: u32,
 ) -> Result<(), String> {
-    let count = unsafe { gl.get_active_uniforms(program) };
-    let actual = (0..count).find_map(|index| {
-        let uniform = unsafe { gl.get_active_uniform(program, index) }?;
-
-        (uniform.name == name).then_some(uniform.utype)
-    });
+    let actual = unsafe { active_uniform_type(gl, program, name) };
 
     match actual {
-        None => Err(format!(
-            "Image shader uniform `{name}` is missing or inactive."
-        )),
-        Some(actual) if actual != expected => Err(format!(
+        Err(error) => Err(error),
+        Ok(actual) if actual != expected => Err(format!(
             "Image shader uniform `{name}` has an incompatible GLSL type."
         )),
-        Some(_) => Ok(()),
+        Ok(_) => Ok(()),
     }
+}
+
+unsafe fn active_uniform_type(
+    gl: &glow::Context,
+    program: glow::NativeProgram,
+    name: &str,
+) -> Result<u32, String> {
+    let count = unsafe { gl.get_active_uniforms(program) };
+
+    (0..count)
+        .find_map(|index| {
+            let uniform = unsafe { gl.get_active_uniform(program, index) }?;
+
+            (uniform.name == name).then_some(uniform.utype)
+        })
+        .ok_or_else(|| format!("Image shader uniform `{name}` is missing or inactive."))
 }
 
 unsafe fn compile(

@@ -250,6 +250,14 @@ fn value_definitions(output: &mut String, methods: &str) {
         output.push_str(&format!("local {class} = {{}}\n\n"));
         output.push_str(&format!("--- Interpolates between compatible values.\n---@param other Kinematic.{class}\n---@param t number Interpolation factor.\n---@return Kinematic.{class}\nfunction {class}:lerp(other, t) end\n\n"));
 
+        if class == "Color" {
+            for channel in ['r', 'g', 'b', 'a'] {
+                output.push_str(&format!(
+                    "--- Returns a copy with the {channel} channel replaced.\n---@param value number Channel value from 0 to 1.\n---@return Kinematic.Color\nfunction Color:set_{channel}(value) end\n\n"
+                ));
+            }
+        }
+
         if matches!(class, "Vec2" | "Vec3") {
             output.push_str(&format!("--- Returns the dot product.\n---@param other Kinematic.{class}\n---@return number\nfunction {class}:dot(other) end\n\n--- Returns the vector magnitude.\n---@return number\nfunction {class}:length() end\n\n"));
         }

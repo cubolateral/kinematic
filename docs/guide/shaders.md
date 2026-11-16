@@ -62,7 +62,8 @@ Very deep zooms need more iterations and eventually more numeric precision.
 ## Bind and animate uniforms
 
 The shader declares `uniform float zoom`, and the object supplies `uniforms = {zoom = 1}`.
-Their types must agree. `plane:uniform("zoom")` returns the binding's property handle.
+Their types must agree. A `k.color(...)` uniform accepts `vec3` (RGB; alpha is ignored)
+or `vec4` (RGBA). `plane:uniform("zoom")` returns the binding's property handle.
 Animating it updates the GPU value without recreating the shader.
 
 Use `to`, `by`, or `from` as for ordinary properties. To change several bindings at

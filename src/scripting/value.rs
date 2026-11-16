@@ -129,6 +129,27 @@ impl UserData for ValueHandle {
                 Ok(Self(this.0.lerp(&other.0, t)))
             },
         );
+
+        for (name, index) in [("set_r", 0), ("set_g", 1), ("set_b", 2), ("set_a", 3)] {
+            methods.add_method(name, move |lua, this, value: Value| {
+                let TrackValue::Color(color) = this.0 else {
+                    return Err(mlua::Error::runtime("Expected a color."));
+                };
+
+                let mut rgba = color.rgba();
+                rgba[index] = number(&value)?;
+
+                ValueHandle(TrackValue::Color(Color::from(rgba))).into_lua(lua)
+            });
+        }
+    }
+}
+
+fn number(value: &Value) -> Result<f32> {
+    match value {
+        Value::Integer(value) => Ok(*value as f32),
+        Value::Number(value) => Ok(*value as f32),
+        _ => Err(mlua::Error::runtime("Expected a color number.")),
     }
 }
 
@@ -157,6 +178,86 @@ pub(crate) fn to_lua(lua: &Lua, value: TrackValue) -> Result<Value> {
         TrackValue::Enum(v) => v.into_lua(lua),
         other => ValueHandle(other).into_lua(lua),
     }
+}
+
+fn named_color(name: &str) -> Option<Color> {
+    if name.eq_ignore_ascii_case("transparent") {
+        return Some(Color::TRANSPARENT);
+    }
+
+    let [r, g, b] = match name.to_ascii_lowercase().as_str() {
+        "red" => [255, 0, 0],
+        "green" => [0, 128, 0],
+        "blue" => [0, 0, 255],
+        "yellow" => [255, 255, 0],
+        "orange" => [255, 165, 0],
+        "purple" => [128, 0, 128],
+        "pink" => [255, 192, 203],
+        "cyan" | "aqua" => [0, 255, 255],
+        "magenta" | "fuchsia" => [255, 0, 255],
+        "black" => [0, 0, 0],
+        "white" => [255, 255, 255],
+        "gray" | "grey" => [128, 128, 128],
+        "maroon" => [128, 0, 0],
+        "olive" => [128, 128, 0],
+        "lime" => [0, 255, 0],
+        "teal" => [0, 128, 128],
+        "navy" => [0, 0, 128],
+        "silver" => [192, 192, 192],
+        "coral" => [255, 127, 80],
+        "tomato" => [255, 99, 71],
+        "salmon" => [250, 128, 114],
+        "gold" => [255, 215, 0],
+        "khaki" => [240, 230, 140],
+        "turquoise" => [64, 224, 208],
+        "violet" => [238, 130, 238],
+        "indigo" => [75, 0, 130],
+        "brown" => [165, 42, 42],
+        "chocolate" => [210, 105, 30],
+        "beige" => [245, 245, 220],
+        "ivory" => [255, 255, 240],
+        "lavender" => [230, 230, 250],
+        "plum" => [221, 160, 221],
+        "orchid" => [218, 112, 214],
+        "crimson" => [220, 20, 60],
+        "rebeccapurple" => [102, 51, 153],
+        "dark_red" => [139, 0, 0],
+        "dark_green" => [0, 100, 0],
+        "dark_blue" => [0, 0, 139],
+        "light_blue" => [173, 216, 230],
+        "sky_blue" => [135, 206, 235],
+        "steel_blue" => [70, 130, 180],
+        "royal_blue" => [65, 105, 225],
+        "forest_green" => [34, 139, 34],
+        "sea_green" => [46, 139, 87],
+        "slate_gray" => [112, 128, 144],
+        _ => return None,
+    };
+
+    Some(Color::from([
+        r as f32 / 255.0,
+        g as f32 / 255.0,
+        b as f32 / 255.0,
+        1.0,
+    ]))
+}
+
+fn hex_color(hex: &str) -> Result<Color> {
+    if !matches!(hex.len(), 6 | 8) {
+        return Err(mlua::Error::runtime(
+            "Color needs six or eight hexadecimal digits.",
+        ));
+    }
+
+    let n = u32::from_str_radix(hex, 16).map_err(mlua::Error::external)?;
+    let n = if hex.len() == 6 { (n << 8) | 255 } else { n };
+
+    Ok(Color::from([
+        ((n >> 24) & 255) as f32 / 255.0,
+        ((n >> 16) & 255) as f32 / 255.0,
+        ((n >> 8) & 255) as f32 / 255.0,
+        (n & 255) as f32 / 255.0,
+    ]))
 }
 
 pub(crate) fn from_lua(
@@ -310,25 +411,16 @@ pub(crate) fn register(lua: &Lua, api: &mlua::Table) -> Result<()> {
     api.set(
         "color",
         lua.create_function(|_, args: mlua::Variadic<Value>| {
-            let color = if let Some(Value::String(hex)) = args.first() {
-                let hex = hex.to_str()?;
-                let hex = hex.strip_prefix('#').unwrap_or(&hex);
+            let color = if let Some(Value::String(value)) = args.first() {
+                let value = value.to_str()?;
 
-                if !matches!(hex.len(), 6 | 8) {
-                    return Err(mlua::Error::runtime(
-                        "Color needs six or eight hexadecimal digits.",
-                    ));
+                if let Some(name) = value.strip_prefix('#') {
+                    hex_color(name)?
+                } else if let Some(color) = named_color(&value) {
+                    color
+                } else {
+                    hex_color(&value)?
                 }
-
-                let n = u32::from_str_radix(hex, 16).map_err(mlua::Error::external)?;
-                let n = if hex.len() == 6 { (n << 8) | 255 } else { n };
-
-                Color::from([
-                    ((n >> 24) & 255) as f32 / 255.0,
-                    ((n >> 16) & 255) as f32 / 255.0,
-                    ((n >> 8) & 255) as f32 / 255.0,
-                    (n & 255) as f32 / 255.0,
-                ])
             } else {
                 let mut rgba = [0.0, 0.0, 0.0, 1.0];
 
@@ -336,11 +428,8 @@ pub(crate) fn register(lua: &Lua, api: &mlua::Table) -> Result<()> {
                     return Err(mlua::Error::runtime("Color needs RGB or RGBA components."));
                 }
 
-                for (i, v) in args.iter().enumerate() {
-                    rgba[i] = v
-                        .as_number()
-                        .ok_or_else(|| mlua::Error::runtime("Expected a color number."))?
-                        as f32;
+                for (i, value) in args.iter().enumerate() {
+                    rgba[i] = number(value)?;
                 }
 
                 Color::from(rgba)

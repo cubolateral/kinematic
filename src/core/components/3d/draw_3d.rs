@@ -763,7 +763,11 @@ fn use_uniforms(
             TrackValue::Color(value) => {
                 let [r, g, b, a] = value.rgba();
 
-                program.use_uniform(name, three_d::vec4(r, g, b, a))
+                if shader.shader.vec3_uniforms.contains(name) {
+                    program.use_uniform(name, three_d::vec3(r, g, b))
+                } else {
+                    program.use_uniform(name, three_d::vec4(r, g, b, a))
+                }
             }
             TrackValue::I32(value) => program.use_uniform(name, *value),
             TrackValue::U32(value) => program.use_uniform(name, *value),

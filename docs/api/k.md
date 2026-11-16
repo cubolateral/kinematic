@@ -234,8 +234,10 @@ Creates a three-dimensional value with x, y, and z components.
 
 <div class="api-description">
 
-Creates a color from RGB or RGBA numbers, or a six/eight-digit hexadecimal string.
-Numeric components use the 0 to 1 convention; omitted alpha defaults to 1. Example: k.color("#60A5FA") or k.color(1,0,0,0.5).
+Creates a color from RGB/RGBA channels, a hex string, or a named color.
+Channels accept integers or decimals from 0 to 1; omitted alpha defaults to 1.
+Named colors are case-insensitive: transparent, red, green, blue, yellow, orange, purple, pink, cyan, magenta, black, white, gray, grey, maroon, olive, lime, teal, navy, aqua, fuchsia, silver, coral, tomato, salmon, gold, khaki, turquoise, violet, indigo, brown, chocolate, beige, ivory, lavender, plum, orchid, crimson, rebeccapurple, dark_red, dark_green, dark_blue, light_blue, sky_blue, steel_blue, royal_blue, forest_green, sea_green, and slate_gray.
+Examples: k.color("#60A5FA"), k.color("red"):set_a(0.5), or k.color(0, 0, 0, 0.5).
 
 </div>
 
