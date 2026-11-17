@@ -1450,6 +1450,31 @@ impl UserData for ObjectHandle {
                 runtime: this.runtime.clone(),
             })
         });
+        methods.add_method("camera_rect", |_, this, ()| {
+            let runtime = this.runtime()?;
+            let world = runtime.world.borrow();
+            let world = world.borrow();
+
+            crate::core::objects::validate_canvas(&world, this.entity)
+                .map_err(mlua::Error::runtime)?;
+
+            let settings = world
+                .get::<&crate::core::objects::CanvasSettings>(this.entity)
+                .map_err(mlua::Error::external)?;
+            let camera = world
+                .get::<&crate::core::components::Camera2D>(this.entity)
+                .map_err(|_| mlua::Error::runtime("Camera rectangle requires a 2D canvas."))?;
+            let (width, height) = settings.resolution();
+            let width = width as f32 / camera.camera_zoom;
+            let height = height as f32 / camera.camera_zoom;
+
+            Ok(super::value::RectHandle(crate::core::types::Rect::new(
+                camera.camera_position.x - width * 0.5,
+                camera.camera_position.y - height * 0.5,
+                width,
+                height,
+            )))
+        });
         methods.add_method("uniform", |_, this, name: String| {
             let runtime = this.runtime()?;
 
@@ -2175,6 +2200,25 @@ end
                 three
             );
         }
+    }
+
+    #[test]
+    fn canvas_2d_camera_rect_uses_resolution_and_zoom_and_ignores_rotation() {
+        let _scene = load(
+            r#"
+return function()
+    local canvas = k.canvas_2d{
+        resolution={800, 600},
+        camera_position=k.vec2(10, 20),
+        camera_zoom=2,
+        camera_rotation=1.25,
+    }
+    local rect = canvas:camera_rect()
+    assert(rect.x == -190 and rect.y == -130)
+    assert(rect.width == 400 and rect.height == 300)
+end
+"#,
+        );
     }
 
     #[test]

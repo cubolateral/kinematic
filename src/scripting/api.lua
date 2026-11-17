@@ -397,6 +397,10 @@ function Object:mutate(callback) end
 ---@return Kinematic.Texture
 function Object:texture() end
 
+--- Returns the axis-aligned scene rectangle visible to this 2D canvas camera, ignoring camera rotation.
+---@return Kinematic.Rect
+function Object:camera_rect() end
+
 --- Returns a shader uniform property handle by name.
 --- The uniform must be configured on the object.
 ---@param name string

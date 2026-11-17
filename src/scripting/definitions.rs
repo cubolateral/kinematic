@@ -189,6 +189,7 @@ fn restricted_method(block: &str) -> Option<&str> {
     matches!(
         name,
         "texture"
+            | "camera_rect"
             | "focus_camera"
             | "get_pixel_color"
             | "global_opacity"
@@ -210,6 +211,7 @@ fn accepts_method(name: &str, world: &hecs::World, entity: hecs::Entity) -> bool
 
     match name {
         "texture" => world.get::<&CanvasSettings>(entity).is_ok(),
+        "camera_rect" => world.get::<&Camera2D>(entity).is_ok(),
         "focus_camera" => world.get::<&Camera3D>(entity).is_ok(),
         "get_pixel_color" => world.get::<&ImageSource>(entity).is_ok(),
         "inputs" | "state" | "update" | "checkpoint" | "mutate" => {
