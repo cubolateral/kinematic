@@ -858,10 +858,6 @@ function Rect:top_right() end
 ---@return Kinematic.Vec2
 function Rect:bottom_left() end
 
---- Returns this rectangle's coordinates as a vec2.
----@return Kinematic.Vec2
-function Rect:position() end
-
 --- Returns this rectangle's width and height as a vec2.
 ---@return Kinematic.Vec2
 function Rect:size() end

@@ -27,45 +27,6 @@ Immutable rectangle value with coordinate, dimension, and anchor queries.
 
 X component or left coordinate.
 
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
 </div>
 
 </section>
@@ -77,45 +38,6 @@ Returns this rectangle's width and height as a vec2.
 <div class="api-description">
 
 Y component or bottom coordinate.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
 
 </div>
 
@@ -129,45 +51,6 @@ Returns this rectangle's width and height as a vec2.
 
 Rectangle width in local coordinates.
 
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
 </div>
 
 </section>
@@ -180,87 +63,9 @@ Returns this rectangle's width and height as a vec2.
 
 Rectangle height in local coordinates.
 
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
 </div>
 
 </section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
 
 </div>
 
@@ -271,45 +76,6 @@ Returns this rectangle's width and height as a vec2.
 <div class="api-description">
 
 Returns the middle point of this rectangle as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
 
 </div>
 
@@ -323,45 +89,6 @@ Returns this rectangle's width and height as a vec2.
 
 Returns the top point of this rectangle as a vec2.
 
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
 </div>
 
 </section>
@@ -373,45 +100,6 @@ Returns this rectangle's width and height as a vec2.
 <div class="api-description">
 
 Returns the bottom point of this rectangle as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
 
 </div>
 
@@ -425,45 +113,6 @@ Returns this rectangle's width and height as a vec2.
 
 Returns the left point of this rectangle as a vec2.
 
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
 </div>
 
 </section>
@@ -475,45 +124,6 @@ Returns this rectangle's width and height as a vec2.
 <div class="api-description">
 
 Returns the right point of this rectangle as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
 
 </div>
 
@@ -527,45 +137,6 @@ Returns this rectangle's width and height as a vec2.
 
 Returns the top_left point of this rectangle as a vec2.
 
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
 </div>
 
 </section>
@@ -577,45 +148,6 @@ Returns this rectangle's width and height as a vec2.
 <div class="api-description">
 
 Returns the bottom_right point of this rectangle as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
 
 </div>
 
@@ -629,45 +161,6 @@ Returns this rectangle's width and height as a vec2.
 
 Returns the top_right point of this rectangle as a vec2.
 
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
 </div>
 
 </section>
@@ -680,13 +173,9 @@ Returns this rectangle's width and height as a vec2.
 
 Returns the bottom_left point of this rectangle as a vec2.
 
-<section class="api-method">
+</div>
 
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
+</section>
 
 <section class="api-method">
 
@@ -699,68 +188,6 @@ Returns this rectangle's width and height as a vec2.
 </div>
 
 </section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">position</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-position}
-
-<div class="api-description">
-
-Returns this rectangle's coordinates as a vec2.
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
-
-</div>
-
-</section>
-
-
-<section class="api-method">
-
-## <code class="api-signature"><a class="api-type-name" href="Rect.html">Rect</a><span class="api-punctuation">:</span><span class="api-function">size</span><span class="api-punctuation">(</span><span class="api-punctuation">)</span><span class="api-punctuation">: </span><a class="api-type-name" href="Vec2.html">Vec2</a></code> {#rect-size}
-
-<div class="api-description">
-
-Returns this rectangle's width and height as a vec2.
-
-</div>
-
-</section>
-
 
 </div>
 

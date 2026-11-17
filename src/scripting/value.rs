@@ -456,11 +456,6 @@ impl UserData for RectHandle {
             }
         });
 
-        m.add_method("position", |_, this, ()| {
-            Ok(ValueHandle(TrackValue::Vector2(glam::vec2(
-                this.0.x, this.0.y,
-            ))))
-        });
         m.add_method("size", |_, this, ()| {
             Ok(ValueHandle(TrackValue::Vector2(glam::vec2(
                 this.0.width,

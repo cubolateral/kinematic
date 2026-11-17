@@ -799,6 +799,18 @@ function Rect:top_right() end
 ---@return Kinematic.Vec2
 function Rect:bottom_left() end
 
+--- Returns this rectangle's width and height as a vec2.
+---@return Kinematic.Vec2
+function Rect:size() end
+
+--- Returns this box's minimum coordinates as a vec3.
+---@return Kinematic.Vec3
+function Box:position() end
+
+--- Returns this box's width, height, and depth as a vec3.
+---@return Kinematic.Vec3
+function Box:size() end
+
 --- Reads the current value of this property or scalar channel.
 ---@generic T
 ---@param self Kinematic.Property<T>
@@ -3627,19 +3639,3 @@ function Script3D:mutate(callback) end
 ---@field auto_update? boolean Whether [`SimulationState::on_update`] runs automatically on project frames. Drawing is unaffected, so a paused simulation keeps showing its latest state. During seek replay, the value is sampled from its historical track at every frame. Default: true.
 
 return k
-
---- Returns this rectangle's coordinates as a vec2.
----@return Kinematic.Vec2
-function Rect:position() end
-
---- Returns this rectangle's width and height as a vec2.
----@return Kinematic.Vec2
-function Rect:size() end
-
---- Returns this box's minimum coordinates as a vec3.
----@return Kinematic.Vec3
-function Box:position() end
-
---- Returns this box's width, height, and depth as a vec3.
----@return Kinematic.Vec3
-function Box:size() end
