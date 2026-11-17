@@ -146,7 +146,7 @@ The callback executes once; its animations repeat until their lifetime ends. Nes
 
 <div class="api-description">
 
-Returns the built-in 2D canvas.
+Returns the built-in 2D canvas. Available in callbacks and imported modules for the current scene.
 Attach 2D objects with k.world_2d():add(object).
 
 </div>
@@ -159,7 +159,7 @@ Attach 2D objects with k.world_2d():add(object).
 
 <div class="api-description">
 
-Returns the built-in 3D canvas.
+Returns the built-in 3D canvas. Available in callbacks and imported modules for the current scene.
 Attach 3D objects with k.world_3d():add(object).
 
 </div>
@@ -172,7 +172,7 @@ Attach 3D objects with k.world_3d():add(object).
 
 <div class="api-description">
 
-Returns the internal root container shared by all scene contents.
+Returns the internal root container shared by all scene contents. Available in callbacks and imported modules for the current scene.
 Attach additional canvases here; use k.world_2d() and k.world_3d() for ordinary world objects.
 
 </div>

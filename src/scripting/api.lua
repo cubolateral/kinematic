@@ -183,17 +183,17 @@ function k.parallel(schedule) end
 ---@param schedule fun()
 function k.loop(schedule) end
 
---- Returns the built-in 2D canvas.
+--- Returns the built-in 2D canvas. Available in callbacks and imported modules for the current scene.
 --- Attach 2D objects with k.world_2d():add(object).
 ---@return Kinematic.Canvas2D
 function k.world_2d() end
 
---- Returns the built-in 3D canvas.
+--- Returns the built-in 3D canvas. Available in callbacks and imported modules for the current scene.
 --- Attach 3D objects with k.world_3d():add(object).
 ---@return Kinematic.Canvas3D
 function k.world_3d() end
 
---- Returns the internal root container shared by all scene contents.
+--- Returns the internal root container shared by all scene contents. Available in callbacks and imported modules for the current scene.
 --- Attach additional canvases here; use k.world_2d() and k.world_3d() for ordinary world objects.
 ---@return Kinematic.Object
 function k.root() end

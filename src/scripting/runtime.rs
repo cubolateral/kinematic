@@ -1097,21 +1097,23 @@ fn register_scene(lua: &Lua, api: &Table) -> Result<()> {
             })
         })?,
     )?;
-    for (name, which) in [("root", 0), ("world_2d", 1), ("world_3d", 2)] {
+    let containers = {
+        let runtime = Runtime::from_lua(lua)?;
+        let scene = runtime.scene.borrow();
+        let scene = scene.as_ref().unwrap();
+
+        [
+            ("root", scene.root().entity()),
+            ("world_2d", scene.world_2d().entity()),
+            ("world_3d", scene.world_3d().entity()),
+        ]
+    };
+
+    for (name, entity) in containers {
         api.set(
             name,
             lua.create_function(move |lua, ()| {
                 let runtime = Runtime::from_lua(lua)?;
-
-                runtime.construction()?;
-
-                let scene = runtime.scene.borrow();
-                let scene = scene.as_ref().unwrap();
-                let entity = match which {
-                    0 => scene.root().entity(),
-                    1 => scene.world_2d().entity(),
-                    _ => scene.world_3d().entity(),
-                };
 
                 Ok(ObjectHandle {
                     runtime: Rc::downgrade(&runtime),
@@ -2111,6 +2113,40 @@ end
                     .get("total")
                     .unwrap()
             })
+    }
+
+    #[test]
+    fn required_module_bounds_can_read_scene_containers() {
+        let module = SOURCE.replace(
+            "return k.rect(10, 20, 30, 40)",
+            "assert(k.root() ~= nil); assert(k.world_3d():get('ambient_intensity') > 0); assert(not pcall(function() k.root():add(k.world_2d()) end)); return k.rect(10, 20, k.world_2d():camera_rect().width, 40)",
+        );
+        let sources = [
+            (
+                PathBuf::from("counter.lua"),
+                "return require('modules.counter')".to_owned(),
+            ),
+            (PathBuf::from("modules/counter.lua"), module),
+        ]
+        .into();
+        let scene = LuaScene::load(
+            ProjectContext::new(".").unwrap(),
+            "counter.lua",
+            sources,
+            (100, 100),
+            60,
+            Margin::default(),
+        )
+        .unwrap();
+        let entity = scene.entity("counter").unwrap();
+        let bounds = super::super::drawing::bounds_2d(&scene.scene.world(), entity);
+
+        assert!(
+            scene.runtime.errors.borrow().is_empty(),
+            "{:?}",
+            scene.runtime.errors.borrow()
+        );
+        assert_eq!(bounds, skia_safe::Rect::from_xywh(10.0, 20.0, 100.0, 40.0));
     }
 
     #[test]

@@ -80,6 +80,9 @@ end
 `require("folder.module")` looks for `folder/module.lua` and `folder/module/init.lua`.
 Imports are cached within each scene revision, and circular imports are errors.
 `k` is a read-only API bound to the importing scene, including when called from a module.
+`k.root()`, `k.world_2d()`, and `k.world_3d()` also work in drawing and bounds callbacks
+for reading the importing scene. Creating objects, changing the scene tree, and scheduling
+animations remain limited to scene construction.
 Each scene has its own Lua VM and module cache, so the same module can create objects and
 schedule work independently in multiple scenes. Return a definition or factory function
 from reusable modules; returning an instance shares that instance within the same scene.
