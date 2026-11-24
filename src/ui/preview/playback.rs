@@ -13,9 +13,10 @@ pub(super) fn draw(
     use kinematic_ui::timeline::transport::{self, Action};
 
     let fps_code = editor.project_info().1.fps;
+    let timeline = editor.timeline();
     let time_labels = [
-        format_timecode(editor.absolute_time(), fps_code),
-        format_timecode(editor.project_duration(), fps_code),
+        format_timecode(timeline.time(), fps_code),
+        format_timecode(timeline.duration(), fps_code),
     ];
     let action = {
         let timeline = editor.timeline_mut();
@@ -108,9 +109,6 @@ pub(in crate::ui) fn fullscreen_controls(
     let group_top = scrubber_min[1] + ((available_height - group_height) * 0.5).max(0.0);
     let buttons_y = group_top + FULLSCREEN_SCRUBBER_HEIGHT;
     let panel_bottom = scrubber_min[1] + ui.content_region_avail_height();
-    let display_time = editor.absolute_time();
-    let display_duration = editor.project_duration();
-
     {
         let _disabled = ui.begin_disabled_with_cond(!interactive);
 
@@ -152,8 +150,8 @@ pub(in crate::ui) fn fullscreen_controls(
         }
 
         transport::scrubber(
-            display_time,
-            display_duration,
+            timeline.time(),
+            timeline.duration(),
             ui,
             [scrubber_min[0], group_top],
             scrubber_width,

@@ -49,12 +49,16 @@ pub(super) fn update(
     timeline.is_controlling =
         state.interaction == Interaction::Scrubber && right_down && state.right_dragged;
 
-    if timeline.is_controlling && mouse_delta != [0.0; 2] {
-        let (start, end) = state.view_range();
-        let visible_time = start
-            + ((mouse[0] - layout.timeline_left) / layout.timeline_width).clamp(0.0, 1.0)
-                * (end - start);
+    if timeline.is_controlling && ui.is_mouse_pos_valid() {
+        let x = mouse[0] - layout.timeline_left;
 
-        timeline.go_to(visible_time);
+        state.pan_at_scrubber_edge(x, layout.timeline_width, ui.io().delta_time());
+
+        let (start, end) = state.view_range();
+        let visible_time = start + (x / layout.timeline_width).clamp(0.0, 1.0) * (end - start);
+
+        if visible_time != timeline.time() {
+            timeline.go_to(visible_time);
+        }
     }
 }

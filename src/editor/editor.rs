@@ -1960,6 +1960,10 @@ impl Editor {
             .map_err(|e| e.to_string())
     }
 
+    pub fn timeline(&self) -> &Timeline {
+        &self.timeline
+    }
+
     pub fn timeline_mut(&mut self) -> &mut Timeline {
         &mut self.timeline
     }

@@ -44,7 +44,7 @@ pub(super) fn draw(
         let _disabled = ui.begin_disabled_with_cond(is_exporting);
         let focused_scene = editor.focused_scene_index();
         let time = {
-            let timeline = editor.timeline_mut();
+            let timeline = editor.timeline();
 
             state.sync_focus(focused_scene, timeline.duration());
 

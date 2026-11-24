@@ -74,9 +74,13 @@ there as with other properties. Other active types appear as read-only entries.
 
 ## Timeline and events
 
-Use the ruler to seek. The arrow keys move between frames, and Space toggles playback.
-Project scene order comes from the manifest. Focus a scene to limit the visible and
-audible range without changing its clips. Press `L` to loop playback in the editor.
+Drag with the right mouse button to seek. In a zoomed timeline, hold the drag at
+either edge to scroll toward the start or end. The arrow keys move between frames,
+and Space toggles playback. Press `L` to loop playback in the editor.
+
+Project scene order comes from the manifest. When you focus a scene, the timeline and
+Preview show time from zero to that scene's duration. The audible range also follows
+the focused scene without changing its clips.
 
 Use `k.event("Reading")` to add a named pause that you can adjust on the timeline.
 Resolve pending source edits before changing events. Event times are saved in the [scene

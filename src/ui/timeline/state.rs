@@ -1,5 +1,8 @@
 use super::metrics::DRAG_DIRECTION_THRESHOLD;
 
+const SCRUBBER_PAN_VIEWS_PER_SECOND: f32 = 0.75;
+const SCRUBBER_PAN_MAX_FRAME_TIME: f32 = 0.05;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) enum Interaction {
     #[default]
@@ -148,6 +151,19 @@ impl State {
         );
     }
 
+    pub(super) fn pan_at_scrubber_edge(&mut self, x: f32, width: f32, dt: f32) {
+        let direction = if x <= 0.0 {
+            1.0
+        } else if x >= width {
+            -1.0
+        } else {
+            return;
+        };
+        let step = width * SCRUBBER_PAN_VIEWS_PER_SECOND * dt.min(SCRUBBER_PAN_MAX_FRAME_TIME);
+
+        self.pan(direction * step, width);
+    }
+
     pub(super) fn press_scene(&mut self, scene: usize) {
         self.pressed_scene = (self.view_focus != Some(scene)).then_some(scene);
     }
@@ -261,6 +277,40 @@ mod tests {
 
         assert!(panned_start >= 0.0);
         assert!(panned_end <= 10.0);
+    }
+
+    #[test]
+    fn scrubbing_at_the_edges_pans_at_a_bounded_speed_and_stops_at_the_ends() {
+        let mut state = State::default();
+
+        state.sync_focus(Some(1), 10.0);
+        state.set_view(3.0, 7.0);
+        state.pan_at_scrubber_edge(1.0, 200.0, 1.0);
+        state.pan_at_scrubber_edge(199.0, 200.0, 1.0);
+
+        assert_eq!(state.view_range(), (3.0, 7.0));
+
+        state.pan_at_scrubber_edge(200.0, 200.0, 1.0);
+
+        assert!((state.view_range().0 - 3.15).abs() < 0.00001);
+
+        state.pan_at_scrubber_edge(0.0, 200.0, 1.0);
+
+        assert!((state.view_range().0 - 3.0).abs() < 0.00001);
+
+        for _ in 0..100 {
+            state.pan_at_scrubber_edge(250.0, 200.0, 0.05);
+        }
+
+        assert!((state.view_range().0 - 6.0).abs() < 0.0001);
+        assert_eq!(state.view_range().1, 10.0);
+
+        for _ in 0..100 {
+            state.pan_at_scrubber_edge(-50.0, 200.0, 0.05);
+        }
+
+        assert_eq!(state.view_range().0, 0.0);
+        assert!((state.view_range().1 - 4.0).abs() < 0.0001);
     }
 
     #[test]

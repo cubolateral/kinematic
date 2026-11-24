@@ -951,6 +951,9 @@ fn ui_audio_clips_save_mix_and_rebuild() {
 
     assert_eq!(editor.audio_clips(), absolute_clips);
     assert_eq!(editor.project_duration(), global_duration);
+    assert_eq!(editor.timeline().time(), 0.0);
+    assert_eq!(editor.timeline().duration(), editor.scene_range(1)[1]);
+    assert!(editor.timeline().duration() < global_duration);
     assert!((editor.absolute_time() - 0.05).abs() < 1e-6);
     assert_eq!(editor.mix_audio(0, 4800), expected[4800..14400]);
 

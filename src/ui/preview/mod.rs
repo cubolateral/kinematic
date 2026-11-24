@@ -186,11 +186,9 @@ pub(super) fn draw(
                 draw_editor_3d(editor, ui, plain_keyboard_input, &mut state.orientation);
             }
         });
-        kinematic_ui::timeline::ruler::duration_bar(
-            ui,
-            editor.absolute_time(),
-            editor.project_duration(),
-        );
+        let timeline = editor.timeline();
+
+        kinematic_ui::timeline::ruler::duration_bar(ui, timeline.time(), timeline.duration());
 
         ui.set_cursor_screen_pos([ui.cursor_screen_pos()[0], ui.item_rect_max()[1]]);
 
