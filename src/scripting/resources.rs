@@ -148,29 +148,42 @@ pub(super) fn register(runtime: &Rc<Runtime>, api: &Table) -> Result<()> {
                 .ok_or_else(|| mlua::Error::runtime("Shader source is required."))?;
                 let vertex = source("vertex", "vertex_path")?;
                 let key = format!("{image}:{vertex:?}:{fragment}");
-                let shader = SHADERS.with(|cache| {
+                let shader = SHADERS.with(|cache| -> Result<ShaderHandle> {
                     let mut cache = cache.borrow_mut();
 
                     cache.retain(|_, v| v.strong_count() > 0);
 
                     if let Some(shader) = cache.get(&key).and_then(Weak::upgrade) {
-                        return ShaderHandle(shader);
+                        return Ok(ShaderHandle(shader));
                     }
 
+                    let definitions = crate::renderer::shader_programs::reflect(
+                        vertex.as_deref(),
+                        &fragment,
+                        image,
+                    )
+                    .map_err(mlua::Error::runtime)?
+                    .map(Arc::new);
                     let shader = Arc::new(if image {
-                        Shader::Image(ImageShader::new(fragment))
+                        let mut shader = ImageShader::new(fragment);
+                        shader.uniforms = definitions;
+
+                        Shader::Image(shader)
                     } else {
-                        Shader::Mesh(if let Some(vertex) = vertex {
+                        let mut shader = if let Some(vertex) = vertex {
                             MeshShader::program(vertex, fragment)
                         } else {
                             MeshShader::fragment(fragment)
-                        })
+                        };
+                        shader.uniforms = definitions;
+
+                        Shader::Mesh(shader)
                     });
 
                     cache.insert(key, Arc::downgrade(&shader));
 
-                    ShaderHandle(shader)
-                });
+                    Ok(ShaderHandle(shader))
+                })?;
 
                 runtime.assets.borrow_mut().push(Box::new(shader.clone()));
 
@@ -327,15 +340,20 @@ pub(super) fn configure(
             ));
         }
 
-        let mut values = BTreeMap::new();
+        let definitions = match shader.0.as_ref() {
+            Shader::Image(shader) => shader.uniforms.as_deref(),
+            Shader::Mesh(shader) => shader.uniforms.as_deref(),
+        };
+        let mut values = definitions
+            .into_iter()
+            .flatten()
+            .filter_map(|(name, value)| Some((name.clone(), value.as_ref()?.clone())))
+            .collect::<BTreeMap<_, _>>();
 
         if let Some(uniforms) = uniforms {
             for pair in uniforms.pairs::<String, Value>() {
                 let (name, value) = pair?;
-                let value = super::extension::infer(value)?;
-
-                crate::core::objects::validate_shader_track_value(&value)
-                    .map_err(mlua::Error::runtime)?;
+                let value = uniform_override(lua, &name, value, definitions)?;
 
                 values.insert(name, value);
             }
@@ -373,12 +391,9 @@ pub(super) fn configure(
             Shader::Mesh(shader) => {
                 let mut data = MeshShaderData::with_shader(shader.clone());
 
-                for (name, value) in values {
-                    let value = uniform(value)?;
+                validate_mesh_uniforms(&values).map_err(mlua::Error::runtime)?;
 
-                    super::runtime::engine(|| data.uniform(name, value))?;
-                }
-
+                data.uniforms = values;
                 data.bounds_padding = Some(padding);
 
                 stamp.push(format!(
@@ -401,24 +416,42 @@ pub(super) fn configure(
             .map_err(mlua::Error::external)?;
     }
 
-    let _ = lua;
-
     Ok(())
 }
-fn uniform(value: TrackValue) -> Result<ImageShaderUniform> {
-    Ok(match value {
-        TrackValue::F32(v) => v.into(),
-        TrackValue::U32(v) => v.into(),
-        TrackValue::I32(v) => v.into(),
-        TrackValue::Bool(v) => v.into(),
-        TrackValue::Vector2(v) => v.into(),
-        TrackValue::Vector3(v) => v.into(),
-        TrackValue::Color(v) => v.into(),
-        TrackValue::Quaternion(v) => v.into(),
-        TrackValue::Quad(v) => v.into(),
-        _ => return Err(mlua::Error::runtime("Unsupported shader uniform.")),
-    })
+
+fn uniform_override(
+    lua: &Lua,
+    name: &str,
+    value: Value,
+    definitions: Option<&crate::core::shader_uniforms::ShaderUniforms>,
+) -> Result<TrackValue> {
+    let value = if let Some(definitions) = definitions {
+        let expected = definitions
+            .get(name)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| {
+                mlua::Error::runtime(format!(
+                    "Shader uniform `{name}` is missing, inactive, or unsupported."
+                ))
+            })?;
+        let inferred = super::extension::infer(value.clone())?;
+
+        match (&inferred, expected) {
+            (TrackValue::Color(_), TrackValue::Vector3(_) | TrackValue::Quad(_))
+            | (TrackValue::Quaternion(_), TrackValue::Quad(_)) => inferred,
+            _ => super::value::from_lua(lua, value, expected, crate::core::TrackChoices::None)
+                .map_err(|error| {
+                    mlua::Error::runtime(format!("Shader uniform `{name}`: {error}"))
+                })?,
+        }
+    } else {
+        super::extension::infer(value)?
+    };
+    validate_shader_track_value(&value).map_err(mlua::Error::runtime)?;
+
+    Ok(value)
 }
+
 fn validate_texture(texture: &TextureHandle, runtime: &Rc<Runtime>) -> Result<()> {
     if texture
         .runtime

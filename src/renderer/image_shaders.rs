@@ -7,11 +7,21 @@ use crate::{
         TrackValue,
         objects::{CanvasTexture, ImageShaderData, validate_shader_values},
     },
-    renderer::target::{Target, reset_gl},
+    renderer::{
+        shader_programs::image_program,
+        target::{Target, reset_gl},
+    },
 };
 
+#[derive(PartialEq, Eq, Hash)]
+struct ProgramKey {
+    shader: u64,
+    uniforms: Vec<String>,
+    textures: Vec<String>,
+}
+
 pub(crate) struct ImageShaders {
-    programs: HashMap<u64, glow::NativeProgram>,
+    programs: HashMap<ProgramKey, glow::NativeProgram>,
     vao: Option<glow::NativeVertexArray>,
     gl: Rc<glow::Context>,
 }
@@ -35,10 +45,6 @@ impl ImageShaders {
         texture: impl Fn(CanvasTexture) -> Option<glow::NativeTexture>,
     ) -> Result<(), String> {
         validate_shader_values(data)?;
-
-        if data.shader.source.lines().next().map(str::trim) != Some("#version 330 core") {
-            return Err("Image shader must start with `#version 330 core`.".into());
-        }
 
         let program = self.program(data)?;
         let vao = match self.vao {
@@ -175,46 +181,20 @@ impl ImageShaders {
     }
 
     fn program(&mut self, data: &ImageShaderData) -> Result<glow::NativeProgram, String> {
-        if let Some(program) = self.programs.get(&data.shader.id) {
+        // Keep omitted bindings at their GLSL defaults by sharing programs only across equal binding sets.
+        let key = ProgramKey {
+            shader: data.shader.id,
+            uniforms: data.uniforms.keys().cloned().collect(),
+            textures: data.textures.keys().cloned().collect(),
+        };
+
+        if let Some(program) = self.programs.get(&key) {
             return Ok(*program);
         }
 
-        let program = unsafe {
-            let vertex = compile(
-                &self.gl,
-                glow::VERTEX_SHADER,
-                "#version 330 core\nout vec2 k_uv;\nvoid main() {\n    vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);\n    k_uv = p;\n    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n}\n",
-            )?;
-            let fragment = match compile(&self.gl, glow::FRAGMENT_SHADER, &data.shader.source) {
-                Ok(shader) => shader,
-                Err(error) => {
-                    self.gl.delete_shader(vertex);
+        let program = image_program(&self.gl, &data.shader.source)?;
 
-                    return Err(error);
-                }
-            };
-            let program = self.gl.create_program()?;
-
-            self.gl.attach_shader(program, vertex);
-            self.gl.attach_shader(program, fragment);
-            self.gl.link_program(program);
-            self.gl.detach_shader(program, vertex);
-            self.gl.detach_shader(program, fragment);
-            self.gl.delete_shader(vertex);
-            self.gl.delete_shader(fragment);
-
-            if !self.gl.get_program_link_status(program) {
-                let diagnostic = self.gl.get_program_info_log(program);
-
-                self.gl.delete_program(program);
-
-                return Err(format!("Image shader link failed:\n{diagnostic}"));
-            }
-
-            program
-        };
-
-        self.programs.insert(data.shader.id, program);
+        self.programs.insert(key, program);
 
         Ok(program)
     }
@@ -251,29 +231,6 @@ unsafe fn active_uniform_type(
             (uniform.name == name).then_some(uniform.utype)
         })
         .ok_or_else(|| format!("Image shader uniform `{name}` is missing or inactive."))
-}
-
-unsafe fn compile(
-    gl: &glow::Context,
-    kind: u32,
-    source: &str,
-) -> Result<glow::NativeShader, String> {
-    let shader = unsafe { gl.create_shader(kind)? };
-
-    unsafe {
-        gl.shader_source(shader, source);
-        gl.compile_shader(shader);
-
-        if !gl.get_shader_compile_status(shader) {
-            let diagnostic = gl.get_shader_info_log(shader);
-
-            gl.delete_shader(shader);
-
-            return Err(format!("Image shader compilation failed:\n{diagnostic}"));
-        }
-    }
-
-    Ok(shader)
 }
 
 unsafe fn bind_texture(

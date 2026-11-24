@@ -68,6 +68,10 @@ does not change Lua or save to the project, and it disappears when playback resu
 timeline moves, or the scene reloads. This also applies to objects with explicit IDs. To
 keep a value, update the constructor options or add an animation in code.
 
+**Shader Uniforms** shows the current values of active scalar and floating-point
+vector uniforms, including those declared only in GLSL. You can preview edits
+there as with other properties. Other active types appear as read-only entries.
+
 ## Timeline and events
 
 Use the ruler to seek. The arrow keys move between frames, and Space toggles playback.

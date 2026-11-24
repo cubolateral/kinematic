@@ -61,7 +61,7 @@ Image or mesh shader resource.
 
 <div class="api-description">
 
-Initial typed shader uniform values; requires shader. Color matches GLSL `vec3` (RGB, alpha ignored) or `vec4` (RGBA).
+Initial typed overrides for shader uniforms. Requires a shader. Omitted uniforms keep their GLSL defaults. Color matches GLSL `vec3` (RGB, alpha ignored) or `vec4` (RGBA).
 
 </div>
 

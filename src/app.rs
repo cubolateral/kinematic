@@ -26,6 +26,71 @@ pub fn app() -> App {
     App::new()
 }
 
+fn load_gl(video: &sdl3::VideoSubsystem) -> glow::Context {
+    unsafe {
+        glow::Context::from_loader_function(|name| {
+            video
+                .gl_get_proc_address(name)
+                .map(|function| function as *const std::ffi::c_void)
+                .unwrap_or(std::ptr::null())
+        })
+    }
+}
+
+pub(crate) fn with_shader_validation<T>(run: impl FnOnce() -> T) -> T {
+    struct ValidationContext {
+        gl: std::rc::Rc<glow::Context>,
+        _context: sdl3::video::GLContext,
+        _window: sdl3::video::Window,
+        _sdl: sdl3::Sdl,
+    }
+
+    let context = std::cell::RefCell::new(None::<ValidationContext>);
+
+    crate::renderer::shader_programs::with_context(
+        move || {
+            let mut context = context.borrow_mut();
+
+            if let Some(context) = context.as_ref() {
+                return Ok(context.gl.clone());
+            }
+
+            let sdl = sdl3::init().map_err(|error| error.to_string())?;
+            let video = sdl.video().map_err(|error| error.to_string())?;
+            let attributes = video.gl_attr();
+
+            attributes.set_context_version(3, 3);
+            attributes.set_context_profile(sdl3::video::GLProfile::Core);
+
+            let window = video
+                .window("Kinematic Shader Validation", 1, 1)
+                .hidden()
+                .opengl()
+                .build()
+                .map_err(|error| error.to_string())?;
+            let gl_context = window
+                .gl_create_context()
+                .map_err(|error| error.to_string())?;
+
+            window
+                .gl_make_current(&gl_context)
+                .map_err(|error| error.to_string())?;
+
+            let gl = std::rc::Rc::new(load_gl(&video));
+
+            *context = Some(ValidationContext {
+                gl: gl.clone(),
+                _context: gl_context,
+                _window: window,
+                _sdl: sdl,
+            });
+
+            Ok(gl)
+        },
+        run,
+    )
+}
+
 impl App {
     pub fn new() -> Self {
         let sdl = sdl3::init().unwrap();
@@ -113,14 +178,7 @@ impl App {
         }
         .unwrap();
         let imgui_renderer = dear_imgui_glow::GlowRenderer::new(gl, &mut imgui).unwrap();
-        let gl = std::rc::Rc::new(unsafe {
-            glow::Context::from_loader_function(|name| {
-                video_subsystem
-                    .gl_get_proc_address(name)
-                    .map(|f| f as *const std::ffi::c_void)
-                    .unwrap_or(std::ptr::null())
-            })
-        });
+        let gl = std::rc::Rc::new(load_gl(&video_subsystem));
 
         // Initialize Skia against the current OpenGL context.
         let interface = skia_safe::gpu::gl::Interface::new_load_with(|name| {
@@ -188,16 +246,9 @@ impl App {
     fn three_context(&self) -> three_d::Context {
         // Load another function table for the same SDL context; no additional GL context is created.
         let video = self.sdl.video().unwrap();
-        let three_gl = unsafe {
-            glow::Context::from_loader_function(|name| {
-                video
-                    .gl_get_proc_address(name)
-                    .map(|f| f as *const std::ffi::c_void)
-                    .unwrap_or(std::ptr::null())
-            })
-        };
+        let gl = load_gl(&video);
 
-        three_d::Context::from_gl_context(std::sync::Arc::new(three_gl))
+        three_d::Context::from_gl_context(std::sync::Arc::new(gl))
             .expect("Three-d must initialize against the SDL context.")
     }
 
@@ -249,6 +300,15 @@ impl App {
 
     /// Runs the configured project editor.
     pub fn run(&mut self) {
+        let gl = std::rc::Rc::clone(&self.gl);
+
+        crate::renderer::shader_programs::with_context(
+            move || Ok(gl.clone()),
+            || self.run_editor(),
+        );
+    }
+
+    fn run_editor(&mut self) {
         let three_context = self.three_context();
         let mut editor = None;
 

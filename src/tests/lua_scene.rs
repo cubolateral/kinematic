@@ -175,6 +175,69 @@ fn signal_errors_do_not_commit_partial_writes() {
     );
 }
 
+pub(crate) fn signal_uses_declared_uniforms_and_restores_shader_defaults() {
+    use crate::core::{TrackValue, objects::shader_uniform, types::vec2};
+
+    let scene = load(
+        r#"
+return function()
+    local world = k.world_2d()
+    local center = k.track(k.vec2(0, 0))
+    local zoom = k.track(1)
+    local fractal = world:add(k.panel {
+        id = 'fractal',
+        shader = k.image_shader { source = [[#version 330 core
+            uniform vec2 center;
+            uniform float zoom = 1.0;
+            out vec4 color;
+            void main() { color = vec4(center, zoom, 1.0); }
+        ]] },
+    })
+    local signal = fractal:signal(function(object)
+        object:uniform("center"):set(center:get())
+        object:uniform("zoom"):set(zoom:get())
+        assert(object:uniform("zoom"):get() == zoom:get())
+    end)
+    fractal:signal(function(_, frame)
+        if frame.time > 1.75 and frame.time < 2 then error("Failed.") end
+    end)
+
+    k.all(function()
+        center:from(k.vec2(0.5, -0.25), k.vec2(0, 0)):play(0.75, 'linear')
+        zoom:from(1.5, 3):play(0.75, 'linear')
+    end)
+    k.all(function()
+        center:to(k.vec2(-2, 0)):play(1.25, 'linear')
+        zoom:to(25):play(1.25, 'linear')
+    end)
+    signal:stop()
+    k.wait(1)
+end
+"#,
+    );
+    let entity = scene.entity("fractal").unwrap();
+    let uniform = |name| shader_uniform(&scene.scene().world(), entity, name);
+
+    scene.update(1.375).unwrap();
+    assert_eq!(uniform("center"), Ok(TrackValue::Vector2(vec2(-1.0, 0.0))));
+    assert_eq!(uniform("zoom"), Ok(TrackValue::F32(14.0)));
+
+    assert!(scene.update(1.875).is_err());
+    assert_eq!(uniform("center"), Ok(TrackValue::Vector2(vec2(-1.0, 0.0))));
+    assert_eq!(uniform("zoom"), Ok(TrackValue::F32(14.0)));
+
+    scene.update(2.5).unwrap();
+    assert_eq!(uniform("center"), Ok(TrackValue::Vector2(vec2(0.0, 0.0))));
+    assert_eq!(uniform("zoom"), Ok(TrackValue::F32(1.0)));
+
+    scene.update(0.375).unwrap();
+    assert_eq!(
+        uniform("center"),
+        Ok(TrackValue::Vector2(vec2(0.25, -0.125)))
+    );
+    assert_eq!(uniform("zoom"), Ok(TrackValue::F32(2.25)));
+}
+
 #[test]
 fn camera_following_shader_rect_updates_without_signal_errors() {
     let scene = load(
@@ -1132,6 +1195,99 @@ return k.object_2d('Custom 2D', {
     assert_eq!(scene.entity("counter"), Some(entity));
 
     scene.update(0.5).unwrap();
+}
+
+pub(crate) fn declared_uniforms_use_the_same_properties_in_2d_and_3d() {
+    use crate::core::{TrackValue, components::Inspection, objects::shader_uniform, types::vec2};
+
+    let source = r#"
+return function()
+    local fractal = k.world_2d():add(k.panel {
+        id = 'fractal',
+        shader = k.image_shader { source = [[#version 330 core
+            const float halfZoom = 0.5;
+            uniform vec2 center;
+            uniform float zoom = halfZoom * 2.0;
+            uniform int passes = 3;
+            uniform float unused;
+            out vec4 color;
+            void main() { color = vec4(center, zoom, float(passes)); }
+        ]] },
+        --[[bindings]]
+    })
+    assert(fractal:uniform('zoom'):get() == INITIAL_ZOOM)
+    assert(fractal:uniform('passes'):get() == 3)
+    assert(not pcall(function() fractal:uniform('unused') end))
+    fractal:uniform('passes'):set(4)
+    fractal:to { uniforms = { zoom = 3 } }:play(1, 'linear')
+    fractal:by { uniforms = { zoom = 2 } }:play(1, 'linear')
+    fractal:from { uniforms = { center = { k.vec2(1, -0.5), k.vec2(0, 0) } } }:play(1, 'linear')
+    fractal:reset():play(0.25, 'linear')
+end
+"#;
+    let default = load(&source.replace("INITIAL_ZOOM", "1"));
+    let overridden = load(
+        &source
+            .replace("--[[bindings]]", "uniforms = { zoom = 4 },")
+            .replace("INITIAL_ZOOM", "4"),
+    );
+    let uniform = |scene: &LuaScene, name| {
+        shader_uniform(
+            &scene.scene().world(),
+            scene.entity("fractal").unwrap(),
+            name,
+        )
+        .unwrap()
+    };
+
+    default.update(0.5).unwrap();
+    overridden.update(0.5).unwrap();
+    assert_eq!(uniform(&default, "zoom"), TrackValue::F32(2.0));
+    assert_eq!(uniform(&overridden, "zoom"), TrackValue::F32(3.5));
+    assert_eq!(uniform(&default, "passes"), TrackValue::I32(4));
+
+    default.update(1.5).unwrap();
+    assert_eq!(uniform(&default, "zoom"), TrackValue::F32(4.0));
+    default.update(2.5).unwrap();
+    assert_eq!(
+        uniform(&default, "center"),
+        TrackValue::Vector2(vec2(0.5, -0.25))
+    );
+    default.update(3.25).unwrap();
+    overridden.update(3.25).unwrap();
+    assert_eq!(uniform(&default, "zoom"), TrackValue::F32(1.0));
+    assert_eq!(uniform(&overridden, "zoom"), TrackValue::F32(4.0));
+
+    let mesh = load(
+        r#"
+return function()
+    local cube = k.world_3d():add(k.cube {
+        id = 'cube',
+        shader = k.mesh_shader { fragment = [[
+            uniform float gain = 0.25;
+            out vec4 color;
+            void main() { color = vec4(gain); }
+        ]] },
+    })
+    assert(cube:uniform('gain'):get() == 0.25)
+    cube:uniform('gain'):to(0.75):play(1, 'linear')
+end
+"#,
+    );
+    mesh.update(0.5).unwrap();
+
+    let world = mesh.scene().world();
+    let entity = mesh.entity("cube").unwrap();
+    let inspection = world.get::<&Inspection>(entity).unwrap();
+    let (_, targets) = inspection
+        .property_groups(&world, entity)
+        .into_iter()
+        .find(|(name, _)| name == "Shader Uniforms")
+        .unwrap();
+
+    assert_eq!(targets.len(), 1);
+    assert_eq!(targets[0].name(), "gain");
+    assert_eq!(targets[0].get(&world, entity), TrackValue::F32(0.5));
 }
 
 #[test]

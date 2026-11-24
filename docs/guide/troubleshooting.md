@@ -90,7 +90,7 @@ the previous revision active.
 
 ## A shader passes check but fails to render
 
-`--check` does not compile GLSL. Image shaders include `#version 330 core`. Mesh shaders
+`--check` compiles GLSL but does not draw the scene. Image shaders include `#version 330 core`. Mesh shaders
 omit the version directive. Check shader inputs, declared uniforms, and active use of
 required matrices in custom vertex shaders. See the [GLSL contract](shaders.md).
 

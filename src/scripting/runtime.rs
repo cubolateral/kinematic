@@ -1275,6 +1275,19 @@ impl ObjectHandle {
         Ok(runtime)
     }
 
+    pub(super) fn uniform(&self, name: &str) -> Result<PropertyHandle> {
+        let runtime = self.runtime()?;
+
+        crate::core::objects::shader_uniform(&runtime.world.borrow().borrow(), self.entity, name)
+            .map_err(mlua::Error::runtime)?;
+
+        Ok(PropertyHandle {
+            object: self.clone(),
+            target: TrackTarget::uniform(name),
+            channel: None,
+        })
+    }
+
     pub(super) fn property(&self, name: &str) -> Result<PropertyHandle> {
         let runtime = self.runtime()?;
         let (name, component) = name
@@ -1477,22 +1490,7 @@ impl UserData for ObjectHandle {
                 height,
             )))
         });
-        methods.add_method("uniform", |_, this, name: String| {
-            let runtime = this.runtime()?;
-
-            crate::core::objects::shader_uniform(
-                &runtime.world.borrow().borrow(),
-                this.entity,
-                &name,
-            )
-            .map_err(mlua::Error::runtime)?;
-
-            Ok(PropertyHandle {
-                object: this.clone(),
-                target: TrackTarget::uniform(name),
-                channel: None,
-            })
-        });
+        methods.add_method("uniform", |_, this, name: String| this.uniform(&name));
         methods.add_method("inputs", |_, this, inputs: Table| {
             extension::configure_inputs(this, inputs)
         });

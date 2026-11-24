@@ -18,6 +18,7 @@ use crate::core::{
 #[derive(Clone)]
 pub struct ImageShader {
     pub(crate) source: Arc<str>,
+    pub(crate) uniforms: Option<Arc<crate::core::shader_uniforms::ShaderUniforms>>,
     pub(crate) id: u64,
 }
 
@@ -28,6 +29,7 @@ impl ImageShader {
 
         Self {
             source: Arc::from(source.into()),
+            uniforms: None,
             id: NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         }
     }
@@ -229,7 +231,7 @@ pub(crate) fn validate_shader_values(data: &ImageShaderData) -> Result<(), Strin
     Ok(())
 }
 
-fn valid_binding_name(name: &str) -> bool {
+pub(crate) fn valid_binding_name(name: &str) -> bool {
     let mut chars = name.chars();
 
     chars
@@ -276,7 +278,7 @@ pub(crate) fn shader_uniform(
     }
 
     Err(format!(
-        "Shader uniform `{name}` must be defined on this object's builder before use."
+        "Shader uniform `{name}` is unavailable on this object."
     ))
 }
 
@@ -301,14 +303,14 @@ pub(crate) fn set_shader_uniform(
     }
 
     Err(format!(
-        "Shader uniform `{name}` must be defined on this object's builder before use."
+        "Shader uniform `{name}` is unavailable on this object."
     ))
 }
 
 fn replace_uniform(name: &str, current: &mut TrackValue, value: TrackValue) -> Result<(), String> {
     if std::mem::discriminant(current) != std::mem::discriminant(&value) {
         return Err(format!(
-            "Shader uniform `{name}` must keep its builder-defined type."
+            "Shader uniform `{name}` must keep its configured type."
         ));
     }
 
@@ -338,6 +340,31 @@ pub(crate) fn shader_uniforms(
                 .collect()
         })
         .unwrap_or_default()
+}
+
+pub(crate) fn shader_untracked_uniforms(world: &hecs::World, entity: hecs::Entity) -> Vec<String> {
+    if let Ok(data) = world.get::<&ImageShaderData>(entity) {
+        return data
+            .shader
+            .uniforms
+            .iter()
+            .flat_map(|uniforms| uniforms.iter())
+            .filter(|(name, value)| value.is_none() && !data.textures.contains_key(*name))
+            .map(|(name, _)| name.clone())
+            .collect();
+    }
+
+    let Ok(data) = world.get::<&crate::core::objects::MeshShaderData>(entity) else {
+        return Vec::new();
+    };
+
+    data.shader
+        .iter()
+        .filter_map(|shader| shader.uniforms.as_deref())
+        .flat_map(|uniforms| uniforms.iter())
+        .filter(|(_, value)| value.is_none())
+        .map(|(name, _)| name.clone())
+        .collect()
 }
 
 #[cfg(test)]
@@ -528,7 +555,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "must keep its builder-defined type")]
+    #[should_panic(expected = "must keep its configured type")]
     fn uniform_type_cannot_change() {
         let mut scene = Scene::new();
         let object = panel()

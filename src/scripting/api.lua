@@ -402,7 +402,7 @@ function Object:texture() end
 function Object:camera_rect() end
 
 --- Returns a shader uniform property handle by name.
---- The uniform must be configured on the object.
+--- Active scalar and floating-point vector uniforms are available from the shader declaration. They start at the GLSL default unless the object supplies an override.
 ---@param name string
 ---@return Kinematic.Property
 function Object:uniform(name) end
@@ -670,7 +670,7 @@ function k.mesh_shader(options) end
 ---@field source? Kinematic.Image|Kinematic.Texture Image resource for image objects, or live canvas texture for projection objects.
 ---@field font? Kinematic.Font Project font for Text2D, Text3D, or Code; LaTeX uses its mathematical fonts.
 ---@field shader? Kinematic.Shader Image or mesh shader resource.
----@field uniforms? table<string,boolean|number|Kinematic.Value> Initial typed shader uniform values; requires shader. Color matches GLSL vec3 (RGB, alpha ignored) or vec4 (RGBA).
+---@field uniforms? table<string,boolean|number|Kinematic.Value> Initial typed overrides for shader uniforms. Requires a shader. Omitted uniforms keep their GLSL defaults. Color matches GLSL vec3 (RGB, alpha ignored) or vec4 (RGBA).
 ---@field textures? table<string,Kinematic.Texture> Named live textures for image shaders; bindings require shader.
 ---@field resolution? integer[] Required width and height for additional canvases, each 1–8192 pixels.
 ---@field pixels_per_unit? number Image/projection pixels per local 3D unit; positive and finite, default 256.

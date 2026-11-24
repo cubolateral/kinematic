@@ -33,7 +33,6 @@ return function()
 		radius = 0.8,
 		segments = 64,
 		shader = material,
-		uniforms = { phase = 0 },
 	})
 
 	sphere:uniform("phase"):to(math.pi * 2):play(2, "linear")

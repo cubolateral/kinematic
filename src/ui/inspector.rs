@@ -5,7 +5,7 @@ use crate::{
         TrackChoices, TrackInfo, TrackLimits, TrackTarget, TrackValue,
         components::{Inspection, Name},
         normalized_quaternion,
-        objects::{CanvasSettings, ProjectionSource},
+        objects::{CanvasSettings, ProjectionSource, shader_untracked_uniforms},
     },
     editor::Editor,
 };
@@ -103,6 +103,15 @@ pub(super) fn draw(
                     |texture| format!("{}.", texture.entity.to_bits()),
                 ),
             );
+        }
+
+        let untracked_uniforms = shader_untracked_uniforms(&world, entity);
+        if !untracked_uniforms.is_empty() {
+            properties::section(ui, "Other Shader Uniforms");
+
+            for name in untracked_uniforms {
+                properties::read_only(ui, &name, "Active");
+            }
         }
 
         let _disabled = ui.begin_disabled_with_cond(is_exporting || is_playing);

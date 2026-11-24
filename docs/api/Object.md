@@ -366,7 +366,7 @@ Returns the transformation matrix composed through the object hierarchy.
 <div class="api-description">
 
 Returns a shader uniform property handle by name.
-The uniform must be configured on the object.
+Active scalar and floating-point vector uniforms are available from the shader declaration. They start at the GLSL default unless the object supplies an override.
 
 </div>
 

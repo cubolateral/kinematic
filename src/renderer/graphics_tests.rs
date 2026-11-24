@@ -32,6 +32,16 @@ fn graphics_canvas_projection_alpha_orientation() {
             .unwrap_or(std::ptr::null())
     };
     let gl = std::rc::Rc::new(unsafe { glow::Context::from_loader_function(load) });
+    let shader_gl = gl.clone();
+
+    crate::renderer::shader_programs::with_context(
+        move || Ok(shader_gl.clone()),
+        || {
+            crate::tests::lua_scene::declared_uniforms_use_the_same_properties_in_2d_and_3d();
+            crate::tests::lua_scene::signal_uses_declared_uniforms_and_restores_shader_defaults();
+        },
+    );
+
     let three_gl = unsafe { glow::Context::from_loader_function(load) };
     let three = three_d::Context::from_gl_context(std::sync::Arc::new(three_gl)).unwrap();
     let interface = skia_safe::gpu::gl::Interface::new_load_with(|name| {
@@ -326,7 +336,8 @@ fn graphics_canvas_projection_alpha_orientation() {
          in vec2 k_uv;\n\
          out vec4 k_color;\n\
          uniform sampler2D k_image;\n\
-         uniform float gain;\n\
+         uniform float gain = 0.25;\n\
+         uniform float unused;\n\
          void main() {\n\
              vec4 color = texture(k_image, k_uv);\n\
              k_color = vec4(color.b * gain, 0.0, 0.0, color.a);\n\
@@ -381,6 +392,24 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     assert_pixel(&read(&gl, &output), 32, 32, [0, 128, 64, 255]);
 
+    let mut default_image_scene = Scene::new_with_canvases(
+        canvas_2d().resolution((64, 64)).shader(&group_shader),
+        canvas_3d().resolution((64, 64)),
+    );
+    let default_panel = panel()
+        .size(vec2(24.0, 24.0))
+        .fill(Color::BLUE)
+        .build(&mut default_image_scene);
+
+    default_image_scene.world_2d().add(&default_panel);
+    default_image_scene.update(0.0);
+
+    renderer
+        .render(&default_image_scene, &mut output, &mut skia, 1.0)
+        .unwrap();
+
+    assert_pixel(&read(&gl, &output), 32, 32, [64, 0, 0, 255]);
+
     let inherited_mesh_shader = MeshShader::fragment(
         "in vec3 k_world_position;\n\
          in vec3 k_normal;\n\
@@ -433,6 +462,29 @@ fn graphics_canvas_projection_alpha_orientation() {
 
     assert_pixel(&read(&gl, &output), 32, 32, [64, 64, 0, 255]);
 
+    let mut default_mesh_scene = Scene::new_with_resolution((64, 64));
+
+    default_mesh_scene
+        .world_3d()
+        .camera_position(vec3(0.0, 0.0, 2.0))
+        .camera_fov(std::f32::consts::FRAC_PI_2)
+        .immediate();
+
+    let child = crate::core::objects::cube()
+        .size(vec3(1.0, 1.0, 1.0))
+        .albedo(Color::RED)
+        .mesh_shader(&inherited_mesh_shader)
+        .build(&mut default_mesh_scene);
+
+    default_mesh_scene.world_3d().add(&child);
+    default_mesh_scene.root().view_2d(false).immediate();
+    default_mesh_scene.update(0.25);
+
+    renderer
+        .render(&default_mesh_scene, &mut output, &mut skia, 1.0)
+        .unwrap();
+
+    assert_pixel(&read(&gl, &output), 32, 32, [0, 64, 0, 255]);
     let custom_mesh_shader = MeshShader::program(
         "in vec3 position;\n\
          uniform mat4 modelMatrix;\n\

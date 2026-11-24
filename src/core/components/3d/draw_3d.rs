@@ -1,6 +1,6 @@
 use std::{
     any::TypeId,
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
 };
 
 use crate::core::{
@@ -35,7 +35,7 @@ impl MeshAttributes {
     }
 }
 
-pub(crate) type MeshProgramCache = HashMap<(u64, MeshAttributes), three_d::Program>;
+pub(crate) type MeshProgramCache = HashMap<(u64, MeshAttributes, Vec<String>), three_d::Program>;
 
 struct MeshOutline {
     positions: three_d::VertexBuffer<three_d::Vec3>,
@@ -521,25 +521,31 @@ impl<'a> RenderContext3D<'a> {
             return Ok(false);
         };
         let attributes = self.geometries[&key].attributes;
-        let cache_key = (shader.shader.id, attributes);
+        // Keep omitted uniforms at their GLSL defaults by sharing programs only across equal binding sets.
+        let cache_key = (
+            shader.shader.id,
+            attributes,
+            shader.uniforms.keys().cloned().collect(),
+        );
 
-        if !self.mesh_programs.contains_key(&cache_key) {
-            let vertex = shader
-                .shader
-                .vertex
-                .as_deref()
-                .map(str::to_owned)
-                .unwrap_or_else(|| default_mesh_vertex_shader(attributes));
-            let program =
-                three_d::Program::from_source(self.three_d, &vertex, &shader.shader.fragment)
-                    .map_err(|error| format!("Mesh shader compilation failed: {error}"))?;
+        let program = match self.mesh_programs.entry(cache_key) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                let vertex = shader
+                    .shader
+                    .vertex
+                    .as_deref()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| default_mesh_vertex_shader(attributes));
+                let program =
+                    three_d::Program::from_source(self.three_d, &vertex, &shader.shader.fragment)
+                        .map_err(|error| format!("Mesh shader compilation failed: {error}"))?;
 
-            validate_mesh_program(&program, attributes)?;
+                validate_mesh_program(&program, attributes)?;
 
-            self.mesh_programs.insert(cache_key, program);
-        }
-
-        let program = &self.mesh_programs[&cache_key];
+                entry.insert(program)
+            }
+        };
 
         use_uniforms(
             program,
@@ -630,6 +636,15 @@ impl<'a> RenderContext3D<'a> {
             &[],
         );
     }
+}
+
+pub(crate) fn mesh_reflection_vertex() -> String {
+    default_mesh_vertex_shader(MeshAttributes {
+        normal: true,
+        uv: true,
+        tangent: false,
+        color: false,
+    })
 }
 
 fn default_mesh_vertex_shader(attributes: MeshAttributes) -> String {
@@ -739,6 +754,10 @@ fn use_uniforms(
 
     for (name, value) in &shader.uniforms {
         if !program.requires_uniform(name) {
+            if shader.shader.uniforms.is_some() {
+                continue;
+            }
+
             return Err(format!(
                 "Mesh shader uniform `{name}` is missing or inactive."
             ));
@@ -763,7 +782,14 @@ fn use_uniforms(
             TrackValue::Color(value) => {
                 let [r, g, b, a] = value.rgba();
 
-                if shader.shader.vec3_uniforms.contains(name) {
+                if matches!(
+                    shader
+                        .shader
+                        .uniforms
+                        .as_ref()
+                        .and_then(|uniforms| uniforms.get(name)),
+                    Some(Some(TrackValue::Vector3(_)))
+                ) {
                     program.use_uniform(name, three_d::vec3(r, g, b))
                 } else {
                     program.use_uniform(name, three_d::vec4(r, g, b, a))

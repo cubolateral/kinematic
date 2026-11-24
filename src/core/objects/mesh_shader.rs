@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::core::{
     TrackValue,
@@ -32,7 +29,7 @@ use crate::core::{
 pub struct MeshShader {
     pub(crate) vertex: Option<Arc<str>>,
     pub(crate) fragment: Arc<str>,
-    pub(crate) vec3_uniforms: BTreeSet<String>,
+    pub(crate) uniforms: Option<Arc<crate::core::shader_uniforms::ShaderUniforms>>,
     pub(crate) id: u64,
 }
 
@@ -49,101 +46,14 @@ impl MeshShader {
 
     fn new(vertex: Option<String>, fragment: String) -> Self {
         static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        let vec3_uniforms = vec3_uniforms(vertex.as_deref(), &fragment);
 
         Self {
-            vec3_uniforms,
+            uniforms: None,
             vertex: vertex.map(Arc::from),
             fragment: Arc::from(fragment),
             id: NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         }
     }
-}
-
-fn vec3_uniforms(vertex: Option<&str>, fragment: &str) -> BTreeSet<String> {
-    let mut uniforms = BTreeSet::new();
-
-    for source in vertex.into_iter().chain([fragment]) {
-        let source = strip_comments(source);
-
-        for declaration in source.split(';') {
-            let tokens: Vec<_> = declaration.split_whitespace().collect();
-            let Some(index) = tokens.iter().position(|token| *token == "uniform") else {
-                continue;
-            };
-            let mut index = index + 1;
-
-            while tokens.get(index).is_some_and(|token| {
-                matches!(
-                    *token,
-                    "highp" | "mediump" | "lowp" | "readonly" | "writeonly" | "coherent"
-                )
-            }) {
-                index += 1;
-            }
-
-            if tokens.get(index) != Some(&"vec3") {
-                continue;
-            }
-
-            for name in tokens
-                .iter()
-                .skip(index + 1)
-                .flat_map(|token| token.split(','))
-            {
-                let name = name
-                    .trim_start_matches(|character: char| {
-                        !character.is_ascii_alphanumeric() && character != '_'
-                    })
-                    .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
-                    .next()
-                    .unwrap_or_default();
-
-                if !name.is_empty() {
-                    uniforms.insert(name.to_owned());
-                }
-            }
-        }
-    }
-
-    uniforms
-}
-
-fn strip_comments(source: &str) -> String {
-    let mut chars = source.chars().peekable();
-    let mut result = String::with_capacity(source.len());
-
-    while let Some(character) = chars.next() {
-        if character != '/' {
-            result.push(character);
-            continue;
-        }
-
-        match chars.peek() {
-            Some('/') => {
-                chars.next();
-                for character in chars.by_ref() {
-                    if character == '\n' {
-                        result.push('\n');
-                        break;
-                    }
-                }
-            }
-            Some('*') => {
-                chars.next();
-                while let Some(character) = chars.next() {
-                    if character == '*' && chars.peek() == Some(&'/') {
-                        chars.next();
-                        result.push(' ');
-                        break;
-                    }
-                }
-            }
-            _ => result.push(character),
-        }
-    }
-
-    result
 }
 
 /// Initial value accepted by a custom mesh-shader uniform.
@@ -172,7 +82,7 @@ impl MeshShaderData {
         let name = name.into();
 
         assert!(
-            valid_uniform_name(&name),
+            valid_mesh_uniform_name(&name),
             "Mesh shader uniforms must use non-reserved GLSL identifiers."
         );
 
@@ -258,14 +168,16 @@ pub(crate) fn effective_mesh_shader(
         }
     }
 
-    validate(&result)?;
+    validate_mesh_uniforms(&result.uniforms)?;
 
     Ok(Some(result))
 }
 
-fn validate(data: &EffectiveMeshShader) -> Result<(), String> {
-    for (name, value) in &data.uniforms {
-        if !valid_uniform_name(name) {
+pub(crate) fn validate_mesh_uniforms(
+    uniforms: &BTreeMap<String, TrackValue>,
+) -> Result<(), String> {
+    for (name, value) in uniforms {
+        if !valid_mesh_uniform_name(name) {
             return Err(format!(
                 "Mesh shader uniform `{name}` uses an invalid or reserved name."
             ));
@@ -277,7 +189,7 @@ fn validate(data: &EffectiveMeshShader) -> Result<(), String> {
     Ok(())
 }
 
-fn valid_uniform_name(name: &str) -> bool {
+pub(crate) fn valid_mesh_uniform_name(name: &str) -> bool {
     const RESERVED: [&str; 10] = [
         "modelMatrix",
         "normalMatrix",

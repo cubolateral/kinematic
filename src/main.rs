@@ -57,15 +57,17 @@ fn run() -> Result<(), String> {
 
     if args.first().is_some_and(|arg| arg == "--check") {
         let project = LuaProject::open(args.get(1).ok_or("Missing project directory.")?)?;
-        let scenes = project.load_scenes(&Default::default())?;
+        return app::with_shader_validation(|| {
+            let scenes = project.load_scenes(&Default::default())?;
 
-        for scene in scenes {
-            scene.update(scene.duration()).map_err(|e| e.to_string())?;
+            for scene in scenes {
+                scene.update(scene.duration()).map_err(|e| e.to_string())?;
 
-            println!("Validated scene ({} seconds).", scene.duration());
-        }
+                println!("Validated scene ({} seconds).", scene.duration());
+            }
 
-        return Ok(());
+            Ok(())
+        });
     }
 
     if args.first().is_some_and(|arg| arg == "--render") {

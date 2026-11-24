@@ -4,7 +4,7 @@ local fractal = k.image_shader {
 
 uniform sampler2D k_image;
 uniform vec2 k_resolution;
-uniform float zoom;
+uniform float zoom = 1.0;
 
 out vec4 outColor;
 
@@ -34,7 +34,6 @@ return function()
 	local plane = k.world_2d():add(k.panel{
 		size = k.vec2(960, 540),
 		shader = fractal,
-		uniforms = { zoom = 1 },
 	})
 
 	plane:uniform("zoom"):to(128):play(2, "quart_in_out")

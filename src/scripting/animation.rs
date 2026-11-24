@@ -69,24 +69,7 @@ fn properties(
         }
 
         let property = if uniforms {
-            let runtime = object.runtime()?;
-            let target = crate::core::TrackTarget::uniform(name.clone());
-
-            if !crate::core::objects::shader_uniforms(
-                &runtime.world.borrow().borrow(),
-                object.entity,
-            )
-            .iter()
-            .any(|(key, _)| key == &name)
-            {
-                return Err(mlua::Error::runtime(format!("Unknown uniform '{name}'.")));
-            }
-
-            PropertyHandle {
-                object: object.clone(),
-                target,
-                channel: None,
-            }
+            object.uniform(&name)?
         } else {
             object.property(&name)?
         };
@@ -118,9 +101,7 @@ fn properties(
     let mut masks: Vec<(crate::core::TrackTarget, u8)> = Vec::new();
 
     for (property, _) in &result {
-        let mask = property
-            .channel
-            .map_or((1 << property.value()?.channels()) - 1, |c| 1 << c);
+        let mask = binding_mask(property)?;
 
         if masks
             .iter()
@@ -135,6 +116,13 @@ fn properties(
     }
 
     Ok(result)
+}
+
+fn binding_mask(property: &PropertyHandle) -> Result<u8> {
+    Ok(match property.channel {
+        Some(channel) => 1 << channel,
+        None => (1 << property.value()?.channels()) - 1,
+    })
 }
 
 pub(super) fn configure(lua: &Lua, object: &ObjectHandle, options: &Table) -> Result<()> {
@@ -226,9 +214,7 @@ impl AnimationDefinition {
         let mut result = Self::new(object);
 
         for (property, value) in properties(&result.object, table, false)? {
-            let mask = property
-                .channel
-                .map_or((1 << property.value()?.channels()) - 1, |c| 1 << c);
+            let mask = binding_mask(&property)?;
             let (start, mut finish) = if operation == Operation::From {
                 let (start, finish) = pair(value)?;
 

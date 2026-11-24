@@ -64,7 +64,7 @@ stop at scene boundaries, so leave enough time for releases to finish.
 | `kinematic PROJECT` | Opens a project folder in the editor. |
 | `kinematic --new DIRECTORY NAME` | Creates a 2D project. |
 | `kinematic --new DIRECTORY NAME --3d` | Creates a project from the 3D template. |
-| `kinematic --check PROJECT` | Builds and evaluates scenes without opening a window. |
+| `kinematic --check PROJECT` | Builds and evaluates scenes without showing a window. |
 | `kinematic --render PROJECT` | Opens graphics resources and exports the project. |
 | `kinematic --lua-definitions` | Prints the LuaLS definitions used by external editors and the site. |
 | `kinematic --help` | Shows a summary of commands. |
@@ -73,7 +73,7 @@ stop at scene boundaries, so leave enough time for releases to finish.
 Quote project names that contain spaces. Use the folder containing `kinematic/`, not the
 metadata subfolder.
 
-`--check` does not validate shaders, GPU drawing, readability, or perceived sync.
+`--check` compiles shaders in a hidden OpenGL context when needed. GPU drawing, readability, and perceived sync can be checked in a render.
 `--render` requires an OpenGL 3.3 graphical session, even from the command line. On
 Linux CI, use Xvfb/Mesa and the dummy audio driver, as the documentation workflow does.
 A dummy driver cannot validate what audio sounds like.

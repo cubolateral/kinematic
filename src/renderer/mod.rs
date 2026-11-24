@@ -3,6 +3,7 @@ pub(crate) mod editor_guides;
 mod encoder;
 mod image_shaders;
 pub(crate) mod plan;
+pub(crate) mod shader_programs;
 pub(crate) mod target;
 
 use glow::HasContext;

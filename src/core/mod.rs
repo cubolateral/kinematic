@@ -12,6 +12,7 @@ mod properties;
 mod random;
 mod scene;
 pub(crate) mod scene_file;
+pub(crate) mod shader_uniforms;
 mod signal;
 mod task;
 mod track;

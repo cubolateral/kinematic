@@ -61,14 +61,21 @@ Very deep zooms need more iterations and eventually more numeric precision.
 
 ## Bind and animate uniforms
 
-The shader declares `uniform float zoom`, and the object supplies `uniforms = {zoom = 1}`.
-Their types must agree. A `k.color(...)` uniform accepts `vec3` (RGB; alpha is ignored)
-or `vec4` (RGBA). `plane:uniform("zoom")` returns the binding's property handle.
-Animating it updates the GPU value without recreating the shader.
+An active shader uniform such as `uniform float zoom = 1.0;` is already a property
+of the object that uses the shader. The initial value comes from the GLSL
+initializer, or zero when there is no initializer. Use the optional
+`uniforms = {zoom = 2}` table to give an object its own starting value.
 
-Use `to`, `by`, or `from` as for ordinary properties. To change several bindings at
-once, use `plane:to {uniforms = {zoom = 2}}:play(2)`. Uniforms have their own namespace
-and do not become built-in object fields.
+Use `plane:uniform("zoom")` to get the property and use `get`, `set`, `to`,
+`by`, `from` or signals as with other properties. To animate several at once,
+use `plane:to {uniforms = {zoom = 2}}:play(2)`. Signals override the evaluated
+value while active, and `reset` restores the object's initial values.
+
+Booleans, integers, floats and floating-point vectors are available as
+properties. An object can use `k.color(...)` to override a `vec3` (RGB) or
+`vec4` (RGBA) and animate it as a color. Arrays, matrices, and samplers can
+remain in GLSL. Image shader samplers can be assigned with `textures`. A custom
+uniform must be used by the shader to remain active after compilation.
 
 ## Image coordinates and transparency
 
@@ -148,9 +155,9 @@ does not update CPU bounds. See [Shader](../api/Shader.md) for the full contract
 
 ## Check the result
 
-`--check` validates scene construction and bindings but does not compile GLSL. Render
-the scene to test the program, including transparent edges and the extremes of animated
-uniforms. Shader source and resources stay fixed within an applied revision.
+`--check` validates scene construction and compiles shaders in a hidden OpenGL
+context when needed. Render the scene to test transparent edges, actual mesh
+inputs and the extremes of animated uniforms. Shader source and resources stay fixed within an applied revision.
 
 A failed shader edit preserves the last valid preview. Read the diagnostics if the
 image does not change after an edit. Use uniforms for animation rather than reloading

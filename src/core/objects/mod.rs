@@ -19,11 +19,13 @@ pub use canvas::*;
 pub(crate) use image::ImageSource;
 pub use image_shader::{ImageShader, ImageShaderData, ImageShaderUniform};
 pub(crate) use image_shader::{
-    set_shader_uniform, shader_uniform, shader_uniforms, validate_shader_track_value,
-    validate_shader_values,
+    set_shader_uniform, shader_uniform, shader_uniforms, shader_untracked_uniforms,
+    valid_binding_name, validate_shader_track_value, validate_shader_values,
 };
 pub(crate) use latex_geometry::validate_latex;
-pub(crate) use mesh_shader::{EffectiveMeshShader, effective_mesh_shader};
+pub(crate) use mesh_shader::{
+    EffectiveMeshShader, effective_mesh_shader, valid_mesh_uniform_name, validate_mesh_uniforms,
+};
 pub use mesh_shader::{MeshShader, MeshShaderData, MeshShaderUniform};
 pub use node::*;
 pub use object::*;
